@@ -1,0 +1,10 @@
+node_modules/
+web/dist/
+diff-explainer
+*.log
+.DS_Store
+
+# mygo 桌面应用（desktop/）
+desktop/mygo
+desktop/.mygo/
+desktop/build/
