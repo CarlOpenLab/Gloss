@@ -1,0 +1,6 @@
+{
+  "name": "Diff Explainer",
+  "identifier": "dev.carl.diff-explainer",
+  "version": "0.1.0",
+  "out": "build"
+}

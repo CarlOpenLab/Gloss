@@ -5,6 +5,6 @@ diff-explainer
 .DS_Store
 
 # mygo 桌面应用（desktop/）
-desktop/mygo
 desktop/.mygo/
 desktop/build/
+mygo_windows_*.syso
