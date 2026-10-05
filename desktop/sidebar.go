@@ -11,9 +11,13 @@ const sidebarWidth = 280
 
 // sidebar 是左侧栏：筛选框 + 文件树 + 底部统计。
 //
-// 整栏不铺底色 —— 窗口开了 VibrancySidebar，留空才能透出系统材质。
+// 底色是半透明的：开着 vibrancy 时它只是给系统材质叠一层淡淡的色调，
+// 和 Finder 侧栏一个观感；系统关掉透明效果时它又能兜住底，不至于让
+// 深色主题的文字落在白底上。
 func (a *app) sidebar(c *ui.Context, pal palette) {
-	ui.Column(c).Width(sidebarWidth).Shrink(0).Children(func() {
+	ui.Column(c).Width(sidebarWidth).Shrink(0).
+		Background(pal.sideBg.Alpha(0.55)).
+		Children(func() {
 		ui.Box(c).Padding(8).Shrink(0).Children(func() {
 			// 用 TextInput 而不是 ui.SearchField：SearchField 的 placeholder
 			// 是内部写死的 "Search"，从外面盖不掉，而整个界面是中文的。
@@ -27,10 +31,10 @@ func (a *app) sidebar(c *ui.Context, pal palette) {
 func (a *app) treeView(c *ui.Context, pal palette) {
 	t := c.Theme()
 
-	// 筛选词变了就重建树。直接比对值而不是依赖控件的 Changed()：
+	// 筛选词变了就重算显示的文件。直接比对值而不是依赖控件的 Changed()：
 	// 少一处需要小心维护的时序假设。
 	if a.filter != a.treeFilter {
-		a.rebuildTree()
+		a.applyFilter()
 	}
 
 	switch {

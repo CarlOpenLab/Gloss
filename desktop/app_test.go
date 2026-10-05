@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -38,6 +41,12 @@ func testApp(t *testing.T) *app {
 	// 一个根目录下的新文件
 	writeFile(t, filepath.Join(dir, "README.md"), "# hi\n")
 
+	return loadApp(t, dir)
+}
+
+// loadApp 打开 dir 这个仓库并等后台读取跑完，返回可以直接渲染的 app。
+func loadApp(t *testing.T, dir string) *app {
+	t.Helper()
 	repo, err := gitrepo.Open(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
@@ -49,7 +58,24 @@ func testApp(t *testing.T) *app {
 
 	a := newApp()
 	a.applyModel(m)
+	settle(t, a)
 	return a
+}
+
+// settle 等所有后台任务跑完。测试里 dispatch 是同步执行，所以后台任务
+// 结束时回调也已经跑过了 —— 等它等到就等于界面状态已经稳定。
+func settle(t *testing.T, a *app) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		a.bg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(20 * time.Second):
+		t.Fatal("后台任务超时")
+	}
 }
 
 func runGit(t *testing.T, dir string, args ...string) {
@@ -60,6 +86,62 @@ func runGit(t *testing.T, dir string, args ...string) {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)
 	}
+}
+
+// richApp 建一个内容够丰富的仓库：多个 hunk、能折的未改动区间、删除、
+// 新增文件、带 tab 和中文的行 —— diff 视图的各种排版情况都能覆盖到。
+func richApp(t *testing.T) *app {
+	t.Helper()
+	dir := t.TempDir()
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = resolved
+	}
+
+	runGit(t, dir, "init", "-b", "main")
+	runGit(t, dir, "config", "user.email", "test@example.com")
+	runGit(t, dir, "config", "user.name", "Test")
+	runGit(t, dir, "config", "commit.gpgsign", "false")
+
+	// 60 行的文件，改动分别在第 3 行和第 52 行 —— 中间隔着一大段
+	// 未改动区间，正好看到折叠条
+	var lines []string
+	for i := 1; i <= 60; i++ {
+		lines = append(lines, fmt.Sprintf("line %d: some code here", i))
+	}
+	lines[2] = "line 3: CHANGED"
+	lines[51] = "line 52: CHANGED TOO"
+	writeFile(t, filepath.Join(dir, "internal/server/handler.go"), strings.Join(lines, "\n")+"\n")
+
+	writeFile(t, filepath.Join(dir, "README.md"), "# diff explainer\n\n旧的一行\n")
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "init")
+
+	lines[2] = "line 3: CHANGED AGAIN"
+	lines[5] = "line 6: 新加的一行 with 中文"
+	lines[51] = "line 52: 也改了"
+	writeFile(t, filepath.Join(dir, "internal/server/handler.go"), strings.Join(lines, "\n")+"\n")
+
+	writeFile(t, filepath.Join(dir, "README.md"), "# diff explainer\n\n新的一行\n多了第二行\n")
+	// 内容写得像真的 Go 代码，截图里能看出语法高亮对不对
+	writeFile(t, filepath.Join(dir, "internal/server/router.go"), `package server
+
+import (
+	"fmt"
+	"net/http"
+)
+
+const maxBody = 1 << 20
+
+// route 注册所有处理器。
+func route(mux *http.ServeMux) {
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		// 健康检查不写日志，免得被探针刷屏
+		fmt.Fprintln(w, "ok")
+	})
+}
+`)
+
+	return loadApp(t, dir)
 }
 
 func writeFile(t *testing.T, path, content string) {

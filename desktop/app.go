@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"sync"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -36,6 +37,9 @@ const (
 type app struct {
 	win      *mygo.Window
 	dispatch func(func())
+	// bg 登记所有后台任务，测试靠它等异步流程跑完（生产环境不等 ——
+	// 结果的落地走 dispatch，该等的是回调而不是 goroutine 结束）。
+	bg sync.WaitGroup
 
 	// —— 仓库 ——
 	repoPath string
@@ -48,7 +52,33 @@ type app struct {
 	loadSeq int
 
 	// —— 模型 ——
-	files []gitrepo.File
+	// allFiles 是仓库里的全部改动；files 是过了筛选词之后、界面真正显示的
+	// 那一份。侧栏树、diff 行模型、统计都只看 files，三者才对得上。
+	allFiles []gitrepo.File
+	files    []gitrepo.File
+	// contents 按路径缓存文件在新侧的内容，用于展开未改动区间和语法高亮。
+	// 用路径而不是下标索引：筛选会让文件列表变短，下标会错位。
+	contents map[string]*fileContent
+
+	// —— 派生的行模型 ——
+	// rows 是喂给虚拟化列表的扁平行数组。它只在 rowsDirty 时重建 ——
+	// 每帧重建一个大 diff 的几万行会白白烧 CPU。
+	rows      []row
+	rowsDirty bool
+	diffList  ui.ListState
+	// built 是上一帧构建了多少行。列表是虚拟化的，这个数只跟窗口高度有关，
+	// 和 diff 有多长无关 —— 测试靠它钉住这一点（万一哪天不小心把整份 diff
+	// 都建了出来，几万行的仓库会立刻卡死）。
+	built int
+
+	// —— 展开状态 ——
+	// expanded 记录每个未改动区间展开了多少行，key 见 rows.go 的 gapKey。
+	// 跨帧保留，所以刷新后展开状态还在（文件内容变了才会对不上）。
+	expanded map[string]int
+
+	// —— 视图 ——
+	split    bool    // true = split（左右对照），false = unified
+	codeSize float32 // 代码字号；0 表示用默认值
 
 	// —— 侧栏 ——
 	tree       []*filetree.Node
@@ -61,9 +91,6 @@ type app struct {
 	// 新目录默认展开；靠这个集合区分「第一次出现的目录」和「用户手动收起的
 	// 目录」，否则每次筛选/刷新都会把用户收起的目录又弹开。
 	seenDirs map[string]bool
-
-	// —— 视图 ——
-	split bool
 
 	// —— 已 review：文件路径 -> 当时的内容指纹 ——
 	// 指纹对不上就说明文件又变了，标记自动失效。
@@ -82,7 +109,7 @@ func newApp() *app {
 
 func (a *app) view(c *ui.Context) {
 	pal := paletteFor(c.Theme())
-	// 窗口开了 vibrancy：根节点和侧栏都不铺底色，让系统的毛玻璃材质透上来；
+	// 窗口开了 vibrancy：根节点不铺底色，让系统的毛玻璃材质透上来；
 	// 只有主区不透明，保证代码区域的对比度稳定、不受壁纸颜色影响。
 	c.Root().Background(ui.Transparent)
 
@@ -131,6 +158,19 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 
 			ui.Spacer(c)
 
+			// unified / split 切换。和 Checkbox 一样传副本进去、变了再回写：
+			// 控件要的是 *int，而模式存在 app 上。
+			split := a.split
+			mode := 0
+			if split {
+				mode = 1
+			}
+			ui.Segmented(c, &mode, "Unified", "Split")
+			if (mode == 1) != split {
+				a.split = mode == 1
+				a.rowsDirty = true
+			}
+
 			switch a.state {
 			case loadLoading:
 				ui.Spinner(c)
@@ -147,9 +187,15 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 		})
 }
 
-// mainArea 是右侧主区。Phase 3 会换成真正的 diff 视图。
+// mainArea 是右侧主区：仓库就绪就画 diff，否则画空/加载/出错状态。
 func (a *app) mainArea(c *ui.Context, pal palette) {
 	t := c.Theme()
+
+	if a.state == loadReady && len(a.files) > 0 {
+		a.diffView(c, pal)
+		return
+	}
+
 	ui.Box(c).Grow(1).FillWidth().Background(pal.appBg).Children(func() {
 		ui.Column(c).Fill().Center().Gap(10).Padding(24).Children(func() {
 			switch a.state {
@@ -170,15 +216,13 @@ func (a *app) mainArea(c *ui.Context, pal palette) {
 					a.reload()
 				}
 			case loadReady:
-				if len(a.files) == 0 {
-					ui.Text(c, "没有未提交的改动").FontSize(18).Bold()
-					ui.Text(c, "工作区是干净的。").
+				if a.filter != "" {
+					ui.Text(c, "没有匹配的文件").FontSize(18).Bold()
+					ui.Textf(c, "筛选词「%s」没有匹配到任何改动。", a.filter).
 						TextColor(t.TextMuted)
 				} else {
-					ui.Text(c, "diff 视图待实现").FontSize(18).Bold()
-					ui.Textf(c, "已经读到 %d 个文件、+%d −%d 行，下一步把它们画出来。",
-						len(a.files), a.totalAdd(), a.totalDel()).
-						TextColor(t.TextMuted)
+					ui.Text(c, "没有未提交的改动").FontSize(18).Bold()
+					ui.Text(c, "工作区是干净的。").TextColor(t.TextMuted)
 				}
 			}
 		})
@@ -201,12 +245,22 @@ func (a *app) totalDel() int {
 	return n
 }
 
+// run 起一个后台任务，并登记到 bg 上。所有后台 goroutine 都从这里出发，
+// 免得漏登记 —— 测试里漏一个就是随机失败。
+func (a *app) run(f func()) {
+	a.bg.Add(1)
+	go func() {
+		defer a.bg.Done()
+		f()
+	}()
+}
+
 // chooseFolder 弹原生目录选择框。Dialog.Open 是阻塞调用，必须放到
 // goroutine 里，否则会把主线程（也就是整个界面）卡住。
 func (a *app) chooseFolder() {
-	go func(win *mygo.Window) {
+	a.run(func() {
 		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
-			Parent:    win,
+			Parent:    a.win,
 			Title:     "选择 git 仓库",
 			Directory: true,
 			// 允许直接选 .app 这类包，否则用户没法选中仓库根目录
@@ -216,7 +270,7 @@ func (a *app) chooseFolder() {
 			return // 用户取消不算错误
 		}
 		a.dispatch(func() { a.openRepo(paths[0]) })
-	}(a.win)
+	})
 }
 
 // openRepo 在后台读仓库，读完回主线程写入状态。
@@ -226,7 +280,7 @@ func (a *app) openRepo(path string) {
 	a.state = loadLoading
 	a.errMsg = ""
 
-	go func(path string, seq int) {
+	a.run(func() {
 		ctx := context.Background()
 		repo, err := gitrepo.Open(ctx, path)
 		if err != nil {
@@ -256,7 +310,7 @@ func (a *app) openRepo(path string) {
 			}
 			a.applyModel(m)
 		})
-	}(path, seq)
+	})
 }
 
 // applyModel 把加载结果写进 app。只在主线程调用。
@@ -264,9 +318,38 @@ func (a *app) applyModel(m *gitrepo.Model) {
 	a.repoPath = m.Repo.Root
 	a.repoName = m.Repo.Name
 	a.branch = m.Branch
-	a.files = m.Files
+	a.allFiles = m.Files
+	// 换了仓库，上一个仓库的展开状态和文件内容都不再适用
+	a.expanded = nil
+	a.contents = map[string]*fileContent{}
 	a.state = loadReady
+
+	a.applyFilter()
+	a.loadContents(a.loadSeq)
+}
+
+// applyFilter 依据筛选词算出要显示的文件，并同步树和 diff 行模型。
+func (a *app) applyFilter() {
+	a.files = filterFiles(a.allFiles, a.filter)
 	a.rebuildTree()
+	a.rowsDirty = true
+}
+
+// filterFiles 按筛选词挑出要显示的文件。
+//
+// 筛掉的文件连 diff 一起不显示，而不是只从侧栏树里藏起来 —— 筛选的
+// 用途是「只看这块子系统」，diff 里还留着别的文件会让人对不上。
+func filterFiles(files []gitrepo.File, query string) []gitrepo.File {
+	if query == "" {
+		return files
+	}
+	out := make([]gitrepo.File, 0, len(files))
+	for _, f := range files {
+		if filetree.FuzzyMatch(fileKey(f), query) {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // reload 重新读取当前仓库。

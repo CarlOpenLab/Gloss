@@ -1,0 +1,508 @@
+package main
+
+import (
+	"strconv"
+	"strings"
+
+	"github.com/egoist/mygo/ui"
+
+	"diff-explainer/internal/diff"
+	"diff-explainer/internal/gitrepo"
+	"diff-explainer/internal/highlight"
+)
+
+// diff 视图的尺寸常量集中在这里，改字号时一起调。
+const (
+	barW     = 4    // 行左侧的增删色条宽度
+	gutterW  = 46   // 单侧行号栏宽度
+	gutterPx = 8    // 行号栏左右内边距
+	codeGap  = 12   // 行号栏和代码之间的间距
+	lineH    = 20   // 代码行高
+	hunkH    = 26   // @@ 行高度
+	fileH    = 36   // 文件头高度
+	noteH    = 40   // 二进制/过大提示行的高度
+	defSize  = 12.5 // 默认代码字号
+)
+
+// diffView 渲染整份 diff。
+//
+// 列表是虚拟化的：只构建可见的那些行，所以几万行的 diff 和几百行一样快，
+// 前提是行高别做成动态的（同一帧里量到的高度会被复用）。
+func (a *app) diffView(c *ui.Context, pal palette) {
+	if a.rowsDirty {
+		a.rebuildRows()
+	}
+
+	// Key 用行的稳定标识而不是下标：展开一个未改动区间会让它后面所有行的
+	// 下标整体后移，没有 Key 的话列表的滚动位置和行状态会跟着乱跳。
+	a.diffList.Key = func(i int) any { return a.rows[i].key }
+	// 文件头滚动时钉在顶部，一眼知道现在看的是哪个文件。
+	a.diffList.Header = func(i int) bool { return a.rows[i].kind == rowFileHeader }
+
+	// 只统计本帧构建的行。虚拟化生效时这个数和窗口高度成正比，
+	// 和 diff 总行数无关。
+	a.built = 0
+	ui.List(c, &a.diffList, len(a.rows), func(i int) {
+		a.built++
+		a.diffRow(c, pal, a.rows[i])
+	}).Grow(1)
+}
+
+// rebuildRows 重建扁平行模型。只在主线程、且不在列表构建过程中调用。
+func (a *app) rebuildRows() {
+	a.rows = buildRows(a.files, a.contents, a.expanded, a.split)
+	a.rowsDirty = false
+}
+
+// fileAt 取某个行所指向的文件。
+func (a *app) fileAt(i int) *gitrepo.File {
+	if i < 0 || i >= len(a.files) {
+		return nil
+	}
+	return &a.files[i]
+}
+
+func (a *app) diffRow(c *ui.Context, pal palette, r row) {
+	switch r.kind {
+	case rowFileHeader:
+		a.fileHeaderRow(c, pal, r)
+	case rowHunkHeader:
+		a.hunkHeaderRow(c, pal, r)
+	case rowGap:
+		a.gapRow(c, pal, r)
+	case rowNote:
+		a.noteRow(c, pal, r)
+	default:
+		a.codeRow(c, pal, r)
+	}
+}
+
+// fileHeaderRow 是每个文件顶上的那条：路径 + 增删统计 + 已 review 勾选。
+// 它是列表的 header，会钉在顶部。
+func (a *app) fileHeaderRow(c *ui.Context, pal palette, r row) {
+	t := c.Theme()
+	f := a.fileAt(r.file)
+	if f == nil {
+		return
+	}
+	viewed := a.isViewed(*f)
+
+	ui.Row(c).Height(fileH).Shrink(0).FillWidth().
+		Padding(0, 12).Gap(10).AlignItems(ui.Center).
+		Background(pal.fileBg).
+		BorderWidth(0, 0, 1, 0).BorderColor(pal.border).
+		Children(func() {
+			name := t.Text
+			if viewed {
+				name = t.TextMuted
+			}
+			ui.Text(c, displayPath(*f)).Font("monospace").FontSize(12).Grow(1).
+				SingleLine().TextColor(name)
+
+			if f.AddCount > 0 {
+				ui.Textf(c, "+%d", f.AddCount).Font("monospace").FontSize(11).Bold().
+					FontFeatures("tnum").TextColor(pal.addBar)
+			}
+			if f.DelCount > 0 {
+				ui.Textf(c, "−%d", f.DelCount).Font("monospace").FontSize(11).Bold().
+					FontFeatures("tnum").TextColor(pal.delBar)
+			}
+
+			// Checkbox 要的是 *bool，而 viewed 是按指纹存在 map 里的。
+			// 传一份副本进去，变了再回写 —— 中间不碰真实状态。
+			v := viewed
+			ui.Checkbox(c, &v, "已 review")
+			if v != viewed {
+				a.toggleViewed(*f)
+			}
+		})
+}
+
+// hunkHeaderRow 是 @@ 那一行。左边是原始的 hunk 头，右边跟着 git 抓出来的
+// 函数名（Section），review 时靠它快速判断这段在文件里的位置。
+func (a *app) hunkHeaderRow(c *ui.Context, pal palette, r row) {
+	f := a.fileAt(r.file)
+	if f == nil || r.hunk >= len(f.Hunks) {
+		return
+	}
+	h := f.Hunks[r.hunk]
+
+	ui.Row(c).Height(hunkH).Shrink(0).FillWidth().Padding(0, codeGap).Gap(12).
+		AlignItems(ui.Center).Background(pal.hunkBg).Children(func() {
+		ui.Text(c, hunkHeaderText(h)).Font("monospace").FontSize(11).SingleLine().
+			Shrink(3).TextColor(pal.hunkText)
+		if h.Section != "" {
+			ui.Text(c, h.Section).Font("monospace").FontSize(11).SingleLine().
+				Grow(1).MinWidth(0).TextColor(pal.hunkText).Opacity(0.7)
+		}
+	})
+}
+
+// hunkHeaderText 取 @@ 行里不含函数名的那一段。
+//
+// git 把函数名直接接在第二个 @@ 后面，而我们把函数名单独画在右边 ——
+// 不切掉的话同一句话会连着出现两遍。
+func hunkHeaderText(h diff.Hunk) string {
+	s := h.Header
+	if h.Section != "" {
+		s = strings.TrimSuffix(s, h.Section)
+	}
+	return strings.TrimRight(s, " \t")
+}
+
+// gapRow 是「⋯ N 行未改动」那条，点一下展开一段。
+func (a *app) gapRow(c *ui.Context, pal palette, r row) {
+	bg := pal.gapBg
+	e := ui.Box(c).Height(lineH).Shrink(0).FillWidth().
+		Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+	if e.Hovered() {
+		bg = pal.gapHover
+	}
+	if e.Clicked() {
+		a.expandGap(r)
+	}
+	e.Background(bg).Children(func() {
+		ui.Textf(c, "⋯  展开 %d 行未改动", r.gapN).FontSize(11).TextColor(pal.gapText)
+	})
+}
+
+// noteRow 是没有 hunk 的文件（二进制、过大）的说明行。
+func (a *app) noteRow(c *ui.Context, pal palette, r row) {
+	t := c.Theme()
+	ui.Box(c).Height(noteH).Shrink(0).FillWidth().Padding(0, codeGap+barW).
+		Justify(ui.Center).Children(func() {
+			ui.Text(c, r.note).FontSize(12).TextColor(t.TextMuted)
+		})
+}
+
+// codeRow 画一行代码：unified 是一条行占满宽度，split 是左右对照。
+func (a *app) codeRow(c *ui.Context, pal palette, r row) {
+	if a.split {
+		a.splitRow(c, pal, r)
+		return
+	}
+	a.unifiedRow(c, pal, r)
+}
+
+func (a *app) unifiedRow(c *ui.Context, pal palette, r row) {
+	f := a.fileAt(r.file)
+	if f == nil {
+		return
+	}
+
+	var (
+		text   string
+		oldNo  int
+		newNo  int
+		lineBg = pal.codeBg
+		gutBg  = pal.gutterBg
+		bar    = ui.Transparent
+		// 这一行该去哪份高亮里查：新侧的行看新文件，删除的行看还原出来的旧文件。
+		hlFile *highlight.File
+		old    bool
+	)
+	switch {
+	case r.fromGap:
+		// 展开出来的未改动行：内容不在 patch 里，按行号去文件内容里取。
+		oldNo, newNo = r.oldNo, r.newNo
+		text = a.contentLine(*f, r.newNo)
+	case r.hunk < len(f.Hunks) && r.lineIdx < len(f.Hunks[r.hunk].Lines):
+		l := f.Hunks[r.hunk].Lines[r.lineIdx]
+		oldNo, newNo, text = l.OldNum, l.NewNum, l.Content
+		switch l.Type {
+		case diff.LineAdd:
+			lineBg, gutBg, bar = pal.addBg, pal.addGutter, pal.addBar
+		case diff.LineDel:
+			lineBg, gutBg, bar = pal.delBg, pal.delGutter, pal.delBar
+			old = true
+		}
+	default:
+		// 文件列表换了但 rows 还没重建，这一帧先不画。
+		return
+	}
+	newHL, oldHL := a.highlightFor(*f)
+	if old {
+		// 删除行在新侧没有行号，行号栏右边留空，高亮改查旧文件
+		hlFile, newNo = oldHL, 0
+	} else {
+		hlFile = newHL
+	}
+
+	size := a.codeSize
+	if size <= 0 {
+		size = defSize
+	}
+	// 高亮是按展开 tab 之后的文本切的，这里必须做同样的展开，
+	// 否则字节下标对不上，颜色会整段错位。
+	text = expandTabs(text)
+
+	ui.Row(c).Height(lineH).Shrink(0).FillWidth().Background(lineBg).Children(func() {
+		ui.Box(c).Width(barW).AlignSelf(ui.Stretch).Background(bar)
+		a.gutter(c, pal, oldNo, gutBg)
+		a.gutter(c, pal, newNo, gutBg)
+		a.code(c, pal, hlFile, lineNoOf(r, oldNo, newNo), text, size)
+	})
+}
+
+// sideLine 是 split 模式下某一侧的半行。empty 表示这一侧空着 ——
+// 对面有新增或删除，这里留白。
+type sideLine struct {
+	empty bool
+	text  string
+	kind  diff.LineType
+	no    int             // 这一侧的行号
+	hl    *highlight.File // 该去哪份高亮里查
+}
+
+func (a *app) splitRow(c *ui.Context, pal palette, r row) {
+	f := a.fileAt(r.file)
+	if f == nil {
+		return
+	}
+	left, right := a.splitSides(*f, r)
+	if left.empty && right.empty {
+		// 文件列表换了但 rows 还没重建，这一帧先不画。
+		return
+	}
+
+	size := a.codeSize
+	if size <= 0 {
+		size = defSize
+	}
+	ui.Row(c).Height(lineH).Shrink(0).FillWidth().Children(func() {
+		a.splitHalf(c, pal, left, size)
+		ui.Box(c).Width(1).AlignSelf(ui.Stretch).Background(pal.border)
+		a.splitHalf(c, pal, right, size)
+	})
+}
+
+// splitHalf 画半行：色条 + 行号 + 代码。左右两半除了内容来源不同，
+// 结构完全一样。
+func (a *app) splitHalf(c *ui.Context, pal palette, s sideLine, size float32) {
+	bg, gutBg, bar := pal.codeBg, pal.gutterBg, ui.Transparent
+	switch s.kind {
+	case diff.LineAdd:
+		bg, gutBg, bar = pal.addBg, pal.addGutter, pal.addBar
+	case diff.LineDel:
+		bg, gutBg, bar = pal.delBg, pal.delGutter, pal.delBar
+	}
+	if s.empty {
+		// 对面多出来的行：这一侧整片留白，一眼能看出是增还是删
+		bg, gutBg = pal.sideBg, pal.sideBg
+	}
+
+	ui.Row(c).Grow(1).MinWidth(0).AlignSelf(ui.Stretch).Background(bg).Children(func() {
+		ui.Box(c).Width(barW).AlignSelf(ui.Stretch).Background(bar)
+		a.gutter(c, pal, s.no, gutBg)
+		if s.empty {
+			ui.Spacer(c)
+			return
+		}
+		a.code(c, pal, s.hl, s.no, s.text, size)
+	})
+}
+
+// splitSides 返回一行在左右两侧的内容。
+func (a *app) splitSides(f gitrepo.File, r row) (left, right sideLine) {
+	if r.fromGap {
+		// 未改动区间在两侧是同一行，只是行号不同
+		newHL, oldHL := a.highlightFor(f)
+		text := expandTabs(a.contentLine(f, r.newNo))
+		return sideLine{text: text, kind: diff.LineContext, no: r.oldNo, hl: oldHL},
+			sideLine{text: text, kind: diff.LineContext, no: r.newNo, hl: newHL}
+	}
+	return a.sideOf(f, r.lhunk, r.lidx, true), a.sideOf(f, r.hunk, r.lineIdx, false)
+}
+
+// sideOf 取 hunk 里第 idx 行在某一侧的样子。old 为 true 是旧侧。
+// idx 越界或那一侧本来就没有这一行（新增行在旧侧不存在）时返回空。
+func (a *app) sideOf(f gitrepo.File, hunk, idx int, old bool) sideLine {
+	if idx < 0 || hunk < 0 || hunk >= len(f.Hunks) || idx >= len(f.Hunks[hunk].Lines) {
+		return sideLine{empty: true}
+	}
+	l := f.Hunks[hunk].Lines[idx]
+	newHL, oldHL := a.highlightFor(f)
+	s := sideLine{text: l.Content, kind: l.Type, hl: newHL, no: l.NewNum}
+	if old {
+		s.hl, s.no = oldHL, l.OldNum
+	}
+	if s.no == 0 {
+		return sideLine{empty: true}
+	}
+	s.text = expandTabs(s.text)
+	return s
+}
+
+// code 是半行/整行里代码那一块：可伸缩、横向裁掉超出的部分。
+func (a *app) code(c *ui.Context, pal palette, hl *highlight.File, lineNo int, text string, size float32) {
+	ui.Box(c).Grow(1).MinWidth(0).ClipX().Padding(0, 0, 0, codeGap).
+		Justify(ui.Center).Children(func() {
+			ui.RichText(c, lineSpans(pal, hl, lineNo, text)...).
+				Font("monospace").FontSize(size).SingleLine().TextColor(pal.code)
+		})
+}
+
+// lineNoOf 是这一行在对应那一侧的行号：高亮就是按这个行号取片段的。
+func lineNoOf(r row, oldNo, newNo int) int {
+	if r.fromGap {
+		return r.newNo
+	}
+	if newNo > 0 {
+		return newNo
+	}
+	return oldNo
+}
+
+// lineSpans 把一行切成带颜色的片段。没有高亮（认不出后缀、文件太大、
+// 内容还没读到、行号对不上）时整行一个片段，走默认前景色。
+//
+// 片段必须严丝合缝地铺满整行 —— RichText 按片段依次排版，多一段少一段
+// 都会让画面和实际内容对不上，所以空隙和越界都在这里补齐。
+func lineSpans(pal palette, hl *highlight.File, lineNo int, text string) []ui.Span {
+	plain := []ui.Span{{Text: text, Color: pal.code}}
+	if hl.Plain() {
+		return plain
+	}
+	segs := hl.Line(lineNo)
+	if len(segs) == 0 {
+		return plain
+	}
+
+	out := make([]ui.Span, 0, len(segs)+1)
+	col := 0
+	rich := false
+	for _, s := range segs {
+		if s.Start < col || s.End > len(text) {
+			// 内容和切分对不上（文件在读到之后又被改了之类）。
+			// 整行退回纯文本：宁可不好看，也别把颜色涂到别的字上。
+			return plain
+		}
+		if s.Start > col {
+			out = append(out, ui.Span{Text: text[col:s.Start], Color: pal.code})
+		}
+		e := pal.hl.Entry(s)
+		col = s.End
+		if e.Hex == "" {
+			out = append(out, ui.Span{Text: text[s.Start:s.End], Color: pal.code})
+			continue
+		}
+		rich = true
+		sp := ui.Span{
+			Text:   text[s.Start:s.End],
+			Color:  ui.Hex(e.Hex),
+			Italic: e.Italic,
+		}
+		if e.Bold {
+			sp.Weight = 700
+		}
+		out = append(out, sp)
+	}
+	if col < len(text) {
+		out = append(out, ui.Span{Text: text[col:], Color: pal.code})
+	}
+	if !rich {
+		return plain
+	}
+	return out
+}
+
+// highlightFor 取某个文件两侧的高亮切分。内容还没读到就都是 nil，
+// 渲染时按纯文本处理。
+func (a *app) highlightFor(f gitrepo.File) (newHL, oldHL *highlight.File) {
+	cc := a.contents[fileKey(f)]
+	if cc == nil {
+		return nil, nil
+	}
+	return cc.hl, cc.oldHL
+}
+
+// gutter 画一侧的行号。对面不存在的那一侧留空 —— 空白本身就是信息。
+func (a *app) gutter(c *ui.Context, pal palette, no int, bg ui.Color) {
+	label := ""
+	if no > 0 {
+		label = strconv.Itoa(no)
+	}
+	ui.Box(c).Width(gutterW).AlignSelf(ui.Stretch).Background(bg).
+		Justify(ui.Center).Padding(0, gutterPx).Children(func() {
+			ui.Text(c, label).Font("monospace").FontSize(11).FontFeatures("tnum").
+				SingleLine().Width(gutterW-2*gutterPx).TextAlign(ui.End).
+				TextColor(pal.lineNo)
+		})
+}
+
+// contentLine 取新侧第 n 行（1 起）的内容。内容没加载到就返回空串，
+// 行号仍然照常显示。
+func (a *app) contentLine(f gitrepo.File, n int) string {
+	cc := a.contents[fileKey(f)]
+	if cc == nil || n < 1 || n > len(cc.lines) {
+		return ""
+	}
+	return cc.lines[n-1]
+}
+
+// expandGap 把某个未改动区间再放出来一段。
+//
+// 这里只改状态、把 rows 标脏，不立刻重建 —— 重建会换掉 a.rows，
+// 而当前这一帧的列表正拿着它按行号取数据。
+func (a *app) expandGap(r row) {
+	if a.expanded == nil {
+		a.expanded = map[string]int{}
+	}
+	a.expanded[r.gapKey] += expandStep
+	a.rowsDirty = true
+}
+
+// displayPath 是文件头上显示的路径。删除的文件没有新路径，退回旧的。
+func displayPath(f gitrepo.File) string {
+	p := f.NewPath
+	if p == "" {
+		p = f.OldPath
+	}
+	if f.OldPath != "" && f.NewPath != "" && f.OldPath != f.NewPath {
+		return f.OldPath + " → " + f.NewPath
+	}
+	return p
+}
+
+// tabWidth 是 tab 展开后的列宽。等宽字体下 4 列和大多数编辑器的默认值一致。
+const tabWidth = 4
+
+// expandTabs 把 tab 按列对齐展开成空格。
+//
+// mygo 的文本引擎不处理 \t（会画成缺字方框），而且直接用空格替换不对齐，
+// 所以这里按当前列数补齐。传入的字符串可能含中日韩字符，它们的显示宽度是
+// 两列 —— 只按 rune 计数会让这类文件的缩进对不齐。
+func expandTabs(s string) string {
+	if !strings.ContainsRune(s, '\t') {
+		return s
+	}
+	var b strings.Builder
+	col := 0
+	for _, r := range s {
+		if r == '\t' {
+			n := tabWidth - col%tabWidth
+			b.WriteString(strings.Repeat(" ", n))
+			col += n
+			continue
+		}
+		b.WriteRune(r)
+		col += runeCols(r)
+	}
+	return b.String()
+}
+
+// runeCols 是字符占的显示列数：宽字符（CJK、全角标点）占两列。
+func runeCols(r rune) int {
+	switch {
+	case r >= 0x1100 && r <= 0x115F, // 韩文字母
+		r >= 0x2E80 && r <= 0xA4CF, // CJK 部首、假名、汉字
+		r >= 0xAC00 && r <= 0xD7A3, // 韩文音节
+		r >= 0xF900 && r <= 0xFAFF, // CJK 兼容汉字
+		r >= 0xFE30 && r <= 0xFE6F, // CJK 兼容形式
+		r >= 0xFF00 && r <= 0xFF60, // 全角形式
+		r >= 0xFFE0 && r <= 0xFFE6,
+		r >= 0x20000 && r <= 0x3FFFD: // 扩展区汉字
+		return 2
+	}
+	return 1
+}

@@ -61,6 +61,28 @@ func (h Hunk) Raw() string {
 	return b.String()
 }
 
+// NewStartLine 返回 hunk 覆盖到的第一个新侧行号。
+//
+// 新侧行数为 0 时（纯删除的 hunk），git 把头里的起始行号写成插入点之前
+// 的那一行 —— `@@ -5,3 +4,0 @@` 的意思是「删掉旧文件 5-7 行，新文件第 4
+// 行之后什么都不剩」，所以它覆盖的起点是第 5 行。
+//
+// 界面算「未改动区间」和还原旧文件都要靠这个约定，所以放在这里共用。
+func (h Hunk) NewStartLine() int {
+	if h.NewLines == 0 {
+		return h.NewStart + 1
+	}
+	return h.NewStart
+}
+
+// NewEndLine 返回 hunk 覆盖到的最后一个新侧行号（纯删除的情形见 NewStartLine）。
+func (h Hunk) NewEndLine() int {
+	if h.NewLines == 0 {
+		return h.NewStart
+	}
+	return h.NewStart + h.NewLines - 1
+}
+
 // FileDiff 是单个文件的变更。Status: added / deleted / modified / renamed。
 type FileDiff struct {
 	OldPath  string `json:"oldPath"`

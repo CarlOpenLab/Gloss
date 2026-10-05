@@ -1,6 +1,10 @@
 package main
 
-import "github.com/egoist/mygo/ui"
+import (
+	"github.com/egoist/mygo/ui"
+
+	"diff-explainer/internal/highlight"
+)
 
 // palette 是 diff 视图专用的语义色。
 //
@@ -20,16 +24,42 @@ type palette struct {
 	delGutter ui.Color // 删除行号栏背景
 	delBar    ui.Color // 删除行左侧色条
 	gapBg     ui.Color // 未改动区间条的背景
+	gapHover  ui.Color // 未改动区间条悬停时的背景
 	gapText   ui.Color // 未改动区间条的文字
+	fileBg    ui.Color // 文件头的背景
+	hunkBg    ui.Color // @@ 行背景
+	hunkText  ui.Color // @@ 行文字
 	sideBg    ui.Color // 删除侧留白（split 模式下对面没有对应行）
 	border    ui.Color
 	ref       ui.Color // 分支名、commit hash 的强调色
 	viewed    ui.Color // 已 review 的勾与文字
+
+	// hl 是代码上色用的配色，按明暗共享同一份缓存。
+	hl *highlight.Palette
+}
+
+// hlPalettes 按明暗缓存两套高亮配色。
+//
+// 解析样式表（样式继承、token 类别合并）不便宜，而配色只跟主题有关，
+// 缓存一份就够。只有渲染线程会碰它，所以不加锁。
+var hlPalettes [2]*highlight.Palette
+
+func hlPalette(dark bool) *highlight.Palette {
+	i := 0
+	if dark {
+		i = 1
+	}
+	if hlPalettes[i] == nil {
+		hlPalettes[i] = highlight.NewPalette(dark)
+	}
+	return hlPalettes[i]
 }
 
 func paletteFor(t *ui.Theme) palette {
+	hl := hlPalette(t.Dark)
 	if t.Dark {
 		return palette{
+			hl:        hl,
 			appBg:     ui.Hex("#0d1117"),
 			codeBg:    ui.Hex("#0d1117"),
 			code:      ui.Hex("#e6edf3"),
@@ -42,7 +72,11 @@ func paletteFor(t *ui.Theme) palette {
 			delGutter: ui.Hex("#4c1f24"),
 			delBar:    ui.Hex("#f85149"),
 			gapBg:     ui.Hex("#161b22"),
+			gapHover:  ui.Hex("#21262d"),
 			gapText:   ui.Hex("#8b949e"),
+			fileBg:    ui.Hex("#161b22"),
+			hunkBg:    ui.Hex("#121d2f"),
+			hunkText:  ui.Hex("#79c0ff"),
 			sideBg:    ui.Hex("#11161d"),
 			border:    ui.Hex("#30363d"),
 			ref:       ui.Hex("#d29922"),
@@ -50,6 +84,7 @@ func paletteFor(t *ui.Theme) palette {
 		}
 	}
 	return palette{
+		hl:        hl,
 		appBg:     ui.Hex("#ffffff"),
 		codeBg:    ui.Hex("#ffffff"),
 		code:      ui.Hex("#1f2328"),
@@ -62,7 +97,11 @@ func paletteFor(t *ui.Theme) palette {
 		delGutter: ui.Hex("#ffd7d5"),
 		delBar:    ui.Hex("#cf222e"),
 		gapBg:     ui.Hex("#f6f8fa"),
+		gapHover:  ui.Hex("#eaeef2"),
 		gapText:   ui.Hex("#6e7781"),
+		fileBg:    ui.Hex("#f6f8fa"),
+		hunkBg:    ui.Hex("#ddf4ff"),
+		hunkText:  ui.Hex("#0550ae"),
 		sideBg:    ui.Hex("#fafbfc"),
 		border:    ui.Hex("#d0d7de"),
 		ref:       ui.Hex("#bc4c00"),
