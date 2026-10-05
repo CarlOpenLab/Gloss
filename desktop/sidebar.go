@@ -1,0 +1,141 @@
+package main
+
+import (
+	"github.com/egoist/mygo/ui"
+
+	"diff-explainer/internal/filetree"
+	"diff-explainer/internal/gitrepo"
+)
+
+const sidebarWidth = 280
+
+// sidebar 是左侧栏：筛选框 + 文件树 + 底部统计。
+//
+// 整栏不铺底色 —— 窗口开了 VibrancySidebar，留空才能透出系统材质。
+func (a *app) sidebar(c *ui.Context, pal palette) {
+	ui.Column(c).Width(sidebarWidth).Shrink(0).Children(func() {
+		ui.Box(c).Padding(8).Shrink(0).Children(func() {
+			ui.SearchField(c, &a.filter).Placeholder("筛选文件")
+		})
+		a.treeView(c, pal)
+		a.sidebarFooter(c, pal)
+	})
+}
+
+func (a *app) treeView(c *ui.Context, pal palette) {
+	t := c.Theme()
+
+	// 筛选词变了就重建树。直接比对值而不是依赖控件的 Changed()：
+	// 少一处需要小心维护的时序假设。
+	if a.filter != a.treeFilter {
+		a.rebuildTree()
+	}
+
+	switch {
+	case a.state == loadIdle:
+		a.treeEmpty(c, t, "还没打开仓库")
+		return
+	case a.state != loadReady:
+		return
+	case len(a.tree) == 0 && a.filter != "":
+		a.treeEmpty(c, t, "没有匹配的文件")
+		return
+	case len(a.tree) == 0:
+		a.treeEmpty(c, t, "没有改动")
+		return
+	}
+
+	roots := make([]string, 0, len(a.tree))
+	for _, n := range a.tree {
+		roots = append(roots, n.Key)
+	}
+
+	ui.Outline(c, &a.outline, roots, a.childKeys, func(key string) {
+		n, ok := a.treeByKey[key]
+		if !ok {
+			return
+		}
+		a.treeRow(c, pal, n)
+	}).Grow(1)
+}
+
+func (a *app) treeEmpty(c *ui.Context, t *ui.Theme, msg string) {
+	ui.Box(c).Grow(1).Padding(16).Children(func() {
+		ui.Text(c, msg).FontSize(12).TextColor(t.TextMuted)
+	})
+}
+
+// treeRow 画文件树的一行。目录只画名字；文件画名字 + 增删行数 + 状态字母。
+func (a *app) treeRow(c *ui.Context, pal palette, n *filetree.Node) {
+	t := c.Theme()
+
+	if n.Dir {
+		ui.Text(c, n.Label).FontSize(12).SingleLine().TextColor(t.TextMuted)
+		return
+	}
+	if n.FileIdx < 0 || n.FileIdx >= len(a.files) {
+		ui.Text(c, n.Label).FontSize(12).SingleLine()
+		return
+	}
+
+	f := a.files[n.FileIdx]
+
+	// 已 review 的文件名变灰，一眼能看出哪些还没看
+	nameColor := t.Text
+	if a.isViewed(f) {
+		nameColor = t.TextMuted
+	}
+	ui.Text(c, n.Label).FontSize(12).SingleLine().Grow(1).TextColor(nameColor)
+
+	// 增删行数用来快速判断改动规模。用等宽字体 + tnum 让数字对齐，
+	// 一列扫下来不会参差不齐。
+	if f.AddCount > 0 {
+		ui.Textf(c, "+%d", f.AddCount).FontSize(10).Bold().
+			Font("monospace").FontFeatures("tnum").TextColor(pal.addBar)
+	}
+	if f.DelCount > 0 {
+		ui.Textf(c, "−%d", f.DelCount).FontSize(10).Bold().
+			Font("monospace").FontFeatures("tnum").TextColor(pal.delBar)
+	}
+
+	ui.Text(c, string(f.Status.Letter())).FontSize(10).Bold().
+		Width(12).TextAlign(ui.Center).
+		TextColor(statusColor(f.Status, pal)).
+		Tooltip(f.Status.Label())
+}
+
+func (a *app) sidebarFooter(c *ui.Context, pal palette) {
+	t := c.Theme()
+	ui.Row(c).Shrink(0).Padding(8, 12).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Textf(c, "Total: +%d −%d", a.totalAdd(), a.totalDel()).
+			FontSize(11).Font("monospace").FontFeatures("tnum").
+			TextColor(t.TextMuted)
+		ui.Spacer(c)
+		if n := a.viewedCount(); n > 0 {
+			ui.Textf(c, "✓ %d/%d", n, len(a.files)).
+				FontSize(11).TextColor(pal.viewed)
+		}
+	})
+}
+
+func (a *app) viewedCount() int {
+	n := 0
+	for _, f := range a.files {
+		if a.isViewed(f) {
+			n++
+		}
+	}
+	return n
+}
+
+func statusColor(s gitrepo.Status, pal palette) ui.Color {
+	switch s {
+	case gitrepo.StatusAdded, gitrepo.StatusUntracked:
+		return pal.addBar
+	case gitrepo.StatusDeleted:
+		return pal.delBar
+	case gitrepo.StatusConflict:
+		return pal.delBar
+	}
+	return pal.ref
+}

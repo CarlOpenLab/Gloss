@@ -74,10 +74,13 @@ type Change struct {
 // 用 porcelain=v2 而不是 v1：v2 用 . 明确表示「这一侧没有变更」，
 // 能把「已暂存的修改」和「未暂存的修改」分开，这是后面做暂存/提交的前提；
 // v1 的 XY 在重命名等场景下有歧义。
+//
+// --untracked-files=all 是必须的：默认模式下 git 会把未跟踪的目录折叠成
+// 一条记录（只给 "internal/"，不列里面的文件），那样整个目录的改动都看不见。
 func (r *Repo) Status(ctx context.Context) ([]Change, error) {
 	out, err := run(ctx, r.Root,
 		"-c", "core.quotePath=false",
-		"status", "--porcelain=v2", "--branch", "-z",
+		"status", "--porcelain=v2", "--branch", "--untracked-files=all", "-z",
 	)
 	if err != nil {
 		return nil, err

@@ -16,6 +16,14 @@ import (
 // 只标注「文件过大」——几 MB 的日志文件塞进 diff 视图对谁都没好处。
 const maxUntrackedBytes = 1 << 20
 
+// maxUntracked 是未跟踪文件的处理条数上限。
+//
+// Status 用 --untracked-files=all 展开未跟踪目录，万一用户没配 .gitignore
+// （比如仓库里有个没被忽略的 node_modules），列出来的文件可能上万条，
+// 逐条读内容会把加载拖到没法用。超出部分直接跳过，界面上体现为
+// 「文件数」比实际少 —— 这是有意的取舍，宁可少显示也不要卡死。
+const maxUntracked = 500
+
 // File 是一个可以直接渲染的文件变更：解析好的 hunk + git status 的三态信息。
 type File struct {
 	diff.FileDiff
@@ -71,6 +79,7 @@ func (r *Repo) Load(ctx context.Context) (*Model, error) {
 	}
 
 	m := &Model{Repo: r, Branch: branch}
+	untracked := 0
 	for _, ch := range changes {
 		f := File{
 			Status:      ch.Status,
@@ -81,6 +90,10 @@ func (r *Repo) Load(ctx context.Context) (*Model, error) {
 
 		switch {
 		case ch.Status == StatusUntracked:
+			if untracked >= maxUntracked {
+				continue
+			}
+			untracked++
 			// 未跟踪文件 git diff 不会输出，自己读内容合成一份
 			content, err := readCapped(filepath.Join(r.Root, ch.Path), maxUntrackedBytes)
 			if err != nil {
