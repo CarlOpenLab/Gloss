@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -65,9 +66,21 @@ type FileDiff struct {
 	OldPath  string `json:"oldPath"`
 	NewPath  string `json:"newPath"`
 	Status   string `json:"status"`
+	Binary   bool   `json:"binary,omitempty"` // 二进制文件：没有 hunk，界面显示「二进制文件已变更」
 	Hunks    []Hunk `json:"hunks"`
 	AddCount int    `json:"addCount"`
 	DelCount int    `json:"delCount"`
+}
+
+// AssignHunkIDs 给每个 hunk 算出稳定 ID（文件路径 + hunk 原文的内容哈希）。
+// 界面用它当列表 key，AI 解释缓存也用它当 key 的一半——所以同一个 hunk
+// 出现在不同 PR、不同分支里都会命中同一份缓存。
+func (f *FileDiff) AssignHunkIDs() {
+	for hi := range f.Hunks {
+		h := &f.Hunks[hi]
+		sum := sha256.Sum256([]byte(f.NewPath + "|" + h.Raw()))
+		h.ID = hex.EncodeToString(sum[:])[:16]
+	}
 }
 
 var hunkRe = regexp.MustCompile(`^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@\s?(.*)$`)
@@ -142,6 +155,8 @@ func Parse(raw string) []FileDiff {
 			cur.Status = "added"
 		case strings.HasPrefix(line, "deleted file mode"):
 			cur.Status = "deleted"
+		case strings.HasPrefix(line, "Binary files "), strings.HasPrefix(line, "GIT binary patch"):
+			cur.Binary = true
 		case strings.HasPrefix(line, "rename from "):
 			cur.Status = "renamed"
 			cur.OldPath = strings.TrimPrefix(line, "rename from ")
@@ -188,14 +203,35 @@ func Parse(raw string) []FileDiff {
 
 	// 计算每个 hunk 的稳定 ID（内容哈希），用作前端 key 和解释缓存 key
 	for fi := range files {
-		f := &files[fi]
-		for hi := range f.Hunks {
-			h := &f.Hunks[hi]
-			sum := sha256.Sum256([]byte(f.NewPath + "|" + h.Raw()))
-			h.ID = hex.EncodeToString(sum[:])[:16]
-		}
+		files[fi].AssignHunkIDs()
 	}
 	return files
+}
+
+// NewFileFromContent 把一个全新文件的内容合成成「整文件新增」的 FileDiff。
+//
+// 未跟踪的文件不会出现在 `git diff` 的输出里（git 根本不认为它属于版本控制），
+// 但 review 时恰恰最需要看到它们，所以单独合成一份。
+func NewFileFromContent(path string, content []byte) FileDiff {
+	f := FileDiff{NewPath: path, Status: "added"}
+	if len(content) == 0 {
+		return f
+	}
+	// 末尾的换行只是文件结束标记，不构成一个空行
+	text := strings.TrimSuffix(string(content), "\n")
+	lines := strings.Split(text, "\n")
+	h := Hunk{
+		Header:   fmt.Sprintf("@@ -0,0 +1,%d @@", len(lines)),
+		NewStart: 1,
+		NewLines: len(lines),
+	}
+	for i, l := range lines {
+		h.Lines = append(h.Lines, Line{Type: LineAdd, Content: l, NewNum: i + 1})
+	}
+	f.Hunks = []Hunk{h}
+	f.AddCount = len(lines)
+	f.AssignHunkIDs()
+	return f
 }
 
 func stripAB(p string) string {
