@@ -15,7 +15,9 @@ const sidebarWidth = 280
 func (a *app) sidebar(c *ui.Context, pal palette) {
 	ui.Column(c).Width(sidebarWidth).Shrink(0).Children(func() {
 		ui.Box(c).Padding(8).Shrink(0).Children(func() {
-			ui.SearchField(c, &a.filter).Placeholder("筛选文件")
+			// 用 TextInput 而不是 ui.SearchField：SearchField 的 placeholder
+			// 是内部写死的 "Search"，从外面盖不掉，而整个界面是中文的。
+			ui.TextInput(c, &a.filter).Placeholder("筛选文件")
 		})
 		a.treeView(c, pal)
 		a.sidebarFooter(c, pal)

@@ -317,9 +317,12 @@ func (a *app) rebuildTree() {
 }
 
 // childKeys 是给 ui.Outline 的 children 回调：返回某个目录节点的子节点 key。
+//
+// 叶子节点必须返回 nil 而不是空切片 —— Outline 用 `kids != nil` 判断一个
+// 条目是不是分支，返回空切片会让文件也画上展开三角。
 func (a *app) childKeys(key string) []string {
 	n, ok := a.treeByKey[key]
-	if !ok {
+	if !ok || len(n.Children) == 0 {
 		return nil
 	}
 	out := make([]string, 0, len(n.Children))
