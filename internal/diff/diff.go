@@ -94,14 +94,28 @@ type FileDiff struct {
 	DelCount int    `json:"delCount"`
 }
 
-// AssignHunkIDs 给每个 hunk 算出稳定 ID（文件路径 + hunk 原文的内容哈希）。
-// 界面用它当列表 key，AI 解释缓存也用它当 key 的一半——所以同一个 hunk
-// 出现在不同 PR、不同分支里都会命中同一份缓存。
+// Path 是这个文件的主路径。删除的文件没有新路径，退回旧的。
+func (f FileDiff) Path() string {
+	if f.NewPath != "" {
+		return f.NewPath
+	}
+	return f.OldPath
+}
+
+// HunkID 是 hunk 的稳定标识：文件路径 + hunk 原文的内容哈希。
+//
+// 哈希覆盖的是 hunk.Raw()，也就是模型和界面看到的那份文本，@@ 行里的
+// 行号也包括在内 —— 「同一处改动挪到了别的行」算两个不同的块。
+// 界面用它当列表 key，AI 解释缓存也用它当 key 的一半。
+func HunkID(path string, h Hunk) string {
+	sum := sha256.Sum256([]byte(path + "|" + h.Raw()))
+	return hex.EncodeToString(sum[:])[:16]
+}
+
+// AssignHunkIDs 给每个 hunk 算好 ID（见 HunkID）。
 func (f *FileDiff) AssignHunkIDs() {
 	for hi := range f.Hunks {
-		h := &f.Hunks[hi]
-		sum := sha256.Sum256([]byte(f.NewPath + "|" + h.Raw()))
-		h.ID = hex.EncodeToString(sum[:])[:16]
+		f.Hunks[hi].ID = HunkID(f.Path(), f.Hunks[hi])
 	}
 }
 

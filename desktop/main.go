@@ -7,12 +7,23 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+
+	"diff-explainer/internal/store"
 )
 
 func main() {
 	a := newApp()
 
 	mygo.App.WhenReady(func() {
+		// 设置、状态和解释缓存都在应用数据目录里。拿不到目录（极少见）
+		// 就退回内存里的一份空 store —— 设置存不下，但应用照常能用。
+		dir, err := mygo.App.Path(mygo.PathUserData)
+		if err != nil {
+			log.Printf("拿不到数据目录，这次的设置不会被保存：%v", err)
+		}
+		s := store.Open(dir)
+		a.attachStore(s)
+
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:     "Diff Explainer",
 			Width:     1280,
@@ -30,6 +41,11 @@ func main() {
 		// 后台 goroutine 改状态必须走这里：它把闭包投到主线程执行，
 		// 并请求重绘。直接改字段不会触发重绘。
 		a.dispatch = win.Update
+
+		// 接着上次的仓库打开，省得每次启动都要重新选一遍
+		if p := s.State().LastRepo; p != "" {
+			a.dispatch(func() { a.openRepo(p) })
+		}
 	})
 
 	if err := mygo.App.Run(); err != nil {

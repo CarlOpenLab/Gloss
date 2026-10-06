@@ -62,19 +62,30 @@ func loadApp(t *testing.T, dir string) *app {
 	return a
 }
 
-// settle 等所有后台任务跑完。测试里 dispatch 是同步执行，所以后台任务
-// 结束时回调也已经跑过了 —— 等它等到就等于界面状态已经稳定。
+// settle 等所有后台任务跑完，并把它们投回主线程的闭包执行干净。
+//
+// 要循环：一轮回调里可能又起新的后台任务（比如解释结束后落盘），
+// 等一次只能等到第一层。
 func settle(t *testing.T, a *app) {
 	t.Helper()
-	done := make(chan struct{})
-	go func() {
-		a.bg.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(20 * time.Second):
-		t.Fatal("后台任务超时")
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		done := make(chan struct{})
+		go func() {
+			a.bg.Wait()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(time.Until(deadline)):
+			t.Fatal("后台任务超时")
+		}
+		if !a.loop.drain() {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("后台任务超时")
+		}
 	}
 }
 

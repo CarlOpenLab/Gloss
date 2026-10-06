@@ -118,8 +118,8 @@ func (a *app) fileHeaderRow(c *ui.Context, pal palette, r row) {
 		})
 }
 
-// hunkHeaderRow 是 @@ 那一行。左边是原始的 hunk 头，右边跟着 git 抓出来的
-// 函数名（Section），review 时靠它快速判断这段在文件里的位置。
+// hunkHeaderRow 是 @@ 那一行。左边是原始的 hunk 头，中间跟着 git 抓出来的
+// 函数名（Section），最右边是 ✨ 解释按钮。
 func (a *app) hunkHeaderRow(c *ui.Context, pal palette, r row) {
 	f := a.fileAt(r.file)
 	if f == nil || r.hunk >= len(f.Hunks) {
@@ -134,6 +134,19 @@ func (a *app) hunkHeaderRow(c *ui.Context, pal palette, r row) {
 		if h.Section != "" {
 			ui.Text(c, h.Section).Font("monospace").FontSize(11).SingleLine().
 				Grow(1).MinWidth(0).TextColor(pal.hunkText).Opacity(0.7)
+		} else {
+			ui.Spacer(c)
+		}
+
+		// 先问点击再记锚点：这一帧刚点开时，卡片要靠同一个按钮的位置来
+		// 定位，顺序反了第一帧就会摆在左上角。
+		btn := ui.Button(c, "✨ 解释")
+		clicked := btn.Clicked()
+		if clicked {
+			a.toggleExplain(r.file, r.hunk)
+		}
+		if a.isExplaining(r.file, r.hunk) {
+			a.ex.anchor = btn.Bounds()
 		}
 	})
 }

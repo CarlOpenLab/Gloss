@@ -9,6 +9,7 @@ import (
 
 	"diff-explainer/internal/filetree"
 	"diff-explainer/internal/gitrepo"
+	"diff-explainer/internal/store"
 )
 
 // 线程约定 —— desktop 包里所有代码都要守这几条：
@@ -40,6 +41,9 @@ type app struct {
 	// bg 登记所有后台任务，测试靠它等异步流程跑完（生产环境不等 ——
 	// 结果的落地走 dispatch，该等的是回调而不是 goroutine 结束）。
 	bg sync.WaitGroup
+	// loop 只在测试里用：dispatch 改成把闭包排进队列，由 settle 执行。
+	// 生产环境它是零值，没人碰。
+	loop mainLoop
 
 	// —— 仓库 ——
 	repoPath string
@@ -95,16 +99,104 @@ type app struct {
 	// —— 已 review：文件路径 -> 当时的内容指纹 ——
 	// 指纹对不上就说明文件又变了，标记自动失效。
 	viewed map[string]string
+
+	// —— AI 解释 ——
+	store *store.Store
+	// modelName 是当前生效的模型名，解释缓存的 key 里带它。它在设置变化时
+	// 更新一次，而不是每帧去问 store —— 那要加锁还可能要读环境变量。
+	modelName  string
+	ex         explainState
+	// settingsOn 是「模型设置」对话框是否打开；editCfg 是编辑中的副本，
+	// 点确定之前不动真配置。
+	settingsOn bool
+	editCfg    store.Config
+	editIdx    int
 }
 
 func newApp() *app {
 	a := &app{
 		sidebarOn: true,
 		viewed:    map[string]string{},
+		// 没接上真实目录之前先用一个空 store，这样 newApp 之后随时可以
+		// 直接跑（测试就是这么用的）；main 里再换成真正的数据目录。
+		store: store.Open(""),
 	}
-	// 默认同步执行，测试可直接驱动；生产环境由 main 换成 win.Update。
-	a.dispatch = func(f func()) { f() }
+	// 测试里 dispatch 不直接执行，而是排进队列，由 settle 在测试 goroutine
+	// （也就是扮演主线程的那一个）上跑完。直接执行的话这些闭包会在后台
+	// goroutine 上改 app 的字段，第 1 条约定就破了 —— race detector 也就
+	// 失去了意义。生产环境由 main 换成 win.Update，同样是跳回主线程。
+	a.dispatch = a.loop.post
 	return a
+}
+
+// mainLoop 是测试里的「主线程」：一个先进先出的闭包队列。
+type mainLoop struct {
+	mu sync.Mutex
+	q  []func()
+}
+
+func (l *mainLoop) post(f func()) {
+	l.mu.Lock()
+	l.q = append(l.q, f)
+	l.mu.Unlock()
+}
+
+// drain 把队列里的闭包依次执行完，返回是否执行过。
+//
+// 执行过程中可能又排进新的闭包（比如落盘任务结束后的回调），所以循环到
+// 队列真的空了为止。
+func (l *mainLoop) drain() bool {
+	ran := false
+	for {
+		l.mu.Lock()
+		batch := l.q
+		l.q = nil
+		l.mu.Unlock()
+		if len(batch) == 0 {
+			return ran
+		}
+		ran = true
+		for _, f := range batch {
+			f()
+		}
+	}
+}
+
+// attachStore 换上真正的数据目录，并把上次的状态恢复进来。
+//
+// 它同时承担「启动时恢复现场」的职责：调用的地方在窗口建好、view 挂上之后，
+// 所以这里改状态会自然反映到第一帧。
+func (a *app) attachStore(s *store.Store) {
+	a.store = s
+	cfg := s.Config()
+	a.codeSize = cfg.CodeSize
+	a.split = cfg.Split
+	a.sidebarOn = !cfg.SidebarOff
+	a.viewed = s.State().Viewed
+	if a.viewed == nil {
+		a.viewed = map[string]string{}
+	}
+	a.editIdx = cfg.Active
+	a.modelName = s.Provider().EffectiveModel()
+}
+
+// persist 把设置、状态和缓存落盘。写文件不占主线程，扔到后台去。
+func (a *app) persist() {
+	s := a.store
+	a.run(func() { _ = s.Save() })
+}
+
+// saveViewSettings 记下跟界面有关的几项设置（视图模式、侧栏、字号）。
+//
+// 只覆盖这几项，别的字段原样留着 —— 模型设置的保存走 applySettings，
+// 两边各管各的，不会互相冲掉。
+func (a *app) saveViewSettings() {
+	cfg := a.store.Config()
+	cfg.Split = a.split
+	cfg.SidebarOff = !a.sidebarOn
+	cfg.CodeSize = a.codeSize
+	a.store.SetConfig(cfg)
+	a.persist()
 }
 
 func (a *app) view(c *ui.Context) {
@@ -122,6 +214,16 @@ func (a *app) view(c *ui.Context) {
 			a.mainArea(c, pal)
 		})
 	})
+	a.settingsDialog(c, pal)
+
+	// 卡片画在最后：这一帧的 ✨ 按钮位置刚写好，卡片当帧就能摆对地方。
+	// 它在 Overlay 层，不受上面的布局影响。
+	a.explainCard(c, pal)
+
+	// Esc 关掉卡片。放在最后，让卡片里正在编辑的输入框先有机会处理它。
+	if a.explainOpen() && c.Shortcut(0, ui.KeyEscape) {
+		a.closeExplain()
+	}
 }
 
 // toolbar 是自绘的标题栏：窗口用 TitleBarHidden，标题栏由 view 画出来，
@@ -169,6 +271,7 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 			if (mode == 1) != split {
 				a.split = mode == 1
 				a.rowsDirty = true
+				a.saveViewSettings()
 			}
 
 			switch a.state {
@@ -180,6 +283,9 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 
 			if ui.Button(c, "刷新").Clicked() {
 				a.reload()
+			}
+			if ui.Button(c, "模型设置…").Clicked() {
+				a.openSettings()
 			}
 			if ui.Button(c, "打开仓库…").Clicked() {
 				a.chooseFolder()
@@ -322,7 +428,12 @@ func (a *app) applyModel(m *gitrepo.Model) {
 	// 换了仓库，上一个仓库的展开状态和文件内容都不再适用
 	a.expanded = nil
 	a.contents = map[string]*fileContent{}
+	// 卡片指向的是上一个仓库里的第几个文件的第几段，同样作废
+	a.closeExplain()
 	a.state = loadReady
+
+	// 记住这个仓库，下次启动直接打开
+	a.store.SetLastRepo(a.repoPath)
 
 	a.applyFilter()
 	a.loadContents(a.loadSeq)
@@ -424,7 +535,9 @@ func (a *app) isViewed(f gitrepo.File) bool {
 func (a *app) toggleViewed(f gitrepo.File) {
 	if a.isViewed(f) {
 		delete(a.viewed, f.NewPath)
-		return
+	} else {
+		a.viewed[f.NewPath] = f.Fingerprint
 	}
-	a.viewed[f.NewPath] = f.Fingerprint
+	a.store.SetViewed(a.viewed)
+	a.persist()
 }
