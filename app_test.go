@@ -334,3 +334,44 @@ func TestNarrowWindow(t *testing.T) {
 		t.Errorf("窄窗口下渲染不完整：%q", tt.Texts())
 	}
 }
+
+// 打开本仓库自己 —— 临时仓库里只有两三个小文件，这里是真的、有历史、
+// 文件又多的大仓库，加载路径上的每一条都过一遍。
+func TestOpenThisRepo(t *testing.T) {
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo, err := gitrepo.Open(context.Background(), dir)
+	if err != nil {
+		t.Skipf("当前目录不是 git 仓库：%v", err)
+	}
+	m, err := repo.Load(context.Background())
+	if err != nil {
+		t.Fatalf("读不动本仓库：%v", err)
+	}
+
+	a := newApp()
+	a.applyModel(m)
+	settle(t, a)
+	tt := ui.NewTester(a.view, 1280, 860)
+
+	if a.repoName != "diff-explainer" {
+		t.Errorf("仓库名 = %q", a.repoName)
+	}
+	if !tt.HasText(a.repoName) {
+		t.Errorf("顶栏没有显示仓库名：%q", tt.Texts())
+	}
+	// 工作区干净或脏都行，但两边的界面都得画出来
+	if len(a.files) == 0 && !tt.HasText("没有未提交的改动") {
+		t.Errorf("既没有改动也没有空状态提示：%q", tt.Texts())
+	}
+
+	// 历史也得能读
+	a.setTab(1)
+	settle(t, a)
+	tt.Frame()
+	if a.hist != loadReady || len(a.commits) == 0 {
+		t.Errorf("读不到本仓库的历史：state=%v err=%s", a.hist, a.histErr)
+	}
+}
