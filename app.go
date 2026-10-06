@@ -123,10 +123,17 @@ type app struct {
 	// —— 历史 ——
 	tab        int // 0 = 改动，1 = 历史
 	commits    []gitrepo.Commit
+	graph      []graphRow // 和 commits 一一对应，见 setCommits
+	maxLanes   int        // 整张图占几条泳道，图形栏按它定宽
 	commitList ui.ListState
 	commitSel  int // 选中的提交下标，-1 表示还没选
-	hist       loadState
-	histErr    string
+	// hist 是提交列表本身的状态，histDiff 是选中那个提交的 diff 的状态。
+	// 必须分开：列表和 diff 是两路异步加载，共用一个的话点一个提交会让
+	// 整个列表闪成「正在读提交…」。
+	hist        loadState
+	histErr     string
+	histDiff    loadState
+	histDiffErr string
 
 	// —— AI 解释 ——
 	store *store.Store
@@ -339,7 +346,7 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 				// 两个 tab 都报当前主区里的文件数：改动是工作区的，
 				// 历史是选中那个提交的
 				ui.Textf(c, "%d 个文件", len(a.files)).FontSize(12).TextColor(t.TextMuted)
-			case a.tab == 1 && a.hist == loadLoading:
+			case a.tab == 1 && (a.hist == loadLoading || a.histDiff == loadLoading):
 				ui.Spinner(c)
 			}
 
@@ -355,9 +362,15 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 		})
 }
 
-// mainArea 是右侧主区：仓库就绪就画 diff，否则画空/加载/出错状态。
+// mainArea 是右侧主区。历史 tab 是「提交列表 + diff」两栏，改动 tab 就是
+// 一份 diff，没有 diff 可画时给一块空状态。
 func (a *app) mainArea(c *ui.Context, pal palette) {
 	t := c.Theme()
+
+	if a.tab == 1 {
+		a.historyArea(c, pal)
+		return
+	}
 
 	if a.state == loadReady && len(a.files) > 0 {
 		a.diffView(c, pal)
@@ -367,9 +380,6 @@ func (a *app) mainArea(c *ui.Context, pal palette) {
 	ui.Box(c).Grow(1).FillWidth().Background(pal.appBg).Children(func() {
 		ui.Column(c).Fill().Center().Gap(10).Padding(24).Children(func() {
 			switch {
-			case a.tab == 1:
-				a.historyEmpty(c, t)
-
 			case a.state == loadIdle:
 				ui.Text(c, "还没有打开仓库").FontSize(18).Bold()
 				ui.Text(c, "选一个本地 git 仓库，看看有哪些改动。").
@@ -399,31 +409,39 @@ func (a *app) mainArea(c *ui.Context, pal palette) {
 }
 
 // historyEmpty 是历史 tab 主区没有 diff 可画时的几种情况。
+//
+// 先问列表的状态、再问这个提交的 diff 的状态 —— 两者是两路独立的加载，
+// 列表没读出来时根本谈不上「选中了哪个提交」。
 func (a *app) historyEmpty(c *ui.Context, t *ui.Theme) {
-	switch a.hist {
-	case loadLoading:
+	switch {
+	case a.hist == loadLoading:
 		ui.Spinner(c)
 		ui.Text(c, "正在读提交…").TextColor(t.TextMuted)
-	case loadFailed:
+	case a.hist == loadFailed:
 		ui.Text(c, "读不到历史").FontSize(18).Bold()
 		ui.Text(c, a.histErr).TextColor(t.Danger)
 		if ui.Button(c, "重试").Clicked() {
 			a.loadCommits()
 		}
+	case len(a.commits) == 0:
+		ui.Text(c, "还没有提交").FontSize(18).Bold()
+		ui.Text(c, "这个仓库还没有任何历史。").TextColor(t.TextMuted)
+	case a.histDiff == loadLoading:
+		ui.Spinner(c)
+		ui.Text(c, "正在读这个提交…").TextColor(t.TextMuted)
+	case a.histDiff == loadFailed:
+		ui.Text(c, "读不到这个提交").FontSize(18).Bold()
+		ui.Text(c, a.histDiffErr).TextColor(t.Danger)
+		if ui.Button(c, "重试").Clicked() {
+			a.loadCommit(a.commitSel)
+		}
+	case a.commitSel >= 0 && a.commitSel < len(a.commits):
+		cm := a.commits[a.commitSel]
+		ui.Text(c, cm.Subject).FontSize(18).Bold()
+		ui.Textf(c, "%s · %s · %s", cm.Short, cm.Author, cm.When.Format("2006-01-02 15:04")).
+			TextColor(t.TextMuted)
+		ui.Text(c, "这个提交没有改动内容。").TextColor(t.TextMuted)
 	default:
-		if len(a.commits) == 0 {
-			ui.Text(c, "还没有提交").FontSize(18).Bold()
-			ui.Text(c, "这个仓库还没有任何历史。").TextColor(t.TextMuted)
-			return
-		}
-		if a.commitSel >= 0 && a.commitSel < len(a.commits) {
-			cm := a.commits[a.commitSel]
-			ui.Text(c, cm.Subject).FontSize(18).Bold()
-			ui.Textf(c, "%s · %s · %s", cm.Short, cm.Author, cm.When.Format("2006-01-02 15:04")).
-				TextColor(t.TextMuted)
-			ui.Text(c, "这个提交没有改动内容。").TextColor(t.TextMuted)
-			return
-		}
 		ui.Text(c, "选一个提交").FontSize(18).Bold()
 		ui.Text(c, "左边挑一个提交，看看它改了什么。").TextColor(t.TextMuted)
 	}

@@ -34,8 +34,21 @@ type palette struct {
 	ref       ui.Color // 分支名、commit hash 的强调色
 	viewed    ui.Color // 已 review 的勾与文字
 
+	// lanes 是提交拓扑图里每条泳道的颜色。
+	//
+	// 用定长数组而不是切片：调色板每帧都要重建，切片意味着每帧一次分配。
+	// 第 i 条泳道取 lanes[i%8] —— 按泳道号定色，不是按「第几次被占用」，
+	// 这样同一列一路同色，而且每行都能独立算出来（列表是虚拟化的，行与行
+	// 之间不能有共享状态）。
+	lanes [8]ui.Color
+
 	// hl 是代码上色用的配色，按明暗共享同一份缓存。
 	hl *highlight.Palette
+}
+
+// laneColor 是第 i 条泳道的颜色。
+func (p palette) laneColor(i int) ui.Color {
+	return p.lanes[i%len(p.lanes)]
 }
 
 // hlPalettes 按明暗缓存两套高亮配色。
@@ -81,6 +94,17 @@ func paletteFor(t *ui.Theme) palette {
 			border:    ui.Hex("#30363d"),
 			ref:       ui.Hex("#d29922"),
 			viewed:    ui.Hex("#3fb950"),
+			// 泳道色：八条线两两要能分开，也得在 #0d1117 上看得清
+			lanes: [8]ui.Color{
+				ui.Hex("#58a6ff"), // 蓝
+				ui.Hex("#3fb950"), // 绿
+				ui.Hex("#d29922"), // 琥珀
+				ui.Hex("#bc8cff"), // 紫
+				ui.Hex("#f85149"), // 红
+				ui.Hex("#39c5cf"), // 青
+				ui.Hex("#db61a2"), // 粉
+				ui.Hex("#e3b341"), // 黄
+			},
 		}
 	}
 	return palette{
@@ -106,5 +130,16 @@ func paletteFor(t *ui.Theme) palette {
 		border:    ui.Hex("#d0d7de"),
 		ref:       ui.Hex("#bc4c00"),
 		viewed:    ui.Hex("#1a7f37"),
+		// 同一套色相，压暗一档，在白底上才够看
+		lanes: [8]ui.Color{
+			ui.Hex("#0969da"),
+			ui.Hex("#1a7f37"),
+			ui.Hex("#9a6700"),
+			ui.Hex("#8250df"),
+			ui.Hex("#cf222e"),
+			ui.Hex("#1b7c83"),
+			ui.Hex("#bf3989"),
+			ui.Hex("#7d4e00"),
+		},
 	}
 }

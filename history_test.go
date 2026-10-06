@@ -35,6 +35,56 @@ func histApp(t *testing.T) *app {
 	return loadApp(t, dir)
 }
 
+// graphApp 建一个带分支和合并的仓库，用来看拓扑图对不对。
+//
+//	init ─ a1 ─┬── a2 ─┬── a3 ── 合并支线一 ── a4 ── 合并支线二
+//	           └ f1 ─ f2 │        └ g1 ─ g2 ─┘
+//	                     └ (feat2 从 a2 分出去)
+//
+// 两条支线同时开着，"合并支线一" 那阵子图上会并排三条泳道 —— 只有一条直线
+// 的仓库看不出分叉画得对不对。
+func graphApp(t *testing.T) *app {
+	t.Helper()
+	dir := t.TempDir()
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = resolved
+	}
+
+	runGit(t, dir, "init", "-b", "main")
+	runGit(t, dir, "config", "user.email", "test@example.com")
+	runGit(t, dir, "config", "user.name", "Test")
+	runGit(t, dir, "config", "commit.gpgsign", "false")
+
+	// 每次写一个新文件名，保证一定有东西可提交
+	commit := func(name, msg string) {
+		t.Helper()
+		writeFile(t, filepath.Join(dir, name), msg+"\n")
+		runGit(t, dir, "add", ".")
+		runGit(t, dir, "commit", "-m", msg)
+	}
+
+	commit("init.txt", "初始提交")
+	commit("a1.txt", "主线一")
+
+	runGit(t, dir, "checkout", "-q", "-b", "feat1")
+	commit("f1.txt", "支线一之一")
+	commit("f2.txt", "支线一之二")
+
+	runGit(t, dir, "checkout", "-q", "main")
+	commit("a2.txt", "主线二")
+	runGit(t, dir, "checkout", "-q", "-b", "feat2")
+	commit("g1.txt", "支线二之一")
+	commit("g2.txt", "支线二之二")
+
+	runGit(t, dir, "checkout", "-q", "main")
+	commit("a3.txt", "主线三")
+	runGit(t, dir, "merge", "-q", "--no-ff", "-m", "合并支线一", "feat1")
+	commit("a4.txt", "主线四")
+	runGit(t, dir, "merge", "-q", "--no-ff", "-m", "合并支线二", "feat2")
+
+	return loadApp(t, dir)
+}
+
 // 切到历史 tab：提交列表出来，并自动选中最近那个提交。
 func TestHistoryTabListsCommits(t *testing.T) {
 	a := histApp(t)
@@ -276,5 +326,127 @@ func TestHistoryRefreshesCommits(t *testing.T) {
 	tt.Frame()
 	if !tt.HasText("第四条") {
 		t.Errorf("新提交没进列表：%q", tt.Texts())
+	}
+}
+
+// 有分支有合并的仓库：图上要出现多条泳道，行数和列表一一对应，点提交照样
+// 能换右边的 diff。
+func TestHistoryGraphOnBranchyRepo(t *testing.T) {
+	a := graphApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+
+	a.setTab(1)
+	settle(t, a)
+	tt.Frame()
+
+	if a.hist != loadReady || a.histDiff != loadReady {
+		t.Fatalf("加载状态 hist=%v histDiff=%v（%s）", a.hist, a.histDiff, a.histDiffErr)
+	}
+	if len(a.graph) != len(a.commits) {
+		t.Fatalf("图 %d 行，提交 %d 条 —— 必须一一对应", len(a.graph), len(a.commits))
+	}
+	if a.maxLanes < 3 {
+		t.Errorf("两条支线同时开着，该并排三条泳道，实际 %d", a.maxLanes)
+	}
+
+	// 合并提交那两行要连出两条线
+	merges := 0
+	for i, cm := range a.commits {
+		if len(cm.Parents) == 2 {
+			merges++
+			if len(a.graph[i].Out) != 2 {
+				t.Errorf("合并提交 %q 的 Out = %v，该连出两条", cm.Subject, a.graph[i].Out)
+			}
+		}
+	}
+	if merges != 2 {
+		t.Fatalf("测试仓库该有两个合并提交，实际 %d", merges)
+	}
+
+	for _, want := range []string{"合并支线二", "主线四", "支线二之二", "初始提交", "11 个提交"} {
+		if !tt.HasText(want) {
+			t.Errorf("列表里找不到 %q：%q", want, tt.Texts())
+		}
+	}
+
+	// 点支线上的提交，右边换成它的 diff
+	if err := tt.Click("支线二之二"); err != nil {
+		t.Fatalf("点提交：%v", err)
+	}
+	settle(t, a)
+	tt.Frame()
+	if !tt.HasText("g2.txt") {
+		t.Errorf("主区没换成那个提交的 diff：%q", tt.Texts())
+	}
+}
+
+// 图形栏的宽度按整张图的最大泳道数定，不按当前行 —— 否则列表滚动时
+// 每一行的文字会跟着图左右横跳。
+func TestGraphWidthIsStable(t *testing.T) {
+	if got := graphWidth(1); got != graphWidth(2) && got > 8+1*14 {
+		t.Errorf("一条泳道的图不该比两条的还宽：%v", got)
+	}
+	if graphWidth(1) != graphPad+graphLaneW {
+		t.Errorf("一条泳道 = %v", graphWidth(1))
+	}
+	// 超过上限就封顶，不能把提交信息挤没了
+	if graphWidth(9) != graphWidth(graphMaxCol) {
+		t.Errorf("泳道数超过 %d 之后宽度该封顶：%v vs %v",
+			graphMaxCol, graphWidth(9), graphWidth(graphMaxCol))
+	}
+	// 空列表也留一条泳道的宽度（加载中 vs 就绪之间不闪）
+	if graphWidth(0) != graphWidth(1) {
+		t.Errorf("空图 = %v, want %v", graphWidth(0), graphWidth(1))
+	}
+	// 超出上限的泳道都并到最右边那条上
+	if laneX(9, 9) != laneX(graphMaxCol-1, graphMaxCol) {
+		t.Errorf("超出的泳道该并到最右：%v vs %v", laneX(9, 9), laneX(graphMaxCol-1, graphMaxCol))
+	}
+	// 泳道在图形栏里面
+	for _, l := range []int{0, 3, 7} {
+		if x := laneX(l, 8); x < graphPad || x > graphWidth(8) {
+			t.Errorf("第 %d 条泳道跑到图形栏外面了：%v（宽 %v）", l, x, graphWidth(8))
+		}
+	}
+}
+
+// 图形栏真的在屏幕上画出了东西。
+//
+// 只断言 a.graph 里的数据不够：上一版 laneX 算的是「相对图形栏」的 x，画的时候
+// 忘了加图形栏自己的偏移，线全画到侧栏底下、还被列表的裁剪区裁掉 —— 数据和
+// 单元测试全绿，屏幕上却一根线都没有。所以这里直接数像素。
+func TestHistoryGraphDrawsPixels(t *testing.T) {
+	a := graphApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+
+	a.setTab(1)
+	settle(t, a)
+	tt.Frame()
+	tt.Frame()
+
+	img := tt.Image()
+	b := img.Bounds()
+	if a.maxLanes < 2 {
+		t.Fatalf("这个仓库该有多条泳道，实际 %d", a.maxLanes)
+	}
+
+	// 图形栏占的那条竖带：从列表左边到文字开始之前
+	x0 := sidebarWidth
+	x1 := sidebarWidth + int(graphWidth(a.maxLanes))
+
+	// 泳道线是这里唯一的彩色像素 —— 选中行的底色、文字、边框都是灰阶，
+	// 所以「鲜艳」就等于「图画出来了」，不用去比具体色值（主题一改就失效）。
+	saturated := 0
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := x0; x < x1 && x < b.Max.X; x++ {
+			r, g, bl, _ := img.At(x, y).RGBA()
+			hi, lo := max(r, g, bl), min(r, g, bl)
+			if hi-lo > 0x3000 { // 每通道 8 位，差出 48 以上
+				saturated++
+			}
+		}
+	}
+	if saturated < 200 {
+		t.Errorf("图形栏里只有 %d 个彩色像素，线没画出来", saturated)
 	}
 }

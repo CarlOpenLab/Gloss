@@ -2,6 +2,17 @@ package main
 
 import "github.com/egoist/mygo/ui"
 
+// emptyNote 是列表、侧栏空着时的一行浅色提示。msg 为空就什么都不画 ——
+// 有些「为什么空」是主区该说的事，侧栏跟着重复一遍反而乱。
+func emptyNote(c *ui.Context, t *ui.Theme, msg string) {
+	if msg == "" {
+		return
+	}
+	ui.Box(c).Grow(1).Padding(16).Children(func() {
+		ui.Text(c, msg).FontSize(12).TextColor(t.TextMuted)
+	})
+}
+
 // xBtnSize 是叉号按钮的边长（关闭、删除）。
 //
 // 不用 ui.Button(c, "×")：按钮宽度跟着字形走，一个 × 撑出来是又扁又小的

@@ -95,8 +95,9 @@ func TestDumpScreenshot(t *testing.T) {
 	writePNG(t, "/tmp/de-shot-palette.png", tt.Image())
 	a.closePalette()
 
-	// 历史 tab：左边提交列表，右边该提交的 diff
-	hist := histApp(t)
+	// 历史 tab：左边提交列表（带拓扑图），右边该提交的 diff。
+	// 用带分支的仓库 —— 一条直线的仓库看不出泳道画得对不对。
+	hist := graphApp(t)
 	ht := ui.NewTester(hist.view, 1280, 860)
 	ht.Frame()
 	ht.SetTitleBar(realTitleBar)
@@ -107,6 +108,16 @@ func TestDumpScreenshot(t *testing.T) {
 	ht.SetDark(true)
 	ht.Frame()
 	writePNG(t, "/tmp/de-shot-history-dark.png", ht.Image())
+
+	// 选中一个合并提交：右边是它的 diff，左边那一行的线最密
+	hist.split = true
+	if err := ht.Click("合并支线一"); err != nil {
+		t.Fatal(err)
+	}
+	settle(t, hist)
+	ht.SetDark(false)
+	ht.Frame()
+	writePNG(t, "/tmp/de-shot-history-split.png", ht.Image())
 }
 
 // sampleExplanation 是一段有代表性的模型输出：一句话总结、要点、行内代码、

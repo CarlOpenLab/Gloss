@@ -136,27 +136,67 @@ func TestLogMergeCommitParents(t *testing.T) {
 	}
 }
 
-// --topo-order：不管各条分支的提交时间怎么交错，父提交一定排在子提交后面。
+// --topo-order：父提交永远排在子提交后面 —— 哪怕父提交的日期比子提交还新。
+//
+//	init(2099) ─┬─ X(2020) ─┐
+//	            └─ Y(2010) ─┴─ M(2030)   ← main 在这
+//
+// 默认的 git log 按提交时间倒序排。走到 M 时它把两个父都放进队列，
+// 先弹出 X(2020)，于是 init(2099) 进了队列 —— 它比还在队列里等着的
+// Y(2010) 新，就先被弹出来了。可 init 是 Y 的父提交，排在 Y 前面就成了
+// 逆序。日期被改过、从别处 fetch 过、rebase 过的仓库都会撞上这种情况。
+//
+// 所以这条测试必须把日期真的造拧：光在分支上提交几个再合并，时间序碰巧
+// 也是拓扑序，测不出 --topo-order 有没有生效。
 func TestLogIsTopological(t *testing.T) {
 	r := tempRepo(t)
 
-	// 支线上的提交时间故意做得比主线晚，默认的按时间排序会把它插到前面去
-	git(t, r.Root, "checkout", "-q", "-b", "feature")
-	write(t, filepath.Join(r.Root, "f.txt"), "feature\n")
+	// 根提交的日期挪到未来 —— 它是最老的提交，却最「新」
+	future := "2099-01-01T00:00:00+00:00"
+	gitDated(t, r.Root, future, "commit", "--amend", "--no-edit", "--date="+future)
+
+	// 两条兄弟支线，日期一旧一新
+	git(t, r.Root, "branch", "y")
+	write(t, filepath.Join(r.Root, "x.txt"), "x\n")
 	git(t, r.Root, "add", ".")
-	git(t, r.Root, "commit", "-m", "支线")
+	gitDated(t, r.Root, "2020-01-01T00:00:00+00:00", "commit", "-m", "X")
+
+	git(t, r.Root, "checkout", "-q", "y")
+	write(t, filepath.Join(r.Root, "y.txt"), "y\n")
+	git(t, r.Root, "add", ".")
+	gitDated(t, r.Root, "2010-01-01T00:00:00+00:00", "commit", "-m", "Y")
 
 	git(t, r.Root, "checkout", "-q", "main")
-	write(t, filepath.Join(r.Root, "m.txt"), "main\n")
-	git(t, r.Root, "add", ".")
-	git(t, r.Root, "commit", "-m", "主线")
-
-	git(t, r.Root, "merge", "-q", "--no-ff", "-m", "合并", "feature")
+	gitDated(t, r.Root, "2030-01-01T00:00:00+00:00", "merge", "-q", "--no-ff", "-m", "合并", "y")
 
 	commits, err := r.Log(context.Background(), 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(commits) != 4 {
+		t.Fatalf("提交数 = %d, want 4（%v）", len(commits), subjects(commits))
+	}
+
+	// 前提先立住：日期得真的是拧的，否则这条测试又成了一句废话 ——
+	// 时间序碰巧等于拓扑序，去掉 --topo-order 也一样过。
+	// 找根提交不能靠「排在最后一个」，那本身就是拓扑序的性质，顺序一错
+	// 就找错了人，报出来的错也会驴唇不对马嘴。
+	root := -1
+	for i, c := range commits {
+		if len(c.Parents) == 0 {
+			root = i
+		}
+	}
+	if root < 0 {
+		t.Fatal("没找到根提交")
+	}
+	for _, c := range commits {
+		if c.When.After(commits[root].When) {
+			t.Fatalf("日期没造拧：根提交 %v 不是最新的（%v 比它新）",
+				commits[root].When, c.When)
+		}
+	}
+
 	pos := map[string]int{}
 	for i, c := range commits {
 		pos[c.Hash] = i
@@ -173,6 +213,20 @@ func TestLogIsTopological(t *testing.T) {
 					c.Short, pos[c.Hash], p[:7], pi)
 			}
 		}
+	}
+}
+
+// gitDated 在指定时刻跑一条 git 命令：作者时间和提交时间都定死。
+//
+// 注意 --amend 不吃 GIT_AUTHOR_DATE（它会原样保留原来的作者时间），那种
+// 情况得自己补一个 --date=。merge 反过来，它不认 --date，只认环境变量。
+func gitDated(t *testing.T, dir, when string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(gitEnv(), "GIT_AUTHOR_DATE="+when, "GIT_COMMITTER_DATE="+when)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
 	}
 }
 
