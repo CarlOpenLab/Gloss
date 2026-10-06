@@ -34,19 +34,28 @@ type palette struct {
 	ref       ui.Color // 分支名、commit hash 的强调色
 	viewed    ui.Color // 已 review 的勾与文字
 
-	// lanes 是提交拓扑图里每条泳道的颜色。
+	// lanes 是提交拓扑图里每条线的颜色。
 	//
 	// 用定长数组而不是切片：调色板每帧都要重建，切片意味着每帧一次分配。
-	// 第 i 条泳道取 lanes[i%8] —— 按泳道号定色，不是按「第几次被占用」，
-	// 这样同一列一路同色，而且每行都能独立算出来（列表是虚拟化的，行与行
-	// 之间不能有共享状态）。
-	lanes [8]ui.Color
+	// 色号由 buildGraph 指给「线」（graphSeg.Color），不是泳道号 —— 一条线
+	// 会换泳道，按泳道号定色的话主线走一半就变色了。
+	lanes [laneCount]ui.Color
 
 	// hl 是代码上色用的配色，按明暗共享同一份缓存。
 	hl *highlight.Palette
 }
 
-// laneColor 是第 i 条泳道的颜色。
+// selAlpha 是「选中行」底色的不透明度。
+//
+// 侧栏的引用树、下半区的文件树、提交列表共用这一个值 —— 三处的选中态是同一
+// 件事，不该有三种浓度。选中底色都是叠在自己那层的底色上，深浅主题一个值够用。
+const selAlpha = 0.22
+
+// laneCount 是拓扑图的色号数量，palette.lanes 的长度。graph.go 挑色号时按它
+// 取模/找空位，两处必须一致。
+const laneCount = 8
+
+// laneColor 是第 i 号色。
 func (p palette) laneColor(i int) ui.Color {
 	return p.lanes[i%len(p.lanes)]
 }

@@ -132,7 +132,7 @@ func TestFilterNarrowsDiffView(t *testing.T) {
 		t.Fatal("筛选前应该能看到 handler.go")
 	}
 
-	a.filter = "README"
+	a.fileFilter = "README"
 	tt.Frame()
 
 	if !tt.HasText("README.md") {

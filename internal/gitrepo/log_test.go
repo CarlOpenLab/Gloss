@@ -14,7 +14,7 @@ func TestLogParsesFields(t *testing.T) {
 	write(t, filepath.Join(r.Root, "a.txt"), "one\ntwo\nthree\nfour\n")
 	git(t, r.Root, "commit", "-am", "a: 中文 subject, with commas | and 竖线")
 
-	commits, err := r.Log(context.Background(), 10, 0)
+	commits, err := r.Log(context.Background(), "", 10, 0)
 	if err != nil {
 		t.Fatalf("Log: %v", err)
 	}
@@ -48,11 +48,11 @@ func TestLogPaging(t *testing.T) {
 		git(t, r.Root, "commit", "-am", "c"+s)
 	}
 
-	page1, err := r.Log(context.Background(), 2, 0)
+	page1, err := r.Log(context.Background(), "", 2, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	page2, err := r.Log(context.Background(), 2, 2)
+	page2, err := r.Log(context.Background(), "", 2, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestLogReadsParents(t *testing.T) {
 	write(t, filepath.Join(r.Root, "a.txt"), "one\ntwo\nthree\nCHANGED\n")
 	git(t, r.Root, "commit", "-am", "second")
 
-	commits, err := r.Log(context.Background(), 10, 0)
+	commits, err := r.Log(context.Background(), "", 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestLogMergeCommitParents(t *testing.T) {
 
 	git(t, r.Root, "merge", "-q", "--no-ff", "-m", "合并支线", "feature")
 
-	commits, err := r.Log(context.Background(), 10, 0)
+	commits, err := r.Log(context.Background(), "", 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +169,7 @@ func TestLogIsTopological(t *testing.T) {
 	git(t, r.Root, "checkout", "-q", "main")
 	gitDated(t, r.Root, "2030-01-01T00:00:00+00:00", "merge", "-q", "--no-ff", "-m", "合并", "y")
 
-	commits, err := r.Log(context.Background(), 10, 0)
+	commits, err := r.Log(context.Background(), "", 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +251,7 @@ func TestLogEmptyRepo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	commits, err := r.Log(context.Background(), 10, 0)
+	commits, err := r.Log(context.Background(), "", 10, 0)
 	if err != nil {
 		t.Fatalf("空仓库的 Log 不该报错：%v", err)
 	}
@@ -271,7 +271,7 @@ func TestCommitDiff(t *testing.T) {
 	git(t, r.Root, "add", "a.txt")
 	git(t, r.Root, "commit", "-m", "second")
 
-	commits, err := r.Log(context.Background(), 1, 0)
+	commits, err := r.Log(context.Background(), "", 1, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -307,7 +307,7 @@ func TestCommitDiff(t *testing.T) {
 // 根提交（没有父提交）也要能看 diff，不能报错也不能空手而归。
 func TestCommitDiffOnRootCommit(t *testing.T) {
 	r := tempRepo(t)
-	commits, err := r.Log(context.Background(), 1, 0)
+	commits, err := r.Log(context.Background(), "", 1, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -337,7 +337,7 @@ func TestCommitDiffDetectsRename(t *testing.T) {
 	git(t, r.Root, "mv", "old.txt", "new.txt")
 	git(t, r.Root, "commit", "-m", "rename")
 
-	commits, _ := r.Log(context.Background(), 1, 0)
+	commits, _ := r.Log(context.Background(), "", 1, 0)
 	files, err := r.CommitDiff(context.Background(), commits[0].Hash)
 	if err != nil {
 		t.Fatal(err)

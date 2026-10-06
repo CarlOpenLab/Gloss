@@ -212,7 +212,7 @@ func TestFilterNarrowsTree(t *testing.T) {
 		t.Fatal("筛选前应该有 README.md")
 	}
 
-	a.filter = "x.go"
+	a.fileFilter = "x.go"
 	tt.Frame()
 
 	if !tt.HasText("x.go") {
@@ -227,7 +227,7 @@ func TestFilterNoMatchShowsMessage(t *testing.T) {
 	a := testApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
 
-	a.filter = "zzzznothing"
+	a.fileFilter = "zzzznothing"
 	tt.Frame()
 
 	if !tt.HasText("没有匹配的文件") {

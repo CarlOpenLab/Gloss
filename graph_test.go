@@ -42,6 +42,16 @@ func sameInts(a, b []int) bool {
 	return true
 }
 
+// segLanes 把一段段线抽成泳道号 —— 断言里关心的还是「连到哪条泳道」，
+// 色号另有测试盯着（TestGraphLineKeepsColor）。
+func segLanes(segs []graphSeg) []int {
+	out := make([]int, 0, len(segs))
+	for _, s := range segs {
+		out = append(out, s.Lane)
+	}
+	return out
+}
+
 func checkGraph(t *testing.T, commits []gitrepo.Commit, wantLanes int, want []rowWant) {
 	t.Helper()
 	rows, maxLanes := buildGraph(commits)
@@ -56,14 +66,14 @@ func checkGraph(t *testing.T, commits []gitrepo.Commit, wantLanes int, want []ro
 		if got.Lane != w.lane {
 			t.Errorf("第 %d 行（%s）节点泳道 = %d, want %d", i, commits[i].Hash, got.Lane, w.lane)
 		}
-		if !sameInts(got.In, w.in) {
-			t.Errorf("第 %d 行（%s）In = %v, want %v", i, commits[i].Hash, got.In, w.in)
+		if !sameInts(segLanes(got.In), w.in) {
+			t.Errorf("第 %d 行（%s）In = %v, want %v", i, commits[i].Hash, segLanes(got.In), w.in)
 		}
-		if !sameInts(got.Out, w.out) {
-			t.Errorf("第 %d 行（%s）Out = %v, want %v", i, commits[i].Hash, got.Out, w.out)
+		if !sameInts(segLanes(got.Out), w.out) {
+			t.Errorf("第 %d 行（%s）Out = %v, want %v", i, commits[i].Hash, segLanes(got.Out), w.out)
 		}
-		if !sameInts(got.Through, w.through) {
-			t.Errorf("第 %d 行（%s）Through = %v, want %v", i, commits[i].Hash, got.Through, w.through)
+		if !sameInts(segLanes(got.Through), w.through) {
+			t.Errorf("第 %d 行（%s）Through = %v, want %v", i, commits[i].Hash, segLanes(got.Through), w.through)
 		}
 	}
 }
@@ -179,12 +189,12 @@ func TestGraphWideHistory(t *testing.T) {
 		t.Fatalf("行数 = %d, want 10", len(rows))
 	}
 	// 合并提交把 8 条线全铺开
-	if !sameInts(rows[0].Out, []int{0, 1, 2, 3, 4, 5, 6, 7}) {
-		t.Errorf("合并行的 Out = %v", rows[0].Out)
+	if !sameInts(segLanes(rows[0].Out), []int{0, 1, 2, 3, 4, 5, 6, 7}) {
+		t.Errorf("合并行的 Out = %v", segLanes(rows[0].Out))
 	}
 	// 最后一行的前一行应该把 7 条汇聚到 lane 0
-	if !sameInts(rows[8].Out, []int{0}) || rows[8].Lane != 7 {
-		t.Errorf("H 行 = lane %d, out %v", rows[8].Lane, rows[8].Out)
+	if !sameInts(segLanes(rows[8].Out), []int{0}) || rows[8].Lane != 7 {
+		t.Errorf("H 行 = lane %d, out %v", rows[8].Lane, segLanes(rows[8].Out))
 	}
 }
 
@@ -200,6 +210,75 @@ func TestGraphReusesFreedLanes(t *testing.T) {
 	for i, r := range rows {
 		if r.Lane > 1 {
 			t.Errorf("第 %d 行的泳道 = %d，超出了 2 条的宽度", i, r.Lane)
+		}
+	}
+}
+
+// 色号跟着「线」走，不是跟着泳道号。
+//
+//	D ─┬─ E ─ C ─┐
+//	   └───────── B ─ A
+//
+// D→E→C→B→A 是一条链，可它中途换了泳道：走到 C 那行时，B 已经被 lane 1 上
+// 那条线（D 直接连过来的那条）等着了，于是连线并到 lane 1 上。按泳道号定色
+// 的话，B 和 A 两行会忽然换成 lane 1 的颜色，往下看就像换了一条分支。
+func TestGraphLineKeepsColor(t *testing.T) {
+	rows, _ := buildGraph(graphCommits("D:E,B", "E:C", "C:B", "B:A", "A:"))
+
+	want := rows[0].Color
+	for i, name := range []string{"D", "E", "C", "B", "A"} {
+		if rows[i].Color != want {
+			t.Errorf("%s 那一行的节点色号 = %d，主线一开始是 %d —— 线换泳道不该换色",
+				name, rows[i].Color, want)
+		}
+	}
+
+	// 旁边那条支线（D 直接连到 B）得是另一个色号，否则两条线糊在一起
+	branch := rows[0].Out[1]
+	if branch.Color == want {
+		t.Errorf("支线的色号 = %d，和主线一样 —— 两条线得分得开", branch.Color)
+	}
+	// 它贯穿 C 那一行的时候还得是同一个色号
+	if got := rows[2].Through[0]; got.Lane != branch.Lane || got.Color != branch.Color {
+		t.Errorf("C 那行的贯穿线 = {lane %d, 色号 %d}，它在 D 那行是 {lane %d, 色号 %d}",
+			got.Lane, got.Color, branch.Lane, branch.Color)
+	}
+
+	// 色号得落在调色板里，laneColor 按它取模
+	for i, r := range rows {
+		if r.Color < 0 || r.Color >= laneCount {
+			t.Errorf("第 %d 行的节点色号 = %d，超出 0..%d", i, r.Color, laneCount-1)
+		}
+		for _, s := range append(append(append([]graphSeg{}, r.In...), r.Out...), r.Through...) {
+			if s.Color < 0 || s.Color >= laneCount {
+				t.Errorf("第 %d 行 lane %d 的线色号 = %d，超出 0..%d",
+					i, s.Lane, s.Color, laneCount-1)
+			}
+		}
+	}
+}
+
+// pickColor 挑的是「当前没被占用的最小色号」，不是「已经用过几个」。
+//
+// 区别在色号用得不连续的时候：0 和 2 在用、1 空着，下一个新线该拿 1。
+// 按「最大号 +1」算是 3，一路涨下去转一圈回来就会撞上还活着的线 ——
+// 屏幕上两条同色的线，谁也认不出谁。空泳道的色号是 -1，不参与。
+func TestPickColor(t *testing.T) {
+	cases := []struct {
+		used []int
+		want int
+		why  string
+	}{
+		{nil, 0, "一条线都没有，从 0 开始"},
+		{[]int{0}, 1, "接着往下拿"},
+		{[]int{0, 2}, 1, "中间空着的 1 先用掉，别一路涨上去"},
+		{[]int{-1, 0, -1}, 1, "空泳道的 -1 不算占用"},
+		{[]int{0, 1, 2, 3, 4, 5, 7}, 6, "只剩一个空位也挑得出来"},
+		{[]int{0, 1, 2, 3, 4, 5, 6, 7}, 0, "全占着就随便给一个，不能崩"},
+	}
+	for _, c := range cases {
+		if got := pickColor(c.used); got != c.want {
+			t.Errorf("pickColor(%v) = %d, want %d（%s）", c.used, got, c.want, c.why)
 		}
 	}
 }

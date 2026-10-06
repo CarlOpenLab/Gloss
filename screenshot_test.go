@@ -33,7 +33,7 @@ func TestDumpScreenshot(t *testing.T) {
 	writePNG(t, "/tmp/de-shot-dark.png", tt.Image())
 
 	// 再单独看一眼带语法高亮的那个文件（它在列表靠下的位置，默认看不到）
-	a.filter = "router"
+	a.fileFilter = "router"
 	tt.SetDark(false)
 	tt.Frame()
 	writePNG(t, "/tmp/de-shot-code-light.png", tt.Image())
@@ -42,7 +42,7 @@ func TestDumpScreenshot(t *testing.T) {
 	writePNG(t, "/tmp/de-shot-code-dark.png", tt.Image())
 
 	// split 视图：左侧旧、右侧新，配不上的那一侧留白
-	a.filter = ""
+	a.fileFilter = ""
 	a.split = true
 	tt.SetDark(false)
 	tt.Frame()
@@ -95,8 +95,9 @@ func TestDumpScreenshot(t *testing.T) {
 	writePNG(t, "/tmp/de-shot-palette.png", tt.Image())
 	a.closePalette()
 
-	// 历史 tab：左边提交列表（带拓扑图），右边该提交的 diff。
-	// 用带分支的仓库 —— 一条直线的仓库看不出泳道画得对不对。
+	// 历史 tab：上半是提交列表（带拓扑图），下半是该提交的「文件列表 + diff」。
+	// 用带分支的仓库 —— 一条直线的仓库看不出泳道画得对不对，也看不出
+	// 主线换泳道之后颜色还连不连续。
 	hist := graphApp(t)
 	ht := ui.NewTester(hist.view, 1280, 860)
 	ht.Frame()
@@ -109,7 +110,7 @@ func TestDumpScreenshot(t *testing.T) {
 	ht.Frame()
 	writePNG(t, "/tmp/de-shot-history-dark.png", ht.Image())
 
-	// 选中一个合并提交：右边是它的 diff，左边那一行的线最密
+	// 换个合并提交、切到 Split：上栏那一行连出的线最多，下栏左右对照也出来了
 	hist.split = true
 	if err := ht.Click("合并支线一"); err != nil {
 		t.Fatal(err)

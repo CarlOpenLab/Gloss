@@ -168,6 +168,9 @@ func TestCodeSizePersists(t *testing.T) {
 }
 
 // ⌘⇧B 收放侧栏，状态同样要记下来。
+//
+// 判据用「本地分支」这个分组名，不能用「Total: +N −M」—— 那是文件栏的
+// 底部统计，布局改成 Fork 那样之后它搬去主区下半了，收起侧栏收不掉它。
 func TestSidebarToggleShortcut(t *testing.T) {
 	a := richApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
@@ -175,7 +178,7 @@ func TestSidebarToggleShortcut(t *testing.T) {
 	if !a.sidebarOn {
 		t.Fatal("侧栏默认是开着的")
 	}
-	if !tt.HasText("Total: ") {
+	if !tt.HasText("本地分支") {
 		t.Fatalf("侧栏内容没画出来：%q", tt.Texts())
 	}
 
@@ -184,8 +187,8 @@ func TestSidebarToggleShortcut(t *testing.T) {
 	if a.sidebarOn {
 		t.Fatal("⌘⇧B 应该收起侧栏")
 	}
-	if tt.HasText("Total: ") {
-		t.Errorf("侧栏收起后不该还有底部统计：%q", tt.Texts())
+	if tt.HasText("本地分支") {
+		t.Errorf("侧栏收起后不该还有分支树：%q", tt.Texts())
 	}
 
 	settle(t, a)
@@ -194,7 +197,10 @@ func TestSidebarToggleShortcut(t *testing.T) {
 	}
 }
 
-// ⌘F 把焦点放进筛选框，收起侧栏时顺手把它打开。
+// ⌘F 把焦点放进主区的文件筛选框，不打侧栏的主意。
+//
+// 这里原来还断言「顺手把侧栏打开」—— 侧栏的筛选框改成筛分支之后，
+// 「找文件」和侧栏开不开就没关系了。
 func TestFindFocusesFilter(t *testing.T) {
 	a := richApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
@@ -203,15 +209,18 @@ func TestFindFocusesFilter(t *testing.T) {
 	tt.Key(ui.Cmd, ui.KeyF)
 	tt.Frame()
 
-	if !a.sidebarOn {
-		t.Error("⌘F 应该把侧栏打开")
+	if a.sidebarOn {
+		t.Error("⌘F 不该把侧栏拽开")
 	}
-	// 焦点在筛选框里：直接打进去的字应该进 filter。
+	// 焦点在文件筛选框里：直接打进去的字应该进 fileFilter。
 	// 占位符不是文本元素，测不了「焦点在哪」，但字打进去就说明焦点是对的。
 	tt.Type("handler")
 	tt.Frame()
-	if a.filter != "handler" {
-		t.Errorf("输入没进筛选框，filter = %q", a.filter)
+	if a.fileFilter != "handler" {
+		t.Errorf("输入没进文件筛选框，fileFilter = %q", a.fileFilter)
+	}
+	if a.refFilter != "" {
+		t.Errorf("侧栏的筛选框不该收到这些字，refFilter = %q", a.refFilter)
 	}
 }
 
@@ -232,8 +241,8 @@ func TestJumpHunkIgnoredWhileTyping(t *testing.T) {
 	if first > 0 {
 		t.Errorf("在筛选框里打 j 不该跳 hunk，可视区从第 %d 行开始了", first)
 	}
-	if a.filter != "j" {
-		t.Errorf("j 应该打进了筛选框，filter = %q", a.filter)
+	if a.fileFilter != "j" {
+		t.Errorf("j 应该打进了筛选框，filter = %q", a.fileFilter)
 	}
 }
 

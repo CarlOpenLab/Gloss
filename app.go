@@ -99,17 +99,37 @@ type app struct {
 	split    bool    // true = split（左右对照），false = unified
 	codeSize float32 // 代码字号；0 表示用默认值
 
-	// —— 侧栏 ——
-	tree       []*filetree.Node
-	treeByKey  map[string]*filetree.Node
-	outline    ui.OutlineState[string]
-	sidebarOn  bool
-	filter     string
-	treeFilter string // 建树时用的筛选词，和 filter 不一致就说明该重建了
-	// seenDirs 记住出现过的目录 key。Outline 的目录默认是收起的，我们想让
-	// 新目录默认展开；靠这个集合区分「第一次出现的目录」和「用户手动收起的
-	// 目录」，否则每次筛选/刷新都会把用户收起的目录又弹开。
-	seenDirs map[string]bool
+	// —— 侧栏：分支 / 远程 / 标签 / 储藏 ——
+	refs      []gitrepo.Ref
+	refByFull map[string]*gitrepo.Ref // Full → Ref，点一行时靠它找回是哪个引用
+	refTree   []*filetree.Node
+	refsList  ui.ListState
+	refsState loadState
+	refErr    string
+	refsSeq   int
+	// refFilter 是侧栏的筛选词，fileFilter 是主区文件栏的。两个框筛的是
+	// 完全不同的东西，合成一个的话切 tab 就会互相干扰。
+	refFilter  string
+	refsFilter string // 建树时用的那份，和 refFilter 不一致就说明该重建了
+	refSel     string // 选中那条引用的 key
+	// refsClosed 记的是用户**收起过**的分组。没记过的一律展开，所以不用
+	// 再去追「哪些是第一次见到的」—— 默认展开，只有手动收起才记一笔。
+	refsClosed map[string]bool
+
+	// —— 主区文件栏（原来的侧栏文件树）——
+	tree           []*filetree.Node
+	filesList      ui.ListState
+	sidebarOn      bool
+	fileFilter     string
+	fileTreeFilter string // 建树时用的筛选词，和 fileFilter 不一致就说明该重建了
+	// filesClosed 记的是用户收起过的目录，同 refsClosed：默认展开。
+	// review 改动时几乎总想直接看到文件列表，默认收起反而要先点一下。
+	filesClosed map[string]bool
+	// fileSel 是文件栏里选中的文件下标（不是行下标 —— 行下标一筛选就指错）。
+	fileSel int
+	// pendingScrollFile 是「点了文件栏，diff 该滚到哪个文件」的一次性请求。
+	// 存文件下标而不是行下标：发起点击时行模型可能还是脏的，行下标会指错。
+	pendingScrollFile int
 
 	// —— 已 review：文件路径 -> 当时的内容指纹 ——
 	// 指纹对不上就说明文件又变了，标记自动失效。
@@ -127,6 +147,22 @@ type app struct {
 	maxLanes   int        // 整张图占几条泳道，图形栏按它定宽
 	commitList ui.ListState
 	commitSel  int // 选中的提交下标，-1 表示还没选
+	// histRev 是历史看的是哪条引用（侧栏点的那条分支/标签），空串表示 HEAD。
+	// 不为空时 Log 直接喂给它，不能悄悄退回 HEAD —— 点了分支看着没反应
+	// 比报错还难受。
+	histRev string
+	// stashRev 是下半区正在显示的储藏（完整引用名），空串表示没在看储藏。
+	//
+	// 和 histRev 是两回事：储藏不属于任何一条分支历史，提交列表照旧显示
+	// histRev 那份，只有下半区换成储藏的改动。
+	//
+	// 单独立一个字段，是因为 loadCommits 拿到结果时会「顺手选中最近那个
+	// 提交」—— 那一下会把下半区顶掉。用户点的是储藏，不该被自动选中抢走。
+	stashRev string
+	// histSplit 是提交列表那一栏的高度，SplitVertical 拖的就是它。
+	// splitH 是上一帧量到的可用高度，用来在窗口变矮时把 split 收敛回来。
+	histSplit float32
+	splitH    float32
 	// hist 是提交列表本身的状态，histDiff 是选中那个提交的 diff 的状态。
 	// 必须分开：列表和 diff 是两路异步加载，共用一个的话点一个提交会让
 	// 整个列表闪成「正在读提交…」。
@@ -155,10 +191,12 @@ type app struct {
 
 func newApp() *app {
 	a := &app{
-		sidebarOn: true,
-		viewed:    map[string]string{},
-		folded:    map[string]bool{},
-		commitSel: -1,
+		sidebarOn:         true,
+		viewed:            map[string]string{},
+		folded:            map[string]bool{},
+		commitSel:         -1,
+		fileSel:           -1,
+		pendingScrollFile: -1,
 		// 没接上真实目录之前先用一个空 store，这样 newApp 之后随时可以
 		// 直接跑（测试就是这么用的）；main 里再换成真正的数据目录。
 		store: store.Open(""),
@@ -274,6 +312,12 @@ func (a *app) view(c *ui.Context) {
 	}
 }
 
+// toolbarHeight 是工具栏那条带子的高度。toolbar 用的是同一个公式 ——
+// 分成两处算的话，主区的高度就会和实际差几个像素，分隔条的夹逼跟着错。
+func (a *app) toolbarHeight(c *ui.Context) float32 {
+	return max(c.TitleBar().Height, 52)
+}
+
 // toolbar 是自绘的标题栏：窗口用 TitleBarHidden，标题栏由 view 画出来，
 // 红绿灯浮在上面。高度取 max(bar.Height, 52)：窗口那边用 TrafficLightPosition
 // 把红绿灯摆在 52 高的带子正中间，算出来的 bar.Height 正好也是 52，于是
@@ -291,7 +335,7 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 		padLeft = bar.Left + 12
 	}
 
-	ui.Row(c).Height(max(bar.Height, 52)).Shrink(0).
+	ui.Row(c).Height(a.toolbarHeight(c)).Shrink(0).
 		Padding(0, bar.Right+12, 0, padLeft).
 		AlignItems(ui.Center).Gap(10).
 		DragWindow().
@@ -362,50 +406,14 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 		})
 }
 
-// mainArea 是右侧主区。历史 tab 是「提交列表 + diff」两栏，改动 tab 就是
-// 一份 diff，没有 diff 可画时给一块空状态。
+// mainArea 是右侧主区。两个 tab 的下半区是同一样东西 ——「文件列表 + diff」，
+// 见 detailPane；历史 tab 在那个上面还摞了一栏提交列表。
 func (a *app) mainArea(c *ui.Context, pal palette) {
-	t := c.Theme()
-
 	if a.tab == 1 {
 		a.historyArea(c, pal)
 		return
 	}
-
-	if a.state == loadReady && len(a.files) > 0 {
-		a.diffView(c, pal)
-		return
-	}
-
-	ui.Box(c).Grow(1).FillWidth().Background(pal.appBg).Children(func() {
-		ui.Column(c).Fill().Center().Gap(10).Padding(24).Children(func() {
-			switch {
-			case a.state == loadIdle:
-				ui.Text(c, "还没有打开仓库").FontSize(18).Bold()
-				ui.Text(c, "选一个本地 git 仓库，看看有哪些改动。").
-					TextColor(t.TextMuted)
-				if ui.PrimaryButton(c, "打开仓库…").Clicked() {
-					a.chooseFolder()
-				}
-			case a.state == loadLoading:
-				ui.Spinner(c)
-				ui.Text(c, "正在读取仓库…").TextColor(t.TextMuted)
-			case a.state == loadFailed:
-				ui.Text(c, "打不开这个仓库").FontSize(18).Bold()
-				ui.Text(c, a.errMsg).TextColor(t.Danger)
-				if ui.Button(c, "重试").Clicked() {
-					a.reload()
-				}
-			case a.filter != "":
-				ui.Text(c, "没有匹配的文件").FontSize(18).Bold()
-				ui.Textf(c, "筛选词「%s」没有匹配到任何改动。", a.filter).
-					TextColor(t.TextMuted)
-			default:
-				ui.Text(c, "没有未提交的改动").FontSize(18).Bold()
-				ui.Text(c, "工作区是干净的。").TextColor(t.TextMuted)
-			}
-		})
-	})
+	a.detailPane(c, pal)
 }
 
 // historyEmpty 是历史 tab 主区没有 diff 可画时的几种情况。
@@ -498,6 +506,21 @@ func (a *app) openRepo(path string) {
 	a.state = loadLoading
 	a.errMsg = ""
 
+	// 换了个仓库，上一个仓库的分支和「在看哪条历史」全部作废。刷新
+	//（reload 也走这里，path 没变）时留着 —— 用户点过的分支不该被一次
+	// 刷新弹掉。
+	if path != a.repoPath {
+		a.refs = nil
+		a.refByFull = nil
+		a.refTree = nil
+		a.refsList = ui.ListState{}
+		a.refsClosed = nil
+		a.refFilter = ""
+		a.refSel = ""
+		a.histRev = ""
+		a.commitSel = -1
+	}
+
 	a.run(func() {
 		ctx := context.Background()
 		repo, err := gitrepo.Open(ctx, path)
@@ -549,6 +572,54 @@ func (a *app) applyModel(m *gitrepo.Model) {
 		a.loadCommits()
 	}
 	a.state = loadReady
+	a.loadRefs()
+}
+
+// loadRefs 在后台读分支、远程分支、标签和储藏。
+//
+// 单独一路，不并进 openRepo 那个请求：读引用失败不该让整个仓库变成
+// 「打不开」—— 分支树空着，diff 照样能看。
+func (a *app) loadRefs() {
+	if a.repoPath == "" {
+		return
+	}
+	a.refsState = loadLoading
+	a.refErr = ""
+
+	a.refsSeq++
+	seq := a.refsSeq
+	dir := a.repoPath
+	a.run(func() {
+		repo, err := gitrepo.Open(context.Background(), dir)
+		var refs []gitrepo.Ref
+		if err == nil {
+			refs, err = repo.Refs(context.Background())
+		}
+		a.dispatch(func() {
+			if a.refsSeq != seq {
+				return
+			}
+			if err != nil {
+				a.refsState = loadFailed
+				a.refErr = err.Error()
+				return
+			}
+			a.setRefs(refs)
+			a.refsState = loadReady
+		})
+	})
+}
+
+// setRefs 换掉引用列表，并重建侧栏的树。
+//
+// 顺带按 Full 建一张索引：树节点里只存 key，点一行时得靠它找回是哪个引用。
+func (a *app) setRefs(refs []gitrepo.Ref) {
+	a.refs = refs
+	a.refByFull = make(map[string]*gitrepo.Ref, len(refs))
+	for i := range refs {
+		a.refByFull[refs[i].Full] = &refs[i]
+	}
+	a.rebuildRefTree()
 }
 
 // showFiles 把一份文件列表换成当前显示的内容：重置展开状态和缓存内容，
@@ -563,6 +634,9 @@ func (a *app) showFiles(files []gitrepo.File) {
 	a.hunkCur = ""
 	// 卡片指向的是「第几个文件的第几段」，同样作废
 	a.closeExplain()
+	// 选中的文件和「该滚到哪」都是下标，换一份列表就指到别的文件上了
+	a.fileSel = -1
+	a.pendingScrollFile = -1
 
 	a.allFiles = files
 	a.applyFilter()
@@ -571,14 +645,14 @@ func (a *app) showFiles(files []gitrepo.File) {
 
 // applyFilter 依据筛选词算出要显示的文件，并同步树和 diff 行模型。
 func (a *app) applyFilter() {
-	a.files = filterFiles(a.allFiles, a.filter)
+	a.files = filterFiles(a.allFiles, a.fileFilter)
 	a.rebuildTree()
 	a.rowsDirty = true
 }
 
 // filterFiles 按筛选词挑出要显示的文件。
 //
-// 筛掉的文件连 diff 一起不显示，而不是只从侧栏树里藏起来 —— 筛选的
+// 筛掉的文件连 diff 一起不显示，而不是只从文件列表里藏起来 —— 筛选的
 // 用途是「只看这块子系统」，diff 里还留着别的文件会让人对不上。
 func filterFiles(files []gitrepo.File, query string) []gitrepo.File {
 	if query == "" {
@@ -601,59 +675,14 @@ func (a *app) reload() {
 	a.openRepo(a.repoPath)
 }
 
-// rebuildTree 依据当前的文件列表和筛选词重建侧栏树。
-func (a *app) rebuildTree() {
-	a.treeFilter = a.filter
-
-	tree := filetree.Build(a.files)
-	tree = filetree.Filter(tree, a.filter)
-
-	a.tree = tree
-	a.treeByKey = make(map[string]*filetree.Node)
-	var index func([]*filetree.Node)
-	index = func(ns []*filetree.Node) {
-		for _, n := range ns {
-			a.treeByKey[n.Key] = n
-			index(n.Children)
-		}
-	}
-	index(tree)
-
-	// 新出现的目录默认展开 —— review 改动时几乎总想直接看到文件列表。
-	// 只展开第一次见到的，用户手动收起的不再打扰。
-	if a.seenDirs == nil {
-		a.seenDirs = map[string]bool{}
-	}
-	var openNew func([]*filetree.Node)
-	openNew = func(ns []*filetree.Node) {
-		for _, n := range ns {
-			if !n.Dir {
-				continue
-			}
-			if !a.seenDirs[n.Key] {
-				a.seenDirs[n.Key] = true
-				a.outline.Open.Add(n.Key)
-			}
-			openNew(n.Children)
-		}
-	}
-	openNew(tree)
-}
-
-// childKeys 是给 ui.Outline 的 children 回调：返回某个目录节点的子节点 key。
+// rebuildTree 依据当前的文件列表和筛选词重建文件列表那一栏的树。
 //
-// 叶子节点必须返回 nil 而不是空切片 —— Outline 用 `kids != nil` 判断一个
-// 条目是不是分支，返回空切片会让文件也画上展开三角。
-func (a *app) childKeys(key string) []string {
-	n, ok := a.treeByKey[key]
-	if !ok || len(n.Children) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(n.Children))
-	for _, k := range n.Children {
-		out = append(out, k.Key)
-	}
-	return out
+// 展开/收起的状态不用在这里处理：filesClosed 里记的是「用户收起过哪些」，
+// 没记过的一律展开（见 filesClosed 的说明）。原来那套 seenDirs 是为了绕开
+// 「Outline 的目录默认收起」，换成 ui.List 之后这个默认值本身就对了。
+func (a *app) rebuildTree() {
+	a.fileTreeFilter = a.fileFilter
+	a.tree = filetree.Filter(filetree.Build(a.files), a.fileFilter)
 }
 
 // isViewed 判断文件是否已被标记为看过。指纹对不上就说明文件内容变了，

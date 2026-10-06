@@ -33,6 +33,17 @@ func (a *app) diffView(c *ui.Context, pal palette) {
 		a.rebuildRows()
 	}
 
+	// 点了文件栏的那一下：行模型这时候才是新的，在这里滚才对得上。
+	// 放在重建之后而不是点击处，是为了不管文件栏和 diff 谁先构建都对。
+	if a.pendingScrollFile >= 0 {
+		if i := a.fileHeaderRowOf(a.pendingScrollFile); i >= 0 {
+			a.diffList.ScrollTo(i, ui.Start)
+			// 手动跳走了，J/K 的出发点作废（和 hunkAnchor 一个道理）
+			a.hunkCur = ""
+		}
+		a.pendingScrollFile = -1
+	}
+
 	// Key 用行的稳定标识而不是下标：展开一个未改动区间会让它后面所有行的
 	// 下标整体后移，没有 Key 的话列表的滚动位置和行状态会跟着乱跳。
 	a.diffList.Key = func(i int) any { return a.rows[i].key }
@@ -61,6 +72,26 @@ func (a *app) rebuildRows() {
 	}
 	a.rows = buildRows(a.files, a.contents, a.expanded, a.split, collapsed)
 	a.rowsDirty = false
+}
+
+// fileHeaderRowOf 找某个文件的文件头在行模型里的下标，没有返回 -1。
+//
+// 每次点击扫一遍而不是维护一张对照表：行模型一变（展开未改动区间、折叠、
+// 切视图）表就得跟着重建，多一份要保持同步的派生状态。扫描本身很快 ——
+// 文件头按 file 下标单调递增，扫到更大的就能停。
+func (a *app) fileHeaderRowOf(fi int) int {
+	for i := range a.rows {
+		if a.rows[i].kind != rowFileHeader {
+			continue
+		}
+		if a.rows[i].file == fi {
+			return i
+		}
+		if a.rows[i].file > fi {
+			break
+		}
+	}
+	return -1
 }
 
 // fileAt 取某个行所指向的文件。
@@ -93,21 +124,12 @@ const chevronSize = 10
 //
 // 用矢量画而不是打一个 ▾ 字符：这类几何符号很容易落到后备字体上，
 // 各机器上大小和位置都不一样，还可能画成缺字方框。
-// 走向和 ui.Outline 里的展开三角一致，两处看起来才是一套东西。
+//
+// 走向由 drawChevron 统一给（侧栏树里的折叠箭头也是它），全窗口一个样子。
 func foldChevron(c *ui.Context, open bool, color ui.Color) {
 	ui.Box(c).Size(chevronSize, chevronSize).Shrink(0).
 		Draw(func(p *ui.Painter, r ui.Rect) {
-			var path ui.Path
-			if open {
-				path.MoveTo(r.X+r.W*0.1, r.Y+r.H*0.3)
-				path.LineTo(r.X+r.W*0.5, r.Y+r.H*0.7)
-				path.LineTo(r.X+r.W*0.9, r.Y+r.H*0.3)
-			} else {
-				path.MoveTo(r.X+r.W*0.3, r.Y+r.H*0.1)
-				path.LineTo(r.X+r.W*0.7, r.Y+r.H*0.5)
-				path.LineTo(r.X+r.W*0.3, r.Y+r.H*0.9)
-			}
-			p.StrokePath(&path, 1.5, color)
+			drawChevron(p, r, color, open)
 		})
 }
 

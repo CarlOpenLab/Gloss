@@ -8,15 +8,26 @@ import (
 	"diff-explainer/internal/gitrepo"
 )
 
+// graphSeg 是拓扑图里的一段线：画在第几条泳道、用哪个色号。
+//
+// 色号不能由泳道号现算。一条线是会换泳道的：父提交那条已经有别的线在等
+// 的时候，它会挪过去接着走（waitingLane）。按泳道号定色，主线走到那儿就
+// 忽然换个颜色，往下看像另一条分支 —— 色号得跟着线走，所以存在这里。
+type graphSeg struct {
+	Lane  int
+	Color int
+}
+
 // graphRow 是一行提交的泳道布局。
 //
 // 每行自己算好自己那段，渲染时不看邻居 —— ui.List 是虚拟化的，滚到哪行才建
 // 哪行，任何「记住上一行画到哪」的做法一滚动就错位。
 type graphRow struct {
-	Lane    int   // 节点在第几条泳道
-	In      []int // 从上面连进节点的泳道；第一个是节点自己那条，其余是汇进来的分支
-	Out     []int // 从节点连到下面的泳道；第一个对应第一个父提交
-	Through []int // 贯穿本行的泳道：和节点无关，但要从上画到下
+	Lane    int        // 节点在第几条泳道
+	Color   int        // 节点这条线的色号
+	In      []graphSeg // 从上面连进节点的线；第一个是节点自己那条，其余是汇进来的分支
+	Out     []graphSeg // 从节点连到下面的线；第一个对应第一个父提交
+	Through []graphSeg // 贯穿本行的线：和节点无关，但要从上画到下
 }
 
 // buildGraph 把拓扑序的提交列表算成逐行的泳道布局，顺便给出这套图一共占几条
@@ -39,6 +50,7 @@ func buildGraph(commits []gitrepo.Commit) (rows []graphRow, maxLanes int) {
 	}
 
 	var lanes []string // 泳道 → 正在等它的提交哈希，"" 表示空着
+	var colors []int   // 泳道 → 那条线的色号，空泳道是 -1
 	rows = make([]graphRow, 0, len(commits))
 
 	for _, cm := range commits {
@@ -54,20 +66,26 @@ func buildGraph(commits []gitrepo.Commit) (rows []graphRow, maxLanes int) {
 		if len(at) > 0 {
 			lane = at[0]
 		} else {
-			// 没有线在等它：分支尖端，占一条空泳道
-			lane = freeLane(&lanes)
+			// 没有线在等它：分支尖端，占一条空泳道，另挑一个色号
+			lane = freeLane(&lanes, &colors)
+			colors[lane] = pickColor(colors)
 		}
+		nodeColor := colors[lane]
 
 		// 本行开始时的样子。下面要先把这些泳道腾空，但贯穿线正是靠
 		// 「腾空前占着、腾空后还占着」认出来的，得先留个底。
 		before := append([]string(nil), lanes...)
+		beforeColors := append([]int(nil), colors...)
 
 		// 汇进来的分支并到节点上，它们到此为止
+		in := make([]graphSeg, 0, len(at))
 		for _, i := range at {
+			in = append(in, graphSeg{Lane: i, Color: colors[i]})
 			lanes[i] = ""
+			colors[i] = -1
 		}
 
-		var out []int
+		var out []graphSeg
 		for k, p := range cm.Parents {
 			if !visible[p] {
 				continue
@@ -80,11 +98,21 @@ func buildGraph(commits []gitrepo.Commit) (rows []graphRow, maxLanes int) {
 				if k == 0 {
 					j = lane // 第一个父接着走节点这条线，直线下去
 				} else {
-					j = freeLane(&lanes)
+					j = freeLane(&lanes, &colors)
 				}
 			}
+			switch {
+			case k == 0:
+				// 第一个父是这条线的延续，色号跟着它走 —— 即使它挪到了
+				// 别的泳道，那个位置在等的正是同一个提交。
+				colors[j] = nodeColor
+			case colors[j] < 0:
+				// 新分出去的支线，另挑一个色号；并到已经有主的线上则
+				// 什么都不做，用那条线的颜色。
+				colors[j] = pickColor(colors)
+			}
 			lanes[j] = p
-			out = append(out, j)
+			out = append(out, graphSeg{Lane: j, Color: colors[j]})
 		}
 
 		// 前后都占着、又不是节点自己那条、也不是汇进来的 —— 那是条和本行
@@ -94,15 +122,21 @@ func buildGraph(commits []gitrepo.Commit) (rows []graphRow, maxLanes int) {
 		// 正从上往下穿，节点连过去刚好在行底接上，两条线只在端点相交，不是
 		// 重复。In 里的则必须排除 —— 它们在这一行并进了节点，画满整行会多
 		// 出一截。
-		var through []int
+		//
+		// 色号取进场时那份（beforeColors）：贯穿线说的是「本行开始前就在
+		// 这儿的那条线」，用换手之后的颜色会把它画成新来的那条。
+		var through []graphSeg
 		for i := 0; i < len(before) && i < len(lanes); i++ {
 			if before[i] == "" || lanes[i] == "" || i == lane || slices.Contains(at, i) {
 				continue
 			}
-			through = append(through, i)
+			through = append(through, graphSeg{Lane: i, Color: beforeColors[i]})
 		}
 
-		rows = append(rows, graphRow{Lane: lane, In: at, Out: out, Through: through})
+		rows = append(rows, graphRow{
+			Lane: lane, Color: nodeColor,
+			In: in, Out: out, Through: through,
+		})
 		if len(lanes) > maxLanes {
 			maxLanes = len(lanes)
 		}
@@ -110,15 +144,36 @@ func buildGraph(commits []gitrepo.Commit) (rows []graphRow, maxLanes int) {
 	return rows, maxLanes
 }
 
-// freeLane 找一条空泳道，全占着就往后新开一条。
-func freeLane(lanes *[]string) int {
+// freeLane 找一条空泳道，全占着就往后新开一条。新开的那条色号留空（-1），
+// 由调用者按「是延续还是新支线」定。
+func freeLane(lanes *[]string, colors *[]int) int {
 	for i, h := range *lanes {
 		if h == "" {
 			return i
 		}
 	}
 	*lanes = append(*lanes, "")
+	*colors = append(*colors, -1)
 	return len(*lanes) - 1
+}
+
+// pickColor 给新开出的一条线挑色号：优先用当前没被占用的最小号。
+//
+// 不能按「第几次开线」一路数上去 —— 长历史里色号会转回来撞上还活着的线，
+// 屏幕上同时出现两条同色的线，正是这个色号机制要消灭的东西。
+func pickColor(colors []int) int {
+	var used [laneCount]bool
+	for _, c := range colors {
+		if c >= 0 && c < laneCount {
+			used[c] = true
+		}
+	}
+	for i, u := range used {
+		if !u {
+			return i
+		}
+	}
+	return 0 // 八条线同时在跑，色号不够分了，撞就撞吧
 }
 
 // waitingLane 找正在等 h 的泳道，没有就返回 -1。
@@ -131,14 +186,19 @@ func waitingLane(lanes []string, h string) int {
 	return -1
 }
 
-// 提交图的尺寸。行高是定死的 commitH = 56，泳道宽 14 和它相配：节点直径 8，
-// 左右各留 3 像素，相邻两条线不会挨在一起。
+// 提交图的尺寸。行高是定死的 commitH = 30，泳道宽 20 和它相配：节点直径 10，
+// 左右各留 5 像素，相邻两条线不会挨在一起。
+//
+// 这组数是跟着行高一起定的：行压低到 30 之后，泳道如果还照旧的 14，图在
+// 全宽的列表里就细得像根头发。横向铺开 20 一格，一条泳道横移 20 像素只有
+// 15 像素的纵向空间（见 drawVein）—— 陡是陡了点，但换来的是几十行看下来
+// 一眼能分清哪条线是哪条。
 const (
-	graphLaneW  = 14
-	graphPad    = 8 // 图形栏左边的留白
-	graphNodeR  = 4 // 节点半径
-	graphLineW  = 1.5
-	graphMaxCol = 5 // 最多铺几条泳道，再多就都挤在最右边那条上
+	graphLaneW  = 20
+	graphPad    = 10 // 图形栏左边的留白
+	graphNodeR  = 5  // 节点半径
+	graphLineW  = 2
+	graphMaxCol = 6 // 最多铺几条泳道，再多就都挤在最右边那条上
 )
 
 // graphWidth 是图形栏的宽度。
@@ -178,32 +238,32 @@ func drawGraphRow(p *ui.Painter, r ui.Rect, pal palette, row graphRow, maxLanes 
 	//
 	// 多画这一像素不影响性能 —— 引擎按「路径相对自身包围盒的形状」缓存
 	// 蒙版，行高和 x 都是整数，每一行的这条线形状完全一样，栅格化只做一次。
-	for _, l := range row.Through {
-		drawSeg(p, at(l), r.Y-1, r.Y+r.H+1, pal.laneColor(l))
+	for _, s := range row.Through {
+		drawSeg(p, at(s.Lane), r.Y-1, r.Y+r.H+1, pal.laneColor(s.Color))
 	}
 
 	// 上半行：从上面连进节点
-	for _, l := range row.In {
-		if l == row.Lane {
-			drawSeg(p, at(l), r.Y-1, mid, pal.laneColor(l))
+	for _, s := range row.In {
+		if s.Lane == row.Lane {
+			drawSeg(p, at(s.Lane), r.Y-1, mid, pal.laneColor(s.Color))
 		} else {
-			drawVein(p, at(l), r.Y, nodeX, mid, pal.laneColor(l))
+			drawVein(p, at(s.Lane), r.Y, nodeX, mid, pal.laneColor(s.Color))
 		}
 	}
 
 	// 下半行：从节点连到下面
-	for _, l := range row.Out {
-		if l == row.Lane {
-			drawSeg(p, at(l), mid, r.Y+r.H+1, pal.laneColor(l))
+	for _, s := range row.Out {
+		if s.Lane == row.Lane {
+			drawSeg(p, at(s.Lane), mid, r.Y+r.H+1, pal.laneColor(s.Color))
 		} else {
-			drawVein(p, nodeX, mid, at(l), r.Y+r.H, pal.laneColor(l))
+			drawVein(p, nodeX, mid, at(s.Lane), r.Y+r.H, pal.laneColor(s.Color))
 		}
 	}
 
 	// 节点画在最后，盖住底下的线头
 	var dot ui.Path
 	dot.Circle(nodeX, mid, graphNodeR)
-	p.FillPath(&dot, pal.laneColor(row.Lane))
+	p.FillPath(&dot, pal.laneColor(row.Color))
 }
 
 // drawSeg 是竖直的直线段。

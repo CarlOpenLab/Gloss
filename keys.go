@@ -27,10 +27,10 @@ func (a *app) handleKeys(c *ui.Context) {
 		a.toggleSidebar()
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyF) {
+		// 焦点给主区那个文件筛选框，不是侧栏的分支筛选框 —— review 时
+		// 想找的是文件。也不再把侧栏拽开：那个框现在筛的是分支，开不开
+		// 和「找文件」没关系。
 		a.focusFilter = true
-		if !a.sidebarOn {
-			a.toggleSidebar()
-		}
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyK) {
 		a.openPalette()

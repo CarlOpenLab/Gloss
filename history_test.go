@@ -1,11 +1,15 @@
 package main
 
 import (
+	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/egoist/mygo/ui"
+
+	"diff-explainer/internal/gitrepo"
 )
 
 // histApp 建一个有三条提交的仓库，用来测历史 tab。
@@ -192,12 +196,12 @@ func TestHistoryEmptyRepo(t *testing.T) {
 // 一个文件都看不到。
 func TestSetTabClearsFilter(t *testing.T) {
 	a := histApp(t)
-	a.filter = "a.txt"
+	a.fileFilter = "a.txt"
 
 	a.setTab(1)
 	settle(t, a)
-	if a.filter != "" {
-		t.Errorf("切 tab 之后筛选词应该清掉，实际 %q", a.filter)
+	if a.fileFilter != "" {
+		t.Errorf("切 tab 之后筛选词应该清掉，实际 %q", a.fileFilter)
 	}
 }
 
@@ -383,8 +387,11 @@ func TestHistoryGraphOnBranchyRepo(t *testing.T) {
 // 图形栏的宽度按整张图的最大泳道数定，不按当前行 —— 否则列表滚动时
 // 每一行的文字会跟着图左右横跳。
 func TestGraphWidthIsStable(t *testing.T) {
-	if got := graphWidth(1); got != graphWidth(2) && got > 8+1*14 {
-		t.Errorf("一条泳道的图不该比两条的还宽：%v", got)
+	// 一条泳道的图必须比两条的窄。这里原来写的是 got != graphWidth(2) && got > 8+1*14
+	// —— 后半句是旧常量的字面量副本，泳道宽从 14 改到 20 之后就变成「30 > 22」，
+	// 测试直接红了，而它想说的根本不是那个。
+	if graphWidth(1) >= graphWidth(2) {
+		t.Errorf("一条泳道的图不该比两条的宽：%v vs %v", graphWidth(1), graphWidth(2))
 	}
 	if graphWidth(1) != graphPad+graphLaneW {
 		t.Errorf("一条泳道 = %v", graphWidth(1))
@@ -448,5 +455,354 @@ func TestHistoryGraphDrawsPixels(t *testing.T) {
 	}
 	if saturated < 200 {
 		t.Errorf("图形栏里只有 %d 个彩色像素，线没画出来", saturated)
+	}
+}
+
+// 一条线从头顶到底部必须是同一个颜色。
+//
+// 这是「色号跟着线走」的端到端证明。上面 TestGraphLineKeepsColor 只盯着
+// buildGraph 的数据；真正出问题的是画的那一步 —— 它原来用 pal.laneColor(row.Lane)
+// 取色，主线一旦挪泳道（主线三→主线二→主线一 一路往右挪）颜色就跟着变，
+// 屏幕上一条主线看着像三条不同的分支，而数据侧一切正常。
+func TestHistoryGraphLineColorIsContinuous(t *testing.T) {
+	a := graphApp(t)
+	tt := ui.NewTester(a.view, 1280, 1100) // 窗口开高一点，11 行提交要全看得见
+
+	a.setTab(1)
+	settle(t, a)
+	tt.Frame()
+	tt.Frame()
+
+	img := tt.Image()
+	// 提交主题 → 它在列表里的行号
+	idx := map[string]int{}
+	for i, cm := range a.commits {
+		idx[cm.Subject] = i
+	}
+
+	// 主线上那几条。它们在 a.graph 里的 Lane 各不相同，这正是要点。
+	chain := []string{"合并支线二", "主线四", "合并支线一", "主线三", "主线二", "主线一"}
+	type sample struct {
+		name string
+		lane int
+		r    uint32
+		g    uint32
+		b    uint32
+	}
+	var got []sample
+	for _, name := range chain {
+		i, ok := idx[name]
+		if !ok {
+			t.Fatalf("测试仓库里没有 %q", name)
+		}
+		box, ok := tt.Find(name)
+		if !ok {
+			t.Fatalf("屏幕上找不到 %q（窗口不够高？）", name)
+		}
+		// 行里的文字是垂直居中的，所以文字框的中线就是节点中心那条水平线
+		y := int(box.Y + box.H/2)
+		x := sidebarWidth + int(laneX(a.graph[i].Lane, a.maxLanes))
+		r, g, b, _ := img.At(x, y).RGBA()
+		got = append(got, sample{name, a.graph[i].Lane, r, g, b})
+	}
+
+	// 先把「这条链真的换了泳道」钉死，否则这个测试可能什么也没验证
+	lanes := map[int]bool{}
+	for _, s := range got {
+		lanes[s.lane] = true
+	}
+	if len(lanes) < 2 {
+		t.Fatalf("主线全程都在同一泳道上（%v），这个测试就白测了", lanes)
+	}
+
+	first := got[0]
+	for _, s := range got[1:] {
+		if s.r != first.r || s.g != first.g || s.b != first.b {
+			t.Errorf("%s（lane %d）的节点是 %v，%s（lane %d）是 %v —— 同一条线换了颜色",
+				s.name, s.lane, []uint32{s.r, s.g, s.b},
+				first.name, first.lane, []uint32{first.r, first.g, first.b})
+		}
+	}
+
+	// 反面：支线得是另一个颜色，否则「同色」也可能是「全图一个颜色」
+	if i, ok := idx["支线二之二"]; ok {
+		if box, ok := tt.Find("支线二之二"); ok {
+			y := int(box.Y + box.H/2)
+			x := sidebarWidth + int(laneX(a.graph[i].Lane, a.maxLanes))
+			r, g, b, _ := img.At(x, y).RGBA()
+			if r == first.r && g == first.g && b == first.b {
+				t.Errorf("支线二之二和主线同色 —— 两条线得分得开")
+			}
+		}
+	}
+}
+
+// 点侧栏的分支，历史就切到那条分支上。
+//
+// 这是侧栏从文件树换成 refs 树之后新接的那条链路：点一下 → histRev 指到
+// 完整引用名 → 提交列表重读。判据不能只看「列表变短了」—— 还要看 main 上
+// 独有的提交确实不见了，否则「什么都没发生」也能蒙混过关。
+func TestSidebarBranchNarrowsHistory(t *testing.T) {
+	a := graphApp(t)
+	tt := ui.NewTester(a.view, 1280, 1100)
+	tt.Frame()
+	settle(t, a)
+	tt.Frame()
+
+	if len(a.refs) == 0 {
+		t.Fatalf("侧栏没读到引用：%v（%s）", a.refsState, a.refErr)
+	}
+	if a.histRev != "" {
+		t.Fatalf("一开始该看 HEAD，实际 histRev = %q", a.histRev)
+	}
+
+	// 用坐标点，不用 tt.Click("feat1")：提交列表里那个提交还挂着 feat1 的
+	// 徽章，同名文本有两处，按名字点会点中哪一个全看遍历顺序。
+	box, ok := tt.Find("feat1")
+	if !ok {
+		t.Fatalf("侧栏里找不到 feat1：%q", tt.Texts())
+	}
+	tt.ClickAt(box.X+box.W/2, box.Y+box.H/2)
+	settle(t, a)
+	tt.Frame()
+
+	if a.histRev != "refs/heads/feat1" {
+		t.Fatalf("点了 feat1 之后 histRev = %q, want refs/heads/feat1", a.histRev)
+	}
+	if a.tab != 1 {
+		t.Errorf("点分支该切到历史 tab，实际 tab = %d", a.tab)
+	}
+	// feat1 从「主线一」分出去：支线一之一、支线一之二，加上主线上到
+	// 「初始提交」为止 —— 一共四条
+	if len(a.commits) != 4 {
+		t.Errorf("feat1 的历史有 %d 条，want 4：%v", len(a.commits), subjects(a.commits))
+	}
+	if !tt.HasText("支线一之二") {
+		t.Errorf("feat1 的提交没列出来：%q", tt.Texts())
+	}
+	if tt.HasText("主线四") {
+		t.Errorf("主线四不在 feat1 上，不该出现在列表里：%q", tt.Texts())
+	}
+}
+
+// subjects 是给报错信息用的提交主题列表。
+func subjects(commits []gitrepo.Commit) []string {
+	out := make([]string, 0, len(commits))
+	for _, c := range commits {
+		out = append(out, c.Subject)
+	}
+	return out
+}
+
+// scrollApp 建一个「长文件夹着目标文件」的仓库。
+//
+// 目标文件前面要有很长的内容（否则一开始就在屏幕上，测不出滚动），后面也
+// 要有（否则列表滚到底也够不着它，它到不了顶 —— 这不算滚失败，但断言就得
+// 写得绕）。三个文件各放在自己的目录里：文件树显示短名（target.txt），
+// diff 的文件头显示完整路径（m/target.txt），两者对不上，按名字找不会找错。
+func scrollApp(t *testing.T) *app {
+	t.Helper()
+	dir := t.TempDir()
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = resolved
+	}
+
+	runGit(t, dir, "init", "-b", "main")
+	runGit(t, dir, "config", "user.email", "test@example.com")
+	runGit(t, dir, "config", "user.name", "Test")
+	runGit(t, dir, "config", "commit.gpgsign", "false")
+
+	writeFile(t, filepath.Join(dir, "seed.txt"), "seed\n")
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "初始提交")
+
+	bulk := func(prefix string) string {
+		var lines []string
+		for i := 1; i <= 200; i++ {
+			lines = append(lines, fmt.Sprintf("%s line %d", prefix, i))
+		}
+		return strings.Join(lines, "\n") + "\n"
+	}
+	writeFile(t, filepath.Join(dir, "a/huge1.txt"), bulk("before"))
+	writeFile(t, filepath.Join(dir, "m/target.txt"), "target\n")
+	writeFile(t, filepath.Join(dir, "z/huge2.txt"), bulk("after"))
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "三个文件")
+
+	return loadApp(t, dir)
+}
+
+// 点文件列表里的文件，diff 要滚到那个文件的头上。
+//
+// 下半区的 diff 是所有文件接在一起的一大条，点文件名如果只是高亮一下、
+// 不滚过去，屏幕外的那些文件点了看着就像没反应。
+func TestFileClickScrollsDiff(t *testing.T) {
+	a := scrollApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	a.setTab(1)
+	settle(t, a)
+	tt.Frame()
+
+	// 排在 diff 最后、默认肯定在可视区外的那个文件
+	const want = "m/target.txt"
+	target := -1
+	for i, f := range a.files {
+		if f.NewPath == want {
+			target = i
+		}
+	}
+	if target < 0 {
+		t.Fatalf("测试仓库的提交里没有 %s", want)
+	}
+	row := a.fileHeaderRowOf(target)
+	if row < 0 {
+		t.Fatalf("%s 在 diff 里找不到文件头行", want)
+	}
+
+	first, _ := a.diffList.Visible()
+	if first >= row {
+		t.Fatalf("%s 的文件头（第 %d 行）一开始就在可视区里（从第 %d 行开始），滚动的效果测不出来",
+			want, row, first)
+	}
+
+	// 文件树里只叫 target.txt，和 diff 里那个完整路径的标题对不上，所以这个
+	// 名字在屏幕上是唯一的
+	if err := tt.Click("target.txt"); err != nil {
+		t.Fatalf("点不到文件列表里的 target.txt：%v", err)
+	}
+	settle(t, a)
+	tt.Frame()
+
+	if a.fileSel != target {
+		t.Errorf("点了之后 fileSel = %d, want %d", a.fileSel, target)
+	}
+	if first, _ = a.diffList.Visible(); first != row {
+		t.Errorf("diff 该滚到 %s 的文件头（第 %d 行），实际从第 %d 行开始", want, row, first)
+	}
+}
+
+// stashApp 建一个有储藏的仓库：一个已跟踪文件改了、外加一个未跟踪的新文件，
+// 一起 stash 起来。两种改动都在，才看得出 `stash show -p --include-untracked`
+// 的产物是不是真能当 diff 显示。
+func stashApp(t *testing.T) *app {
+	t.Helper()
+	dir := t.TempDir()
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = resolved
+	}
+
+	runGit(t, dir, "init", "-b", "main")
+	runGit(t, dir, "config", "user.email", "test@example.com")
+	runGit(t, dir, "config", "user.name", "Test")
+	runGit(t, dir, "config", "commit.gpgsign", "false")
+
+	writeFile(t, filepath.Join(dir, "a.txt"), "one\n")
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "初始提交")
+
+	writeFile(t, filepath.Join(dir, "a.txt"), "one\n已经提交的一行\n")
+	runGit(t, dir, "commit", "-am", "第二条")
+
+	writeFile(t, filepath.Join(dir, "a.txt"), "one\n已经提交的一行\n攒了一半的一行\n")
+	writeFile(t, filepath.Join(dir, "b.txt"), "还没加进索引的新文件\n")
+	runGit(t, dir, "stash", "push", "-q", "-u", "-m", "半成品")
+
+	return loadApp(t, dir)
+}
+
+// 点侧栏的储藏，下半区显示它的改动。
+//
+// 储藏不走 Log —— 它不是任何一条分支历史的一部分，硬塞进提交列表会打断
+// 拓扑图，而且 Log 也拿不出「这个储藏的改动」。走的是 git stash show。
+// 计划里把这一步标成「可以对不上就先放弃」，所以更得有一条测试钉住它。
+func TestStashClickShowsDiff(t *testing.T) {
+	a := stashApp(t)
+	tt := ui.NewTester(a.view, 1280, 1100)
+	tt.Frame()
+	settle(t, a)
+	tt.Frame()
+
+	if !tt.HasText("储藏") {
+		t.Fatalf("侧栏没有储藏分组：%q", tt.Texts())
+	}
+	if !tt.HasText("stash@{0}") {
+		t.Fatalf("侧栏没列出储藏：%q", tt.Texts())
+	}
+
+	if err := tt.Click("stash@{0}"); err != nil {
+		t.Fatalf("点不到储藏：%v", err)
+	}
+	settle(t, a)
+	tt.Frame()
+
+	if a.histDiff != loadReady {
+		t.Fatalf("储藏没读出 diff：state=%v err=%s", a.histDiff, a.histDiffErr)
+	}
+	if len(a.files) != 2 {
+		t.Fatalf("储藏的改动有 %d 个文件，want 2（改过的 + 未跟踪的）：%v", len(a.files), a.files)
+	}
+	if a.commitSel != -1 {
+		t.Errorf("看储藏的时候不该还选中着某个提交：commitSel = %d", a.commitSel)
+	}
+	// 储藏不进提交列表：列表还是 HEAD 那份，拓扑图不该被它打断
+	if a.hist != loadReady || len(a.commits) != 2 {
+		t.Errorf("提交列表被储藏影响了：hist=%v 共 %d 条", a.hist, len(a.commits))
+	}
+
+	// 屏幕上真画出来了：两个文件都在文件列表里，内容也看得到
+	for _, want := range []string{"a.txt", "b.txt", "攒了一半的一行"} {
+		if !tt.HasText(want) {
+			t.Errorf("界面里找不到 %q：%q", want, tt.Texts())
+		}
+	}
+}
+
+// 看过储藏之后切去改动 tab 再切回来，储藏的改动还得在。
+//
+// 切去改动 tab 会把 allFiles 清掉，而 stashRev 还在、提交列表因此不会自动
+// 选中任何提交 —— 不在 setTab 里把储藏接回来的话，上半区没有选中的行、
+// 下半区一片空白，两头都空着。
+func TestStashSurvivesTabSwitch(t *testing.T) {
+	a := stashApp(t)
+	tt := ui.NewTester(a.view, 1280, 1100)
+	tt.Frame()
+	settle(t, a)
+	tt.Frame()
+
+	if err := tt.Click("stash@{0}"); err != nil {
+		t.Fatalf("点不到储藏：%v", err)
+	}
+	settle(t, a)
+	tt.Frame()
+
+	a.setTab(0)
+	settle(t, a)
+	a.setTab(1)
+	settle(t, a)
+	tt.Frame()
+
+	if a.stashRev == "" {
+		t.Error("切回来之后储藏被忘了")
+	}
+	if a.histDiff != loadReady || len(a.files) != 2 {
+		t.Fatalf("切回来之后下半区是空的：state=%v 共 %d 个文件", a.histDiff, len(a.files))
+	}
+	if !tt.HasText("攒了一半的一行") {
+		t.Errorf("储藏的改动没画出来：%q", tt.Texts())
+	}
+
+	// 换个分支看，储藏就该让位了
+	box, ok := tt.Find("main")
+	if !ok {
+		t.Fatalf("侧栏找不到 main：%q", tt.Texts())
+	}
+	tt.ClickAt(box.X+box.W/2, box.Y+box.H/2)
+	settle(t, a)
+	tt.Frame()
+	if a.stashRev != "" {
+		t.Errorf("点了分支之后 stashRev 还留着：%q", a.stashRev)
+	}
+	if a.commitSel != 0 {
+		t.Errorf("点了分支该自动选中最近那个提交，实际 commitSel = %d", a.commitSel)
 	}
 }

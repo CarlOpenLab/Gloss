@@ -21,13 +21,20 @@ type Commit struct {
 }
 
 // Log 读最近的提交。skip 用来翻页。
-func (r *Repo) Log(ctx context.Context, limit, skip int) ([]Commit, error) {
+//
+// rev 是看哪条历史：分支名、标签名、任意 revision，空串表示当前的 HEAD。
+// 侧栏点了哪条分支就传哪条 —— 不为空时不能退回 HEAD，那样点了分支看着没反应。
+func (r *Repo) Log(ctx context.Context, rev string, limit, skip int) ([]Commit, error) {
 	if limit <= 0 {
 		limit = 100
 	}
 	// 还没有任何提交时 git log 会直接报错，但那只是「没有历史」，
-	// 不是出错 —— 先探一下 HEAD。
-	if _, err := run(ctx, r.Root, "rev-parse", "--verify", "--quiet", "HEAD"); err != nil {
+	// 不是出错 —— 先探一下要看的那条引用在不在。
+	probe := rev
+	if probe == "" {
+		probe = "HEAD"
+	}
+	if _, err := run(ctx, r.Root, "rev-parse", "--verify", "--quiet", probe); err != nil {
 		return nil, nil
 	}
 	// 用 %x00 分隔字段、%x1e 分隔记录：作者名和提交信息里可能有任何
@@ -36,9 +43,15 @@ func (r *Repo) Log(ctx context.Context, limit, skip int) ([]Commit, error) {
 	// --topo-order：默认是按提交时间倒序，几条分支的提交会互相穿插，
 	// 画出来的线是乱的。拓扑序保证父提交永远排在子提交之后，而且同一条
 	// 线上的提交是连续的 —— 画泳道图的前提。
-	out, err := run(ctx, r.Root, "-c", "core.quotePath=false", "log", "--no-color",
-		"--date=iso-strict", "--topo-order", "--pretty=format:"+format,
-		"--skip="+strconv.Itoa(skip), "-n", strconv.Itoa(limit))
+	args := []string{
+		"-c", "core.quotePath=false", "log", "--no-color",
+		"--date=iso-strict", "--topo-order", "--pretty=format:" + format,
+		"--skip=" + strconv.Itoa(skip), "-n", strconv.Itoa(limit),
+	}
+	if rev != "" {
+		args = append(args, rev)
+	}
+	out, err := run(ctx, r.Root, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -86,6 +99,24 @@ func (r *Repo) CommitDiff(ctx context.Context, hash string) ([]File, error) {
 		"-M", "-U3", "--format=", "--first-parent",
 	}, hash)
 	out, err := run(ctx, r.Root, args...)
+	if err != nil {
+		return nil, err
+	}
+	return FilesFromDiff(diff.Parse(string(out))), nil
+}
+
+// StashDiff 读一个储藏的内容，产物和 CommitDiff 一样是 []File。
+//
+// 名字传的是 stash@{n}，不是哈希 —— 储藏的改动不在它那个提交本身里
+// （那个提交的第一个父是当时的 HEAD，直接 diff 出来的东西是错的），
+// git stash show 才负责把 WIP 那次提交和它的父正确地摆在一起比。
+func (r *Repo) StashDiff(ctx context.Context, name string) ([]File, error) {
+	out, err := run(ctx, r.Root,
+		"-c", "core.quotePath=false",
+		"stash", "show", "-p", "--include-untracked",
+		"--no-color", "--no-ext-diff", "--no-textconv",
+		"--src-prefix=a/", "--dst-prefix=b/",
+		"-M", "-U3", name)
 	if err != nil {
 		return nil, err
 	}
