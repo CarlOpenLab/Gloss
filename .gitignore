@@ -8,3 +8,8 @@ diff-explainer
 desktop/.mygo/
 desktop/build/
 mygo_windows_*.syso
+
+# 测试留下的临时 store（不该出现在仓库里）
+desktop/config.json
+desktop/state.json
+desktop/cache.json
