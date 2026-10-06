@@ -311,7 +311,7 @@ func (a *app) explainHead(c *ui.Context, pal palette) {
 					Background(t.Surface).TextColor(t.TextMuted)
 			}
 			ui.Spacer(c)
-			if ui.Button(c, "×").Clicked() {
+			if closeButton(c) {
 				a.closeExplain()
 			}
 		})

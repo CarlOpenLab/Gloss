@@ -121,7 +121,7 @@ func (a *app) providerList(c *ui.Context) {
 					}
 					ui.Text(c, providerLabel(*p)).FontSize(12).Grow(1).MinWidth(0).SingleLine()
 					ui.Text(c, secretHint(*p)).FontSize(11).TextColor(t.TextMuted).SingleLine()
-					if ui.Button(c, "×").Clicked() {
+					if removeButton(c) {
 						a.removeProvider(i)
 					}
 				})

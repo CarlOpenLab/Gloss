@@ -9,6 +9,11 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
+// realTitleBar 是真实窗口里红绿灯占的地方（在本机量出来的：窗口用
+// TitleBarHidden + TrafficLightPosition{X:20,Y:19}）。无头渲染默认没有
+// 窗口控件，不摆上它就看不出侧栏顶上会不会被关闭按钮压住。
+var realTitleBar = ui.TitleBar{Height: 52, Left: 80}
+
 // 这个文件是人工检查工具：把界面渲染成 PNG，用眼看排版对不对。
 // 只在 SHOT=1 时跑，不进常规测试。
 func TestDumpScreenshot(t *testing.T) {
@@ -18,6 +23,8 @@ func TestDumpScreenshot(t *testing.T) {
 	a := richApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
 	// 先空跑一帧让列表把行高量出来，否则首帧的字号/行高还没稳定
+	tt.Frame()
+	tt.SetTitleBar(realTitleBar)
 	tt.Frame()
 
 	writePNG(t, "/tmp/de-shot-light.png", tt.Image())
@@ -92,6 +99,7 @@ func TestDumpScreenshot(t *testing.T) {
 	hist := histApp(t)
 	ht := ui.NewTester(hist.view, 1280, 860)
 	ht.Frame()
+	ht.SetTitleBar(realTitleBar)
 	hist.setTab(1)
 	settle(t, hist)
 	ht.Frame()

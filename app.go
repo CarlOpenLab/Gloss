@@ -261,14 +261,24 @@ func (a *app) view(c *ui.Context) {
 }
 
 // toolbar 是自绘的标题栏：窗口用 TitleBarHidden，标题栏由 view 画出来，
-// 红绿灯浮在上面。高度取 max(bar.Height, 52) 让红绿灯垂直居中，
-// 左右各留出 bar.Left/bar.Right 给窗口控件让位。
+// 红绿灯浮在上面。高度取 max(bar.Height, 52)：窗口那边用 TrafficLightPosition
+// 把红绿灯摆在 52 高的带子正中间，算出来的 bar.Height 正好也是 52，于是
+// 红绿灯和这里的按钮落在同一条水平线上。
+//
+// 水平方向要不要让位，取决于侧栏开没开：侧栏在的时候它顶在最左边，红绿灯
+// 落在它头上（sidebar 里留了位），工具栏左边就按普通间距来；侧栏收起来了
+// 工具栏才直接贴着窗口左边缘，这时得把 bar.Left 让出来。
 func (a *app) toolbar(c *ui.Context, pal palette) {
 	t := c.Theme()
 	bar := c.TitleBar()
 
+	padLeft := float32(12)
+	if !a.sidebarOn {
+		padLeft = bar.Left + 12
+	}
+
 	ui.Row(c).Height(max(bar.Height, 52)).Shrink(0).
-		Padding(0, bar.Right+12, 0, bar.Left+12).
+		Padding(0, bar.Right+12, 0, padLeft).
 		AlignItems(ui.Center).Gap(10).
 		DragWindow().
 		Background(pal.appBg).

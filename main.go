@@ -34,8 +34,13 @@ func main() {
 			// 标题栏不画系统的那条，改由 view 自己画（见 app.go 的 toolbar），
 			// 这样红绿灯能和工具栏内容在同一行里对齐。
 			TitleBarStyle: mygo.TitleBarHidden,
-			Vibrancy:      mygo.VibrancySidebar,
-			Content:       ui.View(a.view),
+			// 把红绿灯从系统默认的位置（贴着窗口顶边那条 32 高的带子）挪到
+			// 工具栏的正中间。系统默认位置是给「32 高的标题栏」留的，而工具栏
+			// 有 52 高，照默认放会偏高，和右边的按钮不在一条水平线上。
+			// Y 是关闭按钮顶边到窗口顶边的距离，工具栏高度会跟着它算出来。
+			TrafficLightPosition: &mygo.Point{X: 20, Y: 19},
+			Vibrancy:             mygo.VibrancySidebar,
+			Content:              ui.View(a.view),
 		})
 		a.win = win
 		// 后台 goroutine 改状态必须走这里：它把闭包投到主线程执行，

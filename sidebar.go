@@ -15,9 +15,19 @@ const sidebarWidth = 280
 // 和 Finder 侧栏一个观感；系统关掉透明效果时它又能兜住底，不至于让
 // 深色主题的文字落在白底上。
 func (a *app) sidebar(c *ui.Context, pal palette) {
+	// 侧栏是顶到窗口最上边的，所以红绿灯（macOS 的三个窗口按钮）浮在它上面。
+	// 顶上空出 TitleBar.Height 那条带子，筛选框和提交列表才不会被关闭按钮
+	// 压住；这条空带子顺手当成标题栏用，拖着能移窗口。工具栏是自己画的，
+	// 那边用 bar.Left 在水平方向让位，这里是垂直方向。
+	bar := c.TitleBar()
+
 	ui.Column(c).Width(sidebarWidth).Shrink(0).
 		Background(pal.sideBg.Alpha(0.55)).
 		Children(func() {
+			if bar.Height > 0 {
+				ui.Box(c).Height(bar.Height).Shrink(0).DragWindow()
+			}
+
 			if a.tab == 0 {
 				ui.Box(c).Padding(8).Shrink(0).Children(func() {
 					a.filterInput(c)
@@ -35,8 +45,11 @@ func (a *app) sidebar(c *ui.Context, pal palette) {
 //
 // 用 TextInput 而不是 ui.SearchField：SearchField 的 placeholder 是内部
 // 写死的 "Search"，从外面盖不掉，而整个界面是中文的。
+//
+// Label 和 placeholder 一样是「筛选文件」：输入框没有可见的标签文字，
+// 得有个名字给辅助技术念，测试也靠它定位。
 func (a *app) filterInput(c *ui.Context) {
-	in := ui.TextInput(c, &a.filter).Placeholder("筛选文件")
+	in := ui.TextInput(c, &a.filter).Placeholder("筛选文件").Label("筛选文件")
 	// ⌘F 之后把焦点放进来。只做一次 —— 每帧都 Focus 的话这个框就再也
 	// 交不出焦点了。
 	if a.focusFilter {
