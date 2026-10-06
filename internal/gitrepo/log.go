@@ -17,6 +17,7 @@ type Commit struct {
 	When    time.Time // 作者时间
 	Subject string    // 提交信息的第一行
 	Refs    string    // 指向它的分支/标签，如 "HEAD -> main, origin/main"
+	Parents []string  // 完整哈希的父提交；合并提交有两个以上，根提交没有
 }
 
 // Log 读最近的提交。skip 用来翻页。
@@ -31,9 +32,12 @@ func (r *Repo) Log(ctx context.Context, limit, skip int) ([]Commit, error) {
 	}
 	// 用 %x00 分隔字段、%x1e 分隔记录：作者名和提交信息里可能有任何
 	// 可打印字符，用普通分隔符会被内容里的逗号、竖线之类拆错。
-	format := "%H%x00%h%x00%an%x00%aI%x00%D%x00%s%x1e"
+	format := "%H%x00%h%x00%an%x00%aI%x00%D%x00%P%x00%s%x1e"
+	// --topo-order：默认是按提交时间倒序，几条分支的提交会互相穿插，
+	// 画出来的线是乱的。拓扑序保证父提交永远排在子提交之后，而且同一条
+	// 线上的提交是连续的 —— 画泳道图的前提。
 	out, err := run(ctx, r.Root, "-c", "core.quotePath=false", "log", "--no-color",
-		"--date=iso-strict", "--pretty=format:"+format,
+		"--date=iso-strict", "--topo-order", "--pretty=format:"+format,
 		"--skip="+strconv.Itoa(skip), "-n", strconv.Itoa(limit))
 	if err != nil {
 		return nil, err
@@ -49,7 +53,7 @@ func parseLog(out string) []Commit {
 			continue
 		}
 		f := strings.Split(rec, "\x00")
-		if len(f) < 6 {
+		if len(f) < 7 {
 			continue
 		}
 		when, err := time.Parse(time.RFC3339, f[3])
@@ -62,7 +66,8 @@ func parseLog(out string) []Commit {
 			Author:  f[2],
 			When:    when,
 			Refs:    strings.TrimSpace(f[4]),
-			Subject: f[5],
+			Parents: strings.Fields(f[5]), // 空格分隔，根提交是空串
+			Subject: f[6],
 		})
 	}
 	return commits

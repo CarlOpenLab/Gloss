@@ -51,9 +51,16 @@ type app struct {
 	branch   string
 	state    loadState
 	errMsg   string
-	// loadSeq 每次发起加载自增，回调只在序号仍是最新时才写入结果，
-	// 这样快速切换仓库时旧请求的结果不会覆盖新的。
-	loadSeq int
+	// 四个序号各自守住一路异步加载：每次发起自增，回调只在序号仍是最新的
+	// 时候才写入结果，这样快速切换时旧请求的结果不会覆盖新的。
+	//
+	// 分开是必须的：早期只有一个 loadSeq，于是「读提交列表」和「读这个提交
+	// 的 diff」会互相撞掉 —— 第二次进历史 tab 时，后发的那个把先发的序号
+	// 顶掉，提交列表就永远停在旧数据上（新提交看不见）。
+	repoSeq    int // openRepo：整个仓库
+	logSeq     int // loadCommits：提交列表
+	diffSeq    int // loadCommit：选中提交的 diff
+	contentSeq int // showFiles/loadContents：文件内容与语法高亮
 
 	// —— 模型 ——
 	// allFiles 是当前显示的完整文件列表（工作区改动，或某个提交的 diff）；
@@ -468,8 +475,8 @@ func (a *app) chooseFolder() {
 
 // openRepo 在后台读仓库，读完回主线程写入状态。
 func (a *app) openRepo(path string) {
-	a.loadSeq++
-	seq := a.loadSeq
+	a.repoSeq++
+	seq := a.repoSeq
 	a.state = loadLoading
 	a.errMsg = ""
 
@@ -478,7 +485,7 @@ func (a *app) openRepo(path string) {
 		repo, err := gitrepo.Open(ctx, path)
 		if err != nil {
 			a.dispatch(func() {
-				if a.loadSeq != seq {
+				if a.repoSeq != seq {
 					return
 				}
 				a.state = loadFailed
@@ -489,7 +496,7 @@ func (a *app) openRepo(path string) {
 		m, err := repo.Load(ctx)
 		if err != nil {
 			a.dispatch(func() {
-				if a.loadSeq != seq {
+				if a.repoSeq != seq {
 					return
 				}
 				a.state = loadFailed
@@ -498,7 +505,7 @@ func (a *app) openRepo(path string) {
 			return
 		}
 		a.dispatch(func() {
-			if a.loadSeq != seq {
+			if a.repoSeq != seq {
 				return // 已经有更新的一次加载了，丢弃这次的结果
 			}
 			a.applyModel(m)
@@ -530,7 +537,7 @@ func (a *app) applyModel(m *gitrepo.Model) {
 // 重新筛选、重新读内容。工作区和历史提交共用这一条路。
 func (a *app) showFiles(files []gitrepo.File) {
 	// 上一个列表的异步结果（内容加载）从此作废
-	a.loadSeq++
+	a.contentSeq++
 	// 文件列表换了，展开状态和已读内容都不再对应得上
 	a.expanded = nil
 	a.contents = map[string]*fileContent{}
@@ -541,7 +548,7 @@ func (a *app) showFiles(files []gitrepo.File) {
 
 	a.allFiles = files
 	a.applyFilter()
-	a.loadContents(a.loadSeq)
+	a.loadContents(a.contentSeq)
 }
 
 // applyFilter 依据筛选词算出要显示的文件，并同步树和 diff 行模型。

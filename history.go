@@ -55,8 +55,8 @@ func (a *app) loadCommits() {
 	a.hist = loadLoading
 	a.histErr = ""
 
-	a.loadSeq++
-	seq := a.loadSeq
+	a.logSeq++
+	seq := a.logSeq
 	dir := a.repoPath
 	a.run(func() {
 		repo, err := gitrepo.Open(context.Background(), dir)
@@ -65,7 +65,7 @@ func (a *app) loadCommits() {
 			commits, err = repo.Log(context.Background(), logLimit, 0)
 		}
 		a.dispatch(func() {
-			if a.loadSeq != seq {
+			if a.logSeq != seq {
 				return
 			}
 			if err != nil {
@@ -92,8 +92,8 @@ func (a *app) loadCommit(i int) {
 	a.hist = loadLoading
 	a.histErr = ""
 
-	a.loadSeq++
-	seq := a.loadSeq
+	a.diffSeq++
+	seq := a.diffSeq
 	dir, hash := a.repoPath, a.commits[i].Hash
 	a.run(func() {
 		repo, err := gitrepo.Open(context.Background(), dir)
@@ -102,7 +102,7 @@ func (a *app) loadCommit(i int) {
 			files, err = repo.CommitDiff(context.Background(), hash)
 		}
 		a.dispatch(func() {
-			if a.loadSeq != seq {
+			if a.diffSeq != seq {
 				return
 			}
 			if err != nil {

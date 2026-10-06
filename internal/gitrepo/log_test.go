@@ -2,6 +2,7 @@ package gitrepo
 
 import (
 	"context"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -72,6 +73,120 @@ func subjects(cs []Commit) []string {
 		out = append(out, c.Subject)
 	}
 	return out
+}
+
+// 父提交要读出来 —— 提交拓扑图（泳道图）全靠它。
+func TestLogReadsParents(t *testing.T) {
+	r := tempRepo(t)
+	write(t, filepath.Join(r.Root, "a.txt"), "one\ntwo\nthree\nCHANGED\n")
+	git(t, r.Root, "commit", "-am", "second")
+
+	commits, err := r.Log(context.Background(), 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(commits) != 2 {
+		t.Fatalf("提交数 = %d, want 2", len(commits))
+	}
+	if len(commits[0].Parents) != 1 || commits[0].Parents[0] != commits[1].Hash {
+		t.Errorf("第二个提交的父应该是第一个：%v vs %v", commits[0].Parents, commits[1].Hash)
+	}
+	// 根提交没有父 —— 画图时这条泳道到此为止
+	if len(commits[1].Parents) != 0 {
+		t.Errorf("根提交不该有父：%v", commits[1].Parents)
+	}
+}
+
+// 合并提交有两个父，顺序是 git 自己定的（第一个是「当前分支」那一侧）。
+func TestLogMergeCommitParents(t *testing.T) {
+	r := tempRepo(t)
+	base := head(t, r.Root)
+
+	git(t, r.Root, "checkout", "-q", "-b", "feature")
+	write(t, filepath.Join(r.Root, "f.txt"), "feature\n")
+	git(t, r.Root, "add", ".")
+	git(t, r.Root, "commit", "-m", "支线")
+	feature := head(t, r.Root)
+
+	git(t, r.Root, "checkout", "-q", "main")
+	write(t, filepath.Join(r.Root, "m.txt"), "main\n")
+	git(t, r.Root, "add", ".")
+	git(t, r.Root, "commit", "-m", "主线")
+	mainSide := head(t, r.Root)
+
+	git(t, r.Root, "merge", "-q", "--no-ff", "-m", "合并支线", "feature")
+
+	commits, err := r.Log(context.Background(), 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(commits) == 0 || commits[0].Subject != "合并支线" {
+		t.Fatalf("第一个应该是合并提交：%v", subjects(commits))
+	}
+	got := commits[0].Parents
+	if len(got) != 2 {
+		t.Fatalf("合并提交应该有两个父：%v", got)
+	}
+	// merge 时人在 main 上，所以第一个父是 main 那一侧
+	if got[0] != mainSide || got[1] != feature {
+		t.Errorf("父的顺序不对：%v（main=%v feature=%v）", got, mainSide, feature)
+	}
+	if base == "" {
+		t.Error("没拿到基线提交")
+	}
+}
+
+// --topo-order：不管各条分支的提交时间怎么交错，父提交一定排在子提交后面。
+func TestLogIsTopological(t *testing.T) {
+	r := tempRepo(t)
+
+	// 支线上的提交时间故意做得比主线晚，默认的按时间排序会把它插到前面去
+	git(t, r.Root, "checkout", "-q", "-b", "feature")
+	write(t, filepath.Join(r.Root, "f.txt"), "feature\n")
+	git(t, r.Root, "add", ".")
+	git(t, r.Root, "commit", "-m", "支线")
+
+	git(t, r.Root, "checkout", "-q", "main")
+	write(t, filepath.Join(r.Root, "m.txt"), "main\n")
+	git(t, r.Root, "add", ".")
+	git(t, r.Root, "commit", "-m", "主线")
+
+	git(t, r.Root, "merge", "-q", "--no-ff", "-m", "合并", "feature")
+
+	commits, err := r.Log(context.Background(), 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pos := map[string]int{}
+	for i, c := range commits {
+		pos[c.Hash] = i
+	}
+	for _, c := range commits {
+		for _, p := range c.Parents {
+			pi, ok := pos[p]
+			if !ok {
+				continue // 超出这一页了，不管
+			}
+			if pi <= pos[c.Hash] {
+				// 父必须排在子后面（下标更大）
+				t.Errorf("%s（第 %d 个）的父 %s 排在第 %d 个 —— 拓扑序反了",
+					c.Short, pos[c.Hash], p[:7], pi)
+			}
+		}
+	}
+}
+
+// head 读当前 HEAD 的完整哈希。
+func head(t *testing.T, dir string) string {
+	t.Helper()
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	cmd.Dir = dir
+	cmd.Env = gitEnv()
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("rev-parse HEAD: %v", err)
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // 空仓库没有提交，Log 应该是空列表而不是错误。

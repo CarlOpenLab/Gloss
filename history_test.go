@@ -217,3 +217,64 @@ func TestRefLabel(t *testing.T) {
 		}
 	}
 }
+
+// 连着进两次历史 tab 也要正常。setTab 里 loadCommits 和 loadCommit 会
+// 前后脚发起，两者曾经抢同一个 loadSeq —— 后发的把先发的撞掉，提交列表
+// 永远停在「正在读提交…」。第一次进来 commitSel 还是 -1，所以只有第二次
+// 才露馅。
+func TestHistoryTabTwice(t *testing.T) {
+	a := histApp(t)
+
+	a.setTab(1)
+	settle(t, a)
+	if a.hist != loadReady || len(a.commits) == 0 {
+		t.Fatalf("第一次进历史就不对：hist=%v commits=%d", a.hist, len(a.commits))
+	}
+
+	a.setTab(0)
+	settle(t, a)
+	a.setTab(1)
+	settle(t, a)
+
+	if a.hist != loadReady {
+		t.Errorf("第二次进历史，列表状态 = %v, want loadReady", a.hist)
+	}
+	if len(a.commits) == 0 {
+		t.Error("第二次进历史，提交列表空了")
+	}
+
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+	if tt.HasText("正在读提交…") {
+		t.Errorf("列表卡在加载中：%q", tt.Texts())
+	}
+	if !tt.HasText("第三条：加个文件") {
+		t.Errorf("提交没列出来：%q", tt.Texts())
+	}
+}
+
+// 第二次之后进历史 tab，提交列表要重新读过，不能拿着旧的那份。
+//
+// setTab 里 loadCommits 和 loadCommit 前后脚发起，两者曾经抢同一个
+// loadSeq：后发的把先发的撞掉，loadCommits 的结果被丢弃，a.commits
+// 一直是第一次进来时那份 —— 新提交看不见。
+func TestHistoryRefreshesCommits(t *testing.T) {
+	a := histApp(t)
+	a.setTab(1)
+	settle(t, a) // commitSel 这时才有值，下一次进来才会两个请求打架
+	a.setTab(0)
+	settle(t, a)
+
+	writeFile(t, filepath.Join(a.repoPath, "c.txt"), "新文件\n")
+	runGit(t, a.repoPath, "add", ".")
+	runGit(t, a.repoPath, "commit", "-m", "第四条")
+
+	a.setTab(1)
+	settle(t, a)
+
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+	if !tt.HasText("第四条") {
+		t.Errorf("新提交没进列表：%q", tt.Texts())
+	}
+}

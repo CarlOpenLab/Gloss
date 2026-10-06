@@ -68,7 +68,7 @@ func (a *app) loadContents(seq int) {
 			done := batch
 			batch = make(map[string]*fileContent, contentBatch)
 			a.dispatch(func() {
-				if a.loadSeq != seq {
+				if a.contentSeq != seq {
 					return // 已经切到别的仓库了，这批结果作废
 				}
 				for p, cc := range done {
