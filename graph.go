@@ -5,7 +5,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"diff-explainer/internal/gitrepo"
+	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
 )
 
 // graphSeg 是拓扑图里的一段线：画在第几条泳道、用哪个色号。

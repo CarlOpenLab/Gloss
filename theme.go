@@ -3,7 +3,7 @@ package main
 import (
 	"github.com/egoist/mygo/ui"
 
-	"diff-explainer/internal/highlight"
+	"github.com/CarlOpenLab/Gloss/internal/highlight"
 )
 
 // palette 是 diff 视图专用的语义色。

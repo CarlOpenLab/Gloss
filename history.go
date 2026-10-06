@@ -8,7 +8,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"diff-explainer/internal/gitrepo"
+	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
 )
 
 // 历史 tab：上半是提交列表（带拓扑图），下半是选中提交的「文件列表 + diff」。

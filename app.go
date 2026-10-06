@@ -7,9 +7,9 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
-	"diff-explainer/internal/filetree"
-	"diff-explainer/internal/gitrepo"
-	"diff-explainer/internal/store"
+	"github.com/CarlOpenLab/Gloss/internal/filetree"
+	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
+	"github.com/CarlOpenLab/Gloss/internal/store"
 )
 
 // 线程约定 —— desktop 包里所有代码都要守这几条：
@@ -345,7 +345,7 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 			ui.Column(c).Gap(1).MinWidth(0).Children(func() {
 				name := a.repoName
 				if name == "" {
-					name = "Diff Explainer"
+					name = "Gloss"
 				}
 				ui.Text(c, name).Bold().SingleLine()
 				sub := "未打开仓库"

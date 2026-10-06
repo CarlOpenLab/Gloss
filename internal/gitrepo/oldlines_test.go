@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"diff-explainer/internal/diff"
+	"github.com/CarlOpenLab/Gloss/internal/diff"
 )
 
 // 新侧 8 行，旧侧 8 行；第一个 hunk 删掉一行，第二个 hunk 加了一行。

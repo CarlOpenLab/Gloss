@@ -12,7 +12,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"diff-explainer/internal/gitrepo"
+	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
 )
 
 // testApp 建一个真实的临时 git 仓库并加载它，返回可以直接渲染的 app。
@@ -356,8 +356,10 @@ func TestOpenThisRepo(t *testing.T) {
 	settle(t, a)
 	tt := ui.NewTester(a.view, 1280, 860)
 
-	if a.repoName != "diff-explainer" {
-		t.Errorf("仓库名 = %q", a.repoName)
+	// 仓库名取的就是目录名。别写死字符串：仓库自己会改名，写死的话
+	// 改个目录名这条测试就红，而它想验的是「名字有没有读出来」。
+	if want := filepath.Base(dir); a.repoName != want {
+		t.Errorf("仓库名 = %q, want %q（本目录名）", a.repoName, want)
 	}
 	if !tt.HasText(a.repoName) {
 		t.Errorf("顶栏没有显示仓库名：%q", tt.Texts())

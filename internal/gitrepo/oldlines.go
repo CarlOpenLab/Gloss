@@ -1,7 +1,7 @@
 package gitrepo
 
 import (
-	"diff-explainer/internal/diff"
+	"github.com/CarlOpenLab/Gloss/internal/diff"
 )
 
 // OldLines 由新侧内容和 hunk 反推出旧侧内容。

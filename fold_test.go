@@ -5,7 +5,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"diff-explainer/internal/gitrepo"
+	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
 )
 
 // rowsFolded 报告某个文件在行模型里是不是只剩一条文件头。

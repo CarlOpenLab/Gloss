@@ -8,7 +8,7 @@ package filetree
 import (
 	"strings"
 
-	"diff-explainer/internal/gitrepo"
+	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
 )
 
 // Node 是文件树里的一个节点。

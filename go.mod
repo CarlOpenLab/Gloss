@@ -1,4 +1,4 @@
-module diff-explainer
+module github.com/CarlOpenLab/Gloss
 
 go 1.27.1
 

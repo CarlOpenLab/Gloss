@@ -1,4 +1,4 @@
-// Command diff-explainer 是一个原生 macOS 的 Git GUI，
+// Command Gloss 是一个原生 macOS 的 Git GUI，
 // 核心是逐 hunk 的 AI 解释 —— review 大段代码时哪里不懂点哪里。
 package main
 
@@ -8,7 +8,7 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
-	"diff-explainer/internal/store"
+	"github.com/CarlOpenLab/Gloss/internal/store"
 )
 
 func main() {
@@ -25,7 +25,7 @@ func main() {
 		a.attachStore(s)
 
 		win := mygo.NewWindow(mygo.WindowOptions{
-			Title:     "Diff Explainer",
+			Title:     "Gloss",
 			Width:     1280,
 			Height:    860,
 			MinWidth:  720,

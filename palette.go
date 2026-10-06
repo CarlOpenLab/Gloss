@@ -5,7 +5,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"diff-explainer/internal/filetree"
+	"github.com/CarlOpenLab/Gloss/internal/filetree"
 )
 
 // ⌘K 命令栏。

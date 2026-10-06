@@ -8,8 +8,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"diff-explainer/internal/diff"
-	"diff-explainer/internal/gitrepo"
+	"github.com/CarlOpenLab/Gloss/internal/diff"
+	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
 )
 
 func TestDiffViewShowsCodeLines(t *testing.T) {

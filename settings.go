@@ -3,7 +3,7 @@ package main
 import (
 	"github.com/egoist/mygo/ui"
 
-	"diff-explainer/internal/llm"
+	"github.com/CarlOpenLab/Gloss/internal/llm"
 )
 
 // preset 是一个常见供应商的预设：接口类型、Base URL、模型都填好，

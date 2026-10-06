@@ -5,8 +5,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"diff-explainer/internal/filetree"
-	"diff-explainer/internal/gitrepo"
+	"github.com/CarlOpenLab/Gloss/internal/filetree"
+	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
 )
 
 const sidebarWidth = 280

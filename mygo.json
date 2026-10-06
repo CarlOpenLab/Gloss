@@ -1,6 +1,6 @@
 {
-  "name": "Diff Explainer",
-  "identifier": "dev.carl.diff-explainer",
+  "name": "Gloss",
+  "identifier": "dev.carl.gloss",
   "version": "0.1.0",
   "out": "build"
 }

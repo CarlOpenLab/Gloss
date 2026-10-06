@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"diff-explainer/internal/diff"
-	"diff-explainer/internal/gitrepo"
+	"github.com/CarlOpenLab/Gloss/internal/diff"
+	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
 )
 
 func fileFromPatch(t *testing.T, patch string) gitrepo.File {

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"diff-explainer/internal/diff"
+	"github.com/CarlOpenLab/Gloss/internal/diff"
 )
 
 func parseOne(t *testing.T, patch string) diff.FileDiff {

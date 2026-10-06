@@ -9,10 +9,10 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"diff-explainer/internal/diff"
-	"diff-explainer/internal/explain"
-	"diff-explainer/internal/gitrepo"
-	"diff-explainer/internal/llm"
+	"github.com/CarlOpenLab/Gloss/internal/diff"
+	"github.com/CarlOpenLab/Gloss/internal/explain"
+	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
+	"github.com/CarlOpenLab/Gloss/internal/llm"
 )
 
 // ✨ 解释卡片的尺寸与节奏。

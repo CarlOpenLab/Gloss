@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"diff-explainer/internal/gitrepo"
+	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
 )
 
 // graphCommits 按 "D:B,E" 这种写法造提交列表：冒号前是哈希，冒号后是父提交

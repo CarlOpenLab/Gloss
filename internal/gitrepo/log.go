@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"diff-explainer/internal/diff"
+	"github.com/CarlOpenLab/Gloss/internal/diff"
 )
 
 // Commit 是历史里的一个提交。

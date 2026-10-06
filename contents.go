@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 
-	"diff-explainer/internal/diff"
-	"diff-explainer/internal/gitrepo"
-	"diff-explainer/internal/highlight"
+	"github.com/CarlOpenLab/Gloss/internal/diff"
+	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
+	"github.com/CarlOpenLab/Gloss/internal/highlight"
 )
 
 // maxContentBytes 是读进内存做行号换算和语法高亮的上限。

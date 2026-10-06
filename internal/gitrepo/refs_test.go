@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"diff-explainer/internal/diff"
+	"github.com/CarlOpenLab/Gloss/internal/diff"
 )
 
 // 建一个带远程的仓库：本地 main + feature，一个标签，一个储藏，

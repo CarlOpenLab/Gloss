@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"strings"
 
-	"diff-explainer/internal/diff"
+	"github.com/CarlOpenLab/Gloss/internal/diff"
 )
 
 // SystemPrompt 是解释任务的系统提示。

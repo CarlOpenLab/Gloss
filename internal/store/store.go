@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	"diff-explainer/internal/llm"
+	"github.com/CarlOpenLab/Gloss/internal/llm"
 )
 
 // maxCacheEntries 是解释缓存的条数上限。每条几百字节，500 条足够覆盖

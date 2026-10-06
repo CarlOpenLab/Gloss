@@ -6,9 +6,9 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"diff-explainer/internal/diff"
-	"diff-explainer/internal/gitrepo"
-	"diff-explainer/internal/highlight"
+	"github.com/CarlOpenLab/Gloss/internal/diff"
+	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
+	"github.com/CarlOpenLab/Gloss/internal/highlight"
 )
 
 // diff 视图的尺寸常量集中在这里，改字号时一起调。

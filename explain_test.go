@@ -9,8 +9,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"diff-explainer/internal/llm"
-	"diff-explainer/internal/store"
+	"github.com/CarlOpenLab/Gloss/internal/llm"
+	"github.com/CarlOpenLab/Gloss/internal/store"
 )
 
 // fakeLLM 起一个假的 OpenAI 兼容接口，按片返回一段解释。

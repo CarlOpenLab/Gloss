@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"diff-explainer/internal/diff"
-	"diff-explainer/internal/gitrepo"
+	"github.com/CarlOpenLab/Gloss/internal/diff"
+	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
 )
 
 func fileDiffWithPath(p string) diff.FileDiff {

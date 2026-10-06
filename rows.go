@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 
-	"diff-explainer/internal/diff"
-	"diff-explainer/internal/gitrepo"
-	"diff-explainer/internal/highlight"
+	"github.com/CarlOpenLab/Gloss/internal/diff"
+	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
+	"github.com/CarlOpenLab/Gloss/internal/highlight"
 )
 
 // 扁平行模型：把整个 diff（所有文件）摊成一维的行数组，喂给虚拟化的

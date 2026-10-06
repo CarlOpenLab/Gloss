@@ -3,8 +3,8 @@ package main
 import (
 	"slices"
 
-	"diff-explainer/internal/filetree"
-	"diff-explainer/internal/gitrepo"
+	"github.com/CarlOpenLab/Gloss/internal/filetree"
+	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
 )
 
 // 侧栏 refs 树的键。和文件树的 "d:/f:" 分得开 —— 两棵树各有各的 key

@@ -9,7 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"diff-explainer/internal/diff"
+	"github.com/CarlOpenLab/Gloss/internal/diff"
 )
 
 // maxUntrackedBytes 是未跟踪文件读进来渲染的上限。超过就不渲染内容，

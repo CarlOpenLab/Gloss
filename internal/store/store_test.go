@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"diff-explainer/internal/llm"
+	"github.com/CarlOpenLab/Gloss/internal/llm"
 )
 
 // 第一次启动时什么文件都没有 —— 这不是错误，得拿到一份空配置。
