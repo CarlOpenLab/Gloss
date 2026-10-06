@@ -27,6 +27,7 @@ func TestDumpScreenshot(t *testing.T) {
 
 	// 再单独看一眼带语法高亮的那个文件（它在列表靠下的位置，默认看不到）
 	a.filter = "router"
+	tt.SetDark(false)
 	tt.Frame()
 	writePNG(t, "/tmp/de-shot-code-light.png", tt.Image())
 	tt.SetDark(true)
@@ -70,6 +71,34 @@ func TestDumpScreenshot(t *testing.T) {
 	a.editCfg.Providers[0].APIKey = "sk-ant-xxxxxxxxxxxxxxxx"
 	tt.Frame()
 	writePNG(t, "/tmp/de-shot-settings.png", tt.Image())
+	a.settingsOn = false
+
+	// 折叠：第一个文件标成已 review，它就在 diff 里折起来了。
+	// 前面试筛选的时候列表滚下去过，这里先滚回顶上。
+	a.toggleViewed(a.files[0])
+	a.diffList.ScrollTo(0, ui.Start)
+	tt.Frame()
+	tt.Frame()
+	writePNG(t, "/tmp/de-shot-folded.png", tt.Image())
+	a.toggleViewed(a.files[0])
+
+	// ⌘K 命令栏
+	a.openPalette()
+	tt.Frame()
+	writePNG(t, "/tmp/de-shot-palette.png", tt.Image())
+	a.closePalette()
+
+	// 历史 tab：左边提交列表，右边该提交的 diff
+	hist := histApp(t)
+	ht := ui.NewTester(hist.view, 1280, 860)
+	ht.Frame()
+	hist.setTab(1)
+	settle(t, hist)
+	ht.Frame()
+	writePNG(t, "/tmp/de-shot-history.png", ht.Image())
+	ht.SetDark(true)
+	ht.Frame()
+	writePNG(t, "/tmp/de-shot-history-dark.png", ht.Image())
 }
 
 // sampleExplanation 是一段有代表性的模型输出：一句话总结、要点、行内代码、

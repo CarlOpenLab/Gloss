@@ -9,7 +9,7 @@ import (
 
 const sidebarWidth = 280
 
-// sidebar 是左侧栏：筛选框 + 文件树 + 底部统计。
+// sidebar 是左侧栏：筛选框 + 文件树（或提交列表）+ 底部统计。
 //
 // 底色是半透明的：开着 vibrancy 时它只是给系统材质叠一层淡淡的色调，
 // 和 Finder 侧栏一个观感；系统关掉透明效果时它又能兜住底，不至于让
@@ -18,14 +18,31 @@ func (a *app) sidebar(c *ui.Context, pal palette) {
 	ui.Column(c).Width(sidebarWidth).Shrink(0).
 		Background(pal.sideBg.Alpha(0.55)).
 		Children(func() {
-		ui.Box(c).Padding(8).Shrink(0).Children(func() {
-			// 用 TextInput 而不是 ui.SearchField：SearchField 的 placeholder
-			// 是内部写死的 "Search"，从外面盖不掉，而整个界面是中文的。
-			ui.TextInput(c, &a.filter).Placeholder("筛选文件")
+			if a.tab == 0 {
+				ui.Box(c).Padding(8).Shrink(0).Children(func() {
+					a.filterInput(c)
+				})
+				a.treeView(c, pal)
+				a.sidebarFooter(c, pal)
+				return
+			}
+			a.commitSidebar(c, pal)
+			a.historyFooter(c, pal)
 		})
-		a.treeView(c, pal)
-		a.sidebarFooter(c, pal)
-	})
+}
+
+// filterInput 是侧栏的筛选框。
+//
+// 用 TextInput 而不是 ui.SearchField：SearchField 的 placeholder 是内部
+// 写死的 "Search"，从外面盖不掉，而整个界面是中文的。
+func (a *app) filterInput(c *ui.Context) {
+	in := ui.TextInput(c, &a.filter).Placeholder("筛选文件")
+	// ⌘F 之后把焦点放进来。只做一次 —— 每帧都 Focus 的话这个框就再也
+	// 交不出焦点了。
+	if a.focusFilter {
+		a.focusFilter = false
+		in.Focus()
+	}
 }
 
 func (a *app) treeView(c *ui.Context, pal palette) {
@@ -120,6 +137,25 @@ func (a *app) sidebarFooter(c *ui.Context, pal palette) {
 		if n := a.viewedCount(); n > 0 {
 			ui.Textf(c, "✓ %d/%d", n, len(a.files)).
 				FontSize(11).TextColor(pal.viewed)
+		}
+	})
+}
+
+// historyFooter 是历史 tab 的侧栏底部：提交条数，以及当前这个提交的统计。
+func (a *app) historyFooter(c *ui.Context, pal palette) {
+	t := c.Theme()
+	if a.hist != loadReady || len(a.commits) == 0 {
+		return
+	}
+	ui.Row(c).Shrink(0).Padding(8, 12).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Textf(c, "%d 个提交", len(a.commits)).
+			FontSize(11).Font("monospace").FontFeatures("tnum").
+			TextColor(t.TextMuted)
+		ui.Spacer(c)
+		if a.commitSel >= 0 && a.commitSel < len(a.commits) {
+			ui.Textf(c, "+%d −%d", a.totalAdd(), a.totalDel()).
+				FontSize(11).Font("monospace").FontFeatures("tnum").
+				TextColor(pal.ref)
 		}
 	})
 }

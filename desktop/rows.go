@@ -84,9 +84,12 @@ type fileContent struct {
 // expanded 记录每个未改动区间已经展开了多少行，key 见 gapKeyOf。
 // 它跨帧保留，所以用户展开过的区间在重绘、筛选、刷新之后仍然是展开的。
 //
+// collapsed 里的文件只留一条文件头 —— 已 review 的文件默认折起来，
+// 一屏就能扫完整个改动清单。
+//
 // split 为 true 时按左右对照排布：一段删除和紧跟其后的新增一一配对，
 // 配不上的那一侧留空。
-func buildRows(files []gitrepo.File, contents map[string]*fileContent, expanded map[string]int, split bool) []row {
+func buildRows(files []gitrepo.File, contents map[string]*fileContent, expanded map[string]int, split bool, collapsed map[string]bool) []row {
 	var rows []row
 	for fi := range files {
 		f := &files[fi]
@@ -97,6 +100,10 @@ func buildRows(files []gitrepo.File, contents map[string]*fileContent, expanded 
 			file: fi,
 			key:  "h:" + path,
 		})
+
+		if collapsed[path] {
+			continue
+		}
 
 		if len(f.Hunks) == 0 {
 			rows = append(rows, row{

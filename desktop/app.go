@@ -56,10 +56,14 @@ type app struct {
 	loadSeq int
 
 	// —— 模型 ——
-	// allFiles 是仓库里的全部改动；files 是过了筛选词之后、界面真正显示的
-	// 那一份。侧栏树、diff 行模型、统计都只看 files，三者才对得上。
+	// allFiles 是当前显示的完整文件列表（工作区改动，或某个提交的 diff）；
+	// files 是过了筛选词之后、界面真正显示的那一份。侧栏树、diff 行模型、
+	// 统计都只看 files，三者才对得上。
 	allFiles []gitrepo.File
 	files    []gitrepo.File
+	// workFiles 是工作区的文件列表。切到历史看某个提交时 allFiles 会换成
+	// 那个提交的 diff，切回来要还原，所以单独留一份。
+	workFiles []gitrepo.File
 	// contents 按路径缓存文件在新侧的内容，用于展开未改动区间和语法高亮。
 	// 用路径而不是下标索引：筛选会让文件列表变短，下标会错位。
 	contents map[string]*fileContent
@@ -79,6 +83,10 @@ type app struct {
 	// expanded 记录每个未改动区间展开了多少行，key 见 rows.go 的 gapKey。
 	// 跨帧保留，所以刷新后展开状态还在（文件内容变了才会对不上）。
 	expanded map[string]int
+
+	// —— J/K 跳 hunk ——
+	// hunkCur 是上一次跳到的那一段的 key，见 keys.go 的 hunkAnchor。
+	hunkCur string
 
 	// —— 视图 ——
 	split    bool    // true = split（左右对照），false = unified
@@ -100,23 +108,43 @@ type app struct {
 	// 指纹对不上就说明文件又变了，标记自动失效。
 	viewed map[string]string
 
+	// folded 是「折叠/展开」的手动覆盖：没记过的文件跟着 viewed 走
+	// （标了已 review 就折起来），点过文件头的按点的来。
+	// 用 map 的存在性区分「没手动设过」和「手动设成 false」。
+	folded map[string]bool
+
+	// —— 历史 ——
+	tab        int // 0 = 改动，1 = 历史
+	commits    []gitrepo.Commit
+	commitList ui.ListState
+	commitSel  int // 选中的提交下标，-1 表示还没选
+	hist       loadState
+	histErr    string
+
 	// —— AI 解释 ——
 	store *store.Store
 	// modelName 是当前生效的模型名，解释缓存的 key 里带它。它在设置变化时
 	// 更新一次，而不是每帧去问 store —— 那要加锁还可能要读环境变量。
-	modelName  string
-	ex         explainState
+	modelName string
+	ex        explainState
 	// settingsOn 是「模型设置」对话框是否打开；editCfg 是编辑中的副本，
 	// 点确定之前不动真配置。
 	settingsOn bool
 	editCfg    store.Config
 	editIdx    int
+
+	// —— 命令栏（⌘K）——
+	palette paletteState
+	// focusFilter 是 ⌘F 的一次性请求：下帧把焦点放进筛选框。
+	focusFilter bool
 }
 
 func newApp() *app {
 	a := &app{
 		sidebarOn: true,
 		viewed:    map[string]string{},
+		folded:    map[string]bool{},
+		commitSel: -1,
 		// 没接上真实目录之前先用一个空 store，这样 newApp 之后随时可以
 		// 直接跑（测试就是这么用的）；main 里再换成真正的数据目录。
 		store: store.Open(""),
@@ -201,6 +229,10 @@ func (a *app) saveViewSettings() {
 
 func (a *app) view(c *ui.Context) {
 	pal := paletteFor(c.Theme())
+	// 快捷键要在最前面处理：c.Shortcut 是「注册即认领」的，注册得越早
+	// 越先拿到键。
+	a.handleKeys(c)
+
 	// 窗口开了 vibrancy：根节点不铺底色，让系统的毛玻璃材质透上来；
 	// 只有主区不透明，保证代码区域的对比度稳定、不受壁纸颜色影响。
 	c.Root().Background(ui.Transparent)
@@ -214,6 +246,7 @@ func (a *app) view(c *ui.Context) {
 			a.mainArea(c, pal)
 		})
 	})
+	a.paletteDialog(c, pal)
 	a.settingsDialog(c, pal)
 
 	// 卡片画在最后：这一帧的 ✨ 按钮位置刚写好，卡片当帧就能摆对地方。
@@ -221,7 +254,8 @@ func (a *app) view(c *ui.Context) {
 	a.explainCard(c, pal)
 
 	// Esc 关掉卡片。放在最后，让卡片里正在编辑的输入框先有机会处理它。
-	if a.explainOpen() && c.Shortcut(0, ui.KeyEscape) {
+	// 命令栏和设置对话框开着的时候它们自己会处理 Esc，这里让位。
+	if a.explainOpen() && !a.palette.on && !a.settingsOn && c.Shortcut(0, ui.KeyEscape) {
 		a.closeExplain()
 	}
 }
@@ -260,6 +294,13 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 
 			ui.Spacer(c)
 
+			// 改动 / 历史。⌘1 ⌘2 也能切。
+			tab := a.tab
+			ui.Segmented(c, &tab, "改动", "历史")
+			if tab != a.tab {
+				a.setTab(tab)
+			}
+
 			// unified / split 切换。和 Checkbox 一样传副本进去、变了再回写：
 			// 控件要的是 *int，而模式存在 app 上。
 			split := a.split
@@ -274,11 +315,15 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 				a.saveViewSettings()
 			}
 
-			switch a.state {
-			case loadLoading:
+			switch {
+			case a.state == loadLoading:
 				ui.Spinner(c)
-			case loadReady:
+			case a.state == loadReady && len(a.files) > 0:
+				// 两个 tab 都报当前主区里的文件数：改动是工作区的，
+				// 历史是选中那个提交的
 				ui.Textf(c, "%d 个文件", len(a.files)).FontSize(12).TextColor(t.TextMuted)
+			case a.tab == 1 && a.hist == loadLoading:
+				ui.Spinner(c)
 			}
 
 			if ui.Button(c, "刷新").Clicked() {
@@ -304,35 +349,67 @@ func (a *app) mainArea(c *ui.Context, pal palette) {
 
 	ui.Box(c).Grow(1).FillWidth().Background(pal.appBg).Children(func() {
 		ui.Column(c).Fill().Center().Gap(10).Padding(24).Children(func() {
-			switch a.state {
-			case loadIdle:
+			switch {
+			case a.tab == 1:
+				a.historyEmpty(c, t)
+
+			case a.state == loadIdle:
 				ui.Text(c, "还没有打开仓库").FontSize(18).Bold()
 				ui.Text(c, "选一个本地 git 仓库，看看有哪些改动。").
 					TextColor(t.TextMuted)
 				if ui.PrimaryButton(c, "打开仓库…").Clicked() {
 					a.chooseFolder()
 				}
-			case loadLoading:
+			case a.state == loadLoading:
 				ui.Spinner(c)
 				ui.Text(c, "正在读取仓库…").TextColor(t.TextMuted)
-			case loadFailed:
+			case a.state == loadFailed:
 				ui.Text(c, "打不开这个仓库").FontSize(18).Bold()
 				ui.Text(c, a.errMsg).TextColor(t.Danger)
 				if ui.Button(c, "重试").Clicked() {
 					a.reload()
 				}
-			case loadReady:
-				if a.filter != "" {
-					ui.Text(c, "没有匹配的文件").FontSize(18).Bold()
-					ui.Textf(c, "筛选词「%s」没有匹配到任何改动。", a.filter).
-						TextColor(t.TextMuted)
-				} else {
-					ui.Text(c, "没有未提交的改动").FontSize(18).Bold()
-					ui.Text(c, "工作区是干净的。").TextColor(t.TextMuted)
-				}
+			case a.filter != "":
+				ui.Text(c, "没有匹配的文件").FontSize(18).Bold()
+				ui.Textf(c, "筛选词「%s」没有匹配到任何改动。", a.filter).
+					TextColor(t.TextMuted)
+			default:
+				ui.Text(c, "没有未提交的改动").FontSize(18).Bold()
+				ui.Text(c, "工作区是干净的。").TextColor(t.TextMuted)
 			}
 		})
 	})
+}
+
+// historyEmpty 是历史 tab 主区没有 diff 可画时的几种情况。
+func (a *app) historyEmpty(c *ui.Context, t *ui.Theme) {
+	switch a.hist {
+	case loadLoading:
+		ui.Spinner(c)
+		ui.Text(c, "正在读提交…").TextColor(t.TextMuted)
+	case loadFailed:
+		ui.Text(c, "读不到历史").FontSize(18).Bold()
+		ui.Text(c, a.histErr).TextColor(t.Danger)
+		if ui.Button(c, "重试").Clicked() {
+			a.loadCommits()
+		}
+	default:
+		if len(a.commits) == 0 {
+			ui.Text(c, "还没有提交").FontSize(18).Bold()
+			ui.Text(c, "这个仓库还没有任何历史。").TextColor(t.TextMuted)
+			return
+		}
+		if a.commitSel >= 0 && a.commitSel < len(a.commits) {
+			cm := a.commits[a.commitSel]
+			ui.Text(c, cm.Subject).FontSize(18).Bold()
+			ui.Textf(c, "%s · %s · %s", cm.Short, cm.Author, cm.When.Format("2006-01-02 15:04")).
+				TextColor(t.TextMuted)
+			ui.Text(c, "这个提交没有改动内容。").TextColor(t.TextMuted)
+			return
+		}
+		ui.Text(c, "选一个提交").FontSize(18).Bold()
+		ui.Text(c, "左边挑一个提交，看看它改了什么。").TextColor(t.TextMuted)
+	}
 }
 
 func (a *app) totalAdd() int {
@@ -424,17 +501,35 @@ func (a *app) applyModel(m *gitrepo.Model) {
 	a.repoPath = m.Repo.Root
 	a.repoName = m.Repo.Name
 	a.branch = m.Branch
-	a.allFiles = m.Files
-	// 换了仓库，上一个仓库的展开状态和文件内容都不再适用
-	a.expanded = nil
-	a.contents = map[string]*fileContent{}
-	// 卡片指向的是上一个仓库里的第几个文件的第几段，同样作废
-	a.closeExplain()
-	a.state = loadReady
+	a.workFiles = m.Files
 
 	// 记住这个仓库，下次启动直接打开
 	a.store.SetLastRepo(a.repoPath)
 
+	// 正在看历史时别把主区切回工作区 —— 用户下一次刷新可能只是想
+	// 更新一下提交列表。
+	if a.tab == 0 {
+		a.showFiles(a.workFiles)
+	} else {
+		a.loadCommits()
+	}
+	a.state = loadReady
+}
+
+// showFiles 把一份文件列表换成当前显示的内容：重置展开状态和缓存内容，
+// 重新筛选、重新读内容。工作区和历史提交共用这一条路。
+func (a *app) showFiles(files []gitrepo.File) {
+	// 上一个列表的异步结果（内容加载）从此作废
+	a.loadSeq++
+	// 文件列表换了，展开状态和已读内容都不再对应得上
+	a.expanded = nil
+	a.contents = map[string]*fileContent{}
+	// 记下的跳转位置同样作废：同样的 key 可能落在完全不同的行上
+	a.hunkCur = ""
+	// 卡片指向的是「第几个文件的第几段」，同样作废
+	a.closeExplain()
+
+	a.allFiles = files
 	a.applyFilter()
 	a.loadContents(a.loadSeq)
 }
@@ -538,6 +633,28 @@ func (a *app) toggleViewed(f gitrepo.File) {
 	} else {
 		a.viewed[f.NewPath] = f.Fingerprint
 	}
+	// 标记变了，之前手动折叠/展开的覆盖就不作数了 ——
+	// 「勾上已 review 就折起来」这条规则要立刻生效。
+	delete(a.folded, fileKey(f))
+	a.rowsDirty = true
 	a.store.SetViewed(a.viewed)
 	a.persist()
+}
+
+// isFolded 判断一个文件在 diff 里是不是折着的。默认跟着「已 review」走，
+// 点过文件头的以手动设置为准。
+func (a *app) isFolded(f gitrepo.File) bool {
+	if v, ok := a.folded[fileKey(f)]; ok {
+		return v
+	}
+	return a.isViewed(f)
+}
+
+// toggleFold 是点文件头时调用的：折起来 / 展开。
+func (a *app) toggleFold(f gitrepo.File) {
+	if a.folded == nil {
+		a.folded = map[string]bool{}
+	}
+	a.folded[fileKey(f)] = !a.isFolded(f)
+	a.rowsDirty = true
 }

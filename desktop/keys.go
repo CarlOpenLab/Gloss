@@ -1,0 +1,191 @@
+package main
+
+import (
+	"github.com/egoist/mygo/ui"
+)
+
+// 窗口级快捷键集中在 handleKeys 里，view 一开头就调用。
+//
+// c.Shortcut 报的是「本帧有没有按下这个键」，注册即认领 —— 一个键只能被
+// 认领一次，所以每处只问一次。它在对话框打开时会自动让位（ui 内部的
+// insideModal），输入框正在编辑时也会先把键吃掉（焦点元素先收到 keyDown），
+// 所以「在筛选框里打 j」不会跳 hunk。
+
+// codeSizeMin/Max/Step 是 ⌘+/⌘− 的范围。小于 9 看不清，大于 22 一行放不下
+// 几个字。
+const (
+	codeSizeMin  = 9
+	codeSizeMax  = 22
+	codeSizeStep = 1
+)
+
+func (a *app) handleKeys(c *ui.Context) {
+	if c.Shortcut(ui.Cmd, ui.KeyR) {
+		a.reload()
+	}
+	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyB) {
+		a.toggleSidebar()
+	}
+	if c.Shortcut(ui.Cmd, ui.KeyF) {
+		a.focusFilter = true
+		if !a.sidebarOn {
+			a.toggleSidebar()
+		}
+	}
+	if c.Shortcut(ui.Cmd, ui.KeyK) {
+		a.openPalette()
+	}
+	if c.Shortcut(ui.Cmd, ui.Key1) {
+		a.setTab(0)
+	}
+	if c.Shortcut(ui.Cmd, ui.Key2) {
+		a.setTab(1)
+	}
+	// 字号从「当前生效的字号」上加减，而不是从 a.codeSize 上 ——
+	// 后者 0 表示「用默认值」，直接 +1 会被夹到下限，第一次按就跳到底。
+	if c.Shortcut(ui.Cmd, ui.KeyEqual) || c.Shortcut(ui.Cmd, ui.KeyComma) {
+		a.setCodeSize(a.codeSizeValue() + codeSizeStep)
+	}
+	if c.Shortcut(ui.Cmd, ui.KeyMinus) {
+		a.setCodeSize(a.codeSizeValue() - codeSizeStep)
+	}
+	if c.Shortcut(ui.Cmd, ui.Key0) {
+		a.setCodeSize(0)
+	}
+
+	// J / K 跳上下一段改动。不给它们加修饰键：review 时手一直在这两个键上。
+	// 历史 tab 里的 diff 是同一套视图，同样能用。
+	if a.state == loadReady && len(a.files) > 0 {
+		if c.Shortcut(0, ui.KeyJ) {
+			a.jumpHunk(1)
+		}
+		if c.Shortcut(0, ui.KeyK) {
+			a.jumpHunk(-1)
+		}
+	}
+}
+
+func (a *app) toggleSidebar() {
+	a.sidebarOn = !a.sidebarOn
+	a.saveViewSettings()
+}
+
+// setCodeSize 调整代码字号。传 0 表示回到默认值。
+func (a *app) setCodeSize(size float32) {
+	if size == 0 {
+		a.codeSize = 0
+	} else {
+		a.codeSize = clamp(size, codeSizeMin, codeSizeMax)
+	}
+	a.saveViewSettings()
+}
+
+func (a *app) codeSizeValue() float32 {
+	if a.codeSize <= 0 {
+		return defSize
+	}
+	return a.codeSize
+}
+
+// jumpHunk 把列表滚到上一段/下一段改动。
+//
+// 出发点优先取上一次跳到的那一段，它看不见了就退回视口顶行 ——
+// 用户手动滚动、展开未改动区间、切视图都会让「我记得跳到哪了」过期，
+// 而滚动位置永远是真的。细节见 hunkAnchor。
+func (a *app) jumpHunk(dir int) {
+	if a.rowsDirty {
+		a.rebuildRows()
+	}
+	if len(a.rows) == 0 {
+		return
+	}
+
+	target := hunkRowNear(a.rows, a.hunkAnchor(), dir)
+	if target < 0 {
+		return
+	}
+	a.hunkCur = a.rows[target].key
+	a.diffList.ScrollTo(target, ui.Start)
+}
+
+// hunkAnchor 是这次跳转的出发点。
+//
+// 默认取上一次跳到的那一段（它还看得见的话），否则取视口顶行。
+//
+// 为什么不单纯用视口顶行：视口不一定跟得上。文件头钉在列表顶上时顶行
+// 一直是它；diff 滚到底之后视口也不再动。这两种情况都会让「下一段」
+// 每次都算出同一个目标，连按 J 就卡在原地，所以要记着跳到哪了。
+//
+// 反过来，用户要是滚到了别处，那一段就滚出屏幕了（滑出去的会被列表
+// 扔掉，下标对不上），于是自然回到「以视口为准」。
+func (a *app) hunkAnchor() int {
+	first, last := a.diffList.Visible()
+	if i := a.rowIndexOf(a.hunkCur); i >= first && i <= last {
+		return i
+	}
+	a.hunkCur = ""
+	return a.topRow()
+}
+
+// rowIndexOf 找某一行 key 的下标，没有返回 -1。
+func (a *app) rowIndexOf(key string) int {
+	if key == "" {
+		return -1
+	}
+	for i := range a.rows {
+		if a.rows[i].key == key {
+			return i
+		}
+	}
+	return -1
+}
+
+// topRow 是视口顶上的那一行。
+//
+// 钉在列表顶部的文件头不算 —— 它下面那一行才是真正顶在眼前的内容。
+func (a *app) topRow() int {
+	first, last := a.diffList.Visible()
+	if first >= 0 && first < last && a.rows[first].kind == rowFileHeader {
+		return first + 1
+	}
+	return first
+}
+
+// hunkRowNear 找 from 之后（dir > 0）或之前（dir < 0）最近的一段改动。
+// 到头了就绕到另一端：一路按 J 会循环，手不用离开键盘。
+func hunkRowNear(rows []row, from, dir int) int {
+	if dir > 0 {
+		for i := from + 1; i < len(rows); i++ {
+			if rows[i].kind == rowHunkHeader {
+				return i
+			}
+		}
+		return firstHunkRow(rows, from)
+	}
+	for i := min(from, len(rows)-1) - 1; i >= 0; i-- {
+		if rows[i].kind == rowHunkHeader {
+			return i
+		}
+	}
+	return lastHunkRow(rows)
+}
+
+// firstHunkRow 是 from 之前的第一段改动。到头了绕回开头时用。
+func firstHunkRow(rows []row, before int) int {
+	for i := 0; i < len(rows) && i < before; i++ {
+		if rows[i].kind == rowHunkHeader {
+			return i
+		}
+	}
+	return -1
+}
+
+// lastHunkRow 是最后一段改动。
+func lastHunkRow(rows []row) int {
+	for i := len(rows) - 1; i >= 0; i-- {
+		if rows[i].kind == rowHunkHeader {
+			return i
+		}
+	}
+	return -1
+}

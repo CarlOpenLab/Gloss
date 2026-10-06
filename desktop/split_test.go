@@ -115,12 +115,12 @@ func TestSplitRowsKeysAreUnique(t *testing.T) {
 	contents := map[string]*fileContent{"a.go": content}
 
 	unified := map[string]bool{}
-	for _, r := range buildRows(files, contents, nil, false) {
+	for _, r := range buildRows(files, contents, nil, false, nil) {
 		unified[r.key] = true
 	}
 
 	seen := map[string]bool{}
-	for _, r := range buildRows(files, contents, nil, true) {
+	for _, r := range buildRows(files, contents, nil, true, nil) {
 		if r.key == "" {
 			t.Errorf("有行没有 key（kind=%d）", r.kind)
 			continue
@@ -174,7 +174,7 @@ func TestSplitToggleRebuildsRows(t *testing.T) {
 	}
 	// split 下同一行只画一次：旧侧的删除行和新侧的新增行并成一条，
 	// 所以总行数比 unified 少
-	unified := buildRows(a.files, a.contents, a.expanded, false)
+	unified := buildRows(a.files, a.contents, a.expanded, false, nil)
 	if len(a.rows) >= len(unified) {
 		t.Errorf("split 的行数 = %d，unified = %d，配对没生效", len(a.rows), len(unified))
 	}

@@ -55,7 +55,7 @@ const simplePatch = `diff --git a/a.go b/a.go
 
 func TestBuildRowsSimple(t *testing.T) {
 	f := fileFromPatch(t, simplePatch)
-	rows := buildRows([]gitrepo.File{f}, nil, nil, false)
+	rows := buildRows([]gitrepo.File{f}, nil, nil, false, nil)
 
 	if got := shape(rows); got != "H@LLL" {
 		t.Errorf("行结构 = %s, want H@LLL", got)
@@ -73,7 +73,7 @@ func TestBuildRowsLeadingGapCollapses(t *testing.T) {
  line41
  line42
 `)
-	rows := buildRows([]gitrepo.File{f}, nil, nil, false)
+	rows := buildRows([]gitrepo.File{f}, nil, nil, false, nil)
 
 	if got := shape(rows); got != "HG@LLLL" {
 		t.Fatalf("行结构 = %s, want HG@LLLL", got)
@@ -96,7 +96,7 @@ func TestBuildRowsShortGapIsInlined(t *testing.T) {
 +y
  z
 `)
-	rows := buildRows([]gitrepo.File{f}, nil, nil, false)
+	rows := buildRows([]gitrepo.File{f}, nil, nil, false, nil)
 
 	// 前 4 行被摊开，没有折叠条
 	if got := shape(rows); got != "HLLLL@LLL" {
@@ -124,7 +124,7 @@ func TestBuildRowsHonorsExpanded(t *testing.T) {
 	files := []gitrepo.File{f}
 
 	// 先拿到 gapKey
-	base := buildRows(files, nil, nil, false)
+	base := buildRows(files, nil, nil, false, nil)
 	var key string
 	for _, r := range base {
 		if r.kind == rowGap {
@@ -136,7 +136,7 @@ func TestBuildRowsHonorsExpanded(t *testing.T) {
 	}
 
 	// 展开 100 行：整个 39 行的区间都该摊开，折叠条消失
-	rows := buildRows(files, nil, map[string]int{key: expandStep}, false)
+	rows := buildRows(files, nil, map[string]int{key: expandStep}, false, nil)
 	want := "H" + strings.Repeat("L", 39) + "@LLLL"
 	if got := shape(rows); got != want {
 		t.Errorf("全部展开后 = %s, want %s", got, want)
@@ -173,7 +173,7 @@ func TestBuildRowsPartialExpand(t *testing.T) {
  line42
 `)
 	files := []gitrepo.File{f}
-	base := buildRows(files, nil, nil, false)
+	base := buildRows(files, nil, nil, false, nil)
 	key := ""
 	for _, r := range base {
 		if r.kind == rowGap {
@@ -181,7 +181,7 @@ func TestBuildRowsPartialExpand(t *testing.T) {
 		}
 	}
 
-	rows := buildRows(files, nil, map[string]int{key: 10}, false)
+	rows := buildRows(files, nil, map[string]int{key: 10}, false, nil)
 	gaps := 0
 	lines := 0
 	for _, r := range rows {
@@ -212,7 +212,7 @@ func TestBuildRowsTrailingGap(t *testing.T) {
 `)
 	// 文件共 30 行
 	content := &fileContent{lines: make([]string, 30)}
-	rows := buildRows([]gitrepo.File{f}, map[string]*fileContent{"a.go": content}, nil, false)
+	rows := buildRows([]gitrepo.File{f}, map[string]*fileContent{"a.go": content}, nil, false, nil)
 
 	if got := shape(rows); got != "H@LLLG" {
 		t.Fatalf("行结构 = %s, want H@LLLG", got)
@@ -235,7 +235,7 @@ func TestBuildRowsPureDeletion(t *testing.T) {
  gone2
  gone3
 `)
-	rows := buildRows([]gitrepo.File{f}, nil, nil, false)
+	rows := buildRows([]gitrepo.File{f}, nil, nil, false, nil)
 
 	// 新侧第 4 行之后没有内容了，所以折叠区间是第 1-4 行（4 行，走内联）
 	if got := shape(rows); got != "HLLLL@LLL" {
@@ -259,7 +259,7 @@ func TestBuildRowsGapLineNumbersAccountForDelta(t *testing.T) {
  a
 +b
 `)
-	rows := buildRows([]gitrepo.File{f}, nil, nil, false)
+	rows := buildRows([]gitrepo.File{f}, nil, nil, false, nil)
 
 	// 两个 hunk 之间的区间是新的 3-6 行（4 行，走内联展开）
 	var gapLines []row
@@ -288,7 +288,7 @@ index 111..222 100644
 Binary files a/logo.png and b/logo.png differ
 `)
 	f.Binary = true
-	rows := buildRows([]gitrepo.File{f}, nil, nil, false)
+	rows := buildRows([]gitrepo.File{f}, nil, nil, false, nil)
 
 	if got := shape(rows); got != "HN" {
 		t.Fatalf("行结构 = %s, want HN", got)
@@ -314,7 +314,7 @@ func TestBuildRowsKeysAreUnique(t *testing.T) {
 `),
 	}
 	content := &fileContent{lines: make([]string, 200)}
-	rows := buildRows(files, map[string]*fileContent{"b.go": content}, map[string]int{"g:b.go:38": 5}, false)
+	rows := buildRows(files, map[string]*fileContent{"b.go": content}, map[string]int{"g:b.go:38": 5}, false, nil)
 
 	seen := map[string]bool{}
 	for i, r := range rows {
@@ -340,7 +340,7 @@ func TestBuildRowsMultipleFiles(t *testing.T) {
 +// x
 `),
 	}
-	rows := buildRows(files, nil, nil, false)
+	rows := buildRows(files, nil, nil, false, nil)
 
 	if got := shape(rows); got != "H@LLLH@LL" {
 		t.Errorf("行结构 = %s, want H@LLLH@LL", got)

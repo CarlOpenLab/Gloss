@@ -50,7 +50,16 @@ func (a *app) diffView(c *ui.Context, pal palette) {
 
 // rebuildRows 重建扁平行模型。只在主线程、且不在列表构建过程中调用。
 func (a *app) rebuildRows() {
-	a.rows = buildRows(a.files, a.contents, a.expanded, a.split)
+	var collapsed map[string]bool
+	for i := range a.files {
+		if a.isFolded(a.files[i]) {
+			if collapsed == nil {
+				collapsed = map[string]bool{}
+			}
+			collapsed[fileKey(a.files[i])] = true
+		}
+	}
+	a.rows = buildRows(a.files, a.contents, a.expanded, a.split, collapsed)
 	a.rowsDirty = false
 }
 
@@ -77,8 +86,36 @@ func (a *app) diffRow(c *ui.Context, pal palette, r row) {
 	}
 }
 
+// chevronSize 是折叠三角的边长。和侧栏树里的那个一样大。
+const chevronSize = 10
+
+// foldChevron 画文件头前面的折叠三角。
+//
+// 用矢量画而不是打一个 ▾ 字符：这类几何符号很容易落到后备字体上，
+// 各机器上大小和位置都不一样，还可能画成缺字方框。
+// 走向和 ui.Outline 里的展开三角一致，两处看起来才是一套东西。
+func foldChevron(c *ui.Context, open bool, color ui.Color) {
+	ui.Box(c).Size(chevronSize, chevronSize).Shrink(0).
+		Draw(func(p *ui.Painter, r ui.Rect) {
+			var path ui.Path
+			if open {
+				path.MoveTo(r.X+r.W*0.1, r.Y+r.H*0.3)
+				path.LineTo(r.X+r.W*0.5, r.Y+r.H*0.7)
+				path.LineTo(r.X+r.W*0.9, r.Y+r.H*0.3)
+			} else {
+				path.MoveTo(r.X+r.W*0.3, r.Y+r.H*0.1)
+				path.LineTo(r.X+r.W*0.7, r.Y+r.H*0.5)
+				path.LineTo(r.X+r.W*0.3, r.Y+r.H*0.9)
+			}
+			p.StrokePath(&path, 1.5, color)
+		})
+}
+
 // fileHeaderRow 是每个文件顶上的那条：路径 + 增删统计 + 已 review 勾选。
 // 它是列表的 header，会钉在顶部。
+//
+// 点文件头空白处可以折叠/展开这个文件。已 review 的文件默认折起来，
+// 一屏能扫完整个改动清单。
 func (a *app) fileHeaderRow(c *ui.Context, pal palette, r row) {
 	t := c.Theme()
 	f := a.fileAt(r.file)
@@ -86,36 +123,46 @@ func (a *app) fileHeaderRow(c *ui.Context, pal palette, r row) {
 		return
 	}
 	viewed := a.isViewed(*f)
+	folded := a.isFolded(*f)
 
-	ui.Row(c).Height(fileH).Shrink(0).FillWidth().
+	row := ui.Row(c).Height(fileH).Shrink(0).FillWidth().
 		Padding(0, 12).Gap(10).AlignItems(ui.Center).
-		Background(pal.fileBg).
-		BorderWidth(0, 0, 1, 0).BorderColor(pal.border).
-		Children(func() {
-			name := t.Text
-			if viewed {
-				name = t.TextMuted
-			}
-			ui.Text(c, displayPath(*f)).Font("monospace").FontSize(12).Grow(1).
-				SingleLine().TextColor(name)
+		Background(pal.fileBg).Cursor(ui.CursorPointer).
+		BorderWidth(0, 0, 1, 0).BorderColor(pal.border)
+	row.Children(func() {
+		foldChevron(c, !folded, t.TextMuted)
 
-			if f.AddCount > 0 {
-				ui.Textf(c, "+%d", f.AddCount).Font("monospace").FontSize(11).Bold().
-					FontFeatures("tnum").TextColor(pal.addBar)
-			}
-			if f.DelCount > 0 {
-				ui.Textf(c, "−%d", f.DelCount).Font("monospace").FontSize(11).Bold().
-					FontFeatures("tnum").TextColor(pal.delBar)
-			}
+		name := t.Text
+		if viewed {
+			name = t.TextMuted
+		}
+		ui.Text(c, displayPath(*f)).Font("monospace").FontSize(12).Grow(1).
+			SingleLine().TextColor(name)
 
-			// Checkbox 要的是 *bool，而 viewed 是按指纹存在 map 里的。
-			// 传一份副本进去，变了再回写 —— 中间不碰真实状态。
-			v := viewed
-			ui.Checkbox(c, &v, "已 review")
-			if v != viewed {
-				a.toggleViewed(*f)
-			}
-		})
+		if folded {
+			ui.Text(c, "已折叠").FontSize(11).TextColor(t.TextMuted)
+		}
+		if f.AddCount > 0 {
+			ui.Textf(c, "+%d", f.AddCount).Font("monospace").FontSize(11).Bold().
+				FontFeatures("tnum").TextColor(pal.addBar)
+		}
+		if f.DelCount > 0 {
+			ui.Textf(c, "−%d", f.DelCount).Font("monospace").FontSize(11).Bold().
+				FontFeatures("tnum").TextColor(pal.delBar)
+		}
+
+		// Checkbox 要的是 *bool，而 viewed 是按指纹存在 map 里的。
+		// 传一份副本进去，变了再回写 —— 中间不碰真实状态。
+		v := viewed
+		ui.Checkbox(c, &v, "已 review")
+		if v != viewed {
+			a.toggleViewed(*f)
+		}
+	})
+	// Checkbox 是行内的可点元素，命中的是它自己 —— 点勾选框不会连带折叠。
+	if row.Clicked() {
+		a.toggleFold(*f)
+	}
 }
 
 // hunkHeaderRow 是 @@ 那一行。左边是原始的 hunk 头，中间跟着 git 抓出来的
@@ -184,8 +231,8 @@ func (a *app) noteRow(c *ui.Context, pal palette, r row) {
 	t := c.Theme()
 	ui.Box(c).Height(noteH).Shrink(0).FillWidth().Padding(0, codeGap+barW).
 		Justify(ui.Center).Children(func() {
-			ui.Text(c, r.note).FontSize(12).TextColor(t.TextMuted)
-		})
+		ui.Text(c, r.note).FontSize(12).TextColor(t.TextMuted)
+	})
 }
 
 // codeRow 画一行代码：unified 是一条行占满宽度，split 是左右对照。
@@ -241,10 +288,7 @@ func (a *app) unifiedRow(c *ui.Context, pal palette, r row) {
 		hlFile = newHL
 	}
 
-	size := a.codeSize
-	if size <= 0 {
-		size = defSize
-	}
+	size := a.codeSizeValue()
 	// 高亮是按展开 tab 之后的文本切的，这里必须做同样的展开，
 	// 否则字节下标对不上，颜色会整段错位。
 	text = expandTabs(text)
@@ -278,10 +322,7 @@ func (a *app) splitRow(c *ui.Context, pal palette, r row) {
 		return
 	}
 
-	size := a.codeSize
-	if size <= 0 {
-		size = defSize
-	}
+	size := a.codeSizeValue()
 	ui.Row(c).Height(lineH).Shrink(0).FillWidth().Children(func() {
 		a.splitHalf(c, pal, left, size)
 		ui.Box(c).Width(1).AlignSelf(ui.Stretch).Background(pal.border)
@@ -350,9 +391,9 @@ func (a *app) sideOf(f gitrepo.File, hunk, idx int, old bool) sideLine {
 func (a *app) code(c *ui.Context, pal palette, hl *highlight.File, lineNo int, text string, size float32) {
 	ui.Box(c).Grow(1).MinWidth(0).ClipX().Padding(0, 0, 0, codeGap).
 		Justify(ui.Center).Children(func() {
-			ui.RichText(c, lineSpans(pal, hl, lineNo, text)...).
-				Font("monospace").FontSize(size).SingleLine().TextColor(pal.code)
-		})
+		ui.RichText(c, lineSpans(pal, hl, lineNo, text)...).
+			Font("monospace").FontSize(size).SingleLine().TextColor(pal.code)
+	})
 }
 
 // lineNoOf 是这一行在对应那一侧的行号：高亮就是按这个行号取片段的。
@@ -437,10 +478,10 @@ func (a *app) gutter(c *ui.Context, pal palette, no int, bg ui.Color) {
 	}
 	ui.Box(c).Width(gutterW).AlignSelf(ui.Stretch).Background(bg).
 		Justify(ui.Center).Padding(0, gutterPx).Children(func() {
-			ui.Text(c, label).Font("monospace").FontSize(11).FontFeatures("tnum").
-				SingleLine().Width(gutterW-2*gutterPx).TextAlign(ui.End).
-				TextColor(pal.lineNo)
-		})
+		ui.Text(c, label).Font("monospace").FontSize(11).FontFeatures("tnum").
+			SingleLine().Width(gutterW - 2*gutterPx).TextAlign(ui.End).
+			TextColor(pal.lineNo)
+	})
 }
 
 // contentLine 取新侧第 n 行（1 起）的内容。内容没加载到就返回空串，
