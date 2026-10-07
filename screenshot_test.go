@@ -272,6 +272,36 @@ func TestDumpScreenshot(t *testing.T) {
 	writePNG(t, "/tmp/de-shot-tag-error.png", ht.Image())
 	hist.tag = tagState{}
 
+	// 重置对话框：默认是混合档，三档的说明摆在一起。第二张换成硬重置，
+	// 工作区里留一点没提交的改动 —— 那句「会丢什么」是这张卡片的重点。
+	// （改一个已跟踪的文件：新加的文件是未跟踪，硬重置不碰，数不进警告。）
+	writeFile(t, filepath.Join(hist.repoPath, "init.txt"), "初始提交\n手头又改了一行\n")
+	hist.reload()
+	settle(t, hist)
+	tcm := hist.commits[0]
+	hist.openResetDialog(tcm)
+	ht.Frame()
+	writePNG(t, "/tmp/de-shot-reset.png", ht.Image())
+	ht.SetDark(true)
+	ht.Frame()
+	writePNG(t, "/tmp/de-shot-reset-dark.png", ht.Image())
+	hist.reset.mode = gitrepo.ResetHard
+	ht.SetDark(false)
+	ht.Frame()
+	writePNG(t, "/tmp/de-shot-reset-hard.png", ht.Image())
+	hist.reset = resetState{}
+
+	// 新建分支对话框：从某条提交起步，默认勾着「建好就切过去」
+	hist.openNewBranchDialog(tcm.Hash, tcm.Short+" · "+tcm.Subject)
+	hist.newBranch.name = "feature/health-check"
+	ht.Frame()
+	writePNG(t, "/tmp/de-shot-newbranch.png", ht.Image())
+	ht.SetDark(true)
+	ht.Frame()
+	writePNG(t, "/tmp/de-shot-newbranch-dark.png", ht.Image())
+	ht.SetDark(false)
+	hist.newBranch = branchState{}
+
 	// 分离 HEAD：工具栏那枚分支芯片换成警示色，把话说全
 	det := branchApp(t)
 	runGit(t, det.repoPath, "checkout", "-q", "--detach", "HEAD")

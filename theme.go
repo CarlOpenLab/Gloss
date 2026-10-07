@@ -105,7 +105,13 @@ func glossTheme(dark bool) *ui.Theme {
 	}
 
 	if dark {
-		t.Background = ui.Hex("#0d1117")
+		// Background 是深色下的「浮层底」而不是画布底：画布由 pal.appBg
+		// （#0d1117）自己铺，框架拿 Background 画的是对话框面板、弹出层、
+		// 提示气泡这些**浮在内容之上**的东西。取 #161b22（GitHub 的 overlay
+		// 色）：原先跟画布同色，深色对话框的面板边缘就消失了 —— 内容浮在
+		// 一片被压暗的画布上，看不出卡片在哪儿。浅色那边 Background 是纯白，
+		// 和画布同色反而正好（白卡片压在深色遮罩上）。
+		t.Background = ui.Hex("#161b22")
 		t.Surface = ui.Hex("#161b22")
 		t.SurfaceHover = ui.Hex("#21262d")
 		t.SurfacePressed = ui.Hex("#282e37")

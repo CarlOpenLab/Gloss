@@ -2,6 +2,8 @@ package main
 
 import (
 	"github.com/egoist/mygo/ui"
+
+	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
 )
 
 // 写操作的结果横幅，挂在主列最顶上。
@@ -80,5 +82,30 @@ func warnIcon(c *ui.Context, size float32, col ui.Color) {
 			var dot ui.Path
 			dot.Circle(cx, cy+rad*0.48, 0.9)
 			p.FillPath(&dot, col)
+		})
+}
+
+// failureBox 是对话框里的失败说明，和顶部横幅同一套说法、同一个红色。
+//
+// 对话框开着时的失败留在这里而不是顶上：用户在改的正是出问题的那个字段
+// （标签名、分支名），把话搬到对话框背后等于让他两头看。空失败什么都不画。
+func failureBox(c *ui.Context, t *ui.Theme, f gitrepo.Failure) {
+	if f.Empty() {
+		return
+	}
+	ui.Row(c).Shrink(0).FillWidth().Padding(8, 10).Gap(8).AlignItems(ui.Start).
+		Radius(t.Radius).Background(t.Danger.Alpha(0.10)).
+		Children(func() {
+			warnIcon(c, 13, t.Danger)
+			ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
+				ui.Text(c, f.Title).FontSize(12).Bold().TextColor(t.Text)
+				if f.Hint != "" {
+					ui.Text(c, f.Hint).FontSize(11).TextColor(t.TextMuted)
+				}
+				if f.Detail != "" {
+					ui.Text(c, f.Detail).Font("monospace").FontSize(11).
+						TextColor(t.TextMuted).Opacity(0.85)
+				}
+			})
 		})
 }

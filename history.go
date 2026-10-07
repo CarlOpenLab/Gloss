@@ -382,14 +382,7 @@ func (a *app) commitRow(c *ui.Context, pal palette, i int) {
 	}
 }
 
-// commitMenu 是提交行的右键菜单。
-func (a *app) commitMenu(m *ui.Menu, cm gitrepo.Commit) {
-	// 「新建标签…」后面还有别的事可做（拣选、回退……），先摆一条，位置
-	// 留着。菜单文案带上短哈希，用户能确认自己点的是哪一行。
-	if m.Item("在 " + cm.Short + " 上新建标签…").Chosen() {
-		a.openTagDialog(cm.Hash, cm.Short+" · "+cm.Subject)
-	}
-}
+// commitMenu 在 commitops.go（提交行右键点开之后的那些事）。
 
 // refLabel 把 git 的 ref 列表缩短一点。「HEAD -> main, origin/main, tag: v1」
 // 全画出来会把一行的宽度吃光，只留最关键的那个。

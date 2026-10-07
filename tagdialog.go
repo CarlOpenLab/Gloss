@@ -112,7 +112,7 @@ func (a *app) tagBody(c *ui.Context, pal palette) {
 		if msg := tagBlocker(tg); msg != "" {
 			ui.Text(c, msg).FontSize(11).TextColor(t.TextMuted)
 		}
-		a.tagError(c, t, tg)
+		failureBox(c, t, tg.err)
 
 		ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
 			if ui.Button(c, "取消").Clicked() {
@@ -129,37 +129,13 @@ func (a *app) tagBody(c *ui.Context, pal palette) {
 	})
 }
 
-// tagError 把上一次失败摆出来，和顶部横幅同一套说法：说事的标题、怎么办的
-// 提示、git 的原话。
-func (a *app) tagError(c *ui.Context, t *ui.Theme, tg *tagState) {
-	if tg.err.Empty() {
-		return
-	}
-	f := tg.err
-	ui.Row(c).Shrink(0).FillWidth().Padding(8, 10).Gap(8).AlignItems(ui.Start).
-		Radius(t.Radius).Background(t.Danger.Alpha(0.10)).
-		Children(func() {
-			warnIcon(c, 13, t.Danger)
-			ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
-				ui.Text(c, f.Title).FontSize(12).Bold().TextColor(t.Text)
-				if f.Hint != "" {
-					ui.Text(c, f.Hint).FontSize(11).TextColor(t.TextMuted)
-				}
-				if f.Detail != "" {
-					ui.Text(c, f.Detail).Font("monospace").FontSize(11).
-						TextColor(t.TextMuted).Opacity(0.85)
-				}
-			})
-		})
-}
-
 // tagBlocker 是「还差什么才能创建」：非空时按钮灰着，这句话就是那一灰的
 // 说明。名字还没开始填的时候一声不吭 —— 一个刚打开的表单不该先挨一句数落，
 // 空框加 placeholder 已经把该做什么说清楚了。
 func tagBlocker(tg *tagState) string {
 	name := strings.TrimSpace(tg.name)
 	if name != "" {
-		if p := tagNameProblem(name); p != "" {
+		if p := refNameProblem(name); p != "" {
 			return p
 		}
 	}
@@ -169,15 +145,19 @@ func tagBlocker(tg *tagState) string {
 	return ""
 }
 
-// tagNameProblem 是标签名的本地体检，返回一句人话，没问题时返回空串。
+// refNameProblem 是标签名/分支名的本地体检，返回一句人话，没问题时返回空串。
+// 两处共用一份：git 对这两类名字的规矩本来就是一回事（check-ref-format），
+// 各写一份迟早一处改了另一处没改。
 //
 // 宁可漏判不可误判：这里拦下一个 git 本来收得下的名字，用户就没有任何办法
 // 绕过去；漏掉一个，结果只是 git 报错、界面再把话翻出来（failure.go 里
 // 「这个名字不能当标签」那一条）。所以只挡一眼看得出的毛病。
-func tagNameProblem(name string) string {
+func refNameProblem(name string) string {
 	switch {
 	case name == "":
-		return "给标签起个名字。"
+		// 两个调用方都先判了非空，这里是兜底；措辞不带「标签」二字，
+		// 免得哪天从别处调过来，屏幕上冒出一句张冠李戴的话。
+		return "先起个名字。"
 	case strings.HasPrefix(name, "-"):
 		// 不是 git 的规矩，是我们的：名字是当参数递过去的，以 - 开头会被
 		// 当成选项解析。

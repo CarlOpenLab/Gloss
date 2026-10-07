@@ -73,6 +73,9 @@ export ANTHROPIC_API_KEY=sk-ant-...
 main.go / app.go         窗口、菜单、app 状态、每帧的根布局
   sidebar.go             侧栏：分支 / 远程 / 标签 / 储藏树
   history.go             上半区：提交列表 + 列头
+  commitops.go           提交行右键：拣选 / 回退 / 检出（分离 HEAD）/ 复制哈希
+  resetdialog.go         重置当前分支（软·混合·硬三档说明 + 丢弃改动告警）
+  newbranchdialog.go     从选定提交建分支（名称体检 + 可选建好就切过去）
   graph.go               提交拓扑图：布局（buildGraph）与逐行绘制
   filepane.go            下半区左边：文件列表（含暂存勾选框）
   diffview.go            diff 渲染、语法高亮、折叠
@@ -96,6 +99,8 @@ main.go / app.go         窗口、菜单、app 状态、每帧的根布局
 internal/
   gitrepo/               git CLI 封装（status / diff / log / refs / 写操作）
     write.go             暂存、按块暂存、提交（唯一的几个写口子）
+    commitops.go         拣选、回退、重置（--soft / --mixed / --hard）
+    branch.go            从提交建分支
     remote.go            抓取 / 拉取 / 推送（第一次推自动建上游）
     pending.go           探测停在哪种操作中间 + 继续 / 跳过 / 中止
     conflict.go          冲突文件挑边（ours/theirs、删除-修改走 rm）+ stage 探测
@@ -120,7 +125,7 @@ internal/
 - [x] 远程：fetch / pull / push
 - [x] 停在冲突里：状态条 + 继续 / 跳过 / 中止（中止前确认）
 - [x] 冲突文件逐个解决：用我这边 / 用对方那边 / 在编辑器打开 / 标记为已解决
-- [ ] 提交右键：拣选 / 回退 / 重置（软·混合·硬）/ 从这里建分支 / 复制哈希
+- [x] 提交右键：拣选 / 回退 / 重置（软·混合·硬）/ 从这里建分支 / 复制哈希
 - [ ] 分支管理：新建 / 重命名 / 删除（含远程分支），merge / rebase 进当前分支，force-with-lease 强推，推标签
 - [ ] 储藏 apply / pop / drop + 提交栏「修改上次提交」，侧栏可拖宽
 - [ ] 提交列表的键盘上下选择（`J` / `K` 现在只在 diff 里跳）
