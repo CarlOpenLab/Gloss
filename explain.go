@@ -22,6 +22,26 @@ const (
 	cardGap  = 10  // 卡片和 ✨ 按钮之间的间距
 	cardMinH = 180 // 上方/下方空间再小也要给这么高
 
+	// cardRadius 是卡片的圆角。比框架控件的圆角大一圈：它是一块浮在
+	// diff 上面的整板，圆角跟着按钮走会显得方。
+	cardRadius = 10
+
+	// headTint 是卡片头部那层强调色底的不透明度。
+	//
+	// 头部（标题 + 在解释哪一段）和正文本来只隔一条细线，深色下几乎看不出
+	// 分界，整张卡是一片平的黑。给头部叠一层很淡的强调色：它是「这张卡的
+	// 头」，不是正文的一部分；浅色下是几乎看不出的浅蓝，深色下是抬高一档的
+	// 蓝灰。值再大就成了一块色带，抢正文的注意力。
+	headTintLight float32 = 0.07
+	headTintDark  float32 = 0.13
+
+	// cardMotion 是卡片出现/消失的时长。
+	//
+	// 160ms：比系统弹窗（200ms 上下）略快 —— 卡片是读代码时随手叫出来的，
+	// 慢吞吞地飘进来会挡着正在看的那几行。再快就只剩「闪一下」，看不出是从
+	// 按钮那儿出来的。
+	cardMotion = 160 * time.Millisecond
+
 	// explainFlush 是流式输出的节流间隔。
 	//
 	// 每个 token 都回主线程重绘会把界面拖垮：一次回答几百个 delta，
@@ -56,7 +76,12 @@ type explainState struct {
 	text    string
 	loading bool
 	cached  bool // 内容来自缓存，不是这次问出来的
-	err     string
+	// fail 是这次失败整理过的说法（见 llm.Describe）。零值表示没出错 ——
+	// 判断「出没出错」看 Title 是不是空的。
+	fail llm.Failure
+	// needKey 表示这次没发出请求，因为压根没有可用的凭证 —— 卡片这时
+	// 讲的是「先去配一个模型」，不是「解释失败了」。
+	needKey bool
 	cancel  context.CancelFunc
 
 	// mail 是正在进行的这次请求的信箱。它是独立对象而不是 explainState
@@ -145,6 +170,16 @@ func (a *app) openExplain(fi, hi int) {
 
 // startExplain 起一个后台请求。参数全是值 —— 后台 goroutine 绝不碰 app。
 func (a *app) startExplain(f diff.FileDiff, h diff.Hunk, hi int) {
+	// 连凭证都没有：这一趟发出去必然失败，而且是失败在离代码十万八千里的
+	// 地方（SDK 会回一大段英文，讲它找过哪些凭证来源）。与其把那串东西
+	// 摆在用户面前，不如直接说清楚该去哪儿配 —— 卡片上会给一个按钮。
+	if !a.store.Provider().Ready() {
+		a.ex.loading = false
+		a.ex.needKey = true
+		return
+	}
+	a.ex.needKey = false
+
 	// 提示词在主线程拼：要用到已经加载好的文件内容，而且是纯计算，很快。
 	var lines []string
 	if cc := a.contents[f.Path()]; cc != nil {
@@ -184,7 +219,7 @@ func (a *app) startExplain(f diff.FileDiff, h diff.Hunk, hi int) {
 			a.ex.loading = false
 			if err != nil {
 				if ctx.Err() == nil { // 自己取消的不算错误
-					a.ex.err = err.Error()
+					a.ex.fail = llm.Describe(err)
 				}
 				return
 			}
@@ -253,7 +288,7 @@ func (a *app) explainCard(c *ui.Context, pal palette) {
 	panel := ui.Box(c)
 	ui.Overlay(c, func() {
 		panel = ui.Box(c).Absolute().Left(at.x).Width(w).MaxHeight(at.maxH).
-			Radius(t.Radius+4).Background(t.Background).
+			Radius(cardRadius).Background(t.Background).
 			Border(1, pal.border).
 			Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.22))
 		if at.up {
@@ -266,6 +301,35 @@ func (a *app) explainCard(c *ui.Context, pal palette) {
 			a.explainHead(c, pal)
 			a.explainBody(c, pal, at.maxH)
 			a.explainFoot(c, pal)
+		})
+
+		// 出现和消失都从按钮那一侧滑出来一点点。
+		//
+		// 方向跟着卡片摆哪走：排在下面就从上方落下来，排在上面就从下方
+		// 升上去 —— 位移始终是「从 ✨ 按钮那里出来」，眼睛能顺着这条线
+		// 把卡片和它所属的那段改动连起来。8px 就够了，多了像弹窗。
+		//
+		// 卡片每帧重建，但它在 Overlay 里位置固定，ID 不变，所以起手的
+		// 那一帧能认出来是「新出现的」；窗口大小变化不触发动画（框架
+		// 自己的约定）。
+		//
+		// Position 必须关掉。框架默认三项（位置、尺寸、颜色）全动，而卡片
+		// 的位置每帧都从 ✨ 按钮重新算 —— 滚一下 diff、按钮挪了半屏，卡片
+		// 就会「飘」着追过去：指针按下去时按钮在这儿，松开时它还在半路上，
+		// 这一次点击就落空了。关掉它，滚动时卡片和按钮是钉在一起走的，
+		// 只在出现/消失那一下滑 8px（Enter/Exit 的 Motion 不受这一项管）。
+		//
+		// 尺寸同理：解释是流式吐出来的，卡片高度跟着长，动起来就成了
+		// 每 50ms 一次的抽搐。颜色留着 —— 换主题时卡片跟着一起淡过去。
+		away := float32(8)
+		if at.up {
+			away = -8
+		}
+		panel.Transition(ui.ElementTransition{
+			Duration: cardMotion,
+			Colors:   true, // 只开这一项：不开就等于「三项全开」
+			Enter:    &ui.Motion{Y: away, Opacity: 0},
+			Exit:     &ui.Motion{Y: away, Opacity: 0},
 		})
 	})
 }
@@ -302,10 +366,19 @@ func clamp(v, lo, hi float32) float32 { return min(max(v, lo), hi) }
 // explainHead 是卡片顶部：标题、缓存标记、关闭按钮，下面一行是 hunk 头。
 func (a *app) explainHead(c *ui.Context, pal palette) {
 	t := c.Theme()
+	tint := headTintLight
+	if t.Dark {
+		tint = headTintDark
+	}
 	ui.Column(c).Shrink(0).Padding(10, 12).Gap(4).
+		Background(t.Accent.Alpha(tint)).
+		// 圆角只给上面两角，和卡片一致：头部贴着卡片顶边，四角都给就会
+		// 把下面两个角也切掉，和正文之间出现两道缺口。
+		Radius(cardRadius, cardRadius, 0, 0).
 		BorderWidth(0, 0, 1, 0).BorderColor(pal.border).Children(func() {
-		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "✨ AI 解释").Bold().FontSize(13)
+		ui.Row(c).Gap(7).AlignItems(ui.Center).Children(func() {
+			sparkleCluster(c, 15, t.Accent)
+			ui.Text(c, "AI 解释").Bold().FontSize(13)
 			if a.ex.cached {
 				ui.Text(c, "缓存").FontSize(10).Padding(1, 6).Radius(4).
 					Background(t.Surface).TextColor(t.TextMuted)
@@ -332,7 +405,7 @@ func (a *app) explainBody(c *ui.Context, pal palette, maxH float32) {
 
 	ui.Box(c).MaxHeight(bodyH).MinHeight(60).Shrink(1).Children(func() {
 		ui.Scroll(c).TrackScroll(&a.ex.scroll).Children(func() {
-			ui.Column(c).Padding(10, 12).Gap(2).Children(func() {
+			ui.Column(c).Padding(10, 12).Children(func() {
 				a.explainText(c, t, pal)
 			})
 		})
@@ -342,13 +415,40 @@ func (a *app) explainBody(c *ui.Context, pal palette, maxH float32) {
 // explainText 是正文的三种状态：出错、空、有内容。
 func (a *app) explainText(c *ui.Context, t *ui.Theme, pal palette) {
 	switch {
-	case a.ex.err != "":
-		ui.Text(c, "解释失败了").Bold().FontSize(12).TextColor(t.Danger)
-		ui.Text(c, a.ex.err).FontSize(12).TextColor(t.TextMuted)
-		if ui.Button(c, "重试").Clicked() {
-			f := a.files[a.ex.fi]
-			a.startExplain(f.FileDiff, f.Hunks[a.ex.hi], a.ex.hi)
+	case a.ex.fail.Title != "":
+		ui.Text(c, a.ex.fail.Title).Bold().FontSize(12).TextColor(t.Danger)
+		if h := a.ex.fail.Hint; h != "" {
+			ui.Text(c, h).FontSize(12).TextColor(t.TextMuted)
 		}
+		// 供应商自己的原话放最后、最小，而且是等宽的：它是一句机器输出，
+		// 不是我们的话。翻译不准的时候，证据在这儿。
+		if d := a.ex.fail.Detail; d != "" {
+			ui.Text(c, d).Font("monospace").FontSize(11).TextColor(t.TextMuted)
+		}
+		cardActions(c, func() {
+			// 钥匙不对的时候，能动手改的是设置里的那行；重试是给「改在
+			// 别处了（环境变量、供应商控制台）」留的路。两颗都摆出来，
+			// 设置那颗做成主按钮 —— 它才是这个错的正解。
+			if a.ex.fail.Auth {
+				if ui.PrimaryButton(c, "模型设置…").Clicked() {
+					a.openSettings()
+				}
+			}
+			if ui.Button(c, "重试").Clicked() {
+				a.retryExplain()
+			}
+		})
+		return
+
+	case a.ex.needKey:
+		ui.Text(c, "还没有配置模型").Bold().FontSize(12)
+		ui.Text(c, "解释代码要接一个模型，填上 API key 就能用了。").
+			FontSize(12).TextColor(t.TextMuted)
+		cardActions(c, func() {
+			if ui.PrimaryButton(c, "模型设置…").Clicked() {
+				a.openSettings()
+			}
+		})
 		return
 
 	case a.ex.text == "":
@@ -363,7 +463,128 @@ func (a *app) explainText(c *ui.Context, t *ui.Theme, pal palette) {
 		return
 	}
 
-	ui.RichText(c, mdSpans(a.ex.text, mdStyleFor(t, pal))...).FontSize(13)
+	a.mdBlocks(c, mdStyleFor(t, pal))
+}
+
+// cardActions 是卡片正文底下那一行动作按钮。
+//
+// 上面留 8 —— 和段落间距取同一个数（见 mdBlockGap），卡片里「一块和一块
+// 之间」的距离就这一个值。不给就是零：正文的字底直接压着按钮的色块。
+//
+// 用 Row 收住，是因为 Column 默认横向拉满：直接摆按钮，它会变成一条横贯
+// 卡片的色带 —— 那是个默认值，不是个决定。设置对话框、空状态里按钮都是
+// 它自己的宽度，卡片没道理另开一种。
+const cardActionGap = 8
+
+func cardActions(c *ui.Context, body func()) {
+	ui.Row(c).Gap(8).AlignItems(ui.Center).Margin(cardActionGap, 0, 0, 0).Children(body)
+}
+
+// retryExplain 重来一次：还问同一个变更块，但绕开缓存里那份失败。
+//
+// 直接 startExplain 而不是 openExplain：失败的结果不落缓存，重新问本来就
+// 走的是这条路，这里只是把它收成一个名字，好让几个按钮都指过来。
+func (a *app) retryExplain() {
+	if a.ex.fi < 0 || a.ex.fi >= len(a.files) || a.ex.hi < 0 || a.ex.hi >= len(a.files[a.ex.fi].Hunks) {
+		return
+	}
+	f := a.files[a.ex.fi]
+	// 上一趟已经吐出来的半截话要清掉：连接断了也会先把收到的那段交给
+	// 界面（那是对的 —— 断线前的内容不该丢），可它已经不是这次的答案了，
+	// 不清的话新答案会接在这半句话后面。
+	a.ex.text = ""
+	a.ex.scroll = ui.ScrollState{}
+	a.ex.fail = llm.Failure{}
+	a.ex.needKey = false
+	a.startExplain(f.FileDiff, f.Hunks[a.ex.hi], a.ex.hi)
+}
+
+// mdMarkerW 是列表符号那一栏的宽度。
+//
+// 定宽右对齐，而不是让符号自己撑：「•」和「10.」宽度差一倍，跟着内容走的话
+// 每一项的正文起点都不一样，一列读下来是锯齿。
+const mdMarkerW = 18
+
+// mdDotH 是无序列表那个圆点所在方盒的高度，取正文一行的高度。
+//
+// 13px 正文量出来的行距是 16（两行之间的基线距离）。圆点画在这一行的正中间，
+// 而不是让布局去居中：圆点盒比一行矮，它撑不高行，位置就由这里说了算。
+const mdDotH = 16
+
+// mdMarker 画列表项前面那一栏：无序的是圆点，有序的是编号。
+//
+// 圆点自己画，不用字体的「•」：那个字形在中文环境下落在一个比正文低、
+// 也比正文重的位置上（CJK 字体的中圆点是按全角方格居中的），一列读下来
+// 像一串挂着的小石子。和箭头、叉号一样，这种几何形状自己画才控得住。
+func (a *app) mdMarker(c *ui.Context, st mdStyle, marker string) {
+	if marker != "•" {
+		ui.Text(c, marker).FontSize(13).Width(mdMarkerW).
+			TextAlign(ui.End).TextColor(st.bullet)
+		return
+	}
+	ui.Box(c).Width(mdMarkerW).Height(mdDotH).Shrink(0).
+		Draw(func(p *ui.Painter, r ui.Rect) {
+			var path ui.Path
+			path.Circle(r.X+r.W/2, r.Y+r.H/2, 2.5)
+			p.FillPath(&path, st.bullet)
+		})
+}
+
+// mdBlocks 把解释渲染成一块块元素。
+//
+// 不用一个 RichText 装下全文：那样段落一折行就顶到最左边，列表项的后续行
+// 会和符号对齐，代码块也只有贴着字的底色。见 markdown.go 顶上的说明。
+func (a *app) mdBlocks(c *ui.Context, st mdStyle) {
+	blocks := mdBlocks(a.ex.text, st)
+	for i, b := range blocks {
+		a.mdBlock(c, st, b, mdBlockGap(blocks, i))
+	}
+}
+
+// mdBlockGap 是这一块和上一块之间留的空。
+//
+// 列表项之间收窄（同属一组的几行该挨着），其余段落之间放宽 —— 段与段的
+// 界线一眼看得出来，卡片才不像一坨字。
+func mdBlockGap(blocks []mdBlock, i int) float32 {
+	if i == 0 {
+		return 0
+	}
+	if blocks[i].kind == mdBullet && blocks[i-1].kind == mdBullet {
+		return 3
+	}
+	return 8
+}
+
+func (a *app) mdBlock(c *ui.Context, st mdStyle, b mdBlock, gap float32) {
+	switch b.kind {
+	case mdCode:
+		// 代码块有自己的底、内边距和圆角 —— 一片贴字的灰底认不出是代码块
+		ui.Box(c).Margin(gap, 0, 0, 0).Padding(7, 9).Radius(6).
+			Background(st.codeBg).Children(func() {
+			ui.RichText(c, ui.Span{Text: b.code, Font: st.mono, Color: st.code}).
+				FontSize(12)
+		})
+
+	case mdBullet:
+		// 符号和正文分两栏：折行自然落在正文那一栏里（悬挂缩进）
+		ui.Row(c).Margin(gap, 0, 0, 0).AlignItems(ui.Start).Gap(6).Children(func() {
+			a.mdMarker(c, st, b.marker)
+			ui.RichText(c, b.spans...).Grow(1).MinWidth(0).FontSize(13)
+		})
+
+	case mdQuote:
+		// 左边一条竖线，而不是行首一个「▏」字符：字符会跟着折行跑到第二行
+		// 的行首，看着像正文里混进了一个怪符号
+		ui.Row(c).Margin(gap, 0, 0, 0).AlignItems(ui.Start).Gap(8).Children(func() {
+			ui.Box(c).Width(2).Shrink(0).Radius(1).AlignSelf(ui.Stretch).
+				Background(st.bullet.Alpha(0.4))
+			ui.RichText(c, b.spans...).Grow(1).MinWidth(0).FontSize(13)
+		})
+
+	default:
+		// 段落和标题：spans 里已经带了粗体和颜色
+		ui.RichText(c, b.spans...).Margin(gap, 0, 0, 0).FontSize(13)
+	}
 }
 
 // explainFoot 是卡片底部：已 review 勾选。
@@ -396,7 +617,10 @@ func mdStyleFor(t *ui.Theme, pal palette) mdStyle {
 		code:   pal.code,
 		codeBg: pal.gapBg,
 		head:   t.Text,
-		bullet: pal.ref,
+		// 列表符号用卡片自己的强调色，不用 pal.ref：那个橙色是「分支」
+		// 的意思（提交列表的徽章、侧栏的引用），一颗橙点落在 AI 卡片里
+		// 会让人以为和某条分支有关。蓝是这张卡的头和火花在用的一色。
+		bullet: t.Accent,
 		mono:   "monospace",
 	}
 }

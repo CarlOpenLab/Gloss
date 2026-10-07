@@ -4,11 +4,11 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 )
 
 // streamOpenAI 调 OpenAI 兼容的 /chat/completions 流式接口。
@@ -16,10 +16,10 @@ import (
 func streamOpenAI(ctx context.Context, p *Provider, system, user string, onDelta func(text string)) (string, error) {
 	base := strings.TrimRight(p.BaseURL, "/")
 	if base == "" {
-		return "", errors.New("OpenAI 兼容供应商需要填写 Base URL")
+		return "", ErrNoBaseURL
 	}
 	if p.Model == "" {
-		return "", errors.New("OpenAI 兼容供应商需要填写模型名称")
+		return "", ErrNoModel
 	}
 
 	reqBody, _ := json.Marshal(map[string]any{
@@ -55,15 +55,18 @@ func streamOpenAI(ctx context.Context, p *Provider, system, user string, onDelta
 			} `json:"error"`
 			Message string `json:"message"`
 		}
+		msg := ""
 		if json.Unmarshal(body, &apiErr) == nil {
-			if m := apiErr.Error.Message; m != "" {
-				return "", fmt.Errorf("供应商返回 %d: %s", resp.StatusCode, m)
-			}
-			if apiErr.Message != "" {
-				return "", fmt.Errorf("供应商返回 %d: %s", resp.StatusCode, apiErr.Message)
+			if apiErr.Error.Message != "" {
+				msg = apiErr.Error.Message
+			} else if apiErr.Message != "" {
+				msg = apiErr.Message
 			}
 		}
-		return "", fmt.Errorf("供应商返回 %d: %s", resp.StatusCode, truncate(string(body), 300))
+		if msg == "" {
+			msg = truncate(string(body), 300)
+		}
+		return "", &statusError{Code: resp.StatusCode, Message: msg}
 	}
 
 	return readOpenAIStream(resp.Body, onDelta)
@@ -106,9 +109,16 @@ func readOpenAIStream(body io.Reader, onDelta func(string)) (string, error) {
 	return full.String(), nil
 }
 
+// truncate 按字节截断，但不把一个字符切成两半 —— 切面落在字符中间时，
+// 末尾会冒出一个乱码方块，而供应商的中文报错（自己搭的网关照抄一句
+// 中文说明）正好会踩上。往前退到最后一个完整的字符再切。
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}
-	return s[:n] + "…"
+	cut := n
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + "…"
 }

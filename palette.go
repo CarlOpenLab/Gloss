@@ -29,13 +29,14 @@ type command struct {
 // 所以它每次都要重新算。
 func (a *app) commands() []command {
 	cmds := []command{
-		{"打开仓库…", "", func(a *app) { a.chooseFolder() }},
+		{"打开仓库…", "⌘O", func(a *app) { a.chooseFolder() }},
 		{"刷新", "⌘R", func(a *app) { a.reload() }},
 		{"查看改动", "⌘1", func(a *app) { a.setTab(0) }},
 		{"查看历史", "⌘2", func(a *app) { a.setTab(1) }},
+		{"筛选文件", "⌘F", func(a *app) { a.focusFilter = true }},
 		{"统一视图（Unified）", "", func(a *app) { a.setSplit(false) }},
 		{"左右对照（Split）", "", func(a *app) { a.setSplit(true) }},
-		{"模型设置…", "", func(a *app) { a.openSettings() }},
+		{"模型设置…", "⌘,", func(a *app) { a.openSettings() }},
 		{"放大代码字号", "⌘+", func(a *app) { a.setCodeSize(a.codeSizeValue() + codeSizeStep) }},
 		{"缩小代码字号", "⌘−", func(a *app) { a.setCodeSize(a.codeSizeValue() - codeSizeStep) }},
 		{"恢复默认字号", "⌘0", func(a *app) { a.setCodeSize(0) }},
@@ -189,6 +190,7 @@ func (a *app) paletteRow(c *ui.Context, t *ui.Theme, i int, cmds []command) {
 	if row.Hovered() && !sel {
 		row.Background(t.Surface)
 	}
+	fadeColors(row)
 	var clicked bool
 	row.Children(func() {
 		ui.Text(c, cmd.label).FontSize(12.5).Grow(1).SingleLine().TextColor(text)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -65,6 +66,10 @@ func TestToolbarClearsTitleBarWithoutSidebar(t *testing.T) {
 
 // 卡片和对话框上的 × 要真的点得到。它从 ui.Button(c, "×") 换成了自己画的
 // 方形叉号（按钮上不再有文字），这条测试盯着它别变成点不中的装饰。
+//
+// 卡片是刚打开就点的 —— 也就是它可能还在淡入。这一条顺带钉住「卡片的位置
+// 不能跟着动画走」：位置一动，按下和松开之间按钮就溜到别处去了，这一次
+// 点击白点。（见 explain.go 里那段 Position 的说明。）
 func TestCloseButtonIsClickable(t *testing.T) {
 	a := richApp(t)
 	fi, hi := explainFixtures(t, a)
@@ -209,6 +214,14 @@ func TestTreeSelectionIsPill(t *testing.T) {
 		return float32(r*255/al) / 255, float32(g*255/al) / 255, float32(b*255/al) / 255
 	}
 
+	// bluish 是「这像素属于蓝色胶囊」的判据：b-r 超过它才算数。
+	//
+	// 不能只写「蓝比红多」这么松 —— 主题里的次要文字色本身就是冷灰
+	// （深色下 #8b949e，b-r≈0.075），分组行的灰字也落在扫描的那一列上，
+	// 阈值取 0.06 时它们会被当成胶囊的一部分，纵向量出来的高度就串到
+	// 隔壁分组行去了。胶囊底色 b-r≈0.30，0.15 把两者分得干干净净。
+	const bluish = 0.15
+
 	label, ok := tt.Find("feat1")
 	if !ok {
 		t.Fatalf("侧栏里找不到 feat1：%q", tt.Texts())
@@ -222,7 +235,7 @@ func TestTreeSelectionIsPill(t *testing.T) {
 	top, bot := -1, -1
 	for y := int(label.Y) - 20; y < int(label.Y+label.H)+20; y++ {
 		r, _, b := rgb(col, y)
-		if b-r > 0.06 { // 底色偏蓝 = 胶囊
+		if b-r > bluish { // 底色偏蓝 = 胶囊
 			if top < 0 {
 				top = y
 			}
@@ -246,7 +259,7 @@ func TestTreeSelectionIsPill(t *testing.T) {
 	left, right := -1, -1
 	for x := 0; x < sidebarWidth; x++ {
 		r, _, b := rgb(x, y)
-		if b-r > 0.06 {
+		if b-r > bluish {
 			if left < 0 {
 				left = x
 			}
@@ -291,5 +304,95 @@ func TestFileDirToggles(t *testing.T) {
 	tt.Frame()
 	if tt.HasText("target.txt") {
 		t.Errorf("点别处不该把收起的目录弹开：%q", tt.Texts())
+	}
+}
+
+// 窄窗口下工具栏把摆不下的控件收进「»」—— 收的该是次要的：窗口最小宽度
+// （720）下，「改动 / 历史」还得在。
+//
+// 这条曾经是反的：左边那块「仓库名 + 路径」有 300 的宽度上限，而窗口收到
+// 720 时主区只剩 440 —— 它一个人就吃掉大半条带子，于是连 tab 切换都被挤
+// 进「»」菜单里，那是主区唯一的导航。
+func TestToolbarKeepsTabsWhenNarrow(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 720, 620)
+	still(tt)
+	tt.Frame()
+	tt.SetTitleBar(realTitleBar)
+	tt.Frame()
+
+	for _, want := range []string{"改动", "历史", "Unified"} {
+		if !tt.HasText(want) {
+			t.Errorf("最小宽度下 %q 不该被收进「»」：%q", want, tt.Texts())
+		}
+	}
+	if !tt.HasText(a.repoName) {
+		t.Errorf("仓库名任何宽度下都该在：%q", tt.Texts())
+	}
+}
+
+// 工具栏那行路径：放得下就原样显示，放不下从**头上**截 —— 路径的关键
+// 信息在末尾（在哪一级目录下、和重名的怎么区分），截尾留下的正好是
+// 「/Users/…」这种最没用的部分。
+func TestToolbarPathShortening(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+	tt.Frame()
+	tt.SetTitleBar(realTitleBar)
+
+	// 短路径原样显示
+	a.repoPath = "/tmp/gloss"
+	tt.Frame()
+	if !tt.HasText("/tmp/gloss") {
+		t.Errorf("放得下的路径该原样显示：%q", tt.Texts())
+	}
+
+	// 长路径：压短了，但尾巴还在（结尾是这个仓库）
+	long := "/Users/me/" + strings.Repeat("a-quite-long-directory-name/", 4) + "gloss"
+	a.repoPath = long
+	tt.Frame()
+	if tt.HasText(long) {
+		t.Errorf("这么长的路径该被压短：%q", tt.Texts())
+	}
+	tail := shortText(tt.Texts(), "…/")
+	if tail == "" {
+		t.Fatalf("压短之后该留下「…/」开头的尾巴：%q", tt.Texts())
+	}
+	if !strings.HasSuffix(tail, "/gloss") {
+		t.Errorf("留下的尾巴该以仓库名结尾，实际 %q", tail)
+	}
+
+	// 连两级都放不下（末两节本身就很长）：整行省掉 —— 只剩仓库名的话，
+	// 就是上面那行，摆两遍不是信息
+	a.repoPath = "/a/" + strings.Repeat("zh", 120) + "/gloss"
+	tt.Frame()
+	if s := shortText(tt.Texts(), "…/"); s != "" {
+		t.Errorf("压不出有意义的尾巴时该整行省掉，实际还有 %q", s)
+	}
+}
+
+// shortText 找出以 prefix 开头的第一段文字，没有返回空串。
+func shortText(texts []string, prefix string) string {
+	for _, s := range texts {
+		if strings.HasPrefix(s, prefix) {
+			return s
+		}
+	}
+	return ""
+}
+
+// 「几个文件」只在文件栏栏头报一次。曾经工具栏上也报一遍，两行隔几十像素
+// 摆同一个数字，不是强调，是啰嗦。
+func TestFileCountReportedOnce(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+	tt.Frame()
+	tt.SetTitleBar(realTitleBar)
+	tt.Frame()
+
+	if n := countText(tt.Texts(), strconv.Itoa(len(a.files))+" 个文件"); n != 1 {
+		t.Errorf("「%d 个文件」该只出现一次，实际 %d 次：%q", len(a.files), n, tt.Texts())
 	}
 }

@@ -207,13 +207,15 @@ func (a *app) hunkHeaderRow(c *ui.Context, pal palette, r row) {
 			ui.Spacer(c)
 		}
 
-		// 先问点击再记锚点：这一帧刚点开时，卡片要靠同一个按钮的位置来
-		// 定位，顺序反了第一帧就会摆在左上角。
-		btn := ui.Button(c, "✨ 解释")
-		clicked := btn.Clicked()
-		if clicked {
+		// 按钮的选中态取点击**之前**的状态：刚点开的那一帧，按钮下一刻
+		// 才该变成「正在讲」，否则点下去的同时按钮先变色、卡片才跟上，
+		// 两件事分在两帧上闪。
+		btn := explainButton(c, pal, a.isExplaining(r.file, r.hunk))
+		if btn.Clicked() {
 			a.toggleExplain(r.file, r.hunk)
 		}
+		// 但锚点必须问点击**之后**的状态：这一帧刚点开时，卡片要靠同一个
+		// 按钮的位置来定位，顺序反了第一帧就会摆在左上角。
 		if a.isExplaining(r.file, r.hunk) {
 			a.ex.anchor = btn.Bounds()
 		}
@@ -243,7 +245,9 @@ func (a *app) gapRow(c *ui.Context, pal palette, r row) {
 	if e.Clicked() {
 		a.expandGap(r)
 	}
-	e.Background(bg).Children(func() {
+	e.Background(bg)
+	fadeColors(e)
+	e.Children(func() {
 		ui.Textf(c, "⋯  展开 %d 行未改动", r.gapN).FontSize(11).TextColor(pal.gapText)
 	})
 }

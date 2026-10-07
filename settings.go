@@ -113,6 +113,7 @@ func (a *app) providerList(c *ui.Context) {
 				if row.Hovered() && !selected {
 					row.Background(t.SurfaceHover)
 				}
+				fadeColors(row)
 				row.Children(func() {
 					if selected {
 						ui.Text(c, "●").FontSize(10).TextColor(t.Accent)

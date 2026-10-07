@@ -156,8 +156,8 @@ func TestViewedCheckboxInDiffHeader(t *testing.T) {
 	if a.viewedCount() != 1 {
 		t.Errorf("勾选后 viewedCount = %d, want 1", a.viewedCount())
 	}
-	if !tt.HasText("✓ 1/3") {
-		t.Errorf("侧栏底部应显示 ✓ 1/3，实际：%q", tt.Texts())
+	if !tt.HasText("1/3") {
+		t.Errorf("侧栏底部应显示 1/3（勾是画的，不是字），实际：%q", tt.Texts())
 	}
 }
 

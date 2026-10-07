@@ -27,11 +27,18 @@ type Repo struct {
 // 拿它当比较基准，就能把 index 里的内容当成全是新增。
 const emptyTree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
+// ErrNotRepo 表示这个目录（以及它的各级父目录）不是 git 仓库。
+//
+// 它和「仓库在读的时候出错了」不是一回事：那个重试有意义，这个只说明
+// 文件夹选错了 —— 重试多少次结果都一样，该做的是换一个。界面上要分开
+// 对待，所以这里得是个能认出来的错，而不是一句话。
+var ErrNotRepo = errors.New("不是 git 仓库")
+
 // Open 在 dir 里定位仓库根并打开。dir 可以指向仓库的任意子目录。
 func Open(ctx context.Context, dir string) (*Repo, error) {
 	out, err := run(ctx, dir, "rev-parse", "--show-toplevel")
 	if err != nil {
-		return nil, fmt.Errorf("不是 git 仓库: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrNotRepo, err)
 	}
 	root := strings.TrimSpace(string(out))
 	return &Repo{Root: root, Name: filepath.Base(root)}, nil

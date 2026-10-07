@@ -26,6 +26,9 @@ func (a *app) handleKeys(c *ui.Context) {
 	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyB) {
 		a.toggleSidebar()
 	}
+	if c.Shortcut(ui.Cmd, ui.KeyO) {
+		a.chooseFolder()
+	}
 	if c.Shortcut(ui.Cmd, ui.KeyF) {
 		// 焦点给主区那个文件筛选框，不是侧栏的分支筛选框 —— review 时
 		// 想找的是文件。也不再把侧栏拽开：那个框现在筛的是分支，开不开
@@ -43,7 +46,11 @@ func (a *app) handleKeys(c *ui.Context) {
 	}
 	// 字号从「当前生效的字号」上加减，而不是从 a.codeSize 上 ——
 	// 后者 0 表示「用默认值」，直接 +1 会被夹到下限，第一次按就跳到底。
-	if c.Shortcut(ui.Cmd, ui.KeyEqual) || c.Shortcut(ui.Cmd, ui.KeyComma) {
+	//
+	// 放大要认两个键：⌘= 和 ⌘⇧=。键盘上的加号本来是 ⇧=，可框架配对
+	// 修饰键是全等的（Cmd 不等于 Cmd|Shift），只写一个的话，用户照着
+	// 菜单里的「⌘+」按下去什么都不会发生。
+	if c.Shortcut(ui.Cmd, ui.KeyEqual) || c.Shortcut(ui.Cmd|ui.Shift, ui.KeyEqual) {
 		a.setCodeSize(a.codeSizeValue() + codeSizeStep)
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyMinus) {
@@ -51,6 +58,12 @@ func (a *app) handleKeys(c *ui.Context) {
 	}
 	if c.Shortcut(ui.Cmd, ui.Key0) {
 		a.setCodeSize(0)
+	}
+	// ⌘, 开设置 —— macOS 上这个键是「偏好设置」的意思，按遍所有 Mac 应用
+	// 都是它。原来这个键被接去放大字号了（顺手把 ⌘= 那一路多认了一个键），
+	// 于是用户想开设置，得到的是代码变大一号。
+	if c.Shortcut(ui.Cmd, ui.KeyComma) {
+		a.openSettings()
 	}
 
 	// J / K 跳上下一段改动。不给它们加修饰键：review 时手一直在这两个键上。

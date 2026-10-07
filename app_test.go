@@ -185,9 +185,12 @@ func TestViewShowsTotals(t *testing.T) {
 	a := testApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
 
-	// a.go 加了 2 行，x.go 加了 1 行，README.md 加了 1 行
-	if !tt.HasText("Total: +4 −0") {
-		t.Errorf("底部统计不对，实际文本：%q", tt.Texts())
+	// a.go 加了 2 行，x.go 加了 1 行，README.md 加了 1 行。
+	// 增删分开画（各有各的颜色），所以分三段找。
+	for _, want := range []string{"总计", "+4", "−0"} {
+		if !tt.HasText(want) {
+			t.Errorf("底部统计里没有 %q，实际文本：%q", want, tt.Texts())
+		}
 	}
 }
 
@@ -248,8 +251,8 @@ func TestViewedCount(t *testing.T) {
 	if a.viewedCount() != 1 {
 		t.Errorf("标记后 viewedCount = %d, want 1", a.viewedCount())
 	}
-	if !tt.HasText("✓ 1/3") {
-		t.Errorf("底部应显示 ✓ 1/3，实际：%q", tt.Texts())
+	if !tt.HasText("1/3") {
+		t.Errorf("底部应显示 1/3（勾是画的，不是字），实际：%q", tt.Texts())
 	}
 
 	// 再点一次取消
@@ -302,14 +305,80 @@ func TestEmptyStateBeforeOpeningRepo(t *testing.T) {
 	}
 }
 
+// 打开失败分两档，出路不一样：文件夹根本不是仓库时，重试读多少遍都是同一
+// 句话，该请用户换一个文件夹；别的失败（比如仓库读到一半出错）重试才有意义，
+// 而且 git 自己那句话是唯一的具体信息，得留着。
 func TestFailedStateShowsError(t *testing.T) {
+	// 真的去开一个不是仓库的目录，把 gitrepo → app 这段路走完：errNotRepo
+	// 就是在这条路上被打上的
 	a := newApp()
-	a.state = loadFailed
-	a.errMsg = "不是 git 仓库"
-	tt := ui.NewTester(a.view, 1280, 860)
+	dir := t.TempDir()
+	a.openRepo(dir)
+	settle(t, a)
+	if a.state != loadFailed {
+		t.Fatalf("打开一个空目录之后该是失败态，实际 %v", a.state)
+	}
+	if !a.errNotRepo {
+		t.Errorf("该认出「不是仓库」：%q", a.errMsg)
+	}
+	// 试过的文件夹要留住 —— 卡片上那句「这个文件夹不是 git 仓库」得有个
+	// 「这个」，标题栏就是摆它的地方
+	if a.repoPath != dir || a.repoName == "" {
+		t.Errorf("该记住试的是哪个文件夹：path=%q name=%q", a.repoPath, a.repoName)
+	}
 
-	if !tt.HasText("打不开这个仓库") || !tt.HasText("不是 git 仓库") {
-		t.Errorf("失败态应该显示错误信息，实际：%q", tt.Texts())
+	tt := ui.NewTester(a.view, 1280, 860)
+	if !tt.HasText("打不开这个仓库") || !tt.HasText("这个文件夹不是 git 仓库。") {
+		t.Errorf("失败态该说清是什么事，实际：%q", tt.Texts())
+	}
+	if tt.HasText("未打开仓库") {
+		t.Errorf("已经知道试的是哪个文件夹了，标题栏不该还说「未打开仓库」：%q", tt.Texts())
+	}
+	if !tt.HasText(a.repoName) {
+		t.Errorf("标题栏该摆出试过的文件夹名 %q：%q", a.repoName, tt.Texts())
+	}
+	// 名字要**单独**画在标题栏那份上：完整路径里也含这个名字，HasText 一个人
+	// 说了不算
+	own := false
+	for _, s := range tt.Texts() {
+		if s == a.repoName {
+			own = true
+		}
+	}
+	if !own {
+		t.Errorf("文件夹名该是标题栏上自己的一段，实际：%q", tt.Texts())
+	}
+	if !tt.HasText("换一个文件夹…") {
+		t.Errorf("该给一条「换一个文件夹」的出路：%q", tt.Texts())
+	}
+	if tt.HasText("重试") {
+		t.Error("文件夹选错了，重试没有用，不该摆这个按钮")
+	}
+	// 没有仓库就没有可筛的东西、可切的两边：筛选框和 tab 开关都不该在。
+	// （这两个原来拿 repoPath 当「仓库开着」用，失败态记下试过的文件夹之后
+	// 就都露馅了 —— 记在这里免得再改回去。）
+	if tt.HasText("筛选分支") {
+		t.Errorf("没有仓库可筛，侧栏不该摆筛选框：%q", tt.Texts())
+	}
+	if err := tt.Click("历史"); err != nil {
+		t.Errorf("工具栏上该有「历史」这个开关（只是灰的）：%v", err)
+	}
+	// 灰只挡得住鼠标。⌘2 / 菜单 / 命令栏都通向 setTab，同一件事得在入口上
+	// 也把住，否则切过去还会真发一轮注定失败的 git 读。
+	tt.Key(ui.Cmd, ui.Key2)
+	tt.Frame()
+	settle(t, a)
+	if a.tab != 0 {
+		t.Errorf("打开失败时两个 tab 画的是同一张卡片，不该切得动，tab = %d", a.tab)
+	}
+
+	// 另一档：原话和重试都在
+	b := newApp()
+	b.state = loadFailed
+	b.errMsg = "fatal: unable to read tree 0000000000000000000000000000000000000000"
+	bt := ui.NewTester(b.view, 1280, 860)
+	if !bt.HasText(b.errMsg) || !bt.HasText("重试") {
+		t.Errorf("别的失败该留 git 的原话、给重试：%q", bt.Texts())
 	}
 }
 

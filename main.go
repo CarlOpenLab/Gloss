@@ -24,6 +24,11 @@ func main() {
 		s := store.Open(dir)
 		a.attachStore(s)
 
+		// 菜单栏。自己搭一份的理由写在 menu.go 顶上：框架默认那份会把
+		// ⌘R / ⌘+ / ⌘− / ⌘0 当成网页的「重新载入 / 缩放」占掉，而这几个
+		// 键在 Gloss 里另有主人。
+		mygo.App.SetMenu(buildAppMenu(a))
+
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:     "Gloss",
 			Width:     1280,

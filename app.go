@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/egoist/mygo"
@@ -46,11 +49,17 @@ type app struct {
 	loop mainLoop
 
 	// —— 仓库 ——
+	// 打开失败时这两个也记着东西：试的是哪个文件夹（标题栏要摆出来，卡片
+	// 上的「这个文件夹」才有指代）。所以「repoPath 非空」不等于「仓库开着」，
+	// 那件事只由 state 说。
 	repoPath string
 	repoName string
 	branch   string
 	state    loadState
 	errMsg   string
+	// errNotRepo 说明这次的失败是「选的文件夹不是仓库」。它和别的加载失败
+	// 分开：那种重试有意义，这种重试多少次都一样，该请用户换一个文件夹。
+	errNotRepo bool
 	// 四个序号各自守住一路异步加载：每次发起自增，回调只在序号仍是最新的
 	// 时候才写入结果，这样快速切换时旧请求的结果不会覆盖新的。
 	//
@@ -98,6 +107,9 @@ type app struct {
 	// —— 视图 ——
 	split    bool    // true = split（左右对照），false = unified
 	codeSize float32 // 代码字号；0 表示用默认值
+	// menu 是菜单栏里那几个要跟着状态走的项目，见 menu.go。测试里没有
+	// 菜单，它是 nil —— syncMenu 因此什么都不做。
+	menu *appMenu
 
 	// —— 侧栏：分支 / 远程 / 标签 / 储藏 ——
 	refs      []gitrepo.Ref
@@ -280,10 +292,20 @@ func (a *app) saveViewSettings() {
 }
 
 func (a *app) view(c *ui.Context) {
+	// 换成 Gloss 自己的主题。必须在建任何控件之前：SetTheme 只作用于
+	// 调用之后创建的控件，放在后面的话这一帧前半截还是框架默认配色。
+	// 明暗从框架那份读 —— 它是跟着系统外观走的，我们只替换配色。
+	dark := c.Theme().Dark
+	c.SetTheme(themeFor(dark, c.Preferences()))
 	pal := paletteFor(c.Theme())
+
 	// 快捷键要在最前面处理：c.Shortcut 是「注册即认领」的，注册得越早
 	// 越先拿到键。
 	a.handleKeys(c)
+
+	// 跟上这一帧的状态：菜单里的勾要在被拉开之前就是对的，而状态这一帧
+	// 刚被快捷键改过。
+	a.syncMenu()
 
 	// 窗口开了 vibrancy：根节点不铺底色，让系统的毛玻璃材质透上来；
 	// 只有主区不透明，保证代码区域的对比度稳定、不受壁纸颜色影响。
@@ -312,6 +334,61 @@ func (a *app) view(c *ui.Context) {
 	}
 }
 
+// titleMaxW 是工具栏左边那块「仓库名 + 路径」的宽度上限。
+//
+// 300 是在 1280 宽的窗口里量出来的：把整条工具栏摆得下（两边都开着侧栏）
+// 的前提下，够放一个项目名加一段看得出来的路径。
+const titleMaxW = 300
+
+// titleMinW 是它再挤也要留下的宽度：仓库名那一行是「我在看哪个仓库」，
+// 压没了整条工具栏就没剩下什么了。
+const titleMinW = 140
+
+// titleWidth 是这一趟给标题块多少宽度。
+//
+// 上限 300 留给宽窗口：路径再长也不该占掉半条工具栏。窄窗口要跟着可用
+// 宽度收 —— 工具栏把摆不下的控件收进「»」是从右往左收的，左边多占一寸，
+// 右边就少一寸：窗口收到最小（720）时标题块还占满 300 的话，连「改动 /
+// 历史」都会被挤进菜单，而那是主区唯一的导航。
+//
+// 按主区宽度算而不是窗口宽度：侧栏那 280 是固定的，不归工具栏。
+func (a *app) titleWidth(c *ui.Context) float32 {
+	winW, _ := c.Size()
+	if a.sidebarOn {
+		winW -= sidebarWidth
+	}
+	return clamp(winW*0.4, titleMinW, titleMaxW)
+}
+
+// shortPath 把仓库路径压到 width 以内，从**头上**截。
+//
+// 不靠框架自带的省略：那个截的是尾，而路径的关键信息正好在末尾 —— 仓库
+// 在哪一级目录下、和重名的那些怎么区分。从头截之后留下的尾巴才是有用的，
+// 和正文的截断习惯相反，所以这里自己来。
+//
+// 先原样试；放不下退到「…/最后三级」，再退到两级。只剩最后一节时返回
+// 空串：那一节就是上面那行的仓库名，同一个词摆两行不是信息 —— 调用方
+// 据此把整行省掉。
+func shortPath(c *ui.Context, path string, width float32) string {
+	fits := func(s string) bool {
+		w, _ := c.MeasureText(0, ui.Span{Text: s, Size: 11})
+		return w <= width
+	}
+	if fits(path) {
+		return path
+	}
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	for _, n := range []int{3, 2} {
+		if n >= len(parts) {
+			continue
+		}
+		if s := "…/" + strings.Join(parts[len(parts)-n:], "/"); fits(s) {
+			return s
+		}
+	}
+	return ""
+}
+
 // toolbarHeight 是工具栏那条带子的高度。toolbar 用的是同一个公式 ——
 // 分成两处算的话，主区的高度就会和实际差几个像素，分隔条的夹逼跟着错。
 func (a *app) toolbarHeight(c *ui.Context) float32 {
@@ -335,75 +412,99 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 		padLeft = bar.Left + 12
 	}
 
-	ui.Row(c).Height(a.toolbarHeight(c)).Shrink(0).
+	// 整条带子交给 ui.Toolbar 管：窗口窄到摆不下时，它会把放不下的控件
+	// 按顺序收进末尾的「»」菜单里，而不是把这一行挤到折行或裁掉 ——
+	// 窗口最小宽度 720，收窄时右边那几颗按钮本来就没地方摆。它还给这一行
+	// 一个整体的键盘焦点环和无障碍角色。
+	//
+	// 是「整条」而不是「右边那一簇」：Toolbar 嵌在别人的弹性行里时，
+	// 它自己那趟测量会把它算窄（它的子元素在上一趟布局里被标成绝对定位，
+	// 第二次测量就把它们跳过了），于是明明摆得下也冒出「»」。
+	ui.Toolbar(c, func() {
+		// 标题块给个宽度上限：仓库路径可以很长，不封顶的话它会把右边
+		// 那几颗工具按钮顶到「»」菜单里去 —— 路径是「我在看哪儿」的
+		// 补充信息，按钮才是要点的东西，谁让位不该反过来。
+		// 名和路径都是 SingleLine，各自的截法见 shortPath。
+		tw := a.titleWidth(c)
+		ui.Column(c).Gap(1).MinWidth(0).MaxWidth(tw).Children(func() {
+			name := a.repoName
+			if name == "" {
+				name = "Gloss"
+			}
+			ui.Text(c, name).Bold().SingleLine()
+			sub := "未打开仓库"
+			if a.repoPath != "" {
+				sub = shortPath(c, a.repoPath, tw)
+			}
+			if sub != "" {
+				ui.Text(c, sub).FontSize(11).TextColor(t.TextMuted).SingleLine()
+			}
+		})
+
+		if a.branch != "" {
+			ui.Text(c, a.branch).FontSize(11).TextColor(pal.ref).
+				Padding(2, 8).Radius(4).Background(t.Surface)
+		}
+
+		ui.Spacer(c)
+
+		// 没打开仓库时这两个开关没有作用对象，画成灰的（框架会压到半透明），
+		// 点也不响应 —— 一个点了没反应的按钮比一个灰掉的按钮更让人困惑。
+		//
+		// 「没打开」是 state 说的，不是 repoPath：打开失败时它也记着东西
+		//（试的是哪个文件夹）。失败态下两个 tab 画的是同一张错误卡，切换
+		// 只会让人以为换了边会有别的，实际没有。
+		noRepo := !a.repoReady()
+
+		// 改动 / 历史。⌘1 ⌘2 也能切。
+		tab := a.tab
+		ui.Segmented(c, &tab, "改动", "历史").Disabled(noRepo)
+		if tab != a.tab {
+			a.setTab(tab)
+		}
+
+		// unified / split 切换。和 Checkbox 一样传副本进去、变了再回写：
+		// 控件要的是 *int，而模式存在 app 上。
+		split := a.split
+		mode := 0
+		if split {
+			mode = 1
+		}
+		ui.Segmented(c, &mode, "Unified", "Split").Disabled(noRepo)
+		if (mode == 1) != split {
+			a.split = mode == 1
+			a.rowsDirty = true
+			a.saveViewSettings()
+		}
+
+		switch {
+		case a.state == loadLoading:
+			ui.Spinner(c)
+		case a.tab == 1 && (a.hist == loadLoading || a.histDiff == loadLoading):
+			ui.Spinner(c)
+		}
+		// 「几个文件」不在这儿报了：正下方文件栏的栏头就写着同一个数字，
+		// 两行隔着几十像素重复一遍不是强调，是啰嗦。工具栏这一格只负责
+		// 「正在读」这类别处没有的状态。
+
+		// 没有仓库时「刷新」什么都不做（reload 会直接返回），画成灰的。
+		// 「模型设置」和「打开仓库」不依赖仓库，照常可点。
+		if toolButton(c, "刷新", "重新读取仓库 ⌘R", noRepo, drawRefreshIcon) {
+			a.reload()
+		}
+		if toolButton(c, "模型设置…", "配置模型和 API Key", false, drawSlidersIcon) {
+			a.openSettings()
+		}
+		if toolButton(c, "打开仓库…", "选一个本地 git 仓库", false, drawFolderIcon) {
+			a.chooseFolder()
+		}
+	}).Height(a.toolbarHeight(c)).Shrink(0).
 		Padding(0, bar.Right+12, 0, padLeft).
-		AlignItems(ui.Center).Gap(10).
+		Gap(10).
 		DragWindow().
 		Background(pal.appBg).
 		Border(0, pal.border).
-		Children(func() {
-			ui.Column(c).Gap(1).MinWidth(0).Children(func() {
-				name := a.repoName
-				if name == "" {
-					name = "Gloss"
-				}
-				ui.Text(c, name).Bold().SingleLine()
-				sub := "未打开仓库"
-				if a.repoPath != "" {
-					sub = a.repoPath
-				}
-				ui.Text(c, sub).FontSize(11).TextColor(t.TextMuted).SingleLine()
-			})
-
-			if a.branch != "" {
-				ui.Text(c, a.branch).FontSize(11).TextColor(pal.ref).
-					Padding(2, 8).Radius(4).Background(t.Surface)
-			}
-
-			ui.Spacer(c)
-
-			// 改动 / 历史。⌘1 ⌘2 也能切。
-			tab := a.tab
-			ui.Segmented(c, &tab, "改动", "历史")
-			if tab != a.tab {
-				a.setTab(tab)
-			}
-
-			// unified / split 切换。和 Checkbox 一样传副本进去、变了再回写：
-			// 控件要的是 *int，而模式存在 app 上。
-			split := a.split
-			mode := 0
-			if split {
-				mode = 1
-			}
-			ui.Segmented(c, &mode, "Unified", "Split")
-			if (mode == 1) != split {
-				a.split = mode == 1
-				a.rowsDirty = true
-				a.saveViewSettings()
-			}
-
-			switch {
-			case a.state == loadLoading:
-				ui.Spinner(c)
-			case a.state == loadReady && len(a.files) > 0:
-				// 两个 tab 都报当前主区里的文件数：改动是工作区的，
-				// 历史是选中那个提交的
-				ui.Textf(c, "%d 个文件", len(a.files)).FontSize(12).TextColor(t.TextMuted)
-			case a.tab == 1 && (a.hist == loadLoading || a.histDiff == loadLoading):
-				ui.Spinner(c)
-			}
-
-			if ui.Button(c, "刷新").Clicked() {
-				a.reload()
-			}
-			if ui.Button(c, "模型设置…").Clicked() {
-				a.openSettings()
-			}
-			if ui.Button(c, "打开仓库…").Clicked() {
-				a.chooseFolder()
-			}
-		})
+		Label("工具栏")
 }
 
 // mainArea 是右侧主区。两个 tab 的下半区是同一样东西 ——「文件列表 + diff」，
@@ -529,8 +630,7 @@ func (a *app) openRepo(path string) {
 				if a.repoSeq != seq {
 					return
 				}
-				a.state = loadFailed
-				a.errMsg = err.Error()
+				a.failOpen(path, err)
 			})
 			return
 		}
@@ -540,8 +640,7 @@ func (a *app) openRepo(path string) {
 				if a.repoSeq != seq {
 					return
 				}
-				a.state = loadFailed
-				a.errMsg = err.Error()
+				a.failOpen(path, err)
 			})
 			return
 		}
@@ -552,6 +651,31 @@ func (a *app) openRepo(path string) {
 			a.applyModel(m)
 		})
 	})
+}
+
+// repoReady 是「仓库开好了吗」—— 工具栏、菜单、setTab、侧栏筛选框都问它。
+//
+// 只能问 state，不能问 repoPath：打开失败时 repoPath 也记着东西（试的是哪个
+// 文件夹）。这条判据原来在四个地方各写了一份，改一处漏三处，就出现了「按钮
+// 灰着、菜单却亮着」这种各说各话，所以收成一份。
+func (a *app) repoReady() bool { return a.state == loadReady }
+
+// failOpen 记下一次「仓库没打开」。只在主线程调用。
+//
+// 记下试的是哪个文件夹：卡片上说「这个文件夹不是 git 仓库」，屏幕上总得有
+// 个「这个」—— 标题栏把它摆在和打开成功时同一个位置，用户一眼就能看出自己
+// 挑错的是哪一层（选了 ~/Desktop 而不是 ~/Desktop/proj）。
+//
+// 但不写进 lastRepo（那在 applyModel 里）：坏路径不该被记住，不然下次启动
+// 又自己撞一遍。
+func (a *app) failOpen(path string, err error) {
+	a.state = loadFailed
+	a.errMsg = err.Error()
+	a.errNotRepo = errors.Is(err, gitrepo.ErrNotRepo)
+	if path != "" {
+		a.repoPath = filepath.Clean(path)
+		a.repoName = filepath.Base(a.repoPath)
+	}
 }
 
 // applyModel 把加载结果写进 app。只在主线程调用。

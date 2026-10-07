@@ -33,22 +33,26 @@ func (a *app) sidebar(c *ui.Context, pal palette) {
 				ui.Box(c).Height(bar.Height).Shrink(0).DragWindow()
 			}
 
-			ui.Box(c).Padding(8).Shrink(0).Children(func() {
-				a.refFilterInput(c)
-			})
+			// 没打开仓库时不摆筛选框：没有东西可筛，一个空框立在顶上
+			// 只会让「还没有打开仓库」这句话显得是漏了什么。
+			//
+			// 判 state 不判 repoPath：打开失败时 repoPath 也记着东西
+			//（试的是哪个文件夹，标题栏要摆），那时候框子照样没得筛。
+			if a.repoReady() {
+				ui.Box(c).Padding(8).Shrink(0).Children(func() {
+					a.refFilterInput(c)
+				})
+			}
 			a.refsView(c, pal)
 		})
 }
 
 // refFilterInput 是侧栏的筛选框。
 //
-// 用 TextInput 而不是 ui.SearchField：SearchField 的 placeholder 是内部
-// 写死的 "Search"，从外面盖不掉，而整个界面是中文的。
-//
-// Label 写成「筛选分支」而不是「筛选」：主区下半还有一个筛选框（筛文件），
+// 名字写成「筛选分支」而不是「筛选」：主区下半还有一个筛选框（筛文件），
 // 两个框名字一样的话，测试和无障碍工具都分不出找的是哪一个。
 func (a *app) refFilterInput(c *ui.Context) {
-	ui.TextInput(c, &a.refFilter).Placeholder("筛选分支").Label("筛选分支")
+	searchField(c, &a.refFilter, "筛选分支")
 }
 
 func (a *app) refsView(c *ui.Context, pal palette) {
@@ -56,6 +60,9 @@ func (a *app) refsView(c *ui.Context, pal palette) {
 
 	switch a.refsState {
 	case loadIdle:
+		// 空白不等于「没事发生」：说明这个位置以后会有什么，比留一片
+		// 灰底好 —— 用户第一次打开时看到的就是这一屏。
+		emptyNote(c, t, "打开一个仓库后，这里会列出它的分支、远程和标签。")
 		return
 	case loadLoading:
 		emptyNote(c, t, "正在读分支…")

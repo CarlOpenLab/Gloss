@@ -188,3 +188,33 @@ func TestPaletteBlocksShortcuts(t *testing.T) {
 		t.Error("命令栏应该还开着")
 	}
 }
+
+// 命令栏里的每一条都真的做了那件事。这里挑「筛选文件」验：它和 ⌘F 走同一条
+// 路（一次性的 focusFilter 请求），而焦点是不是真的落进筛选框，只有把字打
+// 进去才看得出来 —— 命令栏自己也在抢焦点，关掉的那一帧未必交得出来。
+//
+// 用键盘走，不点行：文件栏那个筛选框的 Label 也叫「筛选文件」（命令名就该
+// 是它要聚焦的那个东西的名字），而 Tester.Find 按渲染顺序取第一个「文字或
+// Label」匹配 —— 框在底层先渲染，点到的是它，落在对话框的遮罩上，只是把
+// 命令栏关掉。何况命令栏本来就是键盘的东西。
+func TestPaletteFilterCommandFocusesInput(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+
+	tt.Frame()
+	a.openPalette()
+	a.palette.query = "筛选"
+	tt.Frame()
+	tt.Key(0, ui.KeyEnter)
+	settle(t, a)
+	tt.Frame()
+
+	if a.palette.on {
+		t.Fatal("选中一条命令之后命令栏该关掉")
+	}
+	tt.Type("handler")
+	tt.Frame()
+	if a.fileFilter != "handler" {
+		t.Errorf("字没进文件筛选框，fileFilter = %q", a.fileFilter)
+	}
+}

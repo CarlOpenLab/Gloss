@@ -133,6 +133,15 @@ func TestCodeSizeShortcuts(t *testing.T) {
 		t.Errorf("⌘− 两次之后 = %v, want %v", got, defSize-codeSizeStep)
 	}
 
+	// ⌘⇧= 和 ⌘= 是同一个意思：键盘上的加号本来就是 ⇧=，
+	// 只认一个的话，用户照着菜单上写的「⌘+」按下去不会有反应。
+	// （此时字号刚被 ⌘− 两次压到 defSize−1。）
+	tt.Key(ui.Cmd|ui.Shift, ui.KeyEqual)
+	tt.Frame()
+	if got := a.codeSizeValue(); got != defSize {
+		t.Errorf("⌘⇧= 之后 = %v, want %v", got, defSize)
+	}
+
 	tt.Key(ui.Cmd, ui.Key0)
 	tt.Frame()
 	if a.codeSizeValue() != defSize {
@@ -269,10 +278,40 @@ func TestTabShortcuts(t *testing.T) {
 	}
 }
 
+// ⌘, 开的是模型设置 —— macOS 上这个键就是「偏好设置」。
+//
+// 它原来接在放大字号上（⌘= 那一路顺手多认了一个键），于是按 Mac 的习惯
+// 想开设置，得到的却是代码大了一号。这条测试两头都盯着：设置要开，
+// 字号要一动不动。
+func TestSettingsShortcut(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+
+	tt.Key(ui.Cmd, ui.KeyComma)
+	tt.Frame()
+	if !a.settingsOn {
+		t.Fatal("⌘, 该打开模型设置")
+	}
+	if got := a.codeSizeValue(); got != defSize {
+		t.Errorf("⌘, 之后字号 = %v, want 不动（%v）", got, defSize)
+	}
+}
+
 // 没有打开仓库时按这些键不能崩。
 func TestShortcutsWithoutRepo(t *testing.T) {
 	a := newApp()
 	tt := ui.NewTester(a.view, 1280, 860)
+
+	// ⌘, 不依赖仓库，单独先试 —— 它开出来的对话框是模态的，会把后面
+	// 这一串键全挡在外面，所以先问完再收起来。
+	tt.Key(ui.Cmd, ui.KeyComma)
+	tt.Frame()
+	if !a.settingsOn {
+		t.Fatal("没有仓库时 ⌘, 也该打开模型设置")
+	}
+	a.settingsOn = false
+	tt.Frame()
 
 	for _, c := range []struct {
 		mods ui.Modifiers
@@ -280,6 +319,7 @@ func TestShortcutsWithoutRepo(t *testing.T) {
 	}{
 		{ui.Cmd, ui.KeyR}, {ui.Cmd, ui.KeyF}, {ui.Cmd, ui.KeyK},
 		{ui.Cmd, ui.Key1}, {ui.Cmd, ui.Key2}, {ui.Cmd, ui.KeyEqual},
+		{ui.Cmd | ui.Shift, ui.KeyEqual},
 		{ui.Cmd, ui.KeyMinus}, {ui.Cmd, ui.Key0},
 		{0, ui.KeyJ}, {0, ui.KeyK},
 	} {

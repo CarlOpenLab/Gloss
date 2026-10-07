@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -67,9 +67,10 @@ func TestExplainTogglesFromButton(t *testing.T) {
 		t.Fatal("openExplain 之后卡片应该是开着的")
 	}
 
-	// 按钮点一次收起 —— 用真实点击而不是直接调函数，顺便验证按钮接上了
-	if err := tt.Click("✨ 解释"); err != nil {
-		t.Fatalf("点 ✨ 解释：%v", err)
+	// 按钮点一次收起 —— 用真实点击而不是直接调函数，顺便验证按钮接上了。
+	// 标签是「解释」：✨ 是自绘的矢量图形，不在文字里。
+	if err := tt.Click("解释"); err != nil {
+		t.Fatalf("点解释按钮：%v", err)
 	}
 	tt.Frame()
 	if a.explainOpen() {
@@ -84,8 +85,8 @@ func TestExplainButtonOpensCard(t *testing.T) {
 	withProvider(t, a, srv)
 	tt := ui.NewTester(a.view, 1280, 860)
 
-	if err := tt.Click("✨ 解释"); err != nil {
-		t.Fatalf("点 ✨ 解释：%v", err)
+	if err := tt.Click("解释"); err != nil {
+		t.Fatalf("点解释按钮：%v", err)
 	}
 	settle(t, a)
 	tt.Frame()
@@ -177,10 +178,61 @@ func TestExplainSavesToStore(t *testing.T) {
 }
 
 // 接口报错时卡片要给出错误和重试，而不是一直转圈。
+//
+// 卡片上摆的是「出了什么事」那句中文，供应商那句原话收在下面当证据 ——
+// 反过来的话，用户在中文界面里只会看到一句英文报错（401 的原文甚至不止
+// 一句：SDK 会把请求方法、完整 URL、Request-ID 和一整坨 JSON 拼成一行）。
 func TestExplainShowsError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprint(w, `{"error":{"message":"Invalid API key"}}`)
+	}))
+	defer srv.Close()
+
+	a := richApp(t)
+	withProvider(t, a, srv)
+	tt := ui.NewTester(a.view, 1280, 860)
+	before := countText(tt.Texts(), "模型设置…")
+
+	fi, hi := explainFixtures(t, a)
+	a.openExplain(fi, hi)
+	settle(t, a)
+	tt.Frame()
+
+	if a.ex.loading {
+		t.Error("出错之后不该还在加载")
+	}
+	if !a.ex.fail.Auth {
+		t.Errorf("401 该认成钥匙的问题：%+v", a.ex.fail)
+	}
+	if !tt.HasText("模型没认这个密钥") {
+		t.Errorf("卡片上该有一句说清是什么事的中文：%q", tt.Texts())
+	}
+	if !tt.HasText("Invalid API key") {
+		t.Errorf("供应商的原话该留着当证据：%q", tt.Texts())
+	}
+	if !tt.HasText("重试") {
+		t.Errorf("卡片上没有重试：%q", tt.Texts())
+	}
+	// 钥匙不对 —— 该有一条通向设置的路
+	if n := countText(tt.Texts(), "模型设置…"); n <= before {
+		t.Errorf("该给一个通向模型设置的按钮（「模型设置…」从 %d 个变成 %d 个）", before, n)
+	}
+}
+
+// 点重试：重新发一次请求，把新的结果拿出来 —— 而不是把上一次的错误
+// 钉在卡片上。
+func TestExplainRetryAfterError(t *testing.T) {
+	var n int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if atomic.AddInt32(&n, 1) == 1 {
+			w.WriteHeader(http.StatusUnauthorized)
+			fmt.Fprint(w, `{"error":{"message":"Invalid API key"}}`)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"重试问出来的解释\"}}]}\n\n")
+		fmt.Fprint(w, "data: [DONE]\n\n")
 	}))
 	defer srv.Close()
 
@@ -192,16 +244,108 @@ func TestExplainShowsError(t *testing.T) {
 	a.openExplain(fi, hi)
 	settle(t, a)
 	tt.Frame()
+	if !tt.HasText("重试") {
+		t.Fatalf("第一趟就该失败：%q", tt.Texts())
+	}
+
+	if err := tt.Click("重试"); err != nil {
+		t.Fatalf("点重试：%v", err)
+	}
+	settle(t, a)
+	tt.Frame()
+
+	if a.ex.fail.Title != "" {
+		t.Errorf("重试成功之后卡片上不该还挂着错误：%+v", a.ex.fail)
+	}
+	if !tt.HasText("重试问出来的解释") {
+		t.Errorf("重试的结果没显示：%q", tt.Texts())
+	}
+}
+
+// 上一趟断线前已经吐出来的半截话，重试时得先清掉。
+//
+// 断线时那半句是要留着显示的（收到多少算多少），但它已经不是这次的答案
+// 了 —— 流式输出是往后拼的，不清的话新答案会从这半句后面长出来，用户
+// 看到的是一句拼接起来的怪话。
+func TestExplainRetryClearsPartialText(t *testing.T) {
+	srv, _ := fakeLLM(t, "新的一份")
+	a := richApp(t)
+	withProvider(t, a, srv)
+
+	fi, hi := explainFixtures(t, a)
+	a.ex = explainState{
+		fi: fi, hi: hi,
+		key:  a.explainKey(a.files[fi], hi),
+		head: a.files[fi].Hunks[hi].Header,
+		text: "上一趟的半截话",
+		fail: llm.Failure{Title: "连不上模型服务"},
+	}
+
+	a.retryExplain()
+
+	// 请求刚发出去、一个片段都还没回来 —— 就看这一刻
+	if a.ex.text != "" {
+		t.Errorf("重试该先把半截话清掉，实际还留着 %q", a.ex.text)
+	}
+	settle(t, a)
+	if a.ex.text != "新的一份" {
+		t.Errorf("重试的答案 = %q，该只有新的一份", a.ex.text)
+	}
+}
+
+// 一个供应商都没配、环境里也没有 key 时点 ✨：这一趟不发出去（发出去必然
+// 失败），卡片直接说清楚该去哪儿配，并给一个通向模型设置的按钮。
+//
+// 这条曾经是「首屏体验最差的一处」：真实的输出是 SDK 回的一大段英文，
+// 讲它按顺序找过哪些凭证来源、建议你去跑 `ant auth login` —— 在一个
+// 中文界面里，用户只知道「我点了一下，冒出来一大段看不懂的话」。
+func TestExplainWithoutProvider(t *testing.T) {
+	// 本机可能真配着 ANTHROPIC_API_KEY，清掉才能测「什么都没有」
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("ANTHROPIC_AUTH_TOKEN", "")
+
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+
+	// 先数一遍：工具栏上那颗按钮也是「模型设置…」这个名字，卡片上应该
+	// 再多出一个来。
+	before := countText(tt.Texts(), "模型设置…")
+
+	fi, hi := explainFixtures(t, a)
+	a.openExplain(fi, hi)
+	settle(t, a)
+	tt.Frame()
 
 	if a.ex.loading {
-		t.Error("出错之后不该还在加载")
+		t.Error("没有凭证就不该假装在请求")
 	}
-	if !strings.Contains(a.ex.err, "Invalid API key") {
-		t.Errorf("错误信息 = %q", a.ex.err)
+	if !tt.HasText("还没有配置模型") {
+		t.Fatalf("卡片该说清楚是没配模型：%q", tt.Texts())
 	}
-	if !tt.HasText("解释失败了") || !tt.HasText("重试") {
-		t.Errorf("卡片上没有错误提示：%q", tt.Texts())
+	if n := countText(tt.Texts(), "模型设置…"); n <= before {
+		t.Errorf("卡片上该给一个通向模型设置的按钮（「模型设置…」从 %d 个变成 %d 个）", before, n)
 	}
+
+	// 点它（工具栏那颗文案一样、做的是同一件事，点到哪颗都算数）
+	if err := tt.Click("模型设置…"); err != nil {
+		t.Fatalf("点模型设置：%v", err)
+	}
+	tt.Frame()
+	if !a.settingsOn {
+		t.Error("点那个按钮应该把模型设置打开")
+	}
+}
+
+// countText 数一段文字在界面上一共出现了几次。
+func countText(texts []string, want string) int {
+	n := 0
+	for _, s := range texts {
+		if s == want {
+			n++
+		}
+	}
+	return n
 }
 
 // 关掉卡片要掐掉进行中的请求：不然用户走了，token 还在烧。

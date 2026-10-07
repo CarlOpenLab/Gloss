@@ -41,6 +41,19 @@ func (a *app) filePaneWidth(c *ui.Context) float32 {
 func (a *app) detailPane(c *ui.Context, pal palette) {
 	t := c.Theme()
 
+	// 没打开仓库（或者打不开）时不摆文件栏：那时候它只能是一栏空架子
+	// —— 一个没有东西可筛的筛选框、一条没有文件的总计，而真正要说的话
+	// （「还没有打开仓库」）被挤在旁边一栏里，也不居中。直接让整块地方
+	// 都归那句提示。
+	if !a.hasDiff() && (a.state == loadIdle || a.state == loadFailed) {
+		ui.Box(c).Grow(1).FillWidth().Children(func() {
+			ui.Column(c).Fill().Center().Gap(10).Padding(24).Children(func() {
+				a.detailEmpty(c, t)
+			})
+		})
+		return
+	}
+
 	ui.Row(c).Grow(1).FillWidth().AlignItems(ui.Stretch).Children(func() {
 		a.fileListPane(c, pal, t)
 		ui.Box(c).Width(1).Shrink(0).FillHeight().Background(pal.border)
@@ -75,10 +88,14 @@ func (a *app) fileListPane(c *ui.Context, pal palette, t *ui.Theme) {
 			ui.Text(c, n).FontSize(11).Font("monospace").FontFeatures("tnum").
 				TextColor(t.TextMuted)
 			ui.Spacer(c)
+			// 增删分开上色，和文件行、栏脚是同一套：同一份数据在哪儿都长
+			// 一个样。原来整串用一个橙色，那是「引用名 / hash」这类元信息
+			// 的颜色，用在这里和行里的绿红对不上。
 			if a.state == loadReady && len(a.files) > 0 {
-				ui.Textf(c, "+%d −%d", a.totalAdd(), a.totalDel()).
-					FontSize(11).Font("monospace").FontFeatures("tnum").
-					TextColor(pal.ref)
+				ui.Textf(c, "+%d", a.totalAdd()).FontSize(11).
+					Font("monospace").FontFeatures("tnum").TextColor(pal.addBar)
+				ui.Textf(c, "−%d", a.totalDel()).FontSize(11).
+					Font("monospace").FontFeatures("tnum").TextColor(pal.delBar)
 			}
 		})
 		ui.Box(c).Shrink(0).Padding(0, 12, 8, 12).Children(func() {
@@ -94,12 +111,15 @@ func (a *app) fileListPane(c *ui.Context, pal palette, t *ui.Theme) {
 // Label 和侧栏那个（「筛选分支」）必须分得开：两个框筛的是完全不同的东西，
 // 名字一样的话测试和无障碍工具都认不出找的是哪一个。
 func (a *app) fileFilterInput(c *ui.Context) {
-	in := ui.TextInput(c, &a.fileFilter).Placeholder("筛选文件").Label("筛选文件")
-	// ⌘F 之后把焦点放进来。只做一次 —— 每帧都 Focus 的话这个框就再也
-	// 交不出焦点了。
+	in := searchField(c, &a.fileFilter, "筛选文件")
+	// ⌘F（以及命令栏里的「筛选文件」）之后把焦点放进来。
+	//
+	// 置位的那一帧文件栏可能已经画过（命令栏在覆盖层里，晚于它），所以要
+	// 留到下一帧才轮到这儿。那时命令栏已经收掉、它的输入框不再构建，没有
+	// 谁跟这里抢 —— `Focus()` 当场生效，放一次就够。
 	if a.focusFilter {
-		a.focusFilter = false
 		in.Focus()
+		a.focusFilter = false
 	}
 }
 
@@ -223,14 +243,29 @@ func (a *app) toggleFileDir(key string, open bool) {
 	delete(a.filesClosed, key)
 }
 
+// filePaneFooter 是文件栏底下的那条栏脚：整份改动一共增删了多少行，
+// 以及已 review 的进度。
+//
+// 顶上描一条细线、底色抬一档：它是常驻的状态栏，不是列表的最后一行。
+// 不画出来，这几个字就直接浮在底色上，像是谁忘了删的一行；画出来，
+// 文件栏一整栏也就有了下沿。
+//
+// 数字和文件行里的 +/− 用同一套颜色和等宽字体：同一份数据在哪儿都长
+// 一个样，扫一眼就知道是对得上的。
 func (a *app) filePaneFooter(c *ui.Context, pal palette, t *ui.Theme) {
-	ui.Row(c).Shrink(0).Padding(8, 12).Gap(8).AlignItems(ui.Center).Children(func() {
-		ui.Textf(c, "Total: +%d −%d", a.totalAdd(), a.totalDel()).
-			FontSize(11).Font("monospace").FontFeatures("tnum").
-			TextColor(t.TextMuted)
+	ui.Row(c).Shrink(0).Padding(7, 12).Gap(6).AlignItems(ui.Center).
+		Background(t.Surface).
+		BorderWidth(1, 0, 0, 0).BorderColor(pal.border).Children(func() {
+		ui.Text(c, "总计").FontSize(11).TextColor(t.TextMuted)
+		ui.Textf(c, "+%d", a.totalAdd()).FontSize(11).Bold().
+			Font("monospace").FontFeatures("tnum").TextColor(pal.addBar)
+		ui.Textf(c, "−%d", a.totalDel()).FontSize(11).Bold().
+			Font("monospace").FontFeatures("tnum").TextColor(pal.delBar)
 		ui.Spacer(c)
 		if n := a.viewedCount(); n > 0 {
-			ui.Textf(c, "✓ %d/%d", n, len(a.files)).
+			ui.Box(c).Size(checkSize, checkSize).Shrink(0).
+				Draw(func(p *ui.Painter, r ui.Rect) { drawCheckMark(p, r, pal.viewed) })
+			ui.Textf(c, "%d/%d", n, len(a.files)).
 				FontSize(11).TextColor(pal.viewed)
 		}
 	})
@@ -271,12 +306,25 @@ func (a *app) detailEmpty(c *ui.Context, t *ui.Theme) {
 		if ui.PrimaryButton(c, "打开仓库…").Clicked() {
 			a.chooseFolder()
 		}
+		// 第一眼的地方，顺手把菜单里的那个键说一遍：下次就不用找按钮了。
+		ui.Text(c, "也可以按 ⌘O 打开").FontSize(11).TextColor(t.TextMuted)
 	case a.state == loadLoading:
 		ui.Spinner(c)
 		ui.Text(c, "正在读取仓库…").TextColor(t.TextMuted)
+	case a.state == loadFailed && a.errNotRepo:
+		// 文件夹选错了。这里给的出路是「换一个」而不是「重试」：git 会沿着
+		// 父目录往上找仓库，它说不是，就是它和它所有父目录都不是 —— 再读
+		// 一遍还是这句话。git 自己那句英文也不用摆了，它没有多出任何信息。
+		ui.Text(c, "打不开这个仓库").FontSize(18).Bold()
+		ui.Text(c, "这个文件夹不是 git 仓库。").TextColor(t.TextMuted)
+		if ui.PrimaryButton(c, "换一个文件夹…").Clicked() {
+			a.chooseFolder()
+		}
 	case a.state == loadFailed:
 		ui.Text(c, "打不开这个仓库").FontSize(18).Bold()
-		ui.Text(c, a.errMsg).TextColor(t.Danger)
+		// git 自己的话留着 —— 这一档里它是唯一的具体信息（哪个文件没权限、
+		// 哪条命令错了）。但它是证据，不是结论：等宽、小一号、压过色。
+		ui.Text(c, a.errMsg).Font("monospace").FontSize(12).TextColor(t.TextMuted)
 		if ui.Button(c, "重试").Clicked() {
 			a.reload()
 		}

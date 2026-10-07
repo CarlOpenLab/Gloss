@@ -48,7 +48,7 @@ func streamAnthropic(ctx context.Context, p *Provider, system, user string, onDe
 		}
 	}
 	if err := stream.Err(); err != nil {
-		return full.String(), err
+		return full.String(), wrapStatus(err)
 	}
 	if message.StopReason == anthropic.StopReasonRefusal {
 		return full.String(), ErrRefusal

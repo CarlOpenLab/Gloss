@@ -216,8 +216,8 @@ func TestHistoryCommitDiffIsExplainable(t *testing.T) {
 	settle(t, a)
 	tt.Frame()
 
-	if err := tt.Click("✨ 解释"); err != nil {
-		t.Fatalf("点 ✨ 解释：%v", err)
+	if err := tt.Click("解释"); err != nil {
+		t.Fatalf("点解释按钮：%v", err)
 	}
 	settle(t, a)
 	tt.Frame()
@@ -259,7 +259,7 @@ func TestShortWhen(t *testing.T) {
 // 一个，取第一个 —— 它总是最关键的那个。
 func TestRefLabel(t *testing.T) {
 	cases := []struct{ in, want string }{
-		{"HEAD -> main", "HEAD -> main"},
+		{"HEAD -> main", "HEAD → main"},
 		{"", ""},
 		{"   ", ""},
 		{"main, origin/main, tag: v1", "main"},

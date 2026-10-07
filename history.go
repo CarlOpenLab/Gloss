@@ -26,8 +26,13 @@ const logLimit = 200
 const defaultCommitH = 0.45
 
 // setTab 切换「改动 / 历史」。只改状态，真正的加载在后台做。
+//
+// 仓库没开成（或者还没开完）时哪一路都读不出东西，直接不切：工具栏上那两个
+// 分段控件这时是灰的，⌘1 ⌘2、菜单和命令栏却都通到这里 —— 在入口上把住，
+// 三处就不会各说各话。切过去还会真发一轮注定失败的 git 读，然后在历史里
+// 报「读不到历史」，而其实根本是仓库没开。
 func (a *app) setTab(t int) {
-	if t == a.tab {
+	if !a.repoReady() || t == a.tab {
 		return
 	}
 	a.tab = t
@@ -337,6 +342,7 @@ func (a *app) commitRow(c *ui.Context, pal palette, i int) {
 	if row.Hovered() && !sel {
 		row.Background(t.Surface)
 	}
+	fadeColors(row)
 	row.Children(func() {
 		// 图形栏：本行的线画在这块的 Draw 里，r 就是它这一行的矩形。
 		// 宽度按整张图的最大泳道数定，所以每行的图对齐，文字也齐。
@@ -374,10 +380,13 @@ func (a *app) commitRow(c *ui.Context, pal palette, i int) {
 
 // refLabel 把 git 的 ref 列表缩短一点。「HEAD -> main, origin/main, tag: v1」
 // 全画出来会把一行的宽度吃光，只留最关键的那个。
+//
+// 箭头换成「→」：git 管道输出里是 ASCII 的「->」，摆在界面上和四周的排版
+// 不是一个味道 —— 这是个字，不是图标，用真正的箭头字符没有字形风险。
 func refLabel(refs string) string {
 	for _, part := range strings.Split(refs, ",") {
 		if p := strings.TrimSpace(part); p != "" {
-			return p
+			return strings.Replace(p, " -> ", " → ", 1)
 		}
 	}
 	return ""

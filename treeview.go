@@ -73,6 +73,7 @@ func treeRow(c *ui.Context, t *ui.Theme, o treeRowOpts, content func()) (row, ar
 		case hovered:
 			band.Background(t.Surface)
 		}
+		fadeColors(band)
 
 		band.Children(func() {
 			if o.Depth > 0 {
