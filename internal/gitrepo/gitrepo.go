@@ -21,6 +21,13 @@ import (
 type Repo struct {
 	Root string // 工作区根目录的绝对路径
 	Name string // 目录名，用于显示
+	// GitDir 是 .git 目录的绝对路径。判断「正卡在合并/变基中间」要看它
+	// 底下的标记文件（pending.go），所以打开时顺手量好。
+	//
+	// 不能想当然写成 Root/.git：linked worktree 和子模块的 .git 是一个
+	// **文件**（里面一行 gitdir: …），GIT_DIR 环境变量也常见 ——
+	// `--absolute-git-dir` 正是为这些情况存在的。
+	GitDir string
 }
 
 // emptyTree 是 git 的「空树」对象哈希。仓库还没有任何提交时（HEAD 不存在），
@@ -36,12 +43,19 @@ var ErrNotRepo = errors.New("不是 git 仓库")
 
 // Open 在 dir 里定位仓库根并打开。dir 可以指向仓库的任意子目录。
 func Open(ctx context.Context, dir string) (*Repo, error) {
-	out, err := run(ctx, dir, "rev-parse", "--show-toplevel")
+	// 一次进程问两件事：仓库根 + .git 目录。两条输出按参数顺序来。
+	// （分开跑两条就是把每次打开仓库的开销翻倍，而它们回答的是同一个问题。）
+	out, err := run(ctx, dir, "rev-parse", "--show-toplevel", "--absolute-git-dir")
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrNotRepo, err)
 	}
-	root := strings.TrimSpace(string(out))
-	return &Repo{Root: root, Name: filepath.Base(root)}, nil
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	root := strings.TrimSpace(lines[0])
+	gitDir := filepath.Join(root, ".git")
+	if len(lines) > 1 {
+		gitDir = strings.TrimSpace(lines[1])
+	}
+	return &Repo{Root: root, Name: filepath.Base(root), GitDir: gitDir}, nil
 }
 
 // Branch 返回当前分支名。处于 detached HEAD 时返回短哈希。
@@ -117,12 +131,22 @@ func diffArgs(extra ...string) []string {
 //   - LC_ALL=C：锁定输出语言，错误信息和日期格式不会随用户 locale 变化
 //   - GIT_PAGER=cat / GIT_TERMINAL_PROMPT=0：绝不分页、绝不弹交互提示
 //     （GUI 进程没有终端，弹提示会直接挂住）
+//   - GIT_EDITOR=true / GIT_SEQUENCE_EDITOR=true：绝不弹编辑器。这条是
+//     实测逼出来的：`git merge --continue` 会把提交信息交给 $GIT_EDITOR
+//     过目 —— 终端里跑就是 vim，从这里跑就是「Vim: Warning: Output is
+//     not to a terminal」之后的一个没人能回答的挂起。给 true 让「编辑器」
+//     立刻退 0，git 就按现有的 MERGE_MSG 往下走。设成全局环境变量而不是
+//     每条命令 -c core.editor=true：这是对整个进程的约束（我们永远不要
+//     编辑器），漏掉一处就是一次挂起。（cherry-pick/revert 的 --continue
+//     实测不拉编辑器，但按「永远不要」来要求自己更省心。）
 func gitEnv() []string {
 	return append(os.Environ(),
 		"GIT_OPTIONAL_LOCKS=0",
 		"LC_ALL=C",
 		"GIT_PAGER=cat",
 		"GIT_TERMINAL_PROMPT=0",
+		"GIT_EDITOR=true",
+		"GIT_SEQUENCE_EDITOR=true",
 	)
 }
 

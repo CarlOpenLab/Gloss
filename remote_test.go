@@ -229,8 +229,8 @@ func TestPullDivergedExplainsHowToChoose(t *testing.T) {
 }
 
 // 配好 pull.rebase=false 之后，同一个分叉会真的合并 —— 撞冲突。
-// 横幅说人话，冲突文件按冲突的样子（`!`）出现在列表里：光说「合并有冲突」
-// 而不指出是哪个文件，用户下一步还是不知道去哪儿。
+// 横幅说人话，冲突文件按冲突的样子（`!`）出现在列表里：光说「有冲突」
+// 而不指出是哪个文件、去哪儿继续，用户下一步还是不知道怎么办。
 func TestPullConflictShowsBannerAndFiles(t *testing.T) {
 	a, bare := remoteApp(t)
 	// 选一次「合并」：git 2.27 起不选就不肯拉，这一步是用户自己在终端里做的
@@ -253,8 +253,14 @@ func TestPullConflictShowsBannerAndFiles(t *testing.T) {
 	if a.opErr == nil {
 		t.Fatal("冲突该留下横幅")
 	}
-	if a.opErr.Title != "合并有冲突" {
+	// 「拉取撞上了冲突」而不是笼统的「合并有冲突」：撞上的是拉取这一下，
+	// 标题按发起的那一步说（Describe 拿 op 算出这句）。
+	if a.opErr.Title != "拉取撞上了冲突" {
 		t.Errorf("标题 = %q（原话：%q）", a.opErr.Title, a.opErr.Detail)
+	}
+	// 出路在状态条上，横幅要把人指过去
+	if !strings.Contains(a.opErr.Hint, "状态条") {
+		t.Errorf("Hint 该指向状态条的继续/中止：%q", a.opErr.Hint)
 	}
 	var found *gitrepo.File
 	for i := range a.files {

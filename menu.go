@@ -194,9 +194,10 @@ func (a *app) menuToggle(label, accel string, kind mygo.MenuItemType, checked bo
 //
 // 对话框开着的时候让位：视图里的快捷键在模态下会被框架挡掉，菜单可挡不掉，
 // 两边得一个脾气 —— 设置或命令栏开着的时候，⌘R 不该在背后偷偷刷新，
-// 命令栏也不该再叠一层。
+// 命令栏也不该再叠一层。判据收在 modalOn 里，视图那边 Esc 的让位用的是
+// 同一个函数。
 func (a *app) menuDo(fn func()) {
-	if a.palette.on || a.settingsOn || a.tag.on {
+	if a.modalOn() {
 		return
 	}
 	if a.dispatch == nil {

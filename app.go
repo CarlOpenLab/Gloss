@@ -64,6 +64,9 @@ type app struct {
 	// 可用性看它：`git fetch --all` 在一条远程都没有时是**静默成功**的，
 	// 等命令报错等不到「这个仓库没有远程」。
 	remotes []string
+	// pending 是仓库正卡在哪一步写操作中间（合并/变基撞了冲突停着），跟着
+	// 每次 Load 一起读回来。状态条（pendingbar.go）和分支芯片靠它说话。
+	pending gitrepo.Pending
 	state   loadState
 	errMsg  string
 	// loadingPath 是这一趟正在读的仓库路径。它不是 repoPath：repoPath 只在
@@ -240,6 +243,9 @@ type app struct {
 	// tag 是「新建标签」对话框的状态（tagdialog.go）。
 	tag tagState
 
+	// confirm 是确认对话框的状态（confirmdialog.go）。
+	confirm confirmState
+
 	// commitMsg 是提交框里的消息；草稿按仓库持久化（store.Drafts），
 	// draftFor 记着当前这份草稿属于哪个仓库。
 	commitMsg string
@@ -370,14 +376,15 @@ func (a *app) view(c *ui.Context) {
 	a.paletteDialog(c, pal)
 	a.settingsDialog(c, pal)
 	a.tagDialog(c, pal)
+	a.confirmDialog(c, pal)
 
 	// 卡片画在最后：这一帧的 ✨ 按钮位置刚写好，卡片当帧就能摆对地方。
 	// 它在 Overlay 层，不受上面的布局影响。
 	a.explainCard(c, pal)
 
 	// Esc 关掉卡片。放在最后，让卡片里正在编辑的输入框先有机会处理它。
-	// 命令栏和两个对话框开着的时候它们自己会处理 Esc，这里让位。
-	if a.explainOpen() && !a.palette.on && !a.settingsOn && !a.tag.on && c.Shortcut(0, ui.KeyEscape) {
+	// 命令栏和几个对话框开着的时候它们自己会处理 Esc，这里让位。
+	if a.explainOpen() && !a.modalOn() && c.Shortcut(0, ui.KeyEscape) {
 		a.closeExplain()
 	}
 }
@@ -566,6 +573,10 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 // 分离 HEAD 时换成警示色并把话说全：这时候提交是能提交的，只是没有分支
 // 接着它 —— 用户看不到任何异常，直到切走之后才发现那个提交找不回来了。
 // 芯片是唯一一个常驻的分支指示，这一句必须在它身上说。
+//
+// 变基期间是第三种状态，而且比分离 HEAD 更容易说错话：git 那边 HEAD 确实
+// 是分离的，但「分离 HEAD：a1b2c3d，先新建一条分支」在这里是主动误导 ——
+// 用户正停在一次变基中间，该说的是它在变基、变到哪一步了。
 func (a *app) branchChip(c *ui.Context, t *ui.Theme, pal palette) {
 	if a.branch == "" {
 		return
@@ -573,7 +584,15 @@ func (a *app) branchChip(c *ui.Context, t *ui.Theme, pal palette) {
 	name, fg, bg := a.branch, pal.ref, t.Surface
 	border := ui.Transparent
 	tip := "当前分支 " + a.branch
-	if a.detached {
+	switch {
+	case a.pending.Kind == gitrepo.PendingRebase:
+		name = a.rebaseLabel()
+		fg = t.Warning
+		// 底色只加一点点，靠一圈描边立住（和分离 HEAD 同一套做法）
+		bg = t.Warning.Alpha(0.10)
+		border = t.Warning.Alpha(0.45)
+		tip = "变基还没做完。顶上的状态条里有「继续」「跳过」「中止」。"
+	case a.detached:
 		name, fg = "分离 HEAD："+a.branch, t.Warning
 		// 底色只加一点点，靠一圈描边立住：琥珀色全铺在这条浅灰的工具栏上
 		// 是一块发闷的脏黄，加了边才读得出是「一块标出来的状态」。
@@ -586,11 +605,15 @@ func (a *app) branchChip(c *ui.Context, t *ui.Theme, pal palette) {
 		Padding(2, 8).Radius(4).Background(bg).Border(1, border).Tooltip(tip)
 }
 
-// mainArea 是右侧主区：顶上可能有一条操作结果横幅，然后是两个 tab 的内容；
-// 「改动」tab 底下还压着一条提交栏。
+// mainArea 是右侧主区：顶上可能有一条操作结果横幅和一条「卡住了」状态条，
+// 然后是两个 tab 的内容；「改动」tab 底下还压着一条提交栏。
+//
+// 状态条排在两个 tab 之前：合并/变基卡着的时候，不管在看改动还是历史，
+// 「继续 / 跳过 / 中止」都得够得着 —— 它说的是仓库的状态，不是某个 tab 的。
 func (a *app) mainArea(c *ui.Context, pal palette) {
 	ui.Column(c).Grow(1).FillWidth().MinHeight(0).Children(func() {
 		a.opBanner(c, pal)
+		a.pendingBar(c)
 		if a.tab == 1 {
 			a.historyArea(c, pal)
 			return
@@ -817,6 +840,10 @@ func (a *app) failOpen(path string, err error) {
 	a.state = loadFailed
 	a.errMsg = err.Error()
 	a.errNotRepo = errors.Is(err, gitrepo.ErrNotRepo)
+	// 上一份状态条（如果还挂着）说的是上一个仓库的事，清掉。不清的话，
+	// 从一个卡在合并中间的仓库切到一个坏路径，错误卡片上头会飘着一条
+	// 属于别人的「合并停在冲突上」。
+	a.pending = gitrepo.Pending{}
 	if path != "" {
 		a.repoPath = filepath.Clean(path)
 		a.repoName = filepath.Base(a.repoPath)
@@ -830,6 +857,7 @@ func (a *app) applyModel(m *gitrepo.Model) {
 	a.branch = m.Branch
 	a.detached = m.Detached
 	a.remotes = m.Remotes
+	a.pending = m.Pending
 
 	// 换到另一个仓库（或者第一次打开）时把这个仓库存下的提交草稿拾回来。
 	// 刷新同一个仓库不动它 —— 正在打的字不该被一次刷新吃掉。
@@ -846,12 +874,32 @@ func (a *app) applyModel(m *gitrepo.Model) {
 	// 正在看历史时别把主区切回工作区 —— 用户下一次刷新可能只是想
 	// 更新一下提交列表。
 	if a.tab == 0 {
-		a.showFiles(a.workFiles, workListID(m.Repo.Root, m.Branch))
+		a.showFiles(a.workFiles, workListID(m.Repo.Root, a.workBranch()))
 	} else {
 		a.loadCommits()
 	}
 	a.state = loadReady
 	a.loadRefs()
+}
+
+// workBranch 是「改动」列表该认的分支名。
+//
+// 变基期间 git 的 HEAD 是分离的，m.Branch 只是个短哈希 —— 拿它当列表身份
+// 的话，每重放一步就换一个（每步 continue 都是一次整体重读），用户展开着
+// 的未改动区间会被一路重置。用正在变基的那条分支名，整个变基过程里 id 是
+// 同一个。（从分离态发起的 --onto 变基没有分支名，退回短哈希，和以前一样。）
+func (a *app) workBranch() string {
+	if a.pending.Kind == gitrepo.PendingRebase && a.pending.Branch != "" {
+		return a.pending.Branch
+	}
+	return a.branch
+}
+
+// modalOn 说「有对话框开着」。菜单命令和视图快捷键都要在模态下让位 ——
+// 菜单在系统层拦键、视图在自己那一帧拦，各写各的判断迟早漏掉一处
+// （新加一个对话框，忘了改其中一个，⌘R 就会在对话框背后偷偷刷新）。
+func (a *app) modalOn() bool {
+	return a.palette.on || a.settingsOn || a.tag.on || a.confirm.on
 }
 
 // loadRefs 在后台读分支、远程分支、标签和储藏。

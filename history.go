@@ -45,7 +45,7 @@ func (a *app) setTab(t int) {
 	switch t {
 	case 0:
 		if a.workFiles != nil {
-			a.showFiles(a.workFiles, workListID(a.repoPath, a.branch))
+			a.showFiles(a.workFiles, workListID(a.repoPath, a.workBranch()))
 		} else {
 			a.allFiles = nil
 			a.applyFilter()

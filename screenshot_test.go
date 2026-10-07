@@ -371,6 +371,43 @@ func TestDumpScreenshot(t *testing.T) {
 	ct.Frame()
 	writePNG(t, "/tmp/de-shot-pull-conflict.png", ct.Image())
 
+	// 合并/变基停在冲突上：琥珀色状态条（继续/跳过/中止）、冲突文件排在
+	// 列表里、变基时分支芯片改口。这是阶段 D 的主角，四个状态各拍一张。
+	mc, _ := mergeConflictApp(t)
+	mt := ui.NewTester(mc.view, 1280, 860)
+	still(mt)
+	mt.Frame()
+	mt.SetTitleBar(realTitleBar)
+	mt.Frame()
+	writePNG(t, "/tmp/de-shot-conflict-merge.png", mt.Image())
+	mt.SetDark(true)
+	mt.Frame()
+	writePNG(t, "/tmp/de-shot-conflict-merge-dark.png", mt.Image())
+	mt.SetDark(false)
+
+	rb, _ := rebaseConflictApp(t)
+	rtb := ui.NewTester(rb.view, 1280, 860)
+	still(rtb)
+	rtb.Frame()
+	rtb.SetTitleBar(realTitleBar)
+	rtb.Frame()
+	writePNG(t, "/tmp/de-shot-conflict-rebase.png", rtb.Image())
+	rtb.SetDark(true)
+	rtb.Frame()
+	writePNG(t, "/tmp/de-shot-conflict-rebase-dark.png", rtb.Image())
+	rtb.SetDark(false)
+
+	// 确认框：中止合并之前的那一问。确认键写完整动作名（「中止合并」），
+	// 焦点默认在「取消」上 —— 回车落在安全的那一边。
+	mc.abortOp()
+	mt.Frame()
+	writePNG(t, "/tmp/de-shot-confirm.png", mt.Image())
+	mt.SetDark(true)
+	mt.Frame()
+	writePNG(t, "/tmp/de-shot-confirm-dark.png", mt.Image())
+	mt.SetDark(false)
+	mc.confirm = confirmState{}
+
 	// 有远程的仓库收窄到最小宽度：多了三颗图标，工具栏还能不能不折行地
 	// 摆下（摆不下的按顺序进「»」）。没远程的窄窗是上面那张 de-shot-narrow。
 	rt.SetSize(720, 620)
@@ -378,6 +415,14 @@ func TestDumpScreenshot(t *testing.T) {
 	writePNG(t, "/tmp/de-shot-remote-narrow.png", rt.Image())
 	rt.SetSize(1280, 860)
 	rt.Frame()
+
+	// 卡在冲突里的仓库收窄到最小宽度：状态条上两行话加三颗按钮，
+	// 720px 下会不会把正文挤没、按钮会不会折行。
+	mt.SetSize(720, 620)
+	mt.Frame()
+	writePNG(t, "/tmp/de-shot-conflict-narrow.png", mt.Image())
+	mt.SetSize(1280, 860)
+	mt.Frame()
 }
 
 // sampleExplanation 是一段有代表性的模型输出：一句话总结、要点、行内代码、

@@ -33,6 +33,17 @@ const (
 	OpFetch
 	OpPull
 	OpPush
+	OpMerge
+	OpRebase
+	OpCherryPick
+	OpRevert
+	OpReset
+	OpBranch
+	OpStash
+	OpAmend
+	OpConflict
+	OpForcePush
+	OpAm // 用户自己在终端里跑的补丁序列停在半路（git am）
 )
 
 // Describe 把 git 的错误整理成人话。
@@ -98,17 +109,30 @@ func Describe(op Op, err error) Failure {
 		f.Hint = "检查网络，以及 git remote -v 里的地址。"
 
 	// —— 推送被拒 ——
+	//
+	// stale info 和标签已存在都排在最前：它们的原话里都带 `! [rejected]`，
+	// 落到下面那条泛化的 [rejected] 上会被说成「远程有你本地没有的提交」——
+	// 对着一条标签说「先拉取」是答非所问。
+	case strings.Contains(low, "stale info"):
+		f.Title = "远程上有你还没见过的提交"
+		f.Hint = "强制推送用的是 --force-with-lease：远程得还是你上次抓取时的样子才肯推。先抓取看一眼别人改了什么 —— 确认要覆盖，再点一次。"
+	case strings.Contains(low, "tag already exists in the remote"):
+		f.Title = "远程上已经有这个标签"
+		f.Hint = "标签不能就地覆盖。确认要改它，在终端里 git push --force origin refs/tags/<名字>。"
 	case strings.Contains(low, "non-fast-forward"),
 		strings.Contains(low, "fetch first"),
 		strings.Contains(low, "[rejected]"):
 		f.Title = "远程有你本地没有的提交"
-		f.Hint = "先拉取（Pull），合完再推。"
+		f.Hint = "先拉取（Pull），合完再推。这条分支要是你刚变基过的，用「远程 ▸ 强制推送」覆盖远程那一份 —— 它只在远程还是你上次看到的样子时才肯推，别人新推的东西不会被吃掉。"
 	case strings.Contains(low, "protected branch"),
 		strings.Contains(low, "pre-receive hook declined"),
 		strings.Contains(low, "gh006"),
 		strings.Contains(low, "gh013"):
 		f.Title = "远程拒绝了这个推送"
 		f.Hint = "这个分支受保护，改动要走 Pull Request。"
+	case strings.Contains(low, "no configured push destination"):
+		f.Title = "这个仓库没有推送目标"
+		f.Hint = "在终端里 git remote add origin <地址> 加一条远程。"
 
 	// —— 拉取 ——
 	case strings.Contains(low, "need to specify how to reconcile divergent branches"):
@@ -132,15 +156,73 @@ func Describe(op Op, err error) Failure {
 		// 分离 HEAD 上拉取/推送都会撞这句。出路不是「重试」，是先有分支。
 		f.Title = "现在没有分支在手上"
 		f.Hint = "HEAD 是分离的 —— 先新建一条分支（或者检出已有的分支），再拉取和推送。"
+
+	// —— 正卡在合并/变基中间 ——
+	//
+	// 这一组必须排在下面那条泛化的「有冲突」之前：它们的原话里也带
+	// conflict / merge 字样（"Exiting because of an unresolved conflict"、
+	// "is now empty, possibly due to conflict resolution"），落进泛化那条
+	// 就丢掉「该点哪颗按钮」—— 而那是用户此刻唯一需要知道的事。
+	//
+	// 「还没收尾」和「没有可收尾的」是两个相反的处境，分开说：前者指路
+	// 状态条，后者是竞态（多半刚在终端里做完了），指路刷新。
+	case strings.Contains(low, "no rebase in progress"),
+		strings.Contains(low, "no cherry-pick or revert in progress"),
+		strings.Contains(low, "no merge in progress"),
+		strings.Contains(low, "no merge to abort"):
+		f.Title = "这一步已经不在进行中了"
+		f.Hint = "界面显示的是旧状态（多半已经做完或者被中止了）。刷新一下看最新状况 —— 刚才那一下没有改坏任何东西。"
+	case strings.Contains(low, "have not concluded your merge"),
+		strings.Contains(low, "already a rebase-merge directory"),
+		strings.Contains(low, "already a rebase-apply directory"),
+		strings.Contains(low, "already in progress"):
+		f.Title = "上一步还没收尾"
+		f.Hint = "仓库还停在合并或变基中间（顶上的状态条写着是哪一步）。先「继续」或者「中止」把它了结，再做这件事。"
+	case strings.Contains(low, "unmerged files"),
+		// rebase --continue 撞未解决时说的话和 merge/cherry-pick 不一样：
+		// 没有 "unmerged files"，是逐文件一句 "a.txt: needs merge" 加
+		// "You must edit all merge conflicts"（实测 git 2.50）。
+		strings.Contains(low, "you must edit all merge conflicts"),
+		strings.Contains(low, "unresolved conflict"):
+		f.Title = "还有文件没解决完"
+		f.Hint = "文件列表里标 ! 的就是没解决的：逐个挑一边（或者手工改完「标记为已解决」），再点状态条里的「继续」。"
+	case strings.Contains(low, "you need to resolve your current index first"),
+		strings.Contains(low, "could not write index"),
+		strings.Contains(low, "needs merge"):
+		f.Title = "有冲突没收尾"
+		f.Hint = "仓库还停在没解决的冲突里（顶上的状态条写着是哪一步）—— 切换、储藏、开新的一步都得先把它了结：解决完「继续」，或者「中止」。"
+	case strings.Contains(low, "is now empty"):
+		f.Title = "这一步没有产生任何改动"
+		f.Hint = "解决后的结果和当前分支一模一样，git 不肯造一个空提交。点状态条里的「跳过」，接着走后面的。"
+	case strings.Contains(low, "is a merge but no -m option was given"):
+		f.Title = "这是一个合并提交"
+		f.Hint = "合并提交连着两条历史，git 不知道按哪边拣。要拣的话得在终端里写明 git cherry-pick -m 1 <哈希>（1 = 留在当前分支那边）。"
+
+	// —— 有冲突 ——
+	// 通用那条排在这一组的最后：合并、变基、拣选、回退、储藏、拉取都会
+	// 走到它，拉取只是其中之一。标题按 op 说清是哪一步 —— 光说「有冲突」，
+	// 用户还得自己回头猜这是刚才哪一下，而那决定了他接下来按哪颗按钮。
 	case strings.Contains(low, "conflict"),
 		strings.Contains(low, "automatic merge failed"):
-		f.Title = "合并有冲突"
-		f.Hint = "解决冲突文件（列表里标 !）之后提交；或者撤销这次合并。"
+		f.Title = conflictTitle(op)
+		if op == OpStash {
+			// stash apply/pop 撞冲突不会留下可以「中止」的状态（不写
+			// MERGE_HEAD，也没有 sequencer），状态条只会说「有 N 个冲突
+			// 文件要解决」。不写这句，用户会去找一颗不存在的按钮。
+			f.Hint = "列表里标 ! 的就是冲突文件：挑一边解决（右键菜单，或者手工改完「标记为已解决」）再提交。这一步没有「中止」—— 但储藏的条目还在，随时能取回。"
+		} else {
+			f.Hint = "列表里标 ! 的就是冲突文件：逐个挑一边解决，再点状态条里的「继续」；不想继续就「中止」，一切回到动手之前。"
+		}
 
-	// —— 切换被挡 ——
-	case strings.Contains(low, "would be overwritten"):
+	// —— 工作区脏，切换/合并/变基被挡 ——
+	//
+	// 「暂存」不解决这类问题（改动还在工作区里），提交或储藏才解决 ——
+	// 所以别照着老话写「先暂存」。
+	case strings.Contains(low, "would be overwritten"),
+		strings.Contains(low, "cannot rebase"),
+		strings.Contains(low, "cannot pull with rebase"):
 		f.Title = "有未提交的改动挡着"
-		f.Hint = "先提交或暂存这些文件，再切换。"
+		f.Hint = "先提交或者储藏这些改动再继续 —— 切换、合并、变基都要求先把手头这份放下。储藏会把它们收进一个条目，随时能取回。"
 
 	// —— 仓库被占 / 引用消失 / 名称冲突 ——
 	case strings.Contains(low, "index.lock"):
@@ -153,8 +235,19 @@ func Describe(op Op, err error) Failure {
 		f.Title = "这条引用已经不在了"
 		f.Hint = "刷新一下 —— 远端可能被 prune 掉了。"
 	case strings.Contains(low, "a branch named") && strings.Contains(low, "already exists"):
+		// 新建和重命名撞的是同一句话（实测），措辞得同时服务两条路 ——
+		// 老话「直接检出本地那条」对重命名是答非所问，他要的正是这个名字。
 		f.Title = "本地已经有这条分支了"
-		f.Hint = "直接检出本地那条。"
+		f.Hint = "换个名字。想切到原来那条的话，关掉对话框，在分支列表里双击它。"
+	case strings.Contains(low, "not a valid branch name"):
+		f.Title = "这个名字不能当分支名"
+		f.Hint = "别用空格和 ~ ^ : ? * [ \\ 这些字符；斜杠可以（feature/x 这种）。"
+	case strings.Contains(low, "is not fully merged"):
+		f.Title = "这条分支上有还没合并的提交"
+		f.Hint = "删掉它，上面那些提交就再没有分支认领了。确认不要了就强制删除；拿不准就先把它合并进来。"
+	case strings.Contains(low, "cannot delete branch"):
+		f.Title = "这条分支正被用着"
+		f.Hint = "它在一个工作区里检出着（当前分支，或者另一个 worktree），git 不让删。先切到别的分支再说。"
 	case strings.Contains(low, "tag") && strings.Contains(low, "already exists"):
 		f.Title = "已经有同名标签"
 		f.Hint = "换一个名字。"
@@ -179,6 +272,9 @@ func Describe(op Op, err error) Failure {
 	case strings.Contains(low, "nothing to commit"):
 		f.Title = "没有可提交的东西"
 		f.Hint = "先把要提交的文件或改动块勾上。"
+	case strings.Contains(low, "nothing to amend"):
+		f.Title = "还没有提交可以改"
+		f.Hint = "这个仓库还没有任何提交 ——「修改上次提交」得先有一条上次提交。先把第一次提交做出来。"
 	case strings.Contains(low, "hook") && (strings.Contains(low, "exited with code") ||
 		strings.Contains(low, "failed") || strings.Contains(low, "declined")):
 		f.Title = "提交被仓库的钩子拦下了"
@@ -192,6 +288,29 @@ func Describe(op Op, err error) Failure {
 		f.Hint = "文件可能刚被改过，列表已经刷新，重新试一次。"
 	}
 	return f
+}
+
+// conflictTitle 说清「冲突是哪一步撞上的」。
+//
+// 冲突的解法按操作不同：合并/拣选/回退解决完「继续」就收尾，变基后面
+// 还排着一队提交，储藏根本没有可继续的步骤。只说「有冲突」，等于把
+// 「接下来按哪颗按钮」的问题又丢回给用户。
+func conflictTitle(op Op) string {
+	switch op {
+	case OpMerge:
+		return "合并撞上了冲突"
+	case OpRebase:
+		return "变基撞上了冲突"
+	case OpCherryPick:
+		return "拣选撞上了冲突"
+	case OpRevert:
+		return "回退撞上了冲突"
+	case OpPull:
+		return "拉取撞上了冲突"
+	case OpStash:
+		return "储藏的改动和手头的文件冲突了"
+	}
+	return "有冲突要解决"
 }
 
 // opTitle 是「认不出具体错误」时的兜底标题：至少说清是哪一步没成。
@@ -211,6 +330,28 @@ func opTitle(op Op) string {
 		return "拉取没成功"
 	case OpPush:
 		return "推送没成功"
+	case OpMerge:
+		return "合并没成功"
+	case OpRebase:
+		return "变基没成功"
+	case OpCherryPick:
+		return "拣选没成功"
+	case OpRevert:
+		return "回退没成功"
+	case OpReset:
+		return "重置没成功"
+	case OpBranch:
+		return "分支操作没成功"
+	case OpStash:
+		return "储藏没成功"
+	case OpAmend:
+		return "修改上次提交没成功"
+	case OpConflict:
+		return "解决冲突没成功"
+	case OpForcePush:
+		return "强制推送没成功"
+	case OpAm:
+		return "应用补丁没成功"
 	}
 	return "这个操作没成功"
 }

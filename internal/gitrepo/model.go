@@ -66,11 +66,15 @@ type File struct {
 type Model struct {
 	Repo     *Repo
 	Branch   string
-	Detached bool // HEAD 不在任何分支上（检出过标签/提交）
+	Detached bool // HEAD 不在任何分支上（检出过标签/提交，或变基到一半）
 	Remotes  []string
 	Files    []File
 	TotalAdd int
 	TotalDel int
+
+	// Pending 是仓库正卡在哪一步写操作中间（合并/变基/拣选/回退/am 撞了
+	// 冲突停着）。零值 = 没卡住。
+	Pending Pending
 }
 
 // Load 读取工作区相对 HEAD 的全部变更，按「已暂存」「未暂存」分成两段。
@@ -108,7 +112,7 @@ func (r *Repo) Load(ctx context.Context) (*Model, error) {
 	staged := indexByPath(diff.Parse(string(rawStaged)))
 	unstaged := indexByPath(diff.Parse(string(rawUnstaged)))
 
-	m := &Model{Repo: r, Branch: branch, Detached: detached, Remotes: remotes}
+	m := &Model{Repo: r, Branch: branch, Detached: detached, Remotes: remotes, Pending: r.pending()}
 	appendFile := func(f File) {
 		m.Files = append(m.Files, f)
 		m.TotalAdd += f.AddCount
