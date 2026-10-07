@@ -480,7 +480,7 @@ func TestExpansionDroppedWhenListChanges(t *testing.T) {
 	a.expanded = map[string]int{key: expandStep}
 
 	// 同一个对象的刷新：留着
-	a.showFiles(a.allFiles, "w:"+a.repoPath)
+	a.showFiles(a.allFiles, workListID(a.repoPath, a.branch))
 	if _, ok := a.expanded[key]; !ok {
 		t.Fatal("同一个列表刷新一次，展开状态不该丢")
 	}
@@ -488,6 +488,14 @@ func TestExpansionDroppedWhenListChanges(t *testing.T) {
 	a.showFiles(a.allFiles, "c:别处")
 	if len(a.expanded) != 0 {
 		t.Errorf("换了对象之后展开状态该清空，实际 %v", a.expanded)
+	}
+
+	// 同一个仓库、换了一条分支也是换了对象：路径一样，行号却对不上
+	//（同一个文件在另一条分支上是另一段历史），展开状态必须跟着作废。
+	a.expanded = map[string]int{key: expandStep}
+	a.showFiles(a.allFiles, workListID(a.repoPath, "另一条分支"))
+	if len(a.expanded) != 0 {
+		t.Errorf("换了分支之后展开状态该清空，实际 %v", a.expanded)
 	}
 }
 

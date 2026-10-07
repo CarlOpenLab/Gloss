@@ -2,6 +2,7 @@ package main
 
 import (
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -127,9 +128,44 @@ func (a *app) refRow(c *ui.Context, pal palette, r filetree.Row) {
 		}
 	})
 
-	if row.Clicked() {
+	// 分支和标签能检出（储藏不能，它不是一个可以站上去的位置），给它们挂
+	// 右键菜单。双击 = 检出，见下。
+	if checkoutable(*ref) {
+		row.ContextMenu(func(m *ui.Menu) { a.refMenu(m, *ref) })
+	}
+
+	// 双击要问在单击之前：这两下是各自独立的（第二下按下去时两个都是真），
+	// 反过来写的话双击会先切一次历史再检出，屏幕上闪一下完全无关的东西。
+	if row.DoubleClicked() && checkoutable(*ref) {
+		a.refDoubleClicked(n.Key)
+		a.checkoutRef(*ref)
+		return
+	}
+	if row.Clicked() && !a.swallowTrailingClick(n.Key) {
 		a.selectRef(n.Key, *ref)
 	}
+}
+
+// refDoubleClicked 记下「这一行刚被双击过」，见 swallowTrailingClick。
+func (a *app) refDoubleClicked(key string) {
+	a.dblKey, a.dblAt = key, time.Now()
+}
+
+// swallowTrailingClick 吃掉双击之后紧跟的那一次单击，返回 true。
+//
+// 一次双击是两次完整的按下抬起，而每次抬起都会让框架渲染一帧（真实鼠标也
+// 是这样，按键之间隔着好几帧）：第一下抬起已经算了一次单击，第二下抬起又
+// 算一次。后面这一次要是不吃掉，刚双击检出完，它就把界面又切去历史 tab ——
+// 用户看到的是「双击了，人却去了别的地方」。
+//
+// 时间窗用框架自己认双击的那 500ms（ui/input.go 的 lastPress）：同一个窗口
+// 里、同一行上的紧跟单击就是双击的尾巴，再晚就是用户真的又点了一下。
+func (a *app) swallowTrailingClick(key string) bool {
+	if a.dblKey == "" || a.dblKey != key || time.Since(a.dblAt) > 500*time.Millisecond {
+		return false
+	}
+	a.dblKey = ""
+	return true
 }
 
 // refGroupRow 画一个分组行（本地分支 / 远程 / 标签 / 储藏）。整行可点，

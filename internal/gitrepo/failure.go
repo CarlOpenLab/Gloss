@@ -188,11 +188,16 @@ func opTitle(op Op) string {
 // gitDetail 留 git 的原话：挑出像错误的几行（fatal:/error:/remote:/hint:/
 // CONFLICT），一行都没挑出来就整段留着。最多 3 行、约 200 字 —— Detail
 // 是「出怪问题时对得上」的凭据，不是主体，不能反过来把界面淹了。
+//
+// 带前缀那一行底下的缩进续行要一起带走：git 习惯把细节挂在冒号后面，
+// 「这些未跟踪文件会被覆盖」下面那份文件清单就是缩进的。只留带前缀的行，
+// Detail 会停在一个冒号上 —— 而用户要的正是「是哪个文件挡着」。
 func gitDetail(msg string) string {
 	msg = strings.ReplaceAll(msg, "\r\n", "\n")
+	lines := strings.Split(msg, "\n")
 	var picked []string
-	for _, l := range strings.Split(msg, "\n") {
-		l = strings.TrimSpace(l)
+	for i, raw := range lines {
+		l := strings.TrimSpace(raw)
 		if l == "" {
 			continue
 		}
@@ -200,6 +205,12 @@ func gitDetail(msg string) string {
 			strings.HasPrefix(l, "remote:") || strings.HasPrefix(l, "hint:") ||
 			strings.HasPrefix(l, "warning:") || strings.Contains(l, "CONFLICT") {
 			picked = append(picked, l)
+			if i+1 < len(lines) {
+				next := lines[i+1]
+				if strings.HasPrefix(next, "\t") || strings.HasPrefix(next, "  ") {
+					picked = append(picked, strings.TrimSpace(next))
+				}
+			}
 		}
 	}
 	if len(picked) == 0 {

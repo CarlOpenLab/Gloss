@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -55,6 +56,10 @@ type app struct {
 	repoPath string
 	repoName string
 	branch   string
+	// detached 是 HEAD 没附在任何分支上（检出过标签或某个提交）。工具栏的
+	// 分支芯片靠它换色 —— 分离 HEAD 上提交不会丢，但没有分支接着，得让人
+	// 在提交之前就知道。
+	detached bool
 	state    loadState
 	errMsg   string
 	// loadingPath 是这一趟正在读的仓库路径。它不是 repoPath：repoPath 只在
@@ -136,6 +141,10 @@ type app struct {
 	// refsClosed 记的是用户**收起过**的分组。没记过的一律展开，所以不用
 	// 再去追「哪些是第一次见到的」—— 默认展开，只有手动收起才记一笔。
 	refsClosed map[string]bool
+	// dblKey/dblAt 记着刚双击过的那一行引用，用来吃掉双击尾巴上那一次单击
+	// （见 sidebar.go 的 swallowTrailingClick）。
+	dblKey string
+	dblAt  time.Time
 
 	// —— 主区文件栏（原来的侧栏文件树）——
 	tree           []*filetree.Node
@@ -223,6 +232,9 @@ type app struct {
 	opErr   *gitrepo.Failure
 	opNote  string
 	toasted string
+
+	// tag 是「新建标签」对话框的状态（tagdialog.go）。
+	tag tagState
 
 	// commitMsg 是提交框里的消息；草稿按仓库持久化（store.Drafts），
 	// draftFor 记着当前这份草稿属于哪个仓库。
@@ -353,14 +365,15 @@ func (a *app) view(c *ui.Context) {
 	})
 	a.paletteDialog(c, pal)
 	a.settingsDialog(c, pal)
+	a.tagDialog(c, pal)
 
 	// 卡片画在最后：这一帧的 ✨ 按钮位置刚写好，卡片当帧就能摆对地方。
 	// 它在 Overlay 层，不受上面的布局影响。
 	a.explainCard(c, pal)
 
 	// Esc 关掉卡片。放在最后，让卡片里正在编辑的输入框先有机会处理它。
-	// 命令栏和设置对话框开着的时候它们自己会处理 Esc，这里让位。
-	if a.explainOpen() && !a.palette.on && !a.settingsOn && c.Shortcut(0, ui.KeyEscape) {
+	// 命令栏和两个对话框开着的时候它们自己会处理 Esc，这里让位。
+	if a.explainOpen() && !a.palette.on && !a.settingsOn && !a.tag.on && c.Shortcut(0, ui.KeyEscape) {
 		a.closeExplain()
 	}
 }
@@ -472,10 +485,7 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 			}
 		})
 
-		if a.branch != "" {
-			ui.Text(c, a.branch).FontSize(11).TextColor(pal.ref).
-				Padding(2, 8).Radius(4).Background(t.Surface)
-		}
+		a.branchChip(c, t, pal)
 
 		ui.Spacer(c)
 
@@ -536,6 +546,31 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 		Background(pal.appBg).
 		Border(0, pal.border).
 		Label("工具栏")
+}
+
+// branchChip 是工具栏上那枚「现在在哪条分支上」的小牌子。
+//
+// 分离 HEAD 时换成警示色并把话说全：这时候提交是能提交的，只是没有分支
+// 接着它 —— 用户看不到任何异常，直到切走之后才发现那个提交找不回来了。
+// 芯片是唯一一个常驻的分支指示，这一句必须在它身上说。
+func (a *app) branchChip(c *ui.Context, t *ui.Theme, pal palette) {
+	if a.branch == "" {
+		return
+	}
+	name, fg, bg := a.branch, pal.ref, t.Surface
+	border := ui.Transparent
+	tip := "当前分支 " + a.branch
+	if a.detached {
+		name, fg = "分离 HEAD："+a.branch, t.Warning
+		// 底色只加一点点，靠一圈描边立住：琥珀色全铺在这条浅灰的工具栏上
+		// 是一块发闷的脏黄，加了边才读得出是「一块标出来的状态」。
+		bg = t.Warning.Alpha(0.10)
+		border = t.Warning.Alpha(0.45)
+		tip = "HEAD 没有附在任何分支上（检出标签或某个提交之后就是这样）。" +
+			"在这里提交会成为游离提交 —— 要留下它，先新建一条分支。"
+	}
+	ui.Text(c, name).FontSize(11).SingleLine().TextColor(fg).
+		Padding(2, 8).Radius(4).Background(bg).Border(1, border).Tooltip(tip)
 }
 
 // mainArea 是右侧主区：顶上可能有一条操作结果横幅，然后是两个 tab 的内容；
@@ -780,6 +815,7 @@ func (a *app) applyModel(m *gitrepo.Model) {
 	a.repoPath = m.Repo.Root
 	a.repoName = m.Repo.Name
 	a.branch = m.Branch
+	a.detached = m.Detached
 
 	// 换到另一个仓库（或者第一次打开）时把这个仓库存下的提交草稿拾回来。
 	// 刷新同一个仓库不动它 —— 正在打的字不该被一次刷新吃掉。
@@ -796,7 +832,7 @@ func (a *app) applyModel(m *gitrepo.Model) {
 	// 正在看历史时别把主区切回工作区 —— 用户下一次刷新可能只是想
 	// 更新一下提交列表。
 	if a.tab == 0 {
-		a.showFiles(a.workFiles, "w:"+m.Repo.Root)
+		a.showFiles(a.workFiles, workListID(m.Repo.Root, m.Branch))
 	} else {
 		a.loadCommits()
 	}

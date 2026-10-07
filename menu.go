@@ -2,6 +2,8 @@ package main
 
 import (
 	"github.com/egoist/mygo"
+
+	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
 )
 
 // 菜单栏。
@@ -40,6 +42,7 @@ type appMenu struct {
 	split   *mygo.MenuItem
 	refresh *mygo.MenuItem
 	commit  *mygo.MenuItem
+	newTag  *mygo.MenuItem
 }
 
 // buildAppMenu 搭出应用的菜单栏，并把需要跟着状态走的几项记在 a.menu 上。
@@ -53,6 +56,7 @@ func buildAppMenu(a *app) *mygo.Menu {
 	m.sidebar = a.menuToggle("显示侧栏", "CmdOrCtrl+Shift+B", mygo.MenuItemCheckbox, true, a.toggleSidebar)
 	m.refresh = a.menuCmd("刷新", "CmdOrCtrl+R", a.reload)
 	m.commit = a.menuCmd("提交", "CmdOrCtrl+Return", a.doCommit)
+	m.newTag = a.menuCmd("新建标签…", "", a.newTagAtHead)
 
 	view := []*mygo.MenuItem{
 		m.tabDiff, m.tabHist,
@@ -82,6 +86,7 @@ func buildAppMenu(a *app) *mygo.Menu {
 			a.menuCmd("打开仓库…", "CmdOrCtrl+O", a.chooseFolder),
 			mygo.Separator(),
 			m.commit,
+			m.newTag,
 			mygo.Separator(),
 			{Role: mygo.RoleClose, Label: "关闭窗口"},
 		}},
@@ -173,7 +178,7 @@ func (a *app) menuToggle(label, accel string, kind mygo.MenuItemType, checked bo
 // 两边得一个脾气 —— 设置或命令栏开着的时候，⌘R 不该在背后偷偷刷新，
 // 命令栏也不该再叠一层。
 func (a *app) menuDo(fn func()) {
-	if a.palette.on || a.settingsOn {
+	if a.palette.on || a.settingsOn || a.tag.on {
 		return
 	}
 	if a.dispatch == nil {
@@ -208,6 +213,7 @@ func (a *app) syncMenu() {
 	enableItem(m.tabDiff, !noRepo)
 	enableItem(m.tabHist, !noRepo)
 	enableItem(m.commit, a.canCommit())
+	enableItem(m.newTag, !noRepo && a.op == gitrepo.OpNone)
 }
 
 // checkItem 只在勾真的会变的时候才去动它。

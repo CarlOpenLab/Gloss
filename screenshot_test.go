@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	"image/png"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -251,6 +253,59 @@ func TestDumpScreenshot(t *testing.T) {
 	ht.SetDark(false)
 	ht.Frame()
 	writePNG(t, "/tmp/de-shot-history-split.png", ht.Image())
+
+	// 打标签对话框：历史里右键一个提交点出来的那张表单
+	cm := hist.commits[0]
+	hist.openTagDialog(cm.Hash, cm.Short+" · "+cm.Subject)
+	hist.tag.name = "v1.0.0"
+	hist.tag.msg = "第一个正式版本。\n\n- 提交拓扑图\n- 逐块 AI 解释"
+	ht.Frame()
+	writePNG(t, "/tmp/de-shot-tag.png", ht.Image())
+	ht.SetDark(true)
+	ht.Frame()
+	writePNG(t, "/tmp/de-shot-tag-dark.png", ht.Image())
+
+	// 重名：错误留在对话框里，名字和说明一个字都不能丢
+	hist.tag.err = gitrepo.Describe(gitrepo.OpTag, errors.New("fatal: tag 'v1.0.0' already exists"))
+	ht.SetDark(false)
+	ht.Frame()
+	writePNG(t, "/tmp/de-shot-tag-error.png", ht.Image())
+	hist.tag = tagState{}
+
+	// 分离 HEAD：工具栏那枚分支芯片换成警示色，把话说全
+	det := branchApp(t)
+	runGit(t, det.repoPath, "checkout", "-q", "--detach", "HEAD")
+	det.reload()
+	settle(t, det)
+	dt := ui.NewTester(det.view, 1280, 860)
+	still(dt)
+	dt.Frame()
+	dt.SetTitleBar(realTitleBar)
+	dt.Frame()
+	writePNG(t, "/tmp/de-shot-detached.png", dt.Image())
+	dt.SetDark(true)
+	dt.Frame()
+	writePNG(t, "/tmp/de-shot-detached-dark.png", dt.Image())
+
+	// 检出被工作区挡下：这里让 git 真报一次错再翻，拍到的才是用户会看到的话
+	blk := branchApp(t)
+	writeFile(t, filepath.Join(blk.repoPath, "b.txt"), "未跟踪的同名文件\n")
+	blk.reload()
+	settle(t, blk)
+	if repo, err := gitrepo.Open(context.Background(), blk.repoPath); err == nil {
+		ferr := repo.CheckoutLocal(context.Background(), "topic")
+		f := gitrepo.Describe(gitrepo.OpCheckout, ferr)
+		blk.opErr = &f
+	}
+	bt2 := ui.NewTester(blk.view, 1280, 860)
+	still(bt2)
+	bt2.Frame()
+	bt2.SetTitleBar(realTitleBar)
+	bt2.Frame()
+	writePNG(t, "/tmp/de-shot-checkout-blocked.png", bt2.Image())
+	bt2.SetDark(true)
+	bt2.Frame()
+	writePNG(t, "/tmp/de-shot-checkout-blocked-dark.png", bt2.Image())
 }
 
 // sampleExplanation 是一段有代表性的模型输出：一句话总结、要点、行内代码、

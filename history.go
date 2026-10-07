@@ -45,7 +45,7 @@ func (a *app) setTab(t int) {
 	switch t {
 	case 0:
 		if a.workFiles != nil {
-			a.showFiles(a.workFiles, "w:"+a.repoPath)
+			a.showFiles(a.workFiles, workListID(a.repoPath, a.branch))
 		} else {
 			a.allFiles = nil
 			a.applyFilter()
@@ -373,8 +373,21 @@ func (a *app) commitRow(c *ui.Context, pal palette, i int) {
 				Width(commitHashW).Shrink(0).TextColor(t.TextMuted)
 		})
 	})
+	// 右键菜单挂在整行上（含图形栏那一块）：一行 30px 高，能按的面积越大
+	// 越好。挂在行上之后行内不再有别的菜单，右键一定落在这里。
+	row.ContextMenu(func(m *ui.Menu) { a.commitMenu(m, cm) })
+
 	if row.Clicked() {
 		a.loadCommit(i)
+	}
+}
+
+// commitMenu 是提交行的右键菜单。
+func (a *app) commitMenu(m *ui.Menu, cm gitrepo.Commit) {
+	// 「新建标签…」后面还有别的事可做（拣选、回退……），先摆一条，位置
+	// 留着。菜单文案带上短哈希，用户能确认自己点的是哪一行。
+	if m.Item("在 " + cm.Short + " 上新建标签…").Chosen() {
+		a.openTagDialog(cm.Hash, cm.Short+" · "+cm.Subject)
 	}
 }
 
