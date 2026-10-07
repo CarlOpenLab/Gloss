@@ -35,17 +35,18 @@ const appName = "Gloss"
 // 要记着的有两种：单选/复选的勾（菜单展开时看得见，勾错了很扎眼），和
 // 有没有东西可作用的可用性（没开仓库时，刷新和两个 tab 都没有意义）。
 type appMenu struct {
-	tabDiff *mygo.MenuItem
-	tabHist *mygo.MenuItem
-	sidebar *mygo.MenuItem
-	unified *mygo.MenuItem
-	split   *mygo.MenuItem
-	refresh *mygo.MenuItem
-	commit  *mygo.MenuItem
-	newTag  *mygo.MenuItem
-	fetch   *mygo.MenuItem
-	pull    *mygo.MenuItem
-	push    *mygo.MenuItem
+	tabDiff   *mygo.MenuItem
+	tabHist   *mygo.MenuItem
+	sidebar   *mygo.MenuItem
+	unified   *mygo.MenuItem
+	split     *mygo.MenuItem
+	refresh   *mygo.MenuItem
+	commit    *mygo.MenuItem
+	newBranch *mygo.MenuItem
+	newTag    *mygo.MenuItem
+	fetch     *mygo.MenuItem
+	pull      *mygo.MenuItem
+	push      *mygo.MenuItem
 }
 
 // buildAppMenu 搭出应用的菜单栏，并把需要跟着状态走的几项记在 a.menu 上。
@@ -59,6 +60,7 @@ func buildAppMenu(a *app) *mygo.Menu {
 	m.sidebar = a.menuToggle("显示侧栏", "CmdOrCtrl+Shift+B", mygo.MenuItemCheckbox, true, a.toggleSidebar)
 	m.refresh = a.menuCmd("刷新", "CmdOrCtrl+R", a.reload)
 	m.commit = a.menuCmd("提交", "CmdOrCtrl+Return", a.doCommit)
+	m.newBranch = a.menuCmd("新建分支…", "CmdOrCtrl+Shift+N", a.newBranchAtHead)
 	m.newTag = a.menuCmd("新建标签…", "", a.newTagAtHead)
 
 	// 抓取 / 拉取 / 推送的键是挑出来的：F 和 P 是 Fetch 和 Pull，U 是「上传」
@@ -96,6 +98,7 @@ func buildAppMenu(a *app) *mygo.Menu {
 			a.menuCmd("打开仓库…", "CmdOrCtrl+O", a.chooseFolder),
 			mygo.Separator(),
 			m.commit,
+			m.newBranch,
 			m.newTag,
 			mygo.Separator(),
 			{Role: mygo.RoleClose, Label: "关闭窗口"},
@@ -232,6 +235,7 @@ func (a *app) syncMenu() {
 	enableItem(m.tabDiff, !noRepo)
 	enableItem(m.tabHist, !noRepo)
 	enableItem(m.commit, a.canCommit())
+	enableItem(m.newBranch, !noRepo && a.op == gitrepo.OpNone)
 	enableItem(m.newTag, !noRepo && a.op == gitrepo.OpNone)
 
 	// 远程三条：没有远程就没得抓也没得推（`git fetch --all` 在这种情况下

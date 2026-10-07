@@ -302,6 +302,27 @@ func TestDumpScreenshot(t *testing.T) {
 	ht.SetDark(false)
 	hist.newBranch = branchState{}
 
+	// 重命名分支对话框：预填当前分支名
+	hist.openRenameBranchDialog("feat2")
+	hist.rename.newName = "feature/payment"
+	ht.Frame()
+	writePNG(t, "/tmp/de-shot-rename.png", ht.Image())
+	ht.SetDark(true)
+	ht.Frame()
+	writePNG(t, "/tmp/de-shot-rename-dark.png", ht.Image())
+	ht.SetDark(false)
+	hist.rename = renameState{}
+
+	// 删除分支确认对话框
+	hist.askConfirm(confirmState{
+		title: "删除分支 feat2",
+		body:  "确定要删除本地分支 feat2 吗？",
+		yes:   "删除分支",
+	})
+	ht.Frame()
+	writePNG(t, "/tmp/de-shot-delete-branch.png", ht.Image())
+	hist.confirm = confirmState{}
+
 	// 分离 HEAD：工具栏那枚分支芯片换成警示色，把话说全
 	det := branchApp(t)
 	runGit(t, det.repoPath, "checkout", "-q", "--detach", "HEAD")

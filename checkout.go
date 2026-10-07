@@ -163,17 +163,39 @@ func workListID(repoPath, branch string) string {
 }
 
 // refMenu 是侧栏一条引用的右键菜单。
-//
-// 文案直接把去向写出来：「检出标签 v1（分离 HEAD）」比「检出」多出来的那
-// 半句，是用户需要知道、而我们不该替他省略的事 —— 分离 HEAD 是这次操作的
-// 后果，不是一句可以塞进文档里的细节。
 func (a *app) refMenu(m *ui.Menu, ref gitrepo.Ref) {
-	plan, ok := a.planCheckout(ref)
-	if !ok {
-		return
+	switch ref.Kind {
+	case gitrepo.RefLocal:
+		a.localBranchMenu(m, ref)
+	default:
+		plan, ok := a.planCheckout(ref)
+		if !ok {
+			return
+		}
+		busy := a.op != gitrepo.OpNone
+		if m.Item(plan.menu).Disabled(busy || plan.noop).Chosen() {
+			a.checkoutRef(ref)
+		}
 	}
+}
+
+// localBranchMenu 是本地分支的右键菜单：检出、重命名、删除、复制分支名。
+func (a *app) localBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
 	busy := a.op != gitrepo.OpNone
-	if m.Item(plan.menu).Disabled(busy || plan.noop).Chosen() {
+	isHead := ref.Head || ref.Name == a.branch
+
+	if m.Item("检出 " + ref.Name).Disabled(busy || isHead).Chosen() {
 		a.checkoutRef(ref)
+	}
+	m.Separator()
+	if m.Item("重命名 " + ref.Name + "…").Disabled(busy).Chosen() {
+		a.openRenameBranchDialog(ref.Name)
+	}
+	if m.Item("删除分支 " + ref.Name + "…").Disabled(busy || isHead).Chosen() {
+		a.promptDeleteBranch(ref.Name)
+	}
+	m.Separator()
+	if m.Item("复制分支名").Disabled(busy).Chosen() {
+		a.copyText = ref.Name
 	}
 }

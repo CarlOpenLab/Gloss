@@ -80,6 +80,13 @@ func Describe(op Op, err error) Failure {
 			Hint:  "界面拿的是旧状态（多半已经解决掉了）。列表已经重新读过 —— 刚才那一下没有改坏任何东西。",
 		}
 	}
+	if errors.Is(err, ErrBranchNotMerged) {
+		return Failure{
+			Title:  "这条分支上有还没合并的提交",
+			Hint:   "删掉它，上面那些提交就再没有分支认领了。确认不要了就强制删除；拿不准就先把它合并进来。",
+			Detail: err.Error(),
+		}
+	}
 
 	msg := err.Error()
 	low := strings.ToLower(msg)

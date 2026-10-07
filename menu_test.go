@@ -74,6 +74,7 @@ func TestMenuAccelerators(t *testing.T) {
 		"恢复默认字号": "CmdOrCtrl+0",
 		"命令栏…":   "CmdOrCtrl+K",
 		"筛选文件":   "CmdOrCtrl+F",
+		"新建分支…":  "CmdOrCtrl+Shift+N",
 		"抓取":     "CmdOrCtrl+Shift+F",
 		"拉取":     "CmdOrCtrl+Shift+P",
 		"推送":     "CmdOrCtrl+Shift+U",
@@ -150,6 +151,7 @@ func TestMenuWithoutRepo(t *testing.T) {
 	wantEnabled(t, m, "刷新", false)
 	wantEnabled(t, m, "查看改动", false)
 	wantEnabled(t, m, "查看历史", false)
+	wantEnabled(t, m, "新建分支…", false)
 	wantEnabled(t, m, "打开仓库…", true)
 	wantEnabled(t, m, "放大代码字号", true)
 	wantEnabled(t, m, "筛选文件", true)

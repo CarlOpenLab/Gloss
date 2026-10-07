@@ -34,6 +34,7 @@ func (a *app) commands() []command {
 		{"提交", "⌘⏎", func(a *app) { a.doCommit() }},
 		{"暂存全部改动", "", func(a *app) { a.stageAll() }},
 		{"新建标签…", "", func(a *app) { a.newTagAtHead() }},
+		{"新建分支…", "⌘⇧N", func(a *app) { a.newBranchAtHead() }},
 		{"抓取", "⌘⇧F", func(a *app) { a.doFetch() }},
 		{"拉取", "⌘⇧P", func(a *app) { a.doPull() }},
 		{"推送", "⌘⇧U", func(a *app) { a.doPush() }},

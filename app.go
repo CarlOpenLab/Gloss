@@ -243,10 +243,10 @@ type app struct {
 	// tag 是「新建标签」对话框的状态（tagdialog.go）。
 	tag tagState
 
-	// reset / newBranch 是代价更大或要填一填的两张表单（resetdialog.go /
-	// newbranchdialog.go），和 tag 一个形状：状态挂在 app 上。
+	// reset / newBranch / rename 是表单对话框，和 tag 一个形状：状态挂在 app 上。
 	reset     resetState
 	newBranch branchState
+	rename    renameState
 
 	// copyText 是「复制哈希」这类待写进剪贴板的文本。菜单回调里拿不到
 	// *ui.Context（WriteClipboard 是它的方法），先记在这里，view 开头
@@ -401,6 +401,7 @@ func (a *app) view(c *ui.Context) {
 	a.tagDialog(c, pal)
 	a.resetDialog(c, pal)
 	a.newBranchDialog(c, pal)
+	a.renameBranchDialog(c, pal)
 	a.confirmDialog(c, pal)
 
 	// 卡片画在最后：这一帧的 ✨ 按钮位置刚写好，卡片当帧就能摆对地方。
@@ -924,7 +925,7 @@ func (a *app) workBranch() string {
 // 菜单在系统层拦键、视图在自己那一帧拦，各写各的判断迟早漏掉一处
 // （新加一个对话框，忘了改其中一个，⌘R 就会在对话框背后偷偷刷新）。
 func (a *app) modalOn() bool {
-	return a.palette.on || a.settingsOn || a.tag.on || a.reset.on || a.newBranch.on || a.confirm.on
+	return a.palette.on || a.settingsOn || a.tag.on || a.reset.on || a.newBranch.on || a.rename.on || a.confirm.on
 }
 
 // loadRefs 在后台读分支、远程分支、标签和储藏。

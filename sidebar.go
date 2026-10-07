@@ -128,11 +128,8 @@ func (a *app) refRow(c *ui.Context, pal palette, r filetree.Row) {
 		}
 	})
 
-	// 分支和标签能检出（储藏不能，它不是一个可以站上去的位置），给它们挂
-	// 右键菜单。双击 = 检出，见下。
-	if checkoutable(*ref) {
-		row.ContextMenu(func(m *ui.Menu) { a.refMenu(m, *ref) })
-	}
+	// 右键菜单按引用的种类给出可用操作；双击 = 检出（仅分支和标签支持）。
+	row.ContextMenu(func(m *ui.Menu) { a.refMenu(m, *ref) })
 
 	// 双击要问在单击之前：这两下是各自独立的（第二下按下去时两个都是真），
 	// 反过来写的话双击会先切一次历史再检出，屏幕上闪一下完全无关的东西。
