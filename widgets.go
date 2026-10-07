@@ -255,6 +255,9 @@ const toolIconSize = 15
 // 两者都写上，谁也替代不了谁。
 // off 为真时画成灰的（框架压到半透明）、点也不响应：没有对象可作用时，
 // 一颗点下去什么都没发生的按钮比一颗灰掉的按钮更让人困惑。
+//
+// Tooltip 写在 Disabled 前头：反过来的话灰按钮就弹不出解释了（原因见
+// remote.go 的 iconToolButton）。
 func toolButton(c *ui.Context, label, tip string, off bool, icon func(p *ui.Painter, r ui.Rect, col ui.Color)) bool {
 	btn := ui.Button(c, "").Label(label).Tooltip(tip).Padding(0, 8).Disabled(off)
 	fadeColors(btn)

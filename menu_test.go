@@ -74,6 +74,9 @@ func TestMenuAccelerators(t *testing.T) {
 		"恢复默认字号": "CmdOrCtrl+0",
 		"命令栏…":   "CmdOrCtrl+K",
 		"筛选文件":   "CmdOrCtrl+F",
+		"抓取":     "CmdOrCtrl+Shift+F",
+		"拉取":     "CmdOrCtrl+Shift+P",
+		"推送":     "CmdOrCtrl+Shift+U",
 	}
 	for label, accel := range want {
 		if got := menuItem(t, m, label).Accelerator; got != accel {
@@ -150,6 +153,11 @@ func TestMenuWithoutRepo(t *testing.T) {
 	wantEnabled(t, m, "打开仓库…", true)
 	wantEnabled(t, m, "放大代码字号", true)
 	wantEnabled(t, m, "筛选文件", true)
+
+	// 远程三条：连仓库都没有，更谈不上远程。
+	wantEnabled(t, m, "抓取", false)
+	wantEnabled(t, m, "拉取", false)
+	wantEnabled(t, m, "推送", false)
 }
 
 // 打开失败和没打开过是一个口径：这时候 repoPath 也记着东西（试的是哪个

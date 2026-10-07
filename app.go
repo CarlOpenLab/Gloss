@@ -60,8 +60,12 @@ type app struct {
 	// 分支芯片靠它换色 —— 分离 HEAD 上提交不会丢，但没有分支接着，得让人
 	// 在提交之前就知道。
 	detached bool
-	state    loadState
-	errMsg   string
+	// remotes 是配置的远程名（`git remote`）。抓取 / 拉取 / 推送三颗按钮的
+	// 可用性看它：`git fetch --all` 在一条远程都没有时是**静默成功**的，
+	// 等命令报错等不到「这个仓库没有远程」。
+	remotes []string
+	state   loadState
+	errMsg  string
 	// loadingPath 是这一趟正在读的仓库路径。它不是 repoPath：repoPath 只在
 	// 读完（或读失败）之后才改，而「正在重读的旧内容还能不能继续显示」要
 	// 比着它来判断 —— 换个仓库时旧仓库的 diff 一秒都不该留在屏幕上，同
@@ -518,11 +522,20 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 			a.saveViewSettings()
 		}
 
+		// 抓取 / 拉取 / 推送。摆在分段控件之后、刷新之前：左边是「在看哪儿」
+		// 和「怎么看」，从这里开始才是动作。
+		a.remoteBar(c)
+
 		switch {
 		case a.state == loadLoading:
 			ui.Spinner(c)
 		case a.tab == 1 && (a.hist == loadLoading || a.histDiff == loadLoading):
 			ui.Spinner(c)
+		case a.op != gitrepo.OpNone && a.op != gitrepo.OpCommit:
+			// 写操作在进行中。提交不走这里 —— 它自己的状态行就在提交栏上，
+			// 眼睛本来就在那儿，工具栏再报一遍是重复。
+			ui.Spinner(c)
+			ui.Text(c, a.opName).FontSize(11).TextColor(t.TextMuted).SingleLine()
 		}
 		// 「几个文件」不在这儿报了：正下方文件栏的栏头就写着同一个数字，
 		// 两行隔着几十像素重复一遍不是强调，是啰嗦。工具栏这一格只负责
@@ -816,6 +829,7 @@ func (a *app) applyModel(m *gitrepo.Model) {
 	a.repoName = m.Repo.Name
 	a.branch = m.Branch
 	a.detached = m.Detached
+	a.remotes = m.Remotes
 
 	// 换到另一个仓库（或者第一次打开）时把这个仓库存下的提交草稿拾回来。
 	// 刷新同一个仓库不动它 —— 正在打的字不该被一次刷新吃掉。

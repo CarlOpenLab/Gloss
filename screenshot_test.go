@@ -306,6 +306,78 @@ func TestDumpScreenshot(t *testing.T) {
 	bt2.SetDark(true)
 	bt2.Frame()
 	writePNG(t, "/tmp/de-shot-checkout-blocked-dark.png", bt2.Image())
+
+	// 远程：工具栏上那三颗图标按钮（这个仓库连着真的裸仓库，所以它们是亮的）
+	rem, bare := remoteApp(t)
+	runGit(t, rem.repoPath, "push", "-q", "-u", "origin", "main")
+	other := cloneOf(t, bare)
+	commitIn(t, other, "b.txt", "别人先推的\n", "别人先推的提交")
+	runGit(t, other, "push", "-q", "origin", "main")
+	commitIn(t, rem.repoPath, "c.txt", "我这边也提交了\n", "我这边的提交")
+	rem.reload()
+	settle(t, rem)
+	rt := ui.NewTester(rem.view, 1280, 860)
+	still(rt)
+	rt.Frame()
+	rt.SetTitleBar(realTitleBar)
+	rt.Frame()
+	writePNG(t, "/tmp/de-shot-remote.png", rt.Image())
+	rt.SetDark(true)
+	rt.Frame()
+	writePNG(t, "/tmp/de-shot-remote-dark.png", rt.Image())
+	rt.SetDark(false)
+
+	// 推送被拒：还是让 git 真拒一次再翻 —— Detail 里那几行原话是 gitDetail
+	// 从真实的输出里挑的，手拼一段拍不出它挑得对不对
+	if repo, err := gitrepo.Open(context.Background(), rem.repoPath); err == nil {
+		ferr := repo.Push(context.Background(), "main")
+		f := gitrepo.Describe(gitrepo.OpPush, ferr)
+		rem.opErr = &f
+	}
+	rt.Frame()
+	writePNG(t, "/tmp/de-shot-remote-error.png", rt.Image())
+	rt.SetDark(true)
+	rt.Frame()
+	writePNG(t, "/tmp/de-shot-remote-error-dark.png", rt.Image())
+	rem.opErr = nil
+
+	// 进行中：按钮灰着，工具栏上写着在做什么
+	rem.op, rem.opName = gitrepo.OpFetch, "正在抓取…"
+	rt.SetDark(false)
+	rt.Frame()
+	writePNG(t, "/tmp/de-shot-remote-busy.png", rt.Image())
+	rem.op = gitrepo.OpNone
+
+	// 拉取撞上冲突：横幅 + 冲突文件（`!`）在列表里。这是「拉取出错」最常见
+	// 的那张脸，也让冲突状态在界面上的样子有个留底。
+	con, cbare := remoteApp(t)
+	runGit(t, con.repoPath, "config", "pull.rebase", "false") // 用户自己在终端里选的那次
+	runGit(t, con.repoPath, "push", "-q", "-u", "origin", "main")
+	co := cloneOf(t, cbare)
+	commitIn(t, co, "a.txt", "别人写的版本\n", "别人的改动")
+	runGit(t, co, "push", "-q", "origin", "main")
+	commitIn(t, con.repoPath, "a.txt", "我写的版本\n", "我的改动")
+	if repo, err := gitrepo.Open(context.Background(), con.repoPath); err == nil {
+		ferr := repo.Pull(context.Background())
+		f := gitrepo.Describe(gitrepo.OpPull, ferr)
+		con.opErr = &f
+	}
+	con.reload()
+	settle(t, con)
+	ct := ui.NewTester(con.view, 1280, 860)
+	still(ct)
+	ct.Frame()
+	ct.SetTitleBar(realTitleBar)
+	ct.Frame()
+	writePNG(t, "/tmp/de-shot-pull-conflict.png", ct.Image())
+
+	// 有远程的仓库收窄到最小宽度：多了三颗图标，工具栏还能不能不折行地
+	// 摆下（摆不下的按顺序进「»」）。没远程的窄窗是上面那张 de-shot-narrow。
+	rt.SetSize(720, 620)
+	rt.Frame()
+	writePNG(t, "/tmp/de-shot-remote-narrow.png", rt.Image())
+	rt.SetSize(1280, 860)
+	rt.Frame()
 }
 
 // sampleExplanation 是一段有代表性的模型输出：一句话总结、要点、行内代码、

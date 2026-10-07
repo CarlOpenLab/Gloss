@@ -75,6 +75,21 @@ func (a *app) handleKeys(c *ui.Context) {
 		a.doCommit()
 	}
 
+	// 远程三条。可用性判断在 do* 里面（没有远程时不能跑 —— 那种情况下按钮
+	// 和菜单都是灰的，快捷键不该有第二条暗路）。
+	//
+	// 键位和 menu.go 里「远程」菜单那三条一致：真实 macOS 应用里菜单先把键
+	// 吃掉，这条路走不到；测试和没有菜单的环境走的才是这里。
+	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyF) {
+		a.doFetch()
+	}
+	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyP) {
+		a.doPull()
+	}
+	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyU) {
+		a.doPush()
+	}
+
 	// J / K 跳上下一段改动。不给它们加修饰键：review 时手一直在这两个键上。
 	// 历史 tab 里的 diff 是同一套视图，同样能用。
 	if a.state == loadReady && len(a.files) > 0 {

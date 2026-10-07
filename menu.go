@@ -43,6 +43,9 @@ type appMenu struct {
 	refresh *mygo.MenuItem
 	commit  *mygo.MenuItem
 	newTag  *mygo.MenuItem
+	fetch   *mygo.MenuItem
+	pull    *mygo.MenuItem
+	push    *mygo.MenuItem
 }
 
 // buildAppMenu 搭出应用的菜单栏，并把需要跟着状态走的几项记在 a.menu 上。
@@ -57,6 +60,13 @@ func buildAppMenu(a *app) *mygo.Menu {
 	m.refresh = a.menuCmd("刷新", "CmdOrCtrl+R", a.reload)
 	m.commit = a.menuCmd("提交", "CmdOrCtrl+Return", a.doCommit)
 	m.newTag = a.menuCmd("新建标签…", "", a.newTagAtHead)
+
+	// 抓取 / 拉取 / 推送的键是挑出来的：F 和 P 是 Fetch 和 Pull，U 是「上传」
+	// 那个 up（Push 的 P 被拉取占了）。三个都带 ⇧ —— ⌘F 已经是「筛选文件」，
+	// 而 ⌘P 在 Mac 上历来是打印，不抢。
+	m.fetch = a.menuCmd("抓取", "CmdOrCtrl+Shift+F", a.doFetch)
+	m.pull = a.menuCmd("拉取", "CmdOrCtrl+Shift+P", a.doPull)
+	m.push = a.menuCmd("推送", "CmdOrCtrl+Shift+U", a.doPush)
 
 	view := []*mygo.MenuItem{
 		m.tabDiff, m.tabHist,
@@ -91,6 +101,14 @@ func buildAppMenu(a *app) *mygo.Menu {
 			{Role: mygo.RoleClose, Label: "关闭窗口"},
 		}},
 		{Label: "编辑", Submenu: editSubmenu()},
+		// 远程单开一层：这三条命令和「文件」里那些（打开、提交、打标签）不
+		// 是一回事 —— 它们要和网络、和凭证打交道，会等、会失败，出事的地方
+		// 也不一样。摆在一层自己的菜单里，用户找「拉取」的时候知道往哪儿看。
+		{Label: "远程", Submenu: []*mygo.MenuItem{
+			m.fetch,
+			m.pull,
+			m.push,
+		}},
 		{Label: "视图", Submenu: view},
 		// 「窗口」这一层用的是 RoleWindow：菜单名和内容都归我们写，但框架
 		// 会把它注册成系统的窗口菜单（最小化、缩放那些系统项才认得它）。
@@ -214,6 +232,15 @@ func (a *app) syncMenu() {
 	enableItem(m.tabHist, !noRepo)
 	enableItem(m.commit, a.canCommit())
 	enableItem(m.newTag, !noRepo && a.op == gitrepo.OpNone)
+
+	// 远程三条：没有远程就没得抓也没得推（`git fetch --all` 在这种情况下
+	// 静默成功，等错误等不到）；分离 HEAD 上拉取和推送没有落点，抓取照常。
+	// 判据和工具栏那三颗按钮用的是同一个（canReachRemote），两处不能各写
+	// 一套 —— 菜单亮着而按钮是灰的，用户不知道该信哪个。
+	canRemote := a.canReachRemote()
+	enableItem(m.fetch, canRemote)
+	enableItem(m.pull, canRemote && !a.detached)
+	enableItem(m.push, canRemote && !a.detached)
 }
 
 // checkItem 只在勾真的会变的时候才去动它。

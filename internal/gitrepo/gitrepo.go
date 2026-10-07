@@ -126,8 +126,9 @@ func gitEnv() []string {
 	)
 }
 
-// run 执行一条 git 命令并返回 stdout。失败时把 stderr 的内容作为错误返回，
-// 因为 git 的错误信息（比如「not a git repository」）比 exit status 有用得多。
+// run 执行一条 git 命令并返回 stdout。失败时把 stderr（和 stdout 里那些
+// 话）作为错误返回，因为 git 的错误信息（比如「not a git repository」）比
+// exit status 有用得多。
 func run(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	return runIn(ctx, dir, nil, args...)
 }
@@ -138,6 +139,12 @@ func run(ctx context.Context, dir string, args ...string) ([]byte, error) {
 // stdin 为 nil 时子进程拿到的是 /dev/null（exec 的默认），和以前完全一样 ——
 // 任何试图读输入的命令都会立刻拿到 EOF，而不是挂住。写操作同样不给 tty：
 // GIT_TERMINAL_PROMPT=0 保证绝不会卡在一个没人能回答的提示上。
+//
+// 失败时 stdout 也要收进错误里：git 不是把坏消息一律打在 stderr 上的 ——
+// 拉取撞冲突时 "CONFLICT (content): Merge conflict in a.txt" 和
+// "Automatic merge failed" 都在 stdout，stderr 只有抓取的那两行进度。以前
+// 只看 stderr，等于把「为什么失败」丢了，界面上翻出来的是一句光秃秃的
+// 「拉取没成功」，Detail 里挂着抓取摘要，谁也看不出是冲突。
 func runIn(ctx context.Context, dir string, stdin []byte, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
@@ -153,6 +160,13 @@ func runIn(ctx context.Context, dir string, stdin []byte, args ...string) ([]byt
 			return nil, ctx.Err()
 		}
 		msg := strings.TrimSpace(stderr.String())
+		if out := strings.TrimSpace(stdout.String()); out != "" {
+			if msg == "" {
+				msg = out
+			} else {
+				msg += "\n" + out
+			}
+		}
 		if msg == "" {
 			msg = err.Error()
 		}
