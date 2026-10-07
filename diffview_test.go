@@ -245,7 +245,7 @@ func TestDiffViewOnlyBuildsVisibleRows(t *testing.T) {
 	tt := ui.NewTester(a.view, 1280, 860)
 	tt.Frame()
 
-	if len(a.rows) < 30000 {
+	if len(a.rows) < 20000 {
 		t.Fatalf("行模型的规模不对：%d 行", len(a.rows))
 	}
 	// 860 高的窗口能放下的行数在 50 上下，加上列表的前后预取也就百来行

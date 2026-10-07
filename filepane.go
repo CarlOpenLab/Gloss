@@ -23,10 +23,7 @@ const (
 // 窗口窄的时候要收：侧栏 280 + 文件栏 300 = 580，720 的窗口（最小尺寸）
 // 只剩 140 给 diff。夹到「至少给 diff 留 240」为止。
 func (a *app) filePaneWidth(c *ui.Context) float32 {
-	w := float32(filePaneW)
-	if a.split {
-		w = filePaneWSplit
-	}
+	w := float32(filePaneWSplit)
 	avail, _ := c.Size()
 	if a.sidebarOn {
 		avail -= sidebarWidth

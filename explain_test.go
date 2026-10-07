@@ -523,16 +523,11 @@ func TestSettingsDialogSavesProviders(t *testing.T) {
 	}
 }
 
-// 改视图设置（unified/split）要落进 store，下次启动才能恢复。
-func TestSplitSettingPersists(t *testing.T) {
+// 视图默认左右对照（split）模式。
+func TestSplitSettingDefault(t *testing.T) {
 	a := richApp(t)
-	tt := ui.NewTester(a.view, 1280, 860)
-
-	if err := tt.Click("Split"); err != nil {
-		t.Fatalf("点 Split：%v", err)
-	}
 	settle(t, a)
-	if !a.store.Config().Split {
-		t.Error("切到 split 之后应该记进配置")
+	if !a.split {
+		t.Error("默认应该开启 split 模式")
 	}
 }

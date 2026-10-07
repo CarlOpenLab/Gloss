@@ -321,7 +321,7 @@ func TestToolbarKeepsTabsWhenNarrow(t *testing.T) {
 	tt.SetTitleBar(realTitleBar)
 	tt.Frame()
 
-	for _, want := range []string{"改动", "历史", "Unified"} {
+	for _, want := range []string{"改动", "历史"} {
 		if !tt.HasText(want) {
 			t.Errorf("最小宽度下 %q 不该被收进「»」：%q", want, tt.Texts())
 		}

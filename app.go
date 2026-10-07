@@ -276,6 +276,7 @@ type app struct {
 
 func newApp() *app {
 	a := &app{
+		split:             true,
 		sidebarOn:         true,
 		viewed:            map[string]string{},
 		folded:            map[string]bool{},
@@ -335,7 +336,7 @@ func (a *app) attachStore(s *store.Store) {
 	a.store = s
 	cfg := s.Config()
 	a.codeSize = cfg.CodeSize
-	a.split = cfg.Split
+	a.split = true
 	a.sidebarOn = !cfg.SidebarOff
 	a.viewed = s.State().Viewed
 	if a.viewed == nil {
@@ -351,13 +352,13 @@ func (a *app) persist() {
 	a.run(func() { _ = s.Save() })
 }
 
-// saveViewSettings 记下跟界面有关的几项设置（视图模式、侧栏、字号）。
+// saveViewSettings 记下跟界面有关的几项设置（侧栏、字号）。
 //
 // 只覆盖这几项，别的字段原样留着 —— 模型设置的保存走 applySettings，
 // 两边各管各的，不会互相冲掉。
 func (a *app) saveViewSettings() {
 	cfg := a.store.Config()
-	cfg.Split = a.split
+	cfg.Split = true
 	cfg.SidebarOff = !a.sidebarOn
 	cfg.CodeSize = a.codeSize
 	a.store.SetConfig(cfg)
@@ -547,22 +548,8 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 			a.setTab(tab)
 		}
 
-		// unified / split 切换。和 Checkbox 一样传副本进去、变了再回写：
-		// 控件要的是 *int，而模式存在 app 上。
-		split := a.split
-		mode := 0
-		if split {
-			mode = 1
-		}
-		ui.Segmented(c, &mode, "Unified", "Split").Disabled(noRepo)
-		if (mode == 1) != split {
-			a.split = mode == 1
-			a.rowsDirty = true
-			a.saveViewSettings()
-		}
-
-		// 抓取 / 拉取 / 推送。摆在分段控件之后、刷新之前：左边是「在看哪儿」
-		// 和「怎么看」，从这里开始才是动作。
+		// 抓取 / 拉取 / 推送。摆在分段控件之后、刷新之前：左边是「在看哪儿」，
+		// 从这里开始才是动作。
 		a.remoteBar(c)
 
 		switch {

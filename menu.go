@@ -38,8 +38,6 @@ type appMenu struct {
 	tabDiff   *mygo.MenuItem
 	tabHist   *mygo.MenuItem
 	sidebar   *mygo.MenuItem
-	unified   *mygo.MenuItem
-	split     *mygo.MenuItem
 	refresh   *mygo.MenuItem
 	commit    *mygo.MenuItem
 	newBranch *mygo.MenuItem
@@ -57,8 +55,6 @@ func buildAppMenu(a *app) *mygo.Menu {
 
 	m.tabDiff = a.menuToggle("查看改动", "CmdOrCtrl+1", mygo.MenuItemRadio, true, func() { a.setTab(0) })
 	m.tabHist = a.menuToggle("查看历史", "CmdOrCtrl+2", mygo.MenuItemRadio, false, func() { a.setTab(1) })
-	m.unified = a.menuToggle("统一视图", "", mygo.MenuItemRadio, true, func() { a.setSplit(false) })
-	m.split = a.menuToggle("左右对照", "", mygo.MenuItemRadio, false, func() { a.setSplit(true) })
 	m.sidebar = a.menuToggle("显示侧栏", "CmdOrCtrl+Shift+B", mygo.MenuItemCheckbox, true, a.toggleSidebar)
 	m.refresh = a.menuCmd("刷新", "CmdOrCtrl+R", a.reload)
 	m.commit = a.menuCmd("提交", "CmdOrCtrl+Return", a.doCommit)
@@ -76,8 +72,6 @@ func buildAppMenu(a *app) *mygo.Menu {
 
 	view := []*mygo.MenuItem{
 		m.tabDiff, m.tabHist,
-		mygo.Separator(),
-		m.unified, m.split,
 		mygo.Separator(),
 		m.sidebar,
 		mygo.Separator(),
@@ -235,8 +229,6 @@ func (a *app) syncMenu() {
 	checkItem(m.tabDiff, a.tab == 0)
 	checkItem(m.tabHist, a.tab == 1)
 	checkItem(m.sidebar, a.sidebarOn)
-	checkItem(m.unified, !a.split)
-	checkItem(m.split, a.split)
 
 	enableItem(m.refresh, !noRepo)
 	enableItem(m.tabDiff, !noRepo)

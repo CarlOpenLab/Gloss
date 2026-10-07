@@ -70,7 +70,6 @@ func TestDumpScreenshot(t *testing.T) {
 	writePNG(t, "/tmp/de-shot-split.png", tt.Image())
 
 	// ✨ 解释卡片：定位、Markdown 排版、头尾两块
-	a.split = false
 	fi, hi := explainFixtures(t, a)
 	a.ex = explainState{
 		fi:   fi,

@@ -16,7 +16,7 @@ func TestPaletteOpensAndCloses(t *testing.T) {
 	if !a.palette.on {
 		t.Fatal("⌘K 应该打开命令栏")
 	}
-	if !tt.HasText("打开仓库…") || !tt.HasText("左右对照（Split）") {
+	if !tt.HasText("打开仓库…") || !tt.HasText("查看历史") {
 		t.Errorf("命令栏没画出来：%q", tt.Texts())
 	}
 
@@ -34,18 +34,18 @@ func TestPaletteFiltersCommands(t *testing.T) {
 
 	tt.Key(ui.Cmd, ui.KeyK)
 	tt.Frame()
-	tt.Type("split")
+	tt.Type("历史")
 	tt.Frame()
 
 	cmds := a.matchedCommands()
-	if len(cmds) != 1 || cmds[0].label != "左右对照（Split）" {
+	if len(cmds) != 1 || cmds[0].label != "查看历史" {
 		t.Fatalf("匹配结果 = %+v", cmds)
 	}
-	if !tt.HasText("左右对照（Split）") {
+	if !tt.HasText("查看历史") {
 		t.Errorf("筛选后的命令没画出来：%q", tt.Texts())
 	}
 	// 工具栏上也有个「打开仓库…」按钮，拿只有命令栏里才有的那条来验
-	if tt.HasText("查看历史") {
+	if tt.HasText("查看改动") {
 		t.Errorf("不匹配的命令不该还留着：%q", tt.Texts())
 	}
 }
@@ -71,7 +71,7 @@ func TestPaletteRunsCommand(t *testing.T) {
 	tt.Frame()
 
 	a.openPalette()
-	a.palette.query = "左右对照"
+	a.palette.query = "查看历史"
 	tt.Frame()
 
 	tt.Key(0, ui.KeyEnter)
@@ -81,11 +81,8 @@ func TestPaletteRunsCommand(t *testing.T) {
 	if a.palette.on {
 		t.Error("执行之后命令栏应该收起来")
 	}
-	if !a.split {
-		t.Error("选中的是「左右对照」，应该切到 split")
-	}
-	if !a.store.Config().Split {
-		t.Error("切换结果应该落进配置")
+	if a.tab != 1 {
+		t.Error("选中的是「查看历史」，应该切到 tab 1")
 	}
 }
 
