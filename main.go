@@ -51,6 +51,8 @@ func main() {
 		// 后台 goroutine 改状态必须走这里：它把闭包投到主线程执行，
 		// 并请求重绘。直接改字段不会触发重绘。
 		a.dispatch = win.Update
+		// 冲突卡片上的「在编辑器打开」：交给系统默认应用。
+		a.openPath = func(p string) { _ = mygo.Shell.OpenPath(p) }
 
 		// 关窗前把提交框里还没提交的消息存成草稿：下一次打开这个仓库，
 		// 那段写了一半的话还在。

@@ -74,6 +74,12 @@ func Describe(op Op, err error) Failure {
 			Hint:  "HEAD 是分离的（检出过标签或某个提交）。先新建一条分支，或者检出一条已有的，再推送 —— 推上去的东西总得有个名字。",
 		}
 	}
+	if errors.Is(err, ErrNotConflicted) {
+		return Failure{
+			Title: "这个文件已经没有冲突了",
+			Hint:  "界面拿的是旧状态（多半已经解决掉了）。列表已经重新读过 —— 刚才那一下没有改坏任何东西。",
+		}
+	}
 
 	msg := err.Error()
 	low := strings.ToLower(msg)
@@ -191,6 +197,13 @@ func Describe(op Op, err error) Failure {
 		strings.Contains(low, "needs merge"):
 		f.Title = "有冲突没收尾"
 		f.Hint = "仓库还停在没解决的冲突里（顶上的状态条写着是哪一步）—— 切换、储藏、开新的一步都得先把它了结：解决完「继续」，或者「中止」。"
+	case strings.Contains(low, "does not have our version"),
+		strings.Contains(low, "does not have their version"):
+		// 删除-修改冲突：那一方在 index 里根本没有文件版本。界面本来靠
+		// stage 提前把按钮换成了「接受删除」，撞到这里说明状态在点下去的
+		// 一瞬间变了 —— 照实话说着，出路指回卡片。
+		f.Title = "这一边已经没有这个文件了"
+		f.Hint = "对方那边把它删掉了。刷新之后看文件卡片：挑另一边就是接受删除，也可以手工处理完「标记为已解决」。"
 	case strings.Contains(low, "is now empty"):
 		f.Title = "这一步没有产生任何改动"
 		f.Hint = "解决后的结果和当前分支一模一样，git 不肯造一个空提交。点状态条里的「跳过」，接着走后面的。"

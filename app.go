@@ -246,6 +246,11 @@ type app struct {
 	// confirm 是确认对话框的状态（confirmdialog.go）。
 	confirm confirmState
 
+	// openPath 把文件交给系统默认的「打开方式」（冲突卡片上的「在编辑器
+	// 打开」）。main.go 接上 mygo 的 Shell.OpenPath；测试里是 nil，点了
+	// 什么都不发生 —— 无头环境里打开文件本来也无从谈起。
+	openPath func(string)
+
 	// commitMsg 是提交框里的消息；草稿按仓库持久化（store.Drafts），
 	// draftFor 记着当前这份草稿属于哪个仓库。
 	commitMsg string

@@ -60,6 +60,14 @@ type File struct {
 
 	// TooLarge 表示文件超过读取上限，没有渲染内容。
 	TooLarge bool
+
+	// Stages 说（冲突文件）在 index 里还剩哪几方的版本：缺 stage 2 是我们
+	// 这边删了它，缺 stage 3 是对方删了它。只在 Status == StatusConflict
+	// 时有意义；别的文件是零值。
+	//
+	// 界面拿它把「哪边删了文件」提前说清 —— 删除-修改冲突里，一颗写着
+	// 「用对方那边的」的按钮按下去是**把文件删掉**，不说清就是挖坑。
+	Stages ConflictSides
 }
 
 // Model 是仓库当前状态的完整快照，界面每次刷新重建一份。
@@ -119,6 +127,18 @@ func (r *Repo) Load(ctx context.Context) (*Model, error) {
 		m.TotalDel += f.DelCount
 	}
 
+	// 有冲突文件时多跑一条 ls-files -u，把每个路径的 stage 情况读回来
+	// （哪边删了文件）。判据是「有没有冲突文件」而不是 Pending 是否为空：
+	// 储藏 apply/pop 撞出来的冲突不写 MERGE_HEAD，Pending 是零值，但那些
+	// 文件同样需要逐边解决的说明。干净仓库一次都不多跑。
+	var sides map[string]ConflictSides
+	for _, ch := range changes {
+		if ch.Status == StatusConflict {
+			sides = r.unmergedSides(ctx)
+			break
+		}
+	}
+
 	// 已暂存段（Files 的连续前缀）。
 	for _, ch := range changes {
 		if ch.StagedStatus == "" {
@@ -155,13 +175,15 @@ func (r *Repo) Load(ctx context.Context) (*Model, error) {
 
 		case ch.Status == StatusConflict:
 			// 冲突内容的 patch 是合并格式（diff --cc、@@@ 头），解析器不认；
-			// 给一张没有内容的卡片，解决路径是整文件 `git add`。
+			// 给一张没有内容的卡片，解决路径是整文件 `git add` 或挑一边
+			// （conflict.go）。
 			appendFile(File{
 				FileDiff:    diff.FileDiff{NewPath: ch.Path},
 				Status:      StatusConflict,
 				Section:     SectionUnstaged,
 				Unstaged:    true,
 				Fingerprint: fingerprint(ch.Path, string(StatusConflict)),
+				Stages:      sides[ch.Path],
 			})
 
 		case ch.UnstagedStatus != "":

@@ -397,6 +397,20 @@ func TestDumpScreenshot(t *testing.T) {
 	writePNG(t, "/tmp/de-shot-conflict-rebase-dark.png", rtb.Image())
 	rtb.SetDark(false)
 
+	// 删除-修改冲突：对方删了文件、我这边改了它。卡片的白话不一样 ——
+	// 按「用被并入的」是**接受删除**，不提前说清就是挖坑，这张留底。
+	dc, _ := deleteConflictApp(t)
+	dct := ui.NewTester(dc.view, 1280, 860)
+	still(dct)
+	dct.Frame()
+	dct.SetTitleBar(realTitleBar)
+	dct.Frame()
+	writePNG(t, "/tmp/de-shot-conflict-delete.png", dct.Image())
+	dct.SetDark(true)
+	dct.Frame()
+	writePNG(t, "/tmp/de-shot-conflict-delete-dark.png", dct.Image())
+	dct.SetDark(false)
+
 	// 确认框：中止合并之前的那一问。确认键写完整动作名（「中止合并」），
 	// 焦点默认在「取消」上 —— 回车落在安全的那一边。
 	mc.abortOp()

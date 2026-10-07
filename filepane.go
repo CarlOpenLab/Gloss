@@ -246,6 +246,13 @@ func (a *app) treeRow(c *ui.Context, pal palette, r filetree.Row) {
 			Tooltip(f.Status.Label())
 	})
 
+	// 冲突文件挂右键菜单：挑一边、去编辑器、「标记为已解决」在这里都
+	// 够得着 —— 卡片在 diff 那边，用户对着文件列表数还有几个冲突时，
+	// 不该为了每个文件先滚过去。
+	if f.Section == gitrepo.SectionUnstaged && f.Status == gitrepo.StatusConflict {
+		row.ContextMenu(func(m *ui.Menu) { a.conflictMenu(m, f) })
+	}
+
 	if box != nil && box.Clicked() {
 		a.toggleStageFile(f)
 		return
@@ -290,6 +297,13 @@ func (a *app) filePaneFooter(c *ui.Context, pal palette, t *ui.Theme) {
 			Font("monospace").FontFeatures("tnum").TextColor(pal.addBar)
 		ui.Textf(c, "−%d", a.totalDel()).FontSize(11).Bold().
 			Font("monospace").FontFeatures("tnum").TextColor(pal.delBar)
+		// 冲突数摆在总计旁边：它是「这份改动现在能不能提交」的答案 ——
+		// 不解决完，提交上去的会是带着 <<<<<<< 的文件。
+		if n := a.conflictCount(); n > 0 {
+			warnIcon(c, 11, t.Warning)
+			ui.Textf(c, "%d 个冲突待解决", n).FontSize(11).
+				FontFeatures("tnum").TextColor(t.Warning)
+		}
 		ui.Spacer(c)
 		if n := a.viewedCount(); n > 0 {
 			ui.Box(c).Size(checkSize, checkSize).Shrink(0).

@@ -114,6 +114,8 @@ func (a *app) diffRow(c *ui.Context, pal palette, r row) {
 		a.gapRow(c, pal, r)
 	case rowNote:
 		a.noteRow(c, pal, r)
+	case rowConflict:
+		a.conflictRow(c, pal, r)
 	default:
 		a.codeRow(c, pal, r)
 	}

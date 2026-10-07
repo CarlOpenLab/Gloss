@@ -22,6 +22,7 @@ const (
 	rowLine                      // 一行代码
 	rowGap                       // 「N 行未改动」的折叠条
 	rowNote                      // 二进制文件、文件过大之类的提示
+	rowConflict                  // 冲突文件：一行说明 + 挑一边的按钮
 	rowSection                   // 「已暂存 / 未暂存」两段之间的分隔行
 )
 
@@ -123,6 +124,18 @@ func buildRows(files []gitrepo.File, contents map[string]*fileContent, expanded 
 		})
 
 		if collapsed[path] {
+			continue
+		}
+
+		// 冲突文件：patch 是合并格式解析器不认，内容也不值得画（要看就去
+		// 编辑器），给一张「挑一边」的卡片。它排在 hunk 分支前面 —— 万一
+		// 哪天冲突文件带上了 hunk，也该走卡片而不是把它渲染出来。
+		if f.Status == gitrepo.StatusConflict {
+			rows = append(rows, row{
+				kind: rowConflict,
+				file: fi,
+				key:  "c:" + path,
+			})
 			continue
 		}
 
@@ -350,8 +363,6 @@ func sectionKey(s gitrepo.Section) string {
 // noteFor 给没有 hunk 的文件生成一条说明。
 func noteFor(f gitrepo.File) string {
 	switch {
-	case f.Status == gitrepo.StatusConflict:
-		return "文件有冲突：手动解决后，勾上左侧的方框把它标记为已解决"
 	case f.Binary:
 		return "二进制文件已变更"
 	case f.TooLarge:

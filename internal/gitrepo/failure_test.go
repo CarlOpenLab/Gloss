@@ -72,6 +72,11 @@ func TestDescribeKnownFailures(t *testing.T) {
 			"mark them as resolved using git add", "还有文件没解决完"},
 		{OpCheckout, "error: you need to resolve your current index first\na.txt: needs merge", "有冲突没收尾"},
 		{OpStash, "error: could not write index\na.txt: needs merge", "有冲突没收尾"},
+		// 删除-修改冲突里点了「没有内容」的那一边（实测 git 2.50 的原话）。
+		// 界面本来靠 stage 提前把它换成「接受删除」，撞到这里说明状态在
+		// 点下去的一瞬间变了。
+		{OpConflict, "error: path 'f.txt' does not have our version", "这一边已经没有这个文件了"},
+		{OpConflict, "error: path 'f.txt' does not have their version", "这一边已经没有这个文件了"},
 
 		{OpCherryPick, "The previous cherry-pick is now empty, possibly due to conflict resolution.\n" +
 			"If you wish to commit it anyway, use:\n\n    git commit --allow-empty\n\n" +
@@ -134,6 +139,18 @@ func TestDescribeHunkGone(t *testing.T) {
 	}
 	if f.Hint == "" {
 		t.Error("该告诉用户下一步（刷过了，重看一眼）")
+	}
+}
+
+// 「这个文件已经没有冲突了」是同一类竞态：冲突在点下去和跑起来之间被
+// 解决掉了。它必须走 sentinel 这一档，不能被下面的模式表当成别的事。
+func TestDescribeNotConflicted(t *testing.T) {
+	f := Describe(OpConflict, ErrNotConflicted)
+	if f.Title != "这个文件已经没有冲突了" {
+		t.Errorf("标题 = %q", f.Title)
+	}
+	if f.Hint == "" {
+		t.Error("该告诉用户下一步（列表已经重新读过）")
 	}
 }
 
