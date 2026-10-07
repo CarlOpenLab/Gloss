@@ -35,6 +35,7 @@ func (a *app) setTab(t int) {
 	if !a.repoReady() || t == a.tab {
 		return
 	}
+	oldTab := a.tab
 	a.tab = t
 	a.closeExplain()
 	// 两个 tab 的文件集完全不同，留着筛选词多半一个文件都看不到。
@@ -44,6 +45,10 @@ func (a *app) setTab(t int) {
 
 	switch t {
 	case 0:
+		if oldTab == 1 {
+			a.histFiles = a.allFiles
+			a.histListID = a.listID
+		}
 		if a.workFiles != nil {
 			a.showFiles(a.workFiles, workListID(a.repoPath, a.workBranch()))
 		} else {
@@ -51,8 +56,12 @@ func (a *app) setTab(t int) {
 			a.applyFilter()
 		}
 	case 1:
-		a.allFiles = nil
-		a.applyFilter()
+		if a.histFiles != nil {
+			a.showFiles(a.histFiles, a.histListID)
+		} else {
+			a.allFiles = nil
+			a.applyFilter()
+		}
 		a.loadCommits()
 		// 刚才在看储藏就把储藏接回来。切去改动 tab 时 allFiles 被清空了，
 		// 不接回来的话下半区是空的，而上半区因为 stashRev 还在、不会自动
@@ -65,7 +74,9 @@ func (a *app) setTab(t int) {
 			a.stashRev = "" // 储藏已经没了（被 pop 掉），退回正常历史
 		}
 		if a.commitSel >= 0 && a.commitSel < len(a.commits) {
-			a.loadCommit(a.commitSel)
+			if a.histFiles == nil || a.histListID != "c:"+a.commits[a.commitSel].Hash {
+				a.loadCommit(a.commitSel)
+			}
 		}
 	}
 }
@@ -75,8 +86,12 @@ func (a *app) loadCommits() {
 	if a.repoPath == "" {
 		return
 	}
-	a.hist = loadLoading
-	a.histErr = ""
+	// 已经有提交时不刷白屏幕，保持当前列表显示并在后台静默重读，
+	// 避免切 tab 时闪烁「正在读提交…」。
+	if len(a.commits) == 0 {
+		a.hist = loadLoading
+		a.histErr = ""
+	}
 
 	a.logSeq++
 	seq := a.logSeq
@@ -93,9 +108,15 @@ func (a *app) loadCommits() {
 				return
 			}
 			if err != nil {
-				a.hist = loadFailed
-				a.histErr = err.Error()
+				if len(a.commits) == 0 {
+					a.hist = loadFailed
+					a.histErr = err.Error()
+				}
 				return
+			}
+			oldHead := ""
+			if len(a.commits) > 0 {
+				oldHead = a.commits[0].Hash
 			}
 			a.setCommits(commits)
 			a.hist = loadReady
@@ -104,6 +125,8 @@ func (a *app) loadCommits() {
 			// 正在看储藏的时候不能选：那会把下半区从储藏的改动换成某个
 			// 提交的，用户点的是储藏，屏幕上是别的东西。
 			if a.commitSel < 0 && a.stashRev == "" && len(commits) > 0 {
+				a.loadCommit(0)
+			} else if a.commitSel == 0 && a.stashRev == "" && len(commits) > 0 && commits[0].Hash != oldHead {
 				a.loadCommit(0)
 			}
 		})
@@ -148,6 +171,11 @@ func (a *app) loadCommit(i int) {
 			// 历史 tab 的，不该顶掉工作区的文件列表 —— diffSeq 挡不住
 			// 这一手，切 tab 不会动它。
 			if a.tab != 1 {
+				if err == nil {
+					a.histDiff = loadReady
+					a.histFiles = files
+					a.histListID = "c:" + hash
+				}
 				return
 			}
 			if err != nil {
@@ -156,6 +184,8 @@ func (a *app) loadCommit(i int) {
 				return
 			}
 			a.histDiff = loadReady
+			a.histFiles = files
+			a.histListID = "c:" + hash
 			a.showFiles(files, "c:"+hash)
 		})
 	})
@@ -191,6 +221,11 @@ func (a *app) selectStash(ref gitrepo.Ref) {
 		}
 		a.dispatch(func() {
 			if a.diffSeq != seq || a.tab != 1 {
+				if a.diffSeq == seq && err == nil {
+					a.histDiff = loadReady
+					a.histFiles = files
+					a.histListID = "k:" + ref.Full
+				}
 				return
 			}
 			if err != nil {
@@ -199,6 +234,8 @@ func (a *app) selectStash(ref gitrepo.Ref) {
 				return
 			}
 			a.histDiff = loadReady
+			a.histFiles = files
+			a.histListID = "k:" + ref.Full
 			a.showFiles(files, "k:"+ref.Full)
 		})
 	})
@@ -272,11 +309,15 @@ func (a *app) commitListPane(c *ui.Context, pal palette) {
 		// 按钮，屏幕上看是重复的。
 		switch a.hist {
 		case loadLoading:
-			emptyNote(c, t, "正在读提交…")
-			return
+			if len(a.commits) == 0 {
+				emptyNote(c, t, "正在读提交…")
+				return
+			}
 		case loadFailed:
-			emptyNote(c, t, "读不到历史")
-			return
+			if len(a.commits) == 0 {
+				emptyNote(c, t, "读不到历史")
+				return
+			}
 		}
 		if len(a.commits) == 0 {
 			emptyNote(c, t, "还没有提交")

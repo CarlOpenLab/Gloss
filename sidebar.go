@@ -206,10 +206,15 @@ func (a *app) selectRef(key string, ref gitrepo.Ref) {
 		return
 	}
 
-	a.histRev = ref.Full
-	a.commitSel = -1
-	a.stashRev = "" // 换看分支了，下半区不再是储藏
-	a.histDiff = loadIdle
+	if a.histRev != ref.Full {
+		a.histRev = ref.Full
+		a.commitSel = -1
+		a.commits = nil
+		a.histFiles = nil
+		a.histListID = ""
+		a.stashRev = "" // 换看分支了，下半区不再是储藏
+		a.histDiff = loadIdle
+	}
 	a.tab = 1
 	a.loadCommits()
 }

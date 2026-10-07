@@ -161,15 +161,15 @@ func (a *app) emptyTreeMsg() string {
 		return "还没打开仓库"
 	case a.state != loadReady:
 		return "" // 仓库在读，diff 那边有转圈了，这里先空着
-	case a.tab == 1 && a.hist == loadLoading:
+	case a.tab == 1 && a.hist == loadLoading && len(a.commits) == 0:
 		return "正在读提交…"
-	case a.tab == 1 && a.hist == loadFailed:
+	case a.tab == 1 && a.hist == loadFailed && len(a.commits) == 0:
 		return "读不到历史"
 	case a.tab == 1 && len(a.commits) == 0:
 		return "还没有提交"
-	case a.tab == 1 && a.histDiff == loadLoading:
+	case a.tab == 1 && a.histDiff == loadLoading && len(a.files) == 0:
 		return "正在读这个提交…"
-	case a.tab == 1 && a.histDiff == loadFailed:
+	case a.tab == 1 && a.histDiff == loadFailed && len(a.files) == 0:
 		return "读不到这个提交"
 	case a.fileFilter != "":
 		return "没有匹配的文件"

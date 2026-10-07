@@ -143,6 +143,10 @@ func (a *app) finishCheckout() {
 	a.stashRev = ""
 	a.commitSel = -1
 	a.refSel = ""
+	a.commits = nil
+	a.histFiles = nil
+	a.histListID = ""
+	a.hist = loadIdle
 	a.histDiff = loadIdle
 
 	// 在飞的「读历史」「读那个提交」作废。它们问的是换分支之前的仓库，而

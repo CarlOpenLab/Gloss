@@ -307,6 +307,42 @@ func TestHistoryTabTwice(t *testing.T) {
 	}
 }
 
+// 从改动切回历史时立即恢复展示，不闪烁加载占位提示。
+func TestSwitchingTabsDoesNotFlicker(t *testing.T) {
+	a := histApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+
+	// 第一次进历史并就绪
+	a.setTab(1)
+	settle(t, a)
+	tt.Frame()
+	if !tt.HasText("第三条：加个文件") {
+		t.Fatalf("第一次进历史应该显示提交：%q", tt.Texts())
+	}
+
+	// 切到改动
+	a.setTab(0)
+	tt.Frame()
+
+	// 再次切到历史：甚至在后台 settle 还没跑完的第一帧，
+	// 界面也应该立刻恢复提交和 diff，不能闪出「正在读提交…」或「正在读这个提交…」
+	a.setTab(1)
+	tt.Frame()
+
+	if tt.HasText("正在读提交…") {
+		t.Errorf("切回历史时不应闪烁「正在读提交…」：%q", tt.Texts())
+	}
+	if tt.HasText("正在读这个提交…") {
+		t.Errorf("切回历史时不应闪烁「正在读这个提交…」：%q", tt.Texts())
+	}
+	if !tt.HasText("第三条：加个文件") {
+		t.Errorf("切回历史应该立即保留展示提交列表：%q", tt.Texts())
+	}
+	if len(a.files) == 0 {
+		t.Errorf("切回历史应该立即恢复文件列表，实际为空")
+	}
+}
+
 // 第二次之后进历史 tab，提交列表要重新读过，不能拿着旧的那份。
 //
 // setTab 里 loadCommits 和 loadCommit 前后脚发起，两者曾经抢同一个

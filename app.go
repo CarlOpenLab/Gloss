@@ -97,6 +97,10 @@ type app struct {
 	// workFiles 是工作区的文件列表。切到历史看某个提交时 allFiles 会换成
 	// 那个提交的 diff，切回来要还原，所以单独留一份。
 	workFiles []gitrepo.File
+	// histFiles 是历史 tab 当前看的文件列表，切去改动 tab 时留一份；
+	// 切回历史时立即恢复，避免两区同时清空、白屏闪烁。
+	histFiles  []gitrepo.File
+	histListID string
 	// contents 按路径缓存文件在新侧的内容，用于展开未改动区间和语法高亮。
 	// 用路径而不是下标索引：筛选会让文件列表变短，下标会错位。
 	contents map[string]*fileContent
@@ -648,10 +652,10 @@ func (a *app) mainArea(c *ui.Context, pal palette) {
 // 列表没读出来时根本谈不上「选中了哪个提交」。
 func (a *app) historyEmpty(c *ui.Context, t *ui.Theme) {
 	switch {
-	case a.hist == loadLoading:
+	case a.hist == loadLoading && len(a.commits) == 0:
 		ui.Spinner(c)
 		ui.Text(c, "正在读提交…").TextColor(t.TextMuted)
-	case a.hist == loadFailed:
+	case a.hist == loadFailed && len(a.commits) == 0:
 		ui.Text(c, "读不到历史").FontSize(18).Bold()
 		ui.Text(c, a.histErr).TextColor(t.Danger)
 		if ui.Button(c, "重试").Clicked() {
@@ -660,10 +664,10 @@ func (a *app) historyEmpty(c *ui.Context, t *ui.Theme) {
 	case len(a.commits) == 0:
 		ui.Text(c, "还没有提交").FontSize(18).Bold()
 		ui.Text(c, "这个仓库还没有任何历史。").TextColor(t.TextMuted)
-	case a.histDiff == loadLoading:
+	case a.histDiff == loadLoading && len(a.files) == 0:
 		ui.Spinner(c)
 		ui.Text(c, "正在读这个提交…").TextColor(t.TextMuted)
-	case a.histDiff == loadFailed:
+	case a.histDiff == loadFailed && len(a.files) == 0:
 		ui.Text(c, "读不到这个提交").FontSize(18).Bold()
 		ui.Text(c, a.histDiffErr).TextColor(t.Danger)
 		if ui.Button(c, "重试").Clicked() {
@@ -748,6 +752,11 @@ func (a *app) openRepo(path string) {
 		a.refSel = ""
 		a.histRev = ""
 		a.commitSel = -1
+		a.commits = nil
+		a.histFiles = nil
+		a.histListID = ""
+		a.hist = loadIdle
+		a.histDiff = loadIdle
 	}
 
 	a.run(func() {
