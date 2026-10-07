@@ -22,6 +22,7 @@ const (
 	rowLine                      // 一行代码
 	rowGap                       // 「N 行未改动」的折叠条
 	rowNote                      // 二进制文件、文件过大之类的提示
+	rowSection                   // 「已暂存 / 未暂存」两段之间的分隔行
 )
 
 const (
@@ -90,9 +91,29 @@ type fileContent struct {
 // split 为 true 时按左右对照排布：一段删除和紧跟其后的新增一一配对，
 // 配不上的那一侧留空。
 func buildRows(files []gitrepo.File, contents map[string]*fileContent, expanded map[string]int, split bool, collapsed map[string]bool) []row {
+	// 只有两段都有文件时才插分隔行：只有一段的时候它不提供任何信息，
+	// 历史提交、储藏的 diff（SectionNone）更是从来不分段。
+	both := false
+	for i := 1; i < len(files); i++ {
+		if files[i].Section != files[0].Section {
+			both = true
+			break
+		}
+	}
+
 	var rows []row
+	cur := gitrepo.SectionNone
 	for fi := range files {
 		f := &files[fi]
+		if both && f.Section != cur {
+			cur = f.Section
+			rows = append(rows, row{
+				kind: rowSection,
+				file: fi,
+				note: sectionTitle(cur),
+				key:  "sec:" + sectionKey(cur),
+			})
+		}
 		path := fileKey(*f)
 
 		rows = append(rows, row{
@@ -282,17 +303,55 @@ func appendGapLines(rows []row, fi int, path string, from, shown, delta int, lin
 	return rows
 }
 
-// fileKey 是文件的稳定标识。用新路径，删除的文件退回旧路径。
+// fileKey 是文件的稳定标识：路径 + 所属段落。
+//
+// 同一个路径可以同时在「已暂存」和「未暂存」两段里（暂存之后又改了），
+// 两段的 hunk、行号、内容都不一样 —— 拿路径当 key，行模型的 key、内容
+// 缓存、折叠状态会互相顶掉。SectionNone（历史提交、储藏的 diff）不加前缀：
+// 那边的 key 和语义和分段之前完全一样。
 func fileKey(f gitrepo.File) string {
+	p := pathOf(f)
+	switch f.Section {
+	case gitrepo.SectionStaged:
+		return "s:" + p
+	case gitrepo.SectionUnstaged:
+		return "u:" + p
+	}
+	return p
+}
+
+// pathOf 是给人看、给 git 口子用的纯路径（不带段落前缀）。
+// 界面上的显示、模糊筛选、patch 切片的路径参数都用它，不用 fileKey。
+func pathOf(f gitrepo.File) string {
 	if f.NewPath != "" {
 		return f.NewPath
 	}
 	return f.OldPath
 }
 
+// sectionTitle / sectionKey 是两段的中文名和 key 片段。
+//
+// 名字用「已暂存 / 未暂存」而不是「改动」：后者和工具栏那个 tab 标签
+// 一模一样，界面上（以及测试里）两处会分不清。
+func sectionTitle(s gitrepo.Section) string {
+	if s == gitrepo.SectionStaged {
+		return "已暂存"
+	}
+	return "未暂存"
+}
+
+func sectionKey(s gitrepo.Section) string {
+	if s == gitrepo.SectionStaged {
+		return "s"
+	}
+	return "u"
+}
+
 // noteFor 给没有 hunk 的文件生成一条说明。
 func noteFor(f gitrepo.File) string {
 	switch {
+	case f.Status == gitrepo.StatusConflict:
+		return "文件有冲突：手动解决后，勾上左侧的方框把它标记为已解决"
 	case f.Binary:
 		return "二进制文件已变更"
 	case f.TooLarge:

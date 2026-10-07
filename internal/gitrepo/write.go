@@ -1,0 +1,122 @@
+package gitrepo
+
+import (
+	"context"
+	"errors"
+	"strings"
+
+	"github.com/CarlOpenLab/Gloss/internal/diff"
+)
+
+// ErrHunkGone 表示点的那段改动在重新读出来的 patch 里已经不存在了 ——
+// 用户点下去和 git 真正执行之间文件被改过（或前一次暂存让行号挪了位），
+// 是正常竞态，不是 bug。界面翻译成一句人话 + 自动刷新。
+var ErrHunkGone = errors.New("这个改动已经变了")
+
+// StageFile 把整个文件放进 index。
+//
+// -A 让它同时覆盖删除：对未跟踪、二进制、重命名、纯 mode 变化、未跟踪
+// 转已跟踪这些都是唯一的路径；冲突时它等价于「标记为已解决」。
+// 未跟踪文件不走合成的 patch —— 那种 patch 没有 index 行、没有 new file
+// mode，遇上 core.autocrlf、LFS 过滤器或真实文件权限就会被咬。
+//
+// 路径是变参：重命名要新旧两个路径一起给。只给新路径的话，旧路径在 index
+// 里还是「已跟踪」，暂存完的 index 就成了「新文件是新增、旧文件还在」，
+// 得再点一次才真的变成重命名 —— 用户看到的是一次莫名其妙的中间态。
+func (r *Repo) StageFile(ctx context.Context, paths ...string) error {
+	args := append([]string{"add", "-A", "--"}, paths...)
+	_, err := run(ctx, r.Root, args...)
+	return err
+}
+
+// UnstageFile 把整个文件撤出 index。
+//
+// 用 `git reset` 而不是新版的 `git restore --staged`：语义一样（包括
+// 「已暂存的新增」撤销后回到未跟踪），但 reset 从 git 1.x 就在，不挑版本。
+// 变参的理由和 StageFile 一样：撤销一个已暂存的重命名，得把新旧两个路径
+// 都从 index 里退回去，只退一个会留下半截删除。
+func (r *Repo) UnstageFile(ctx context.Context, paths ...string) error {
+	args := append([]string{"reset", "-q", "--"}, paths...)
+	_, err := run(ctx, r.Root, args...)
+	return err
+}
+
+// StageHunk 把未暂存段里的某一段改动放进 index。
+func (r *Repo) StageHunk(ctx context.Context, path, hunkID string) error {
+	return r.applyHunk(ctx, path, hunkID, false)
+}
+
+// UnstageHunk 把已暂存段里的某一段改动撤出 index。
+//
+// 调用方必须保证目标不是「已暂存的新增文件」：反转 `@@ -0,0 +1,N @@`
+// 会在 index 里留下一个空文件，而不是把条目删掉（和整文件 reset 不同）。
+// 界面那边由 hunkStageable 挡着，只给整文件操作。
+func (r *Repo) UnstageHunk(ctx context.Context, path, hunkID string) error {
+	return r.applyHunk(ctx, path, hunkID, true)
+}
+
+// StageAll 把工作区和 index 的差异全部放进 index（含未跟踪和删除）。
+//
+// 不给 pathspec：`git add -A` 一条命令覆盖全仓库。界面上的「全部暂存」不能
+// 靠遍历文件列表逐条 add —— 那个列表有未跟踪文件的条数上限，会漏。
+func (r *Repo) StageAll(ctx context.Context) error {
+	_, err := run(ctx, r.Root, "add", "-A")
+	return err
+}
+
+// applyHunk 是 hunk 级暂存/取消暂存的共同实现：重新跑一条和界面展示
+// 「同基线」的 diff，找出 hunkID 对应的那一段，原样切出来喂给
+// `git apply --cached [--reverse]`。
+//
+// 同基线是硬要求：暂存方向的展示来自 worktree vs index，这里就重跑
+// `git diff`；取消暂存方向的展示来自 index vs HEAD，这里就重跑
+// `git diff --cached <base>`。hunk 的 ID 含 @@ 行号，基线一换就对不上。
+//
+// --whitespace=nowarn：用户配了 apply.whitespace=error/fix 时，git 会拒收
+// 甚至改写内容，两条都不能要。
+// --recount：上下文或行数头对不上时的兜底（git add -p 也是这么干的），
+// 只在第一次失败后试一次，不掩盖真正的冲突。
+// 绝不用 --3way：它会动工作区，还能静默按「我们的/他们的」选边。
+func (r *Repo) applyHunk(ctx context.Context, path, hunkID string, reverse bool) error {
+	var extra []string
+	if reverse {
+		extra = append(extra, "--cached", r.baseRev(ctx))
+	}
+	raw, err := run(ctx, r.Root, diffArgs(append(extra, "--", path)...)...)
+	if err != nil {
+		return err
+	}
+	patch, ok := diff.SliceHunk(string(raw), path, hunkID)
+	if !ok {
+		return ErrHunkGone
+	}
+	apply := []string{"apply", "--cached", "--whitespace=nowarn", "-"}
+	if reverse {
+		apply = append(apply, "--reverse")
+	}
+	if _, err := runIn(ctx, r.Root, []byte(patch), apply...); err != nil {
+		if _, err2 := runIn(ctx, r.Root, []byte(patch), append(apply, "--recount")...); err2 != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Commit 把 index 里的内容提交成一次提交，信息从管道喂进去。
+//
+// 用 `-F -` 而不是 `-m`：消息里可以有换行、引号、以 - 开头的行，走参数会
+// 被命令行解析咬；管道是字节原样的（git 不认的编码也不会有机会损坏）。git
+// 会忽略纯空白消息、给末尾补换行，这些都交给它自己。
+func (r *Repo) Commit(ctx context.Context, message string) error {
+	_, err := runIn(ctx, r.Root, []byte(message), "commit", "-F", "-")
+	return err
+}
+
+// ShortHead 返回 HEAD 的短哈希（提交成功后的提示里报一串给用户认）。
+func (r *Repo) ShortHead(ctx context.Context) string {
+	out, err := run(ctx, r.Root, "rev-parse", "--short", "HEAD")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}

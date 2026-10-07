@@ -66,6 +66,15 @@ func (a *app) handleKeys(c *ui.Context) {
 		a.openSettings()
 	}
 
+	// ⌘⏎ 提交。
+	//
+	// 用 ⌘ 而不是裸回车：输入框里回车是换行，提交信息本来就常常是多行的。
+	// 框架的编辑器对 KeyEnter 只在「没有修饰键」时才认（ui/editor.go 的
+	// wants），⌘⏎ 因此会漏给窗口这一层 —— 正合惯例。
+	if c.Shortcut(ui.Cmd, ui.KeyEnter) {
+		a.doCommit()
+	}
+
 	// J / K 跳上下一段改动。不给它们加修饰键：review 时手一直在这两个键上。
 	// 历史 tab 里的 diff 是同一套视图，同样能用。
 	if a.state == loadReady && len(a.files) > 0 {

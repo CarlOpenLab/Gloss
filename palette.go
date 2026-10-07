@@ -31,6 +31,8 @@ func (a *app) commands() []command {
 	cmds := []command{
 		{"打开仓库…", "⌘O", func(a *app) { a.chooseFolder() }},
 		{"刷新", "⌘R", func(a *app) { a.reload() }},
+		{"提交", "⌘⏎", func(a *app) { a.doCommit() }},
+		{"暂存全部改动", "", func(a *app) { a.stageAll() }},
 		{"查看改动", "⌘1", func(a *app) { a.setTab(0) }},
 		{"查看历史", "⌘2", func(a *app) { a.setTab(1) }},
 		{"筛选文件", "⌘F", func(a *app) { a.focusFilter = true }},

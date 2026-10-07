@@ -72,8 +72,22 @@ func (a *app) detailPane(c *ui.Context, pal palette) {
 }
 
 // hasDiff 判断下半区该画 diff 还是空状态。
+//
+// 「正在重读」但手上还有同一个仓库的旧列表时继续画旧的那份：连续暂存十个
+// hunk 就是十次重读，每次都把 diff 换成一句「正在读取仓库…」再换回来，画面
+// 会闪成一串。换个仓库则一秒都不留 —— 旧仓库的 diff 留到新内容就绪，那是
+// 实打实地显示错了东西。重读的进展由工具栏的转圈说，那是它该管的事。
 func (a *app) hasDiff() bool {
-	return a.state == loadReady && len(a.files) > 0
+	if len(a.files) == 0 {
+		return false
+	}
+	switch a.state {
+	case loadReady:
+		return true
+	case loadLoading:
+		return a.loadingPath == a.repoPath
+	}
+	return false
 }
 
 // fileListPane 是文件列表那一栏：栏头 + 筛选框 + 文件树 + footer。
@@ -196,7 +210,18 @@ func (a *app) treeRow(c *ui.Context, pal palette, r filetree.Row) {
 
 	f := a.files[n.FileIdx]
 
+	// 勾选框要留到行构建完之后再判点击（见下面的 early return）。它在行里
+	// 是后建的子元素，指针事件会一路冒泡到整行 —— 不先问它，点一下既暂存
+	// 了文件又跳转了 diff。
+	var box *ui.Element
+
 	row, _ := treeRow(c, t, treeRowOpts{Depth: r.Depth, Selected: n.FileIdx == a.fileSel}, func() {
+		// 历史提交和储藏的 diff 是只读的（SectionNone），那里不摆勾选框：
+		// 一个点了会对别的仓库状态动手的方框，比没有方框更糟。
+		if f.Section != gitrepo.SectionNone {
+			box = stageBox(c, stageStateOf(f), a.op != gitrepo.OpNone)
+		}
+
 		// 已 review 的文件名变灰，一眼能看出哪些还没看
 		nameColor := t.Text
 		if a.isViewed(f) {
@@ -221,6 +246,10 @@ func (a *app) treeRow(c *ui.Context, pal palette, r filetree.Row) {
 			Tooltip(f.Status.Label())
 	})
 
+	if box != nil && box.Clicked() {
+		a.toggleStageFile(f)
+		return
+	}
 	if row.Clicked() {
 		a.fileSel = n.FileIdx
 		// 只记下「该滚到哪」，不在这帧直接 ScrollTo：行模型现在可能还是脏的

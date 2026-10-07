@@ -39,6 +39,7 @@ type appMenu struct {
 	unified *mygo.MenuItem
 	split   *mygo.MenuItem
 	refresh *mygo.MenuItem
+	commit  *mygo.MenuItem
 }
 
 // buildAppMenu 搭出应用的菜单栏，并把需要跟着状态走的几项记在 a.menu 上。
@@ -51,6 +52,7 @@ func buildAppMenu(a *app) *mygo.Menu {
 	m.split = a.menuToggle("左右对照", "", mygo.MenuItemRadio, false, func() { a.setSplit(true) })
 	m.sidebar = a.menuToggle("显示侧栏", "CmdOrCtrl+Shift+B", mygo.MenuItemCheckbox, true, a.toggleSidebar)
 	m.refresh = a.menuCmd("刷新", "CmdOrCtrl+R", a.reload)
+	m.commit = a.menuCmd("提交", "CmdOrCtrl+Return", a.doCommit)
 
 	view := []*mygo.MenuItem{
 		m.tabDiff, m.tabHist,
@@ -78,6 +80,8 @@ func buildAppMenu(a *app) *mygo.Menu {
 		{Label: appName, Submenu: a.appSubmenu()},
 		{Label: "文件", Submenu: []*mygo.MenuItem{
 			a.menuCmd("打开仓库…", "CmdOrCtrl+O", a.chooseFolder),
+			mygo.Separator(),
+			m.commit,
 			mygo.Separator(),
 			{Role: mygo.RoleClose, Label: "关闭窗口"},
 		}},
@@ -203,6 +207,7 @@ func (a *app) syncMenu() {
 	enableItem(m.refresh, !noRepo)
 	enableItem(m.tabDiff, !noRepo)
 	enableItem(m.tabHist, !noRepo)
+	enableItem(m.commit, a.canCommit())
 }
 
 // checkItem 只在勾真的会变的时候才去动它。

@@ -106,6 +106,8 @@ func (a *app) diffRow(c *ui.Context, pal palette, r row) {
 	switch r.kind {
 	case rowFileHeader:
 		a.fileHeaderRow(c, pal, r)
+	case rowSection:
+		a.sectionRow(c, pal, r)
 	case rowHunkHeader:
 		a.hunkHeaderRow(c, pal, r)
 	case rowGap:
@@ -115,6 +117,40 @@ func (a *app) diffRow(c *ui.Context, pal palette, r row) {
 	default:
 		a.codeRow(c, pal, r)
 	}
+}
+
+// sectionH 是「已暂存 / 未暂存」分隔行的高度。
+const sectionH = 28
+
+// sectionRow 是两段之间的分隔行。
+//
+// 字号、字重、颜色照抄侧栏的分组行（本地分支 / 远程 / 标签）：两处都是
+// 「下面这一摞属于这里」，长得一样才不用重新认。右边跟上这一段有几个文件 ——
+// 文件栏的栏头报的是总数，分段之后「各有多少」只有这里能看到。
+//
+// 两边都有内容时才画（buildRows 决定），只有一段的时候它不提供任何信息。
+func (a *app) sectionRow(c *ui.Context, pal palette, r row) {
+	t := c.Theme()
+	n := 0
+	sec := gitrepo.SectionNone
+	if f := a.fileAt(r.file); f != nil {
+		sec = f.Section
+		for i := range a.files {
+			if a.files[i].Section == sec {
+				n++
+			}
+		}
+	}
+
+	ui.Row(c).Height(sectionH).Shrink(0).FillWidth().
+		Padding(0, codeGap).Gap(8).AlignItems(ui.Center).
+		Background(pal.gapBg).
+		BorderWidth(0, 0, 1, 0).BorderColor(pal.border).Children(func() {
+		ui.Text(c, r.note).FontSize(11).Bold().SingleLine().TextColor(t.TextMuted)
+		ui.Spacer(c)
+		ui.Textf(c, "%d 个文件", n).FontSize(11).FontFeatures("tnum").
+			TextColor(t.TextMuted)
+	})
 }
 
 // chevronSize 是折叠三角的边长。和侧栏树里的那个一样大。
@@ -188,7 +224,7 @@ func (a *app) fileHeaderRow(c *ui.Context, pal palette, r row) {
 }
 
 // hunkHeaderRow 是 @@ 那一行。左边是原始的 hunk 头，中间跟着 git 抓出来的
-// 函数名（Section），最右边是 ✨ 解释按钮。
+// 函数名（Section），最右边是「暂存这一段」和「✨ 解释」。
 func (a *app) hunkHeaderRow(c *ui.Context, pal palette, r row) {
 	f := a.fileAt(r.file)
 	if f == nil || r.hunk >= len(f.Hunks) {
@@ -205,6 +241,16 @@ func (a *app) hunkHeaderRow(c *ui.Context, pal palette, r row) {
 				Grow(1).MinWidth(0).TextColor(pal.hunkText).Opacity(0.7)
 		} else {
 			ui.Spacer(c)
+		}
+
+		// 按块暂存。不画在不能按块暂存的文件上（未跟踪、冲突、重命名、
+		// 二进制）：那些文件只有「整个暂存」一条路，一颗永远灰着的按钮
+		// 只会让人猜它为什么点不动。文件栏里的整文件勾选框管着它们。
+		if a.hunkStageable(*f) {
+			staged := f.Section == gitrepo.SectionStaged
+			if stageHunkButton(c, pal, staged, a.op != gitrepo.OpNone).Clicked() {
+				a.toggleStageHunk(r.file, r.hunk)
+			}
 		}
 
 		// 按钮的选中态取点击**之前**的状态：刚点开的那一帧，按钮下一刻

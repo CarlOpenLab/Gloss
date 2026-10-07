@@ -57,6 +57,11 @@ type app struct {
 	branch   string
 	state    loadState
 	errMsg   string
+	// loadingPath 是这一趟正在读的仓库路径。它不是 repoPath：repoPath 只在
+	// 读完（或读失败）之后才改，而「正在重读的旧内容还能不能继续显示」要
+	// 比着它来判断 —— 换个仓库时旧仓库的 diff 一秒都不该留在屏幕上，同
+	// 一个仓库刷新时则正好相反，留着才不会闪（见 hasDiff）。
+	loadingPath string
 	// errNotRepo 说明这次的失败是「选的文件夹不是仓库」。它和别的加载失败
 	// 分开：那种重试有意义，这种重试多少次都一样，该请用户换一个文件夹。
 	errNotRepo bool
@@ -99,6 +104,10 @@ type app struct {
 	// expanded 记录每个未改动区间展开了多少行，key 见 rows.go 的 gapKey。
 	// 跨帧保留，所以刷新后展开状态还在（文件内容变了才会对不上）。
 	expanded map[string]int
+	// listID 是「现在这份文件列表是谁的」，见 showFiles。同一个对象刷新
+	// （暂存之后重读、⌘R）ID 不变，展开状态因此保得住；换了对象就作废 ——
+	// 历史提交之间、储藏之间的路径完全一样，光看 key 分不出这是谁的区间。
+	listID string
 
 	// —— J/K 跳 hunk ——
 	// hunkCur 是上一次跳到的那一段的 key，见 keys.go 的 hunkAnchor。
@@ -199,6 +208,28 @@ type app struct {
 	palette paletteState
 	// focusFilter 是 ⌘F 的一次性请求：下帧把焦点放进筛选框。
 	focusFilter bool
+
+	// —— 写操作（暂存 / 提交 / 检出 / 抓取……）——
+	// 同一时刻只允许一个写操作在飞：git 的 index 只有一把锁，两个写操作
+	// 并发的结果是「谁先拿到锁谁赢、另一个报 index.lock」，对用户就是随机
+	// 失败。所有写路径的第一件事都是问它（见 startOp）。
+	op     gitrepo.Op
+	opSeq  int    // 发起时自增；回调只认自己那一次，和上面四个序号同理
+	opName string // 「正在暂存…」这类给界面看的说明
+	// opErr / opNote 是操作结果要显示的东西：失败给翻成人话的说法（顶部
+	// 横幅，自己关），成功给一句确认（Toast，几秒后自己消失）。下一次操作
+	// 或点 × 时清掉。toasted 记着哪句成功提示已经播报过 —— 每帧重新 Toast
+	// 会不断重置它的计时，永远不消失。
+	opErr   *gitrepo.Failure
+	opNote  string
+	toasted string
+
+	// commitMsg 是提交框里的消息；草稿按仓库持久化（store.Drafts），
+	// draftFor 记着当前这份草稿属于哪个仓库。
+	commitMsg string
+	draftFor  string
+	// commitFocused 记上一帧提交框有没有焦点：焦点离开的那一帧落盘草稿。
+	commitFocused bool
 }
 
 func newApp() *app {
@@ -507,14 +538,18 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 		Label("工具栏")
 }
 
-// mainArea 是右侧主区。两个 tab 的下半区是同一样东西 ——「文件列表 + diff」，
-// 见 detailPane；历史 tab 在那个上面还摞了一栏提交列表。
+// mainArea 是右侧主区：顶上可能有一条操作结果横幅，然后是两个 tab 的内容；
+// 「改动」tab 底下还压着一条提交栏。
 func (a *app) mainArea(c *ui.Context, pal palette) {
-	if a.tab == 1 {
-		a.historyArea(c, pal)
-		return
-	}
-	a.detailPane(c, pal)
+	ui.Column(c).Grow(1).FillWidth().MinHeight(0).Children(func() {
+		a.opBanner(c, pal)
+		if a.tab == 1 {
+			a.historyArea(c, pal)
+			return
+		}
+		a.detailPane(c, pal)
+		a.commitBox(c, pal)
+	})
 }
 
 // historyEmpty 是历史 tab 主区没有 diff 可画时的几种情况。
@@ -606,11 +641,14 @@ func (a *app) openRepo(path string) {
 	seq := a.repoSeq
 	a.state = loadLoading
 	a.errMsg = ""
+	a.loadingPath = filepath.Clean(path)
 
 	// 换了个仓库，上一个仓库的分支和「在看哪条历史」全部作废。刷新
 	//（reload 也走这里，path 没变）时留着 —— 用户点过的分支不该被一次
 	// 刷新弹掉。
 	if path != a.repoPath {
+		// 老仓库的提交草稿先落盘（draftFor 还是老仓库的根）。
+		a.saveCommitDraft()
 		a.refs = nil
 		a.refByFull = nil
 		a.refTree = nil
@@ -660,6 +698,65 @@ func (a *app) openRepo(path string) {
 // 灰着、菜单却亮着」这种各说各话，所以收成一份。
 func (a *app) repoReady() bool { return a.state == loadReady }
 
+// startOp 是唯一的写操作入口。有写操作在飞、或者仓库没开好时直接返回 false，
+// 调用方什么都不做（界面本来就把那些控件画成灰的，这里只是最后一道兜底）。
+//
+// work 在后台跑，拿到的 repo 已经打开；返回一句成功提示（可以为空），出错就
+// 返回 error。done 在主线程上、a.op 已经清掉之后调用，参数是这次成没成 ——
+// 重载之类的收尾放在那里。失败会被翻成人话放进 a.opErr（顶部横幅）。
+func (a *app) startOp(kind gitrepo.Op, name string, work func(context.Context, *gitrepo.Repo) (string, error), done func(ok bool)) bool {
+	if a.op != gitrepo.OpNone || !a.repoReady() {
+		return false
+	}
+	a.op = kind
+	a.opName = name
+	a.opErr = nil
+	a.opNote = ""
+	a.opSeq++
+	seq := a.opSeq
+	dir := a.repoPath
+
+	a.run(func() {
+		ctx := context.Background()
+		repo, err := gitrepo.Open(ctx, dir)
+		var note string
+		if err == nil {
+			note, err = work(ctx, repo)
+		}
+		a.dispatch(func() {
+			if a.opSeq != seq {
+				return // 已经有更新的一次操作了，这次的结果丢弃
+			}
+			a.op = gitrepo.OpNone
+			if err != nil {
+				f := gitrepo.Describe(kind, err)
+				a.opErr = &f
+			} else {
+				a.opNote = note
+			}
+			if done != nil {
+				done(err == nil)
+			}
+		})
+	})
+	return true
+}
+
+// reloadAfterOp 是「完成之后整体重读」那一档收尾：暂存、提交、检出、
+// 拉取、推送都动过 index 或工作区，两段 diff 全变了。
+func (a *app) reloadAfterOp() {
+	a.reload()
+}
+
+// saveCommitDraft 把提交框里的消息按仓库存起来。空消息等于删掉这条。
+func (a *app) saveCommitDraft() {
+	if a.draftFor == "" {
+		return
+	}
+	a.store.SetDraft(a.draftFor, a.commitMsg)
+	a.persist()
+}
+
 // failOpen 记下一次「仓库没打开」。只在主线程调用。
 //
 // 记下试的是哪个文件夹：卡片上说「这个文件夹不是 git 仓库」，屏幕上总得有
@@ -683,6 +780,14 @@ func (a *app) applyModel(m *gitrepo.Model) {
 	a.repoPath = m.Repo.Root
 	a.repoName = m.Repo.Name
 	a.branch = m.Branch
+
+	// 换到另一个仓库（或者第一次打开）时把这个仓库存下的提交草稿拾回来。
+	// 刷新同一个仓库不动它 —— 正在打的字不该被一次刷新吃掉。
+	if a.draftFor != m.Repo.Root {
+		a.draftFor = m.Repo.Root
+		a.commitMsg = a.store.State().Drafts[m.Repo.Root]
+	}
+
 	a.workFiles = m.Files
 
 	// 记住这个仓库，下次启动直接打开
@@ -691,7 +796,7 @@ func (a *app) applyModel(m *gitrepo.Model) {
 	// 正在看历史时别把主区切回工作区 —— 用户下一次刷新可能只是想
 	// 更新一下提交列表。
 	if a.tab == 0 {
-		a.showFiles(a.workFiles)
+		a.showFiles(a.workFiles, "w:"+m.Repo.Root)
 	} else {
 		a.loadCommits()
 	}
@@ -746,14 +851,25 @@ func (a *app) setRefs(refs []gitrepo.Ref) {
 	a.rebuildRefTree()
 }
 
-// showFiles 把一份文件列表换成当前显示的内容：重置展开状态和缓存内容，
-// 重新筛选、重新读内容。工作区和历史提交共用这一条路。
-func (a *app) showFiles(files []gitrepo.File) {
+// showFiles 把一份文件列表换成当前显示的内容：重新筛选、重新读内容。
+// 工作区和历史提交共用这一条路。
+//
+// id 说明这份列表是谁的（"w:仓库路径" / "c:提交" / "k:储藏"）。同一个 id
+// 就是同一个对象的刷新 —— 展开着的未改动区间留着：hunk 级暂存点一下就把
+// 刚摊开的上下文收回去，是最让人不想再用第二次的那类反馈。换了 id 则是
+// 换了个对象，展开状态跟着作废。
+func (a *app) showFiles(files []gitrepo.File, id string) {
 	// 上一个列表的异步结果（内容加载）从此作废
 	a.contentSeq++
-	// 文件列表换了，展开状态和已读内容都不再对应得上
-	a.expanded = nil
+	// 已读内容一律作废，跨刷新不复用：暂存之后正文的基线就变了 ——
+	// 未暂存那份比的是新 index，已暂存那份读的是 index 本身。
 	a.contents = map[string]*fileContent{}
+	if a.listID == id {
+		a.pruneExpanded(files)
+	} else {
+		a.expanded = nil
+		a.listID = id
+	}
 	// 记下的跳转位置同样作废：同样的 key 可能落在完全不同的行上
 	a.hunkCur = ""
 	// 卡片指向的是「第几个文件的第几段」，同样作废
@@ -767,6 +883,28 @@ func (a *app) showFiles(files []gitrepo.File) {
 	a.loadContents(a.contentSeq)
 }
 
+// pruneExpanded 丢掉已经没有主了的展开状态：文件整份提交/暂存走之后，
+// 它那一份就不再出现在列表里了，留着只是让 map 慢慢长大。
+//
+// key 的形状是 g:<fileKey>:<起始行号>，而 fileKey 自己带冒号（"s:path"），
+// 所以从**最后**一个冒号切。路径里真带冒号的场合（macOS 允许）会被切错，
+// 结果是少留一次展开 —— 丢掉用户状态总比留着一份对不上的强。
+func (a *app) pruneExpanded(files []gitrepo.File) {
+	if len(a.expanded) == 0 {
+		return
+	}
+	live := make(map[string]bool, len(files))
+	for _, f := range files {
+		live[fileKey(f)] = true
+	}
+	for k := range a.expanded {
+		body := strings.TrimPrefix(k, "g:")
+		if i := strings.LastIndex(body, ":"); i < 0 || !live[body[:i]] {
+			delete(a.expanded, k)
+		}
+	}
+}
+
 // applyFilter 依据筛选词算出要显示的文件，并同步树和 diff 行模型。
 func (a *app) applyFilter() {
 	a.files = filterFiles(a.allFiles, a.fileFilter)
@@ -778,13 +916,15 @@ func (a *app) applyFilter() {
 //
 // 筛掉的文件连 diff 一起不显示，而不是只从文件列表里藏起来 —— 筛选的
 // 用途是「只看这块子系统」，diff 里还留着别的文件会让人对不上。
+// 匹配的是纯路径（pathOf），不是 fileKey —— 后者带「s:/u:」段落前缀，
+// 搜一个 "s" 会把整段已暂存的文件全捞进来。
 func filterFiles(files []gitrepo.File, query string) []gitrepo.File {
 	if query == "" {
 		return files
 	}
 	out := make([]gitrepo.File, 0, len(files))
 	for _, f := range files {
-		if filetree.FuzzyMatch(fileKey(f), query) {
+		if filetree.FuzzyMatch(pathOf(f), query) {
 			out = append(out, f)
 		}
 	}
@@ -801,25 +941,52 @@ func (a *app) reload() {
 
 // rebuildTree 依据当前的文件列表和筛选词重建文件列表那一栏的树。
 //
+// 已暂存是 a.files 的连续前缀（Load 保证）。两段都有文件时各建一棵树、
+// 各挂一个分组行；只有一段时不分组建树 —— 单一段落再套一层分组，所有
+// 文件名白白往右缩一格，什么信息都没多。分组 key 用 g:s / g:u，和侧栏
+// refs 树的 g: 前缀各管各的（两棵树本来就不会同时出现在一个列表里）。
+//
 // 展开/收起的状态不用在这里处理：filesClosed 里记的是「用户收起过哪些」，
-// 没记过的一律展开（见 filesClosed 的说明）。原来那套 seenDirs 是为了绕开
-// 「Outline 的目录默认收起」，换成 ui.List 之后这个默认值本身就对了。
+// 没记过的一律展开（见 filesClosed 的说明）。
 func (a *app) rebuildTree() {
 	a.fileTreeFilter = a.fileFilter
-	a.tree = filetree.Filter(filetree.Build(a.files), a.fileFilter)
+
+	stagedN := 0
+	for stagedN < len(a.files) && a.files[stagedN].Section == gitrepo.SectionStaged {
+		stagedN++
+	}
+	var roots []*filetree.Node
+	switch {
+	case stagedN == 0:
+		roots = filetree.BuildAt(a.files, 0, "")
+	case stagedN == len(a.files):
+		roots = filetree.BuildAt(a.files, 0, "")
+	default:
+		roots = []*filetree.Node{
+			{Key: "g:s", Label: "已暂存", Path: "已暂存", Dir: true, FileIdx: -1,
+				Children: filetree.BuildAt(a.files[:stagedN], 0, "s|")},
+			{Key: "g:u", Label: "未暂存", Path: "未暂存", Dir: true, FileIdx: -1,
+				Children: filetree.BuildAt(a.files[stagedN:], stagedN, "u|")},
+		}
+	}
+	a.tree = filetree.Filter(roots, a.fileFilter)
 }
 
 // isViewed 判断文件是否已被标记为看过。指纹对不上就说明文件内容变了，
 // 之前的标记自动作废。
+//
+// key 用 fileKey（含段落前缀）：同一个路径在「已暂存 / 未暂存」是两份不同
+// 的 diff，也是两次不同的 review。升级前按纯路径存的旧标记就此失效 ——
+// 无害，它们只是再也不会被命中。
 func (a *app) isViewed(f gitrepo.File) bool {
-	return a.viewed[f.NewPath] == f.Fingerprint && f.Fingerprint != ""
+	return a.viewed[fileKey(f)] == f.Fingerprint && f.Fingerprint != ""
 }
 
 func (a *app) toggleViewed(f gitrepo.File) {
 	if a.isViewed(f) {
-		delete(a.viewed, f.NewPath)
+		delete(a.viewed, fileKey(f))
 	} else {
-		a.viewed[f.NewPath] = f.Fingerprint
+		a.viewed[fileKey(f)] = f.Fingerprint
 	}
 	// 标记变了，之前手动折叠/展开的覆盖就不作数了 ——
 	// 「勾上已 review 就折起来」这条规则要立刻生效。

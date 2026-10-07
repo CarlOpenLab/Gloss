@@ -24,17 +24,33 @@ const maxUntrackedBytes = 1 << 20
 // 「文件数」比实际少 —— 这是有意的取舍，宁可少显示也不要卡死。
 const maxUntracked = 500
 
+// Section 说明一个 File 属于文件列表的哪一段。
+//
+// 历史提交、储藏里的 diff 两段都不是（SectionNone）—— 那边的 key 和语义
+// 保持和分段之前完全一样。
+type Section uint8
+
+const (
+	SectionNone     Section = iota
+	SectionStaged           // index vs HEAD：已暂存
+	SectionUnstaged         // worktree vs index：未暂存（含未跟踪、冲突）
+)
+
 // File 是一个可以直接渲染的文件变更：解析好的 hunk + git status 的三态信息。
 type File struct {
 	diff.FileDiff
 
-	// Status 是显示用的变更类型，来自 git status（比只看 patch 更准，
-	// 能区分「未跟踪」和「新增」）。
+	// Status 是这一段里该文件的变更类型（已暂存段用 index 侧的类型，
+	// 未暂存段用工作区侧的类型）。
 	Status Status
 
-	// Staged / Unstaged 区分「已暂存」和「工作区还有改动」。
-	// v1 界面上先把它们合并成一张卡片显示（像 godiff 那样），
-	// 但数据从第一天就是分开的 —— 下一步做暂存/提交时不用回头改数据层。
+	// Section 说明这个 File 属于哪一段。两段各自的 diff 来自各自的基线，
+	// 同一个路径可以同时出现在两段里（暂存之后又改了）。
+	Section Section
+
+	// Staged / Unstaged 是「这一段」的归属标志：SectionStaged 的条目
+	// Staged=true、Unstaged=false，反之亦然。两个独立布尔是为了历史
+	// 调用方读起来顺，不表示一个 File 能同时属于两段。
 	Staged   bool
 	Unstaged bool
 
@@ -50,88 +66,150 @@ type File struct {
 type Model struct {
 	Repo     *Repo
 	Branch   string
+	Detached bool // HEAD 不在任何分支上（检出过标签/提交）
+	Remotes  []string
 	Files    []File
 	TotalAdd int
 	TotalDel int
 }
 
-// Load 读取工作区相对 HEAD 的全部变更（含已暂存、未暂存、未跟踪）。
+// Load 读取工作区相对 HEAD 的全部变更，按「已暂存」「未暂存」分成两段。
+//
+// 两段的 diff 必须来自各自的基线：已暂存 = index vs HEAD
+// （`git diff --cached <base>`），未暂存 = worktree vs index（`git diff`）。
+// 这不只是为了显示 —— hunk 的 ID 是「路径 + 带行号的原文」的哈希，换一条
+// 基线行号就全变；界面上展示的 hunk 和点击暂存时重新跑出来的 hunk 只有
+// 基线相同才对得上号（见 write.go 里 StageHunk 的重新切片）。
+//
+// Files 里「已暂存」是连续的前缀，之后才是未暂存 —— 界面的分组和段落键
+// 都建立在这条性质上。
 func (r *Repo) Load(ctx context.Context) (*Model, error) {
 	changes, err := r.Status(ctx)
 	if err != nil {
 		return nil, err
 	}
-	branch, err := r.Branch(ctx)
+	branch, detached, err := r.branchInfo(ctx)
 	if err != nil {
 		return nil, err
 	}
+	remotes, err := r.Remotes(ctx)
+	if err != nil {
+		remotes = nil // 远程读不到不算加载失败，只是远程操作点不了
+	}
 
-	// git diff HEAD 同时包含已暂存和未暂存的改动，两者合成一张卡片显示。
-	// 未跟踪文件不在此列，下面单独处理。
-	raw, err := run(ctx, r.Root, diffArgs(r.baseRev(ctx))...)
+	rawStaged, err := run(ctx, r.Root, diffArgs("--cached", r.baseRev(ctx))...)
 	if err != nil {
 		return nil, err
 	}
-	parsed := diff.Parse(string(raw))
-	byPath := make(map[string]*diff.FileDiff, len(parsed))
-	for i := range parsed {
-		byPath[parsed[i].NewPath] = &parsed[i]
+	rawUnstaged, err := run(ctx, r.Root, diffArgs()...)
+	if err != nil {
+		return nil, err
+	}
+	staged := indexByPath(diff.Parse(string(rawStaged)))
+	unstaged := indexByPath(diff.Parse(string(rawUnstaged)))
+
+	m := &Model{Repo: r, Branch: branch, Detached: detached, Remotes: remotes}
+	appendFile := func(f File) {
+		m.Files = append(m.Files, f)
+		m.TotalAdd += f.AddCount
+		m.TotalDel += f.DelCount
 	}
 
-	m := &Model{Repo: r, Branch: branch}
+	// 已暂存段（Files 的连续前缀）。
+	for _, ch := range changes {
+		if ch.StagedStatus == "" {
+			continue
+		}
+		fd := staged[ch.Path]
+		appendFile(fileFromDiff(ch, fd, ch.StagedStatus, ch.Path, ch.OldPath, SectionStaged))
+	}
+
+	// 未暂存段：普通改动、未跟踪（合成整文件）、冲突（只有一张空卡片）。
 	untracked := 0
 	for _, ch := range changes {
-		f := File{
-			Status:      ch.Status,
-			Staged:      ch.Staged,
-			Unstaged:    ch.Unstaged,
-			Fingerprint: fingerprint(ch.Path, parsedFingerprintSource(byPath[ch.Path], ch)),
-		}
-
 		switch {
 		case ch.Status == StatusUntracked:
 			if untracked >= maxUntracked {
 				continue
 			}
 			untracked++
-			// 未跟踪文件 git diff 不会输出，自己读内容合成一份
 			content, err := readCapped(filepath.Join(r.Root, ch.Path), maxUntrackedBytes)
 			if err != nil {
 				continue // 读不到（权限、目录、刚好被删）就跳过，不打断整体加载
 			}
-			f.FileDiff = diff.NewFileFromContent(ch.Path, content)
-			f.Fingerprint = fingerprint(ch.Path, string(content))
+			f := File{
+				FileDiff:    diff.NewFileFromContent(ch.Path, content),
+				Status:      StatusUntracked,
+				Section:     SectionUnstaged,
+				Unstaged:    true,
+				Fingerprint: fingerprint(ch.Path, string(content)),
+			}
 			if f.AddCount == 0 && len(content) > 0 {
 				f.TooLarge = true
 			}
+			appendFile(f)
 
-		case byPath[ch.Path] != nil:
-			f.FileDiff = *byPath[ch.Path]
+		case ch.Status == StatusConflict:
+			// 冲突内容的 patch 是合并格式（diff --cc、@@@ 头），解析器不认；
+			// 给一张没有内容的卡片，解决路径是整文件 `git add`。
+			appendFile(File{
+				FileDiff:    diff.FileDiff{NewPath: ch.Path},
+				Status:      StatusConflict,
+				Section:     SectionUnstaged,
+				Unstaged:    true,
+				Fingerprint: fingerprint(ch.Path, string(StatusConflict)),
+			})
 
-		default:
-			// 只在 git status 里出现、patch 里没有的情况：mode 变更、
-			// 空文件新增、子模块指针变化等。给一个只有状态没有内容的条目，
-			// 至少让用户知道这个文件变了。
-			f.FileDiff = diff.FileDiff{NewPath: ch.Path, OldPath: ch.OldPath}
+		case ch.UnstagedStatus != "":
+			appendFile(fileFromDiff(ch, unstaged[ch.Path], ch.UnstagedStatus, ch.Path, ch.OldPath, SectionUnstaged))
 		}
-
-		if ch.Status == StatusRenamed && ch.OldPath != "" {
-			f.OldPath = ch.OldPath
-		}
-		f.Status = ch.Status
-
-		m.Files = append(m.Files, f)
-		m.TotalAdd += f.AddCount
-		m.TotalDel += f.DelCount
 	}
 	return m, nil
 }
 
-// parsedFingerprintSource 取用于算指纹的文本：优先用 patch 原文（能看到
-// 相对 HEAD 的净变更），没有就用状态本身。
-func parsedFingerprintSource(f *diff.FileDiff, ch Change) string {
+// fileFromDiff 组装分段后的一个 File：优先用该段 patch 解析出的内容，
+// patch 里没有（mode 变更、空文件新增、子模块指针变化等）就给一个只有
+// 状态没有内容的条目，至少让用户知道这个文件变了。
+func fileFromDiff(ch Change, fd *diff.FileDiff, status Status, path, oldPath string, section Section) File {
+	f := File{
+		Status:      status,
+		Section:     section,
+		Fingerprint: fingerprint(path, parsedFingerprintSource(fd, status, oldPath)),
+	}
+	if section == SectionStaged {
+		f.Staged = true
+	} else {
+		f.Unstaged = true
+	}
+	if fd != nil {
+		f.FileDiff = *fd
+	} else {
+		f.FileDiff = diff.FileDiff{NewPath: path, OldPath: oldPath}
+	}
+	if status == StatusRenamed && oldPath != "" {
+		f.OldPath = oldPath
+	}
+	return f
+}
+
+// indexByPath 把解析出的文件按主路径建索引。
+//
+// 用 Path()（新路径优先、退回旧路径）而不是 NewPath：删除的文件新路径是
+// 空的，按 NewPath 建索引时它们全落到同一个空键上，界面上就成了「没有可
+// 显示的文本差异」。
+func indexByPath(files []diff.FileDiff) map[string]*diff.FileDiff {
+	m := make(map[string]*diff.FileDiff, len(files))
+	for i := range files {
+		m[files[i].Path()] = &files[i]
+	}
+	return m
+}
+
+// parsedFingerprintSource 取用于算指纹的文本：优先用该段 patch 原文，
+// 没有 patch 就用状态本身。
+func parsedFingerprintSource(f *diff.FileDiff, status Status, oldPath string) string {
 	if f == nil {
-		return string(ch.Status) + "\x00" + ch.OldPath
+		return string(status) + "\x00" + oldPath
 	}
 	var b []byte
 	for i := range f.Hunks {

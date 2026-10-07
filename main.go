@@ -52,6 +52,10 @@ func main() {
 		// 并请求重绘。直接改字段不会触发重绘。
 		a.dispatch = win.Update
 
+		// 关窗前把提交框里还没提交的消息存成草稿：下一次打开这个仓库，
+		// 那段写了一半的话还在。
+		win.OnClose(func(*mygo.CloseEvent) { a.saveCommitDraft() })
+
 		// 接着上次的仓库打开，省得每次启动都要重新选一遍
 		if p := s.State().LastRepo; p != "" {
 			a.dispatch(func() { a.openRepo(p) })

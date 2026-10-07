@@ -43,6 +43,15 @@ func newDir() *dirNode {
 // files 的顺序决定同层内的先后。git status 的输出本身按路径排序，
 // 所以传进来就是有序的。
 func Build(files []gitrepo.File) []*Node {
+	return BuildAt(files, 0, "")
+}
+
+// BuildAt 和 Build 一样建树，但 FileIdx 从 base 开始数、节点 Key 带 keyPrefix。
+//
+// 文件列表分成「已暂存 / 未暂存」两段、各建一棵树时用：base 把 FileIdx 对回
+// 扁平列表（两段共用同一份切片的拼接），keyPrefix 让两段的折叠状态互不干扰
+// —— 同一个路径可以同时在两段里（暂存之后又改了），Key 不带前缀就会串。
+func BuildAt(files []gitrepo.File, base int, keyPrefix string) []*Node {
 	root := newDir()
 	for i, f := range files {
 		path := f.NewPath
@@ -65,16 +74,16 @@ func Build(files []gitrepo.File) []*Node {
 		if _, dup := d.files[name]; !dup {
 			d.order = append(d.order, "f:"+name)
 		}
-		d.files[name] = i
+		d.files[name] = base + i
 	}
-	return walk(root, "")
+	return walk(root, "", keyPrefix)
 }
 
 // walk 把中间结构转成对外的 Node 树。
 //
 // 同层内目录排在文件前面 —— 和 finder/Fork 这些文件浏览器的习惯一致，
 // 也让「目录名和用户名重名」时不会交错得看不清层级。
-func walk(d *dirNode, prefix string) []*Node {
+func walk(d *dirNode, prefix, keyPrefix string) []*Node {
 	var out []*Node
 
 	emit := func(want byte) {
@@ -86,7 +95,7 @@ func walk(d *dirNode, prefix string) []*Node {
 			if want == 'f' {
 				idx := d.files[name]
 				out = append(out, &Node{
-					Key:     "f:" + prefix + name,
+					Key:     "f:" + keyPrefix + prefix + name,
 					Label:   name,
 					Path:    prefix + name,
 					FileIdx: idx,
@@ -104,12 +113,12 @@ func walk(d *dirNode, prefix string) []*Node {
 				sub = sub.dirs[child]
 			}
 			out = append(out, &Node{
-				Key:      "d:" + path,
+				Key:      "d:" + keyPrefix + path,
 				Label:    label,
 				Path:     path,
 				Dir:      true,
 				FileIdx:  -1,
-				Children: walk(sub, path+"/"),
+				Children: walk(sub, path+"/", keyPrefix),
 			})
 		}
 	}

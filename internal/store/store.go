@@ -58,6 +58,9 @@ type State struct {
 	LastRepo string `json:"lastRepo,omitempty"`
 	// Viewed 是「已 review」标记：文件路径 -> 当时的内容指纹。
 	Viewed map[string]string `json:"viewed,omitempty"`
+	// Drafts 是各仓库的提交信息草稿：仓库根路径 -> 还没提交出去的消息。
+	// 消息写到一半切去看别的仓库、或者关掉窗口，回来还应该在。
+	Drafts map[string]string `json:"drafts,omitempty"`
 }
 
 // cacheEntry 是一条解释缓存。At 用于超出上限时淘汰最旧的。
@@ -121,7 +124,7 @@ func (s *Store) Provider() *llm.Provider {
 	return s.cfg.Provider()
 }
 
-// State 返回状态，Viewed 是新的一份 map，改它不会影响 store。
+// State 返回状态，Viewed 和 Drafts 都是新的一份 map，改它们不会影响 store。
 func (s *Store) State() State {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -129,6 +132,10 @@ func (s *Store) State() State {
 	cp.Viewed = make(map[string]string, len(s.st.Viewed))
 	for k, v := range s.st.Viewed {
 		cp.Viewed[k] = v
+	}
+	cp.Drafts = make(map[string]string, len(s.st.Drafts))
+	for k, v := range s.st.Drafts {
+		cp.Drafts[k] = v
 	}
 	return cp
 }
@@ -141,6 +148,21 @@ func (s *Store) SetViewed(m map[string]string) {
 	for k, v := range m {
 		s.st.Viewed[k] = v
 	}
+}
+
+// SetDraft 记下某个仓库的提交信息草稿。msg 为空就把这条删掉 ——
+// 空草稿留在文件里没有任何用处。
+func (s *Store) SetDraft(repo, msg string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.st.Drafts == nil {
+		s.st.Drafts = map[string]string{}
+	}
+	if msg == "" {
+		delete(s.st.Drafts, repo)
+		return
+	}
+	s.st.Drafts[repo] = msg
 }
 
 // SetLastRepo 记住最后打开的仓库，下次启动直接打开。

@@ -37,6 +37,20 @@ func (r *Repo) NewLines(path string, limit int) []string {
 	return SplitLines(string(data))
 }
 
+// NewLinesAt 和 NewLines 一样，但读的是指定版本（rev 语义同 ContentsAt，
+// 比如 ":0" 是 index）。
+//
+// 已暂存段必须用它：那一段 diff 的「新侧」是 index 里的样子，不是工作区的
+// 样子。半暂存的文件（暂存之后又改了）两者不一样 —— 读工作区会让展开的
+// 未改动区间行号错位、语法高亮整段对不上，而且错得静默无声。
+func (r *Repo) NewLinesAt(ctx context.Context, rev, path string, limit int) []string {
+	data, err := r.ContentsAt(ctx, rev, path)
+	if err != nil || len(data) == 0 || len(data) > limit {
+		return nil
+	}
+	return SplitLines(string(data))
+}
+
 // SplitLines 把文件内容切成行，去掉末尾换行造成的那个空串。
 func SplitLines(s string) []string {
 	s = strings.TrimSuffix(s, "\n")

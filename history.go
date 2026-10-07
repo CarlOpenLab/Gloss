@@ -45,7 +45,7 @@ func (a *app) setTab(t int) {
 	switch t {
 	case 0:
 		if a.workFiles != nil {
-			a.showFiles(a.workFiles)
+			a.showFiles(a.workFiles, "w:"+a.repoPath)
 		} else {
 			a.allFiles = nil
 			a.applyFilter()
@@ -156,7 +156,7 @@ func (a *app) loadCommit(i int) {
 				return
 			}
 			a.histDiff = loadReady
-			a.showFiles(files)
+			a.showFiles(files, "c:"+hash)
 		})
 	})
 }
@@ -199,7 +199,7 @@ func (a *app) selectStash(ref gitrepo.Ref) {
 				return
 			}
 			a.histDiff = loadReady
-			a.showFiles(files)
+			a.showFiles(files, "k:"+ref.Full)
 		})
 	})
 }

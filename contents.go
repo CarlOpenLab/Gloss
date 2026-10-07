@@ -33,7 +33,14 @@ func (a *app) loadContents(seq int) {
 	if a.contents == nil {
 		a.contents = map[string]*fileContent{}
 	}
-	paths := make([]string, 0, len(a.allFiles))
+	// 每个要读的文件记下「读哪一侧」：已暂存段的正文在 index 里（git show
+	// :0:path），不在工作区 —— 半暂存的文件两者不同，而这里读错不会报错，
+	// 只会把行号和颜色悄悄画错（见 gitrepo.NewLinesAt）。
+	type req struct {
+		key, path string
+		staged    bool
+	}
+	var reqs []req
 	// diffs 存每个文件的 hunk，后台还原旧文件的高亮要用。
 	// 存值不存指针：后台 goroutine 因此完全不碰 app 上的任何东西。
 	diffs := make(map[string]diff.FileDiff, len(a.allFiles))
@@ -44,17 +51,18 @@ func (a *app) loadContents(seq int) {
 		if f.NewPath == "" || f.TooLarge || a.contents[p] != nil {
 			continue
 		}
-		paths = append(paths, p)
+		reqs = append(reqs, req{key: p, path: pathOf(*f), staged: f.Section == gitrepo.SectionStaged})
 		diffs[p] = f.FileDiff
 	}
-	if len(paths) == 0 {
+	if len(reqs) == 0 {
 		return
 	}
 	root := a.repoPath
 
 	// 后台只拿值参数，结果经 dispatch 回主线程 —— 见 app.go 顶部的线程约定
 	a.run(func() {
-		repo, err := gitrepo.Open(context.Background(), root)
+		ctx := context.Background()
+		repo, err := gitrepo.Open(ctx, root)
 		if err != nil {
 			return
 		}
@@ -78,12 +86,17 @@ func (a *app) loadContents(seq int) {
 			})
 		}
 
-		for _, p := range paths {
-			lines := repo.NewLines(p, maxContentBytes)
+		for _, rq := range reqs {
+			var lines []string
+			if rq.staged {
+				lines = repo.NewLinesAt(ctx, ":0", rq.path, maxContentBytes)
+			} else {
+				lines = repo.NewLines(rq.path, maxContentBytes)
+			}
 			if lines == nil {
 				continue
 			}
-			batch[p] = buildContent(p, lines, diffs[p])
+			batch[rq.key] = buildContent(rq.path, lines, diffs[rq.key])
 			if len(batch) >= contentBatch {
 				flush()
 			}

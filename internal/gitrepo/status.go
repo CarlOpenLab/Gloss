@@ -61,12 +61,17 @@ func (s Status) Letter() byte {
 // Staged / Unstaged 分别对应 index 相对 HEAD 的变更（XY 里的 X）
 // 和工作区相对 index 的变更（Y）。两个都为真表示「暂存了一部分，
 // 之后又改了一些」，这在做暂存/提交功能时是必须区分的状态。
+// StagedStatus / UnstagedStatus 是两侧各自的变更类型（空串 = 这一侧没变），
+// Status 是合成出来的显示用类型。
 type Change struct {
 	Path     string
 	OldPath  string // 重命名/复制时的原路径
 	Status   Status
 	Staged   bool
 	Unstaged bool
+
+	StagedStatus   Status // index vs HEAD 那一侧
+	UnstagedStatus Status // 工作区 vs index 那一侧
 }
 
 // Status 读取仓库的变更列表。
@@ -110,10 +115,12 @@ func parseStatus(out []byte) []Change {
 			}
 			x, y := parts[1][0], parts[1][1]
 			changes = append(changes, Change{
-				Path:     parts[8],
-				Status:   statusOf(x, y, false, false),
-				Staged:   x != '.',
-				Unstaged: y != '.',
+				Path:           parts[8],
+				Status:         statusOf(x, y, false, false),
+				Staged:         x != '.',
+				Unstaged:       y != '.',
+				StagedStatus:   sideStatus(x),
+				UnstagedStatus: sideStatus(y),
 			})
 
 		case '2': // 重命名/复制：2 <XY> ... <X><score> <path> NUL <origPath>
@@ -128,11 +135,13 @@ func parseStatus(out []byte) []Change {
 			}
 			x, y := parts[1][0], parts[1][1]
 			changes = append(changes, Change{
-				Path:     parts[9],
-				OldPath:  orig,
-				Status:   statusOf(x, y, false, false),
-				Staged:   x != '.',
-				Unstaged: y != '.',
+				Path:           parts[9],
+				OldPath:        orig,
+				Status:         statusOf(x, y, false, false),
+				Staged:         x != '.',
+				Unstaged:       y != '.',
+				StagedStatus:   sideStatus(x),
+				UnstagedStatus: sideStatus(y),
 			})
 
 		case 'u': // 冲突：u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path>
@@ -140,11 +149,14 @@ func parseStatus(out []byte) []Change {
 			if len(parts) < 11 {
 				continue
 			}
+			// 冲突在界面上只占「未暂存」那一段一张卡片（两边都没有可
+			// 直接提交的内容），侧标也按这个口径给。
 			changes = append(changes, Change{
-				Path:     parts[10],
-				Status:   StatusConflict,
-				Staged:   true,
-				Unstaged: true,
+				Path:           parts[10],
+				Status:         StatusConflict,
+				Staged:         true,
+				Unstaged:       true,
+				UnstagedStatus: StatusConflict,
 			})
 
 		case '?': // 未跟踪：? <path>
@@ -153,9 +165,10 @@ func parseStatus(out []byte) []Change {
 				continue
 			}
 			changes = append(changes, Change{
-				Path:     parts[1],
-				Status:   StatusUntracked,
-				Unstaged: true,
+				Path:           parts[1],
+				Status:         StatusUntracked,
+				Unstaged:       true,
+				UnstagedStatus: StatusUntracked,
 			})
 
 		case '!': // 被忽略，不显示
@@ -186,6 +199,31 @@ func statusOf(x, y byte, untracked, unmerged bool) Status {
 		return StatusAdded
 	case x == 'D' || y == 'D':
 		return StatusDeleted
+	}
+	return StatusModified
+}
+
+// sideStatus 把 XY 里的单个字符翻译成状态；'.'（这一侧没有变更）返回空串。
+//
+// 分段展示后，每一段显示的是「这一侧自己的类型」：一个文件可以「已暂存
+// 新增 + 工作区又改了」，两段的侧标就该一个是 A、一个是 M。
+// 'T' 是类型变了（文件↔符号链接），显示上归入已修改。
+func sideStatus(c byte) Status {
+	switch c {
+	case '.':
+		return ""
+	case 'M', 'T':
+		return StatusModified
+	case 'A':
+		return StatusAdded
+	case 'D':
+		return StatusDeleted
+	case 'R':
+		return StatusRenamed
+	case 'C':
+		return StatusCopied
+	case 'U':
+		return StatusConflict
 	}
 	return StatusModified
 }

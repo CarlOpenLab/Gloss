@@ -8,11 +8,13 @@ review 别人（或 AI）写的大量的代码时，哪里不懂点哪里，AI �
 ## 功能
 
 - **本地 git 仓库**：打开一个工作副本，看未提交的改动；侧栏列着分支 / 远程 / 标签 / 储藏，点一条分支就只看它的历史，点一条储藏直接看它的改动
+- **暂存与提交**：文件行左边的方框按整个文件暂存，hunk 头上的按钮按块暂存 —— 改动因此分成「已暂存 / 未暂存」两段，同一个文件可以两边各占一份；提交栏里写信息（`⌘⏎` 提交），写了一半的消息按仓库记着，切走再回来还在
 - **GitHub 风格 diff 视图**：红增绿删、双侧行号、语法高亮（chroma）、文件树导航
 - **逐块 AI 解释（悬浮卡片）**：每个 hunk 一个 ✨ 按钮，点开是贴着按钮弹出的浮窗，流式输出、不挤动 diff。一个文件有多个变更块时，prompt 会点名「当前是第几个块」并列出其它块的位置，文件上下文带真实行号，解释只讲这一个块。失败时不甩一坨 HTTP 错误：说清是什么事、怎么办（密钥不对直接给一条「模型设置…」），供应商的原话留着可查
 - **Fork 式的上下分**：主区上半是提交列表（左边一条自己算的提交拓扑图），下半左边是文件列表、右边是选中提交的 diff；点文件列表里的一行，diff 直接滚到那个文件的头上
 - **文件树**：可折叠的目录树（只含一个子目录的目录链合并成一行）、模糊筛选（`⌘F`）、每行右侧 `+N −N` 和状态字母、底部一条常驻栏脚写着总计和已 review 进度
 - **Viewed 联动折叠**：标了 `已 review` 的文件在 diff 里折成一条文件头，一屏就能扫完剩下的改动；内容一变标记自动失效。点文件头可以手动折叠/展开
+- **写操作说人话**：暂存 / 提交失败时顶上一条横幅 —— 出了什么事、能怎么办、git 自己的原话（钩子拦下、`index.lock`、没配 user.name、GPG 签名失败……都有对应的说法），原话永远留着可查
 - **命令栏（`⌘K`）**：所有功能都能键盘调到
 - **多供应商配置**：内置 Anthropic / DeepSeek / Kimi(Moonshot) / 通义千问 / 智谱 GLM / OpenRouter / Ollama 预设，任何 OpenAI 兼容接口都可用；也支持 `ANTHROPIC_API_KEY` 环境变量回退
 - **结果缓存与持久化**：同一个变更块（按内容哈希 + 模型名）不重复调用模型；解释、已 review 状态、窗口设置都存在 `~/Library/Application Support/Gloss/`
@@ -24,6 +26,7 @@ review 别人（或 AI）写的大量的代码时，哪里不懂点哪里，AI �
 | `⌘K` | 命令栏 |
 | `J` / `K` | 跳到下一段 / 上一段改动 |
 | `⌘F` | 聚焦文件筛选框 |
+| `⌘⏎` | 提交（输入框里回车是换行，所以带 `⌘`） |
 | `⌘O` | 打开仓库 |
 | `⌘1` / `⌘2` | 改动 / 历史 |
 | `⌘⇧B` | 收起 / 展开侧栏 |
@@ -65,8 +68,10 @@ main.go / app.go         窗口、菜单、app 状态、每帧的根布局
   sidebar.go             侧栏：分支 / 远程 / 标签 / 储藏树
   history.go             上半区：提交列表 + 列头
   graph.go               提交拓扑图：布局（buildGraph）与逐行绘制
-  filepane.go            下半区左边：文件列表
+  filepane.go            下半区左边：文件列表（含暂存勾选框）
   diffview.go            diff 渲染、语法高亮、折叠
+  commitbox.go           暂存勾选框、hunk 暂存按钮、提交栏
+  opbanner.go            写操作的结果：失败横幅 / 成功 Toast
   treeview.go            两棵树共用的行画法（缩进 / 箭头 / 选中胶囊）
   refs.go                引用树的分组与筛选
   rows.go                扁平行模型（虚拟化列表的数据源）
@@ -77,8 +82,11 @@ main.go / app.go         窗口、菜单、app 状态、每帧的根布局
   theme.go               配色（对齐 GitHub 那套）
 
 internal/
-  gitrepo/               git CLI 封装（status / diff / log / refs）
+  gitrepo/               git CLI 封装（status / diff / log / refs / 写操作）
+    write.go             暂存、按块暂存、提交（唯一的几个写口子）
+    failure.go           把 git 的错误翻成人话（说什么事 / 怎么办 / 原话留着）
   diff/                  unified diff 解析
+    slice.go             从完整 patch 里原样切出一段（按块暂存要用）
   highlight/             chroma：整文件 tokenize 后按行切片
   explain/               prompt 构建、上下文窗口（纯函数，不碰网络）
   llm/                   Anthropic + OpenAI 兼容接口的流式客户端
@@ -92,8 +100,10 @@ internal/
 
 ## 后续路线
 
-- [ ] 暂存 + 提交（stage / unstage / commit）
-- [ ] 分支的右键菜单：checkout / merge / rebase
+- [x] 暂存 + 提交（文件级 + hunk 级）
+- [ ] 切分支 / 检出标签 / 打标签（右键菜单）
+- [ ] 远程：fetch / pull / push
+- [ ] 分支的右键菜单：merge / rebase
 - [ ] 储藏 apply / pop，侧栏可拖宽
 - [ ] 提交列表的键盘上下选择（`J` / `K` 现在只在 diff 里跳）
 - [ ] GitHub PR：直接看 PR 的 diff、把解释回写成评论

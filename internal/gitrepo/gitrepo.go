@@ -46,16 +46,41 @@ func Open(ctx context.Context, dir string) (*Repo, error) {
 
 // Branch 返回当前分支名。处于 detached HEAD 时返回短哈希。
 func (r *Repo) Branch(ctx context.Context) (string, error) {
+	name, _, err := r.branchInfo(ctx)
+	return name, err
+}
+
+// branchInfo 在 Branch 的基础上多带一个「是不是 detached HEAD」。
+//
+// 界面靠它把分支芯片换成警示样式：分离头指针上的提交没人接得住，
+// 不说清楚的话用户会以为自己在分支上正常干活。
+func (r *Repo) branchInfo(ctx context.Context) (string, bool, error) {
 	out, err := run(ctx, r.Root, "symbolic-ref", "--quiet", "--short", "HEAD")
 	if err == nil {
-		return strings.TrimSpace(string(out)), nil
+		return strings.TrimSpace(string(out)), false, nil
 	}
 	// detached HEAD：symbolic-ref 会失败，退回短哈希
 	out, err = run(ctx, r.Root, "rev-parse", "--short", "HEAD")
 	if err != nil {
-		return "", nil // 空仓库还没有 HEAD，不算错误
+		return "", false, nil // 空仓库还没有 HEAD，不算错误
 	}
-	return strings.TrimSpace(string(out)), nil
+	return strings.TrimSpace(string(out)), true, nil
+}
+
+// Remotes 返回配置的远程名。工具栏拿它决定 抓取/拉取/推送 能不能点 ——
+// `git fetch --all` 在没有远程时是静默成功的，等错误等不到。
+func (r *Repo) Remotes(ctx context.Context) ([]string, error) {
+	out, err := run(ctx, r.Root, "remote")
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, l := range strings.Split(string(out), "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			names = append(names, l)
+		}
+	}
+	return names, nil
 }
 
 // baseRev 返回应该拿来做 diff 基准的 revision：有提交时是 HEAD，
@@ -85,8 +110,10 @@ func diffArgs(extra ...string) []string {
 
 // gitEnv 是给所有 git 调用设的环境。
 //
-//   - GIT_OPTIONAL_LOCKS=0：后台读操作不去抢 index 锁，避免和用户正在跑的
-//     git 命令互相阻塞
+//   - GIT_OPTIONAL_LOCKS=0：读操作不去做「顺便刷新 index」这类可选写入，
+//     避免和用户正在跑的 git 命令互相阻塞。注意它挡不住写操作（apply、
+//     commit 该拿 index 锁还是会拿），和外部 git 撞上锁由上层翻译
+//     index.lock 错误。
 //   - LC_ALL=C：锁定输出语言，错误信息和日期格式不会随用户 locale 变化
 //   - GIT_PAGER=cat / GIT_TERMINAL_PROMPT=0：绝不分页、绝不弹交互提示
 //     （GUI 进程没有终端，弹提示会直接挂住）
@@ -102,9 +129,22 @@ func gitEnv() []string {
 // run 执行一条 git 命令并返回 stdout。失败时把 stderr 的内容作为错误返回，
 // 因为 git 的错误信息（比如「not a git repository」）比 exit status 有用得多。
 func run(ctx context.Context, dir string, args ...string) ([]byte, error) {
+	return runIn(ctx, dir, nil, args...)
+}
+
+// runIn 是 run 带上 stdin 的版本：`git apply -` 和 `git commit -F -` 要从
+// 管道里读 patch 和提交信息。
+//
+// stdin 为 nil 时子进程拿到的是 /dev/null（exec 的默认），和以前完全一样 ——
+// 任何试图读输入的命令都会立刻拿到 EOF，而不是挂住。写操作同样不给 tty：
+// GIT_TERMINAL_PROMPT=0 保证绝不会卡在一个没人能回答的提示上。
+func runIn(ctx context.Context, dir string, stdin []byte, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
 	cmd.Env = gitEnv()
+	if stdin != nil {
+		cmd.Stdin = bytes.NewReader(stdin)
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

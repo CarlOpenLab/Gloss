@@ -12,6 +12,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
+	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
 	"github.com/CarlOpenLab/Gloss/internal/llm"
 )
 
@@ -183,6 +184,47 @@ func TestDumpScreenshot(t *testing.T) {
 	writePNG(t, "/tmp/de-shot-narrow.png", tt.Image())
 	tt.SetSize(1280, 860)
 	tt.Frame()
+
+	// 半暂存的仓库：一部分改动进了 index，文件列表分成「已暂存 / 未暂存」
+	// 两段，勾选框一半是勾上的，hunk 头上是「取消暂存」。
+	half := richApp(t)
+	runGit(t, half.repoPath, "add", "README.md")
+	half.reload()
+	settle(t, half)
+	ht2 := ui.NewTester(half.view, 1280, 860)
+	still(ht2)
+	ht2.Frame()
+	ht2.SetTitleBar(realTitleBar)
+	ht2.Frame()
+	writePNG(t, "/tmp/de-shot-sections.png", ht2.Image())
+	ht2.SetDark(true)
+	ht2.Frame()
+	writePNG(t, "/tmp/de-shot-sections-dark.png", ht2.Image())
+
+	// 提交栏的两种活态：输入了消息（按钮亮起来）、正在提交（转圈）
+	half.commitMsg = "把 README 的措辞改一下"
+	half.commitFocused = true
+	ht2.SetDark(false)
+	ht2.Frame()
+	writePNG(t, "/tmp/de-shot-commit.png", ht2.Image())
+	half.op, half.opName = gitrepo.OpCommit, "正在提交…"
+	ht2.Frame()
+	writePNG(t, "/tmp/de-shot-commit-busy.png", ht2.Image())
+	half.op = gitrepo.OpNone
+
+	// 失败横幅：git 的原话留在 Detail 里，Title/Hint 是人话
+	half.opErr = &gitrepo.Failure{
+		Title:  "提交被仓库的钩子拦下了",
+		Hint:   "下面是钩子自己的原话，照它说的改。",
+		Detail: "husky - pre-commit hook exited with code 1 (error)\nremote: ✗ 有文件没跑 gofmt",
+	}
+	ht2.Frame()
+	writePNG(t, "/tmp/de-shot-op-error.png", ht2.Image())
+	ht2.SetDark(true)
+	ht2.Frame()
+	writePNG(t, "/tmp/de-shot-op-error-dark.png", ht2.Image())
+	half.opErr = nil
+	ht2.SetDark(false)
 
 	// 历史 tab：上半是提交列表（带拓扑图），下半是该提交的「文件列表 + diff」。
 	// 用带分支的仓库 —— 一条直线的仓库看不出泳道画得对不对，也看不出

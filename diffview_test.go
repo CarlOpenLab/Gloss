@@ -81,7 +81,18 @@ func TestGapExpandsOnClick(t *testing.T) {
 	}
 	tt.Frame()
 
-	if key := gapKeyOf("internal/server/handler.go", 10); a.expanded[key] != expandStep {
+	// 区间 key 里带的是 fileKey（含段落前缀），这里照界面自己的口径取那一份 ——
+	// 钉的是「点了一下展开状态确实落到那个区间上」，不是 key 长什么样。
+	key := ""
+	for i := range a.files {
+		if pathOf(a.files[i]) == "internal/server/handler.go" {
+			key = gapKeyOf(fileKey(a.files[i]), 10)
+		}
+	}
+	if key == "" {
+		t.Fatal("文件列表里没有 handler.go")
+	}
+	if a.expanded[key] != expandStep {
 		t.Errorf("展开状态 = %d, want %d", a.expanded[key], expandStep)
 	}
 	if tt.HasText(bar) {

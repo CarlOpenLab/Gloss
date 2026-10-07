@@ -73,6 +73,24 @@ func TestBranch(t *testing.T) {
 	}
 }
 
+// 分离头指针要能认出来 —— 界面靠它把分支芯片换成警示样式，
+// 不这么说用户会以为自己在分支上正常干活。
+func TestLoadDetachedHead(t *testing.T) {
+	r := tempRepo(t)
+	git(t, r.Root, "checkout", "--detach", "HEAD")
+
+	m, err := r.Load(context.Background())
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !m.Detached {
+		t.Error("检出到提交之后 Detached 该是 true")
+	}
+	if m.Branch == "" || m.Branch == "main" {
+		t.Errorf("分离头指针的分支名该是短哈希，实际 %q", m.Branch)
+	}
+}
+
 func TestLoadWorkingTree(t *testing.T) {
 	r := tempRepo(t)
 	ctx := context.Background()
@@ -140,8 +158,9 @@ func TestLoadWorkingTree(t *testing.T) {
 	}
 }
 
-// 已暂存和未暂存必须能分开 —— 下一步做暂存/提交功能全靠这个。
-func TestLoadDistinguishesStagedFromUnstaged(t *testing.T) {
+// 已暂存和未暂存拆成两段：两条 File、各自的 Section、各自的 diff 基线 ——
+// hunk 级暂存全靠「界面展示的 hunk 和重新跑出来的 diff 同基线」。
+func TestLoadSplitsSections(t *testing.T) {
 	r := tempRepo(t)
 	ctx := context.Background()
 
@@ -154,13 +173,64 @@ func TestLoadDistinguishesStagedFromUnstaged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if len(m.Files) != 1 {
-		t.Fatalf("len(Files) = %d, want 1", len(m.Files))
+	if len(m.Files) != 2 {
+		t.Fatalf("len(Files) = %d, want 2（已暂存 + 未暂存各一条）: %+v", len(m.Files), m.Files)
 	}
-	f := m.Files[0]
-	if !f.Staged || !f.Unstaged {
-		t.Errorf("Staged=%v Unstaged=%v, 两者都应该是 true", f.Staged, f.Unstaged)
+
+	staged, unstaged := m.Files[0], m.Files[1]
+	if staged.Section != SectionStaged || !staged.Staged || staged.Unstaged {
+		t.Errorf("第一条该是已暂存段: Section=%v Staged=%v Unstaged=%v", staged.Section, staged.Staged, staged.Unstaged)
 	}
+	if unstaged.Section != SectionUnstaged || unstaged.Staged || !unstaged.Unstaged {
+		t.Errorf("第二条该是未暂存段: Section=%v Staged=%v Unstaged=%v", unstaged.Section, unstaged.Staged, unstaged.Unstaged)
+	}
+
+	// 已暂存段看 index vs HEAD：two -> staged；未暂存段看 worktree vs index：
+	// 只多了最后一行。两段的增删行必须各归各。
+	if got := addedLines(staged); len(got) != 1 || got[0] != "staged" {
+		t.Errorf("已暂存段的 + 行 = %q, want [staged]", got)
+	}
+	if got := deletedLines(staged); len(got) != 1 || got[0] != "two" {
+		t.Errorf("已暂存段的 - 行 = %q, want [two]", got)
+	}
+	if got := addedLines(unstaged); len(got) != 1 || got[0] != "unstaged" {
+		t.Errorf("未暂存段的 + 行 = %q, want [unstaged]", got)
+	}
+	if got := deletedLines(unstaged); len(got) != 0 {
+		t.Errorf("未暂存段的 - 行 = %q, want 空", got)
+	}
+
+	if staged.Fingerprint == unstaged.Fingerprint {
+		t.Error("两段内容不同，指纹不该一样")
+	}
+	if m.TotalAdd != 2 || m.TotalDel != 1 {
+		t.Errorf("Total +%d -%d, want +2 -1", m.TotalAdd, m.TotalDel)
+	}
+}
+
+// addedLines / deletedLines 收集一段里所有增/删行的内容。
+func addedLines(f File) []string {
+	var out []string
+	for _, h := range f.Hunks {
+		for _, l := range h.Lines {
+			if l.Type == "add" {
+				out = append(out, l.Content)
+			}
+		}
+	}
+	return out
+}
+
+func deletedLines(f File) []string {
+	var out []string
+	for _, h := range f.Hunks {
+		for _, l := range h.Lines {
+			if l.Type == "del" {
+				out = append(out, l.Content)
+			}
+		}
+	}
+	return out
 }
 
 func TestLoadDetectsRename(t *testing.T) {

@@ -94,32 +94,33 @@ func sparkleCluster(c *ui.Context, size float32, color ui.Color) {
 	})
 }
 
-// explainBtnH 是「解释」按钮的高度。比 hunk 行（26）矮一圈：上下各留 3px。
-// 填满整行的按钮看着是「贴」在色带上的，四周留出缝才像放上去的控件。
+// explainBtnH 是 hunk 行上那颗小按钮的高度。比 hunk 行（26）矮一圈：上下
+// 各留 3px。填满整行的按钮看着是「贴」在色带上的，四周留出缝才像放上去的
+// 控件。
 const explainBtnH = 20
 
-// explainButton 是 hunk 行右边那颗「✨ 解释」。
+// hunkButton 起一颗 hunk 行上的幽灵按钮。
 //
-// 不用 ui.Button：它自带的面 + 描边在蓝色 hunk 带上是一块突兀的白板，而这个
-// 按钮每条 hunk 都有，是界面上出现次数最多的控件，值得按它所在的底色单独调。
+// 不用 ui.Button：它自带的面 + 描边在蓝色 hunk 带上是一块突兀的白板，而
+// 这类按钮每条 hunk 都有，是界面上出现次数最多的控件，值得按它所在的底色
+// 单独调。
 //
 // 三态：常态是描边幽灵键（清楚可点，但不和代码抢视线）；悬停时底色提亮；
-// 这一段正在解释时填成强调色 —— 卡片开着的时候，按钮自己就是「哪一段在讲」
-// 的指示灯。
-func explainButton(c *ui.Context, pal palette, on bool) *ui.Element {
+// on 时填成强调色（✨ 解释用它表示「这一段正在讲」）。
+//
+// ✨ 解释和暂存这一段共用这一套：两处各画各的话，一排按钮里一眼就能看出
+// 是两种东西拼起来的。content 拿到的是这一档该用的前景色。
+func hunkButton(c *ui.Context, pal palette, label, tip string, on bool, content func(fg ui.Color)) *ui.Element {
 	t := c.Theme()
 	btn := ui.ButtonBase(c).Height(explainBtnH).Shrink(0).Radius(5).
 		Padding(0, 7).Gap(5).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).
-		Label("解释").Tooltip("让 AI 讲讲这段改了什么")
+		Cursor(ui.CursorPointer).Label(label).Tooltip(tip)
 
 	hovered := btn.Hovered()
 	var bg, border, fg ui.Color
 	switch {
 	case on:
 		bg, border, fg = t.Accent, ui.Transparent, t.AccentText
-	case hovered && btn.Pressed():
-		bg, border, fg = pal.explainHover, pal.hunkText.Alpha(0.7), pal.hunkText
 	case hovered:
 		bg, border, fg = pal.explainHover, pal.hunkText.Alpha(0.7), pal.hunkText
 	default:
@@ -128,11 +129,34 @@ func explainButton(c *ui.Context, pal palette, on bool) *ui.Element {
 	btn.Background(bg).Border(1, border)
 	fadeColors(btn)
 
-	btn.Children(func() {
+	btn.Children(func() { content(fg) })
+	return btn
+}
+
+// explainButton 是 hunk 行右边那颗「✨ 解释」。
+//
+// 卡片开着的时候，按钮自己就是「哪一段在讲」的指示灯（on 时填成强调色）。
+func explainButton(c *ui.Context, pal palette, on bool) *ui.Element {
+	return hunkButton(c, pal, "解释", "让 AI 讲讲这段改了什么", on, func(fg ui.Color) {
 		sparkleIcon(c, sparkleSize, fg)
 		ui.Text(c, "解释").FontSize(11).SingleLine().TextColor(fg)
 	})
-	return btn
+}
+
+// stageHunkButton 是「暂存 / 取消暂存这一段」。
+//
+// 按下的方向和文件行那颗勾选框一致：填色 = 已经在暂存区里，点它拿出来。
+// 可见的字只有「暂存」两个字，而 Label 写成「暂存这一段」—— 无障碍名字和
+// 测试找它的凭据都得说清「这一段的」，屏幕上的字则要短。
+func stageHunkButton(c *ui.Context, pal palette, staged, lock bool) *ui.Element {
+	label, text, tip := "暂存这一段", "暂存", "把这一段改动放进暂存区"
+	if staged {
+		label, text, tip = "取消暂存这一段", "取消暂存", "把这一段改动移出暂存区"
+	}
+	btn := hunkButton(c, pal, label, tip, false, func(fg ui.Color) {
+		ui.Text(c, text).FontSize(11).SingleLine().TextColor(fg)
+	})
+	return btn.Disabled(lock)
 }
 
 // checkSize 是状态栏里那个小勾的边长。

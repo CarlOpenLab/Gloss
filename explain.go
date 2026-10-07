@@ -165,11 +165,15 @@ func (a *app) openExplain(fi, hi int) {
 		a.ex.cached = true
 		return
 	}
-	a.startExplain(f.FileDiff, h, hi)
+	a.startExplain(f.FileDiff, h, hi, fileKey(f))
 }
 
 // startExplain 起一个后台请求。参数全是值 —— 后台 goroutine 绝不碰 app。
-func (a *app) startExplain(f diff.FileDiff, h diff.Hunk, hi int) {
+//
+// contentKey 是文件在 a.contents 里的键（fileKey，带段落前缀）。不能拿
+// f.Path() 顶替：同一个路径在「已暂存 / 未暂存」两段里是两份内容，拿纯路径
+// 去查会命中另一段的那份 —— 已暂存段就会把工作区的代码当上下文发给模型。
+func (a *app) startExplain(f diff.FileDiff, h diff.Hunk, hi int, contentKey string) {
 	// 连凭证都没有：这一趟发出去必然失败，而且是失败在离代码十万八千里的
 	// 地方（SDK 会回一大段英文，讲它找过哪些凭证来源）。与其把那串东西
 	// 摆在用户面前，不如直接说清楚该去哪儿配 —— 卡片上会给一个按钮。
@@ -182,7 +186,7 @@ func (a *app) startExplain(f diff.FileDiff, h diff.Hunk, hi int) {
 
 	// 提示词在主线程拼：要用到已经加载好的文件内容，而且是纯计算，很快。
 	var lines []string
-	if cc := a.contents[f.Path()]; cc != nil {
+	if cc := a.contents[contentKey]; cc != nil {
 		lines = cc.lines
 	}
 	system, user := explain.BuildPrompt(explain.Request{
@@ -496,7 +500,7 @@ func (a *app) retryExplain() {
 	a.ex.scroll = ui.ScrollState{}
 	a.ex.fail = llm.Failure{}
 	a.ex.needKey = false
-	a.startExplain(f.FileDiff, f.Hunks[a.ex.hi], a.ex.hi)
+	a.startExplain(f.FileDiff, f.Hunks[a.ex.hi], a.ex.hi, fileKey(f))
 }
 
 // mdMarkerW 是列表符号那一栏的宽度。
