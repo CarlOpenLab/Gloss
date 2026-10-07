@@ -272,3 +272,71 @@ func TestRemoteNeedsCredentials(t *testing.T) {
 		t.Errorf("该指向终端：%q", f.Hint)
 	}
 }
+
+// 强制推送：带 --force-with-lease 覆盖远程分支。
+func TestPushForceOverwrites(t *testing.T) {
+	r, bare := linkedRepo(t)
+	ctx := context.Background()
+
+	// 第一次推 main
+	if err := r.Push(ctx, "main"); err != nil {
+		t.Fatalf("第一次推: %v", err)
+	}
+
+	// 本地重写已经推上去的提交（amend）
+	write(t, filepath.Join(r.Root, "a.txt"), "rewritten\n")
+	git(t, r.Root, "commit", "-a", "--amend", "-m", "amended init")
+
+	// 普通 push 会被拒绝（non-fast-forward）
+	if err := r.Push(ctx, "main"); err == nil {
+		t.Error("分叉后普通 push 该被拒绝")
+	}
+
+	// 强制推送（--force-with-lease）成功
+	if err := r.PushForce(ctx, "main"); err != nil {
+		t.Fatalf("PushForce: %v", err)
+	}
+	localHead := strings.TrimSpace(gitOut(t, r.Root, "rev-parse", "HEAD"))
+	if got := remoteHead(t, bare, "main"); got != localHead {
+		t.Errorf("远程 HEAD = %q, want %q", got, localHead)
+	}
+}
+
+// 推送标签到远程。
+func TestPushTag(t *testing.T) {
+	r, bare := linkedRepo(t)
+	ctx := context.Background()
+
+	git(t, r.Root, "tag", "v2.0")
+	if err := r.PushTag(ctx, "origin", "v2.0"); err != nil {
+		t.Fatalf("PushTag: %v", err)
+	}
+
+	tagHead := strings.TrimSpace(gitOut(t, bare, "rev-parse", "refs/tags/v2.0"))
+	localTag := strings.TrimSpace(gitOut(t, r.Root, "rev-parse", "refs/tags/v2.0"))
+	if tagHead != localTag {
+		t.Errorf("远程标签 = %q, want %q", tagHead, localTag)
+	}
+}
+
+// 删除远程分支。
+func TestDeleteRemoteBranch(t *testing.T) {
+	r, bare := linkedRepo(t)
+	ctx := context.Background()
+
+	git(t, r.Root, "branch", "feat-remote")
+	if err := r.Push(ctx, "feat-remote"); err != nil {
+		t.Fatalf("push feat-remote: %v", err)
+	}
+	if got := remoteHead(t, bare, "feat-remote"); got == "" {
+		t.Fatal("远程上该有 feat-remote")
+	}
+
+	if err := r.DeleteRemoteBranch(ctx, "origin", "feat-remote"); err != nil {
+		t.Fatalf("DeleteRemoteBranch: %v", err)
+	}
+
+	if got := strings.TrimSpace(gitOut(t, bare, "branch", "--list", "feat-remote")); got != "" {
+		t.Errorf("删除后远程上不该有 feat-remote，实际：%q", got)
+	}
+}

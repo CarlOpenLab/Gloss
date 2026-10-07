@@ -132,6 +132,9 @@ func Describe(op Op, err error) Failure {
 	case strings.Contains(low, "tag already exists in the remote"):
 		f.Title = "远程上已经有这个标签"
 		f.Hint = "标签不能就地覆盖。确认要改它，在终端里 git push --force origin refs/tags/<名字>。"
+	case strings.Contains(low, "remote ref does not exist"):
+		f.Title = "远程上没有这条分支"
+		f.Hint = "它可能已经被别人删掉了。抓取一次刷新侧栏。"
 	case strings.Contains(low, "non-fast-forward"),
 		strings.Contains(low, "fetch first"),
 		strings.Contains(low, "[rejected]"):

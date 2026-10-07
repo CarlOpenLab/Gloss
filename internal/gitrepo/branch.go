@@ -63,3 +63,21 @@ func (r *Repo) DeleteBranch(ctx context.Context, name string, force bool) error 
 	}
 	return err
 }
+
+// Merge 把 branch 合并进当前分支（git merge --no-edit <branch>）。
+//
+// --no-edit 避免合并需要提交信息时去拉编辑器挂起进程。
+// 撞冲突时命令退出码为非 0，产生 MERGE_HEAD，由上层 Pending 探测接管。
+func (r *Repo) Merge(ctx context.Context, branch string) error {
+	_, err := run(ctx, r.Root, "merge", "--no-edit", branch)
+	return err
+}
+
+// Rebase 把当前分支变基到 upstream（git rebase <upstream>）。
+//
+// 变基改写提交历史。GIT_EDITOR=true 与 GIT_SEQUENCE_EDITOR=true 保证
+// 不会挂在编辑器上；撞冲突时停在 rebase-merge/，由 Pending 状态条接管。
+func (r *Repo) Rebase(ctx context.Context, upstream string) error {
+	_, err := run(ctx, r.Root, "rebase", upstream)
+	return err
+}

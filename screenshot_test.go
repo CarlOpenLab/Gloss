@@ -323,6 +323,44 @@ func TestDumpScreenshot(t *testing.T) {
 	writePNG(t, "/tmp/de-shot-delete-branch.png", ht.Image())
 	hist.confirm = confirmState{}
 
+	// 变基确认对话框
+	hist.promptRebase("feat2")
+	ht.Frame()
+	writePNG(t, "/tmp/de-shot-rebase-confirm.png", ht.Image())
+	ht.SetDark(true)
+	ht.Frame()
+	writePNG(t, "/tmp/de-shot-rebase-confirm-dark.png", ht.Image())
+	ht.SetDark(false)
+	hist.confirm = confirmState{}
+
+	// 删除远程分支确认对话框
+	hist.askConfirm(confirmState{
+		title: "删除远程分支 origin/feature/payment",
+		body:  "确定要从 origin 删除远程分支 feature/payment 吗？\n这会从远端彻底移除该分支，其他协作者将无法再访问它。你的本地分支不会被删除。",
+		yes:   "删除远程分支",
+	})
+	ht.Frame()
+	writePNG(t, "/tmp/de-shot-delete-remote-branch.png", ht.Image())
+	ht.SetDark(true)
+	ht.Frame()
+	writePNG(t, "/tmp/de-shot-delete-remote-branch-dark.png", ht.Image())
+	ht.SetDark(false)
+	hist.confirm = confirmState{}
+
+	// 强制推送二次确认对话框
+	hist.askConfirm(confirmState{
+		title: "强制推送 main",
+		body:  "将使用 --force-with-lease 覆盖 origin/main。\n这会改写远程提交历史。如果别人在你上次抓取后向该分支推送了新提交，Git 会安全地拒绝本次操作。",
+		yes:   "强制推送",
+	})
+	ht.Frame()
+	writePNG(t, "/tmp/de-shot-force-push.png", ht.Image())
+	ht.SetDark(true)
+	ht.Frame()
+	writePNG(t, "/tmp/de-shot-force-push-dark.png", ht.Image())
+	ht.SetDark(false)
+	hist.confirm = confirmState{}
+
 	// 分离 HEAD：工具栏那枚分支芯片换成警示色，把话说全
 	det := branchApp(t)
 	runGit(t, det.repoPath, "checkout", "-q", "--detach", "HEAD")

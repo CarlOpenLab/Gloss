@@ -54,6 +54,9 @@ func (a *app) commands() []command {
 	} else {
 		cmds = append(cmds, command{"显示侧栏", "⌘⇧B", func(a *app) { a.setSidebar(true) }})
 	}
+	if a.canReachRemote() && !a.detached && a.hasUpstream(a.branch) {
+		cmds = append(cmds, command{"强制推送（--force-with-lease）…", "", func(a *app) { a.promptForcePush() }})
+	}
 	if a.explainOpen() {
 		cmds = append(cmds, command{"收起 AI 解释", "Esc", func(a *app) { a.closeExplain() }})
 	}

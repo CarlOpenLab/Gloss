@@ -1,11 +1,14 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
+
+	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
 )
 
 // 本地分支管理（新建、重命名、删除、复制分支名）在界面层的验收。
@@ -277,5 +280,216 @@ func TestCopyBranchName(t *testing.T) {
 	}
 	if !hasAnnouncement(tt.Announcements(), "已复制 topic") {
 		t.Errorf("该播报复制了什么：%q", tt.Announcements())
+	}
+}
+
+// 侧栏右键合并分支：把非 HEAD 分支干净合并进当前分支。
+func TestMergeInFromRefMenu(t *testing.T) {
+	a := branchApp(t) // main 上有 a.txt，topic 上多一个 b.txt
+	tt := ui.NewTester(a.view, 1280, 900)
+	dir := a.repoPath
+	settle(t, a)
+	tt.Frame()
+
+	rightClick(t, tt, "topic")
+	if err := tt.ChooseMenuItem("把 topic 合并进当前分支"); err != nil {
+		t.Fatal(err)
+	}
+	settle(t, a)
+	tt.Frame()
+
+	if _, err := os.Stat(filepath.Join(dir, "b.txt")); err != nil {
+		t.Errorf("合并后工作区应该包含 b.txt：%v", err)
+	}
+	if !hasAnnouncement(tt.Announcements(), "已把 topic 合并进 main") {
+		t.Errorf("应该播报合并提示：%q", tt.Announcements())
+	}
+}
+
+// 合并撞冲突：git 退出非 0，进入 PendingMerge 状态并展示琥珀色状态条。
+func TestMergeConflictEntersPendingBar(t *testing.T) {
+	dir := newRepoDir(t)
+	writeFile(t, filepath.Join(dir, "a.txt"), "base\n")
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "init")
+
+	runGit(t, dir, "checkout", "-qb", "topic")
+	writeFile(t, filepath.Join(dir, "a.txt"), "topic change\n")
+	runGit(t, dir, "commit", "-qam", "topic commit")
+
+	runGit(t, dir, "checkout", "-q", "main")
+	writeFile(t, filepath.Join(dir, "a.txt"), "main change\n")
+	runGit(t, dir, "commit", "-qam", "main commit")
+
+	a := loadApp(t, dir)
+	tt := ui.NewTester(a.view, 1280, 900)
+	settle(t, a)
+	tt.Frame()
+
+	rightClick(t, tt, "topic")
+	if err := tt.ChooseMenuItem("把 topic 合并进当前分支"); err != nil {
+		t.Fatal(err)
+	}
+	settle(t, a)
+	tt.Frame()
+
+	if a.pending.Kind != gitrepo.PendingMerge {
+		t.Fatalf("pending.Kind = %v, want PendingMerge", a.pending.Kind)
+	}
+	if !tt.HasText("合并停在冲突上") {
+		t.Errorf("应该展示合并中的状态条：%q", tt.Texts())
+	}
+}
+
+// 变基到指定分支：弹确认对话框，确认后成功变基。
+func TestRebaseOntoFromRefMenu(t *testing.T) {
+	a := branchApp(t)
+	tt := ui.NewTester(a.view, 1280, 900)
+	settle(t, a)
+	tt.Frame()
+
+	// 检出 topic
+	rightClick(t, tt, "topic")
+	if err := tt.ChooseMenuItem("检出 topic"); err != nil {
+		t.Fatal(err)
+	}
+	settle(t, a)
+	tt.Frame()
+
+	// 右键 main 变基
+	rightClick(t, tt, "main")
+	if err := tt.ChooseMenuItem("把当前分支变基到 main…"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+
+	if !a.confirm.on {
+		t.Fatal("应该弹出变基确认框")
+	}
+	if !tt.HasText("变基 topic 到 main") {
+		t.Errorf("确认框标题不对：%q", tt.Texts())
+	}
+
+	if err := tt.Click("开始变基"); err != nil {
+		t.Fatal(err)
+	}
+	settle(t, a)
+	tt.Frame()
+
+	if !hasAnnouncement(tt.Announcements(), "已把 topic 变基到 main") {
+		t.Errorf("应该播报变基完成：%q", tt.Announcements())
+	}
+}
+
+// 强制推送二次确认：提示 --force-with-lease 并在确认后推送到远程。
+func TestForcePushDialog(t *testing.T) {
+	a, bare := remoteApp(t)
+	tt := ui.NewTester(a.view, 1280, 900)
+	dir := a.repoPath
+	settle(t, a)
+	tt.Frame()
+
+	// 第一次推 main，建立 upstream
+	a.doPush()
+	settle(t, a)
+	tt.Frame()
+
+	// 本地 amend 改写提交
+	writeFile(t, filepath.Join(dir, "a.txt"), "amended\n")
+	runGit(t, dir, "commit", "-qam", "amended init", "--amend")
+
+	a.promptForcePush()
+	tt.Frame()
+
+	if !a.confirm.on {
+		t.Fatal("应该弹出强制推送确认框")
+	}
+	if !tt.HasText("强制推送 main") {
+		t.Errorf("确认框标题不对：%q", tt.Texts())
+	}
+	if !tt.HasText("force-with-lease") {
+		t.Errorf("确认框说明应提及 force-with-lease：%q", tt.Texts())
+	}
+
+	if err := tt.Click("强制推送"); err != nil {
+		t.Fatal(err)
+	}
+	settle(t, a)
+	tt.Frame()
+
+	localHead := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
+	if got := remoteHead(t, bare, "main"); got != localHead {
+		t.Errorf("远程 HEAD = %q, want %q", got, localHead)
+	}
+	if !hasAnnouncement(tt.Announcements(), "已强制推送 main") {
+		t.Errorf("应该播报强制推送成功：%q", tt.Announcements())
+	}
+}
+
+// 标签右键菜单：推送标签到远程。
+func TestPushTagFromMenu(t *testing.T) {
+	a, bare := remoteApp(t)
+	tt := ui.NewTester(a.view, 1280, 900)
+	dir := a.repoPath
+
+	runGit(t, dir, "tag", "v1.0")
+	a.loadRefs()
+	settle(t, a)
+	tt.Frame()
+
+	rightClick(t, tt, "v1.0")
+	if err := tt.ChooseMenuItem("推送标签 v1.0 到 origin"); err != nil {
+		t.Fatal(err)
+	}
+	settle(t, a)
+	tt.Frame()
+
+	tagHead := strings.TrimSpace(gitOut(t, bare, "rev-parse", "refs/tags/v1.0"))
+	localTag := strings.TrimSpace(gitOut(t, dir, "rev-parse", "refs/tags/v1.0"))
+	if tagHead == "" || tagHead != localTag {
+		t.Errorf("远程标签 = %q, want %q", tagHead, localTag)
+	}
+	if !hasAnnouncement(tt.Announcements(), "已推送标签 v1.0 到 origin") {
+		t.Errorf("应该播报推送标签成功：%q", tt.Announcements())
+	}
+}
+
+// 远程分支右键菜单：删除远程分支（带确认）。
+func TestDeleteRemoteBranchDialog(t *testing.T) {
+	a, bare := remoteApp(t)
+	tt := ui.NewTester(a.view, 1280, 900)
+	dir := a.repoPath
+
+	runGit(t, dir, "branch", "feat-remote")
+	runGit(t, dir, "push", "-u", "origin", "feat-remote")
+	runGit(t, dir, "branch", "-d", "feat-remote") // 删掉本地分支，侧栏只保留远程那条
+	a.loadRefs()
+	settle(t, a)
+	tt.Frame()
+
+	rightClick(t, tt, "feat-remote")
+	if err := tt.ChooseMenuItem("删除远程分支 origin/feat-remote…"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+
+	if !a.confirm.on {
+		t.Fatal("应该弹出删除远程分支确认框")
+	}
+	if !tt.HasText("删除远程分支 origin/feat-remote") {
+		t.Errorf("确认框标题不对：%q", tt.Texts())
+	}
+
+	if err := tt.Click("删除远程分支"); err != nil {
+		t.Fatal(err)
+	}
+	settle(t, a)
+	tt.Frame()
+
+	if got := strings.TrimSpace(gitOut(t, bare, "branch", "--list", "feat-remote")); got != "" {
+		t.Errorf("远程分支该被删除了，实际：%q", got)
+	}
+	if !hasAnnouncement(tt.Announcements(), "已删除远程分支 origin/feat-remote") {
+		t.Errorf("应该播报删除远程分支：%q", tt.Announcements())
 	}
 }

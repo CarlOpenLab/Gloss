@@ -47,6 +47,7 @@ type appMenu struct {
 	fetch     *mygo.MenuItem
 	pull      *mygo.MenuItem
 	push      *mygo.MenuItem
+	forcePush *mygo.MenuItem
 }
 
 // buildAppMenu 搭出应用的菜单栏，并把需要跟着状态走的几项记在 a.menu 上。
@@ -69,6 +70,7 @@ func buildAppMenu(a *app) *mygo.Menu {
 	m.fetch = a.menuCmd("抓取", "CmdOrCtrl+Shift+F", a.doFetch)
 	m.pull = a.menuCmd("拉取", "CmdOrCtrl+Shift+P", a.doPull)
 	m.push = a.menuCmd("推送", "CmdOrCtrl+Shift+U", a.doPush)
+	m.forcePush = a.menuCmd("强制推送（--force-with-lease）…", "", a.promptForcePush)
 
 	view := []*mygo.MenuItem{
 		m.tabDiff, m.tabHist,
@@ -111,6 +113,8 @@ func buildAppMenu(a *app) *mygo.Menu {
 			m.fetch,
 			m.pull,
 			m.push,
+			mygo.Separator(),
+			m.forcePush,
 		}},
 		{Label: "视图", Submenu: view},
 		// 「窗口」这一层用的是 RoleWindow：菜单名和内容都归我们写，但框架
@@ -246,6 +250,7 @@ func (a *app) syncMenu() {
 	enableItem(m.fetch, canRemote)
 	enableItem(m.pull, canRemote && !a.detached)
 	enableItem(m.push, canRemote && !a.detached)
+	enableItem(m.forcePush, canRemote && !a.detached && a.hasUpstream(a.branch))
 }
 
 // checkItem 只在勾真的会变的时候才去动它。

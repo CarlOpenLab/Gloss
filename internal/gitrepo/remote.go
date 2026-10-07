@@ -115,3 +115,37 @@ func hasRemote(remotes []string, name string) bool {
 	}
 	return false
 }
+
+// Upstream 返回 branch 的上游引用名，没有上游时返回空串。
+func (r *Repo) Upstream(ctx context.Context, branch string) string {
+	return r.upstream(ctx, branch)
+}
+
+// PushForce 强制推送当前分支（--force-with-lease）。
+//
+// 用 --force-with-lease 而不是裸 --force：只在远程分支还是本地上次抓取
+// 时的样子才覆盖，别人新推上去的提交不会被静默吃掉。别人推过时 git 报错
+// 并含 "stale info"，failure.go 会翻成「远程上有你还没见过的提交」。
+func (r *Repo) PushForce(ctx context.Context, branch string) error {
+	branch = strings.TrimSpace(branch)
+	if branch == "" || !r.hasBranch(ctx, branch) {
+		return ErrNoBranch
+	}
+	_, err := run(ctx, r.Root, "push", "--force-with-lease")
+	return err
+}
+
+// PushTag 把本地标签推送到指定远程。
+func (r *Repo) PushTag(ctx context.Context, remote, tag string) error {
+	if remote == "" {
+		remote = "origin"
+	}
+	_, err := run(ctx, r.Root, "push", remote, "refs/tags/"+tag)
+	return err
+}
+
+// DeleteRemoteBranch 删除指定远程上的分支（git push <remote> --delete <branch>）。
+func (r *Repo) DeleteRemoteBranch(ctx context.Context, remote, branch string) error {
+	_, err := run(ctx, r.Root, "push", remote, "--delete", branch)
+	return err
+}

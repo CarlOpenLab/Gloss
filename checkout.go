@@ -167,6 +167,10 @@ func (a *app) refMenu(m *ui.Menu, ref gitrepo.Ref) {
 	switch ref.Kind {
 	case gitrepo.RefLocal:
 		a.localBranchMenu(m, ref)
+	case gitrepo.RefRemote:
+		a.remoteBranchMenu(m, ref)
+	case gitrepo.RefTag:
+		a.tagMenu(m, ref)
 	default:
 		plan, ok := a.planCheckout(ref)
 		if !ok {
@@ -179,13 +183,21 @@ func (a *app) refMenu(m *ui.Menu, ref gitrepo.Ref) {
 	}
 }
 
-// localBranchMenu 是本地分支的右键菜单：检出、重命名、删除、复制分支名。
+// localBranchMenu 是本地分支的右键菜单：检出、合并、变基、重命名、删除、复制分支名。
 func (a *app) localBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
 	busy := a.op != gitrepo.OpNone
 	isHead := ref.Head || ref.Name == a.branch
+	held := busy || isHead || a.pending.Active()
 
 	if m.Item("检出 " + ref.Name).Disabled(busy || isHead).Chosen() {
 		a.checkoutRef(ref)
+	}
+	m.Separator()
+	if m.Item("把 " + ref.Name + " 合并进当前分支").Disabled(held).Chosen() {
+		a.mergeBranch(ref.Name)
+	}
+	if m.Item("把当前分支变基到 " + ref.Name + "…").Disabled(held).Chosen() {
+		a.promptRebase(ref.Name)
 	}
 	m.Separator()
 	if m.Item("重命名 " + ref.Name + "…").Disabled(busy).Chosen() {
@@ -196,6 +208,49 @@ func (a *app) localBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
 	}
 	m.Separator()
 	if m.Item("复制分支名").Disabled(busy).Chosen() {
+		a.copyText = ref.Name
+	}
+}
+
+// remoteBranchMenu 是远程分支的右键菜单：检出、删除远程分支、复制分支名。
+func (a *app) remoteBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
+	plan, ok := a.planCheckout(ref)
+	if !ok {
+		return
+	}
+	busy := a.op != gitrepo.OpNone
+	if m.Item(plan.menu).Disabled(busy || plan.noop).Chosen() {
+		a.checkoutRef(ref)
+	}
+	m.Separator()
+	remote := ref.Remote
+	if remote == "" {
+		remote = "origin"
+	}
+	localName := remoteLocalName(ref)
+	canRemote := a.canReachRemote()
+	if m.Item("删除远程分支 " + ref.Name + "…").Disabled(!canRemote).Chosen() {
+		a.promptDeleteRemoteBranch(remote, localName)
+	}
+	m.Separator()
+	if m.Item("复制分支名").Disabled(busy).Chosen() {
+		a.copyText = ref.Name
+	}
+}
+
+// tagMenu 是标签的右键菜单：检出、推送到远程、复制标签名。
+func (a *app) tagMenu(m *ui.Menu, ref gitrepo.Ref) {
+	busy := a.op != gitrepo.OpNone
+	if m.Item("检出标签 " + ref.Name + "（分离 HEAD）").Disabled(busy).Chosen() {
+		a.checkoutRef(ref)
+	}
+	m.Separator()
+	canRemote := a.canReachRemote()
+	if m.Item("推送标签 " + ref.Name + " 到 origin").Disabled(!canRemote).Chosen() {
+		a.pushTag("origin", ref.Name)
+	}
+	m.Separator()
+	if m.Item("复制标签名").Disabled(busy).Chosen() {
 		a.copyText = ref.Name
 	}
 }

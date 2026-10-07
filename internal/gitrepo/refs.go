@@ -28,10 +28,11 @@ type Ref struct {
 	// 不能拿短名去当 revision：仓库里同时有分支 v1 和标签 v1 时，git 的消歧
 	// 顺序是 refs/v1 → refs/tags/v1 → refs/heads/v1，标签赢。用户点的是分支，
 	// 看到的是标签的历史，而且不报任何错。
-	Full   string
-	Remote string // 远程分支所属的 remote（"origin"），别的种类留空
-	Hash   string // 短哈希
-	Head   bool   // 当前检出的本地分支
+	Full     string
+	Remote   string // 远程分支所属的 remote（"origin"），别的种类留空
+	Upstream string // 本地分支的上游（"origin/main"），没有或非本地分支为空
+	Hash     string // 短哈希
+	Head     bool   // 当前检出的本地分支
 	// Subject 只有储藏用得上：储藏名字（"On main: ..."）是全部信息，
 	// 分支和标签的提交信息在提交列表里看。
 	Subject string
@@ -54,7 +55,7 @@ func (r Ref) Label() string {
 func (r *Repo) Refs(ctx context.Context) ([]Ref, error) {
 	out, err := run(ctx, r.Root, "for-each-ref",
 		"--sort=-committerdate",
-		"--format=%(refname)%00%(objectname:short)%00%(HEAD)%00%(symref)%00%(committerdate:unix)",
+		"--format=%(refname)%00%(objectname:short)%00%(HEAD)%00%(symref)%00%(committerdate:unix)%00%(upstream:short)",
 		"refs/heads", "refs/remotes", "refs/tags")
 	if err != nil {
 		return nil, err
@@ -115,6 +116,9 @@ func parseRefs(out string) []Ref {
 		ref.Hash = f[1]
 		ref.Head = strings.TrimSpace(f[2]) == "*"
 		ref.When = unixTime(f[4])
+		if len(f) > 5 {
+			ref.Upstream = strings.TrimSpace(f[5])
+		}
 		refs = append(refs, ref)
 	}
 	return refs
