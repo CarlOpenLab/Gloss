@@ -150,55 +150,93 @@ func (a *app) remoteBar(c *ui.Context) {
 // iconDraw 是画一颗图标的函数（和 toolButton 收的是同一种）。
 type iconDraw = func(p *ui.Painter, r ui.Rect, col ui.Color)
 
-// drawFetchIcon 画「抓取」：一支向下的箭头，落在一条横线上。
+// drawFetchIcon 画「抓取」：远端云朵 + 向下穿出箭头（从远端云拉取远端引用与提交）。
 //
-// 和「拉取」只差底下那笔：抓取是把远程的引用取到本地那条线上（不碰工作区），
-// 拉取是落进工作区（一个托盘里）。两条命令本来就只差这一步，图标照着这件事
-// 画，比给它们编两个毫不相干的形状好记。
-//
-// 线画得**通宽**（0.10~0.90）、托盘画得窄（0.24~0.76）：两个图标不这么分
-// 就长得太像了 —— 15px 上一条线和一个托盘本来就没差几个像素，宽度是唯一
-// 一眼分得出的那笔。
+// 隐喻：云朵代表远程服务器（remote），向下箭头代表从云端拉取元数据到本地缓存，
+// 并不合并修改本地分支。
 func drawFetchIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
-	iconArrow(p, r, 0.5, 0.10, 0.62, col)
-
-	var line ui.Path
-	x0, y := iconPt(r, 0.10, 0.86)
-	x1, _ := iconPt(r, 0.90, 0.86)
-	line.MoveTo(x0, y).LineTo(x1, y)
-	p.StrokePath(&line, 1.5, col)
-}
-
-// drawPullIcon 画「拉取」：向下的箭头落进托盘。
-func drawPullIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
-	iconArrow(p, r, 0.5, 0.08, 0.58, col)
-	drawTray(p, r, col)
-}
-
-// drawPushIcon 画「推送」：箭头从托盘里出来、向上。
-//
-// 和拉取是同一套形状的上下翻转 —— 两个动作互为反向，图标也该互为反向。
-func drawPushIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
-	iconArrow(p, r, 0.5, 0.78, 0.12, col)
-	drawTray(p, r, col)
-}
-
-// drawTray 画一个托盘：两侧的短边加一条底边，口朝上。
-//
-// 高度只给到 0.70~0.88：15px 的方盒里，再高的托盘会把箭头挤成一小截，而箭头
-// 才是这三个图标里认人的那部分。
-func drawTray(p *ui.Painter, r ui.Rect, col ui.Color) {
 	pt := func(x, y float32) (float32, float32) { return iconPt(r, x, y) }
-	var path ui.Path
-	x, y := pt(0.24, 0.70)
-	path.MoveTo(x, y)
-	x, y = pt(0.24, 0.88)
-	path.LineTo(x, y)
-	x, y = pt(0.76, 0.88)
-	path.LineTo(x, y)
-	x, y = pt(0.76, 0.70)
-	path.LineTo(x, y)
-	p.StrokePath(&path, 1.5, col)
+
+	// 云朵轮廓（顶部居中，左右饱满，底部留空）
+	var cloud ui.Path
+	cloud.MoveTo(pt(0.16, 0.58))
+	// 左弧升起
+	c1x, c1y := pt(0.12, 0.36)
+	c2x, c2y := pt(0.24, 0.22)
+	x, y := pt(0.36, 0.24)
+	cloud.CubeTo(c1x, c1y, c2x, c2y, x, y)
+	// 云顶中央大圆弧
+	c1x, c1y = pt(0.40, 0.08)
+	c2x, c2y = pt(0.60, 0.08)
+	x, y = pt(0.64, 0.24)
+	cloud.CubeTo(c1x, c1y, c2x, c2y, x, y)
+	// 右弧落下
+	c1x, c1y = pt(0.76, 0.22)
+	c2x, c2y = pt(0.88, 0.36)
+	x, y = pt(0.84, 0.58)
+	cloud.CubeTo(c1x, c1y, c2x, c2y, x, y)
+	// 右底收拢
+	x, y = pt(0.64, 0.58)
+	cloud.LineTo(x, y)
+	p.StrokePath(&cloud, 1.3, col)
+
+	// 左底收拢
+	var leftBase ui.Path
+	leftBase.MoveTo(pt(0.16, 0.58)).LineTo(pt(0.36, 0.58))
+	p.StrokePath(&leftBase, 1.3, col)
+
+	// 从云心穿出的向下箭头（从 0.28 贯穿至 0.88）
+	iconArrow(p, r, 0.50, 0.28, 0.88, col)
+}
+
+// drawPullIcon 画「拉取」：向下箭头落入本地分支线与提交节点（合入当前分支）。
+//
+// 隐喻：一条清晰的本地分支基线带提交圆点（—●—），向下箭头直落节点，
+// 表达“将远端改动合入当前本地分支”。
+func drawPullIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
+	pt := func(x, y float32) (float32, float32) { return iconPt(r, x, y) }
+
+	// 本地水平分支线
+	var branch ui.Path
+	x0, y := pt(0.14, 0.82)
+	x1, _ := pt(0.86, 0.82)
+	branch.MoveTo(x0, y).LineTo(x1, y)
+	p.StrokePath(&branch, 1.4, col)
+
+	// 本地分支上的提交节点（圆点）
+	cx, cy := pt(0.50, 0.82)
+	rad := r.W * 0.10
+	var dot ui.Path
+	arcTo(&dot, cx, cy, rad, 0, 360)
+	p.FillPath(&dot, col)
+
+	// 向下落入分支节点的箭头（从顶部落向节点）
+	iconArrow(p, r, 0.50, 0.10, 0.65, col)
+}
+
+// drawPushIcon 画「推送」：从本地分支提交节点向上发射至远端。
+//
+// 隐喻：与拉取形成完美对偶，底部同样是分支线与节点（—●—），箭头从节点向上射出，
+// 表达“将本地提交推送到远端”。
+func drawPushIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
+	pt := func(x, y float32) (float32, float32) { return iconPt(r, x, y) }
+
+	// 本地水平分支线
+	var branch ui.Path
+	x0, y := pt(0.14, 0.82)
+	x1, _ := pt(0.86, 0.82)
+	branch.MoveTo(x0, y).LineTo(x1, y)
+	p.StrokePath(&branch, 1.4, col)
+
+	// 本地分支上的提交节点（圆点）
+	cx, cy := pt(0.50, 0.82)
+	rad := r.W * 0.10
+	var dot ui.Path
+	arcTo(&dot, cx, cy, rad, 0, 360)
+	p.FillPath(&dot, col)
+
+	// 从分支节点向上发射的箭头（从节点向上指向远端）
+	iconArrow(p, r, 0.50, 0.67, 0.12, col)
 }
 
 // iconArrow 画一支竖直的箭头：从 y0 到 y1，尖端在 y1（y1 在上就是向上的箭头）。
