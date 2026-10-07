@@ -247,6 +247,7 @@ type app struct {
 	reset     resetState
 	newBranch branchState
 	rename    renameState
+	stashDlg  stashState
 
 	// copyText 是「复制哈希」这类待写进剪贴板的文本。菜单回调里拿不到
 	// *ui.Context（WriteClipboard 是它的方法），先记在这里，view 开头
@@ -267,6 +268,10 @@ type app struct {
 	draftFor  string
 	// commitFocused 记上一帧提交框有没有焦点：焦点离开的那一帧落盘草稿。
 	commitFocused bool
+
+	// amend 记录是否勾选了「修改上次提交（Amend）」。
+	amend   bool
+	hasHead bool
 }
 
 func newApp() *app {
@@ -403,6 +408,7 @@ func (a *app) view(c *ui.Context) {
 	a.newBranchDialog(c, pal)
 	a.renameBranchDialog(c, pal)
 	a.confirmDialog(c, pal)
+	a.stashDialog(c, pal)
 
 	// 卡片画在最后：这一帧的 ✨ 按钮位置刚写好，卡片当帧就能摆对地方。
 	// 它在 Overlay 层，不受上面的布局影响。
@@ -884,6 +890,8 @@ func (a *app) applyModel(m *gitrepo.Model) {
 	a.detached = m.Detached
 	a.remotes = m.Remotes
 	a.pending = m.Pending
+	a.hasHead = m.HasHead
+	a.amend = false
 
 	// 换到另一个仓库（或者第一次打开）时把这个仓库存下的提交草稿拾回来。
 	// 刷新同一个仓库不动它 —— 正在打的字不该被一次刷新吃掉。
@@ -925,7 +933,31 @@ func (a *app) workBranch() string {
 // 菜单在系统层拦键、视图在自己那一帧拦，各写各的判断迟早漏掉一处
 // （新加一个对话框，忘了改其中一个，⌘R 就会在对话框背后偷偷刷新）。
 func (a *app) modalOn() bool {
-	return a.palette.on || a.settingsOn || a.tag.on || a.reset.on || a.newBranch.on || a.rename.on || a.confirm.on
+	return a.palette.on || a.settingsOn || a.tag.on || a.reset.on || a.newBranch.on || a.rename.on || a.confirm.on || a.stashDlg.on
+}
+
+// toggleAmend 切换修改上次提交状态。勾选时预填最近一次提交的说明。
+func (a *app) toggleAmend(on bool) {
+	a.amend = on
+	if on {
+		if a.repoReady() {
+			a.run(func() {
+				repo, err := gitrepo.Open(context.Background(), a.repoPath)
+				if err == nil {
+					msg, err := repo.LastCommitMessage(context.Background())
+					if err == nil {
+						a.dispatch(func() {
+							if a.amend {
+								a.commitMsg = msg
+							}
+						})
+					}
+				}
+			})
+		}
+	} else {
+		a.commitMsg = a.store.State().Drafts[a.repoPath]
+	}
 }
 
 // loadRefs 在后台读分支、远程分支、标签和储藏。

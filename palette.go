@@ -33,6 +33,7 @@ func (a *app) commands() []command {
 		{"刷新", "⌘R", func(a *app) { a.reload() }},
 		{"提交", "⌘⏎", func(a *app) { a.doCommit() }},
 		{"暂存全部改动", "", func(a *app) { a.stageAll() }},
+		{"储藏工作区改动…", "", func(a *app) { a.openStashDialog() }},
 		{"新建标签…", "", func(a *app) { a.newTagAtHead() }},
 		{"新建分支…", "⌘⇧N", func(a *app) { a.newBranchAtHead() }},
 		{"抓取", "⌘⇧F", func(a *app) { a.doFetch() }},

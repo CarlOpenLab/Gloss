@@ -112,6 +112,27 @@ func (r *Repo) Commit(ctx context.Context, message string) error {
 	return err
 }
 
+// CommitAmend 修改上一次提交（git commit --amend -F -）。
+func (r *Repo) CommitAmend(ctx context.Context, message string) error {
+	_, err := runIn(ctx, r.Root, []byte(message), "commit", "--amend", "-F", "-")
+	return err
+}
+
+// LastCommitMessage 返回最近一次提交的完整提交信息（修改上次提交时预填）。
+func (r *Repo) LastCommitMessage(ctx context.Context) (string, error) {
+	out, err := run(ctx, r.Root, "log", "-1", "--format=%B")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(string(out), "\r\n"), nil
+}
+
+// HasHead 检查仓库当前是否至少存在一次提交（HEAD 有效）。
+func (r *Repo) HasHead(ctx context.Context) bool {
+	_, err := run(ctx, r.Root, "rev-parse", "--verify", "--quiet", "HEAD")
+	return err == nil
+}
+
 // ShortHead 返回 HEAD 的短哈希（提交成功后的提示里报一串给用户认）。
 func (r *Repo) ShortHead(ctx context.Context) string {
 	out, err := run(ctx, r.Root, "rev-parse", "--short", "HEAD")

@@ -83,6 +83,9 @@ type Model struct {
 	// Pending 是仓库正卡在哪一步写操作中间（合并/变基/拣选/回退/am 撞了
 	// 冲突停着）。零值 = 没卡住。
 	Pending Pending
+
+	// HasHead 表示仓库是否已有提交（HEAD 存在，可用于修改上次提交）。
+	HasHead bool
 }
 
 // Load 读取工作区相对 HEAD 的全部变更，按「已暂存」「未暂存」分成两段。
@@ -109,7 +112,8 @@ func (r *Repo) Load(ctx context.Context) (*Model, error) {
 		remotes = nil // 远程读不到不算加载失败，只是远程操作点不了
 	}
 
-	rawStaged, err := run(ctx, r.Root, diffArgs("--cached", r.baseRev(ctx))...)
+	base := r.baseRev(ctx)
+	rawStaged, err := run(ctx, r.Root, diffArgs("--cached", base)...)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +124,14 @@ func (r *Repo) Load(ctx context.Context) (*Model, error) {
 	staged := indexByPath(diff.Parse(string(rawStaged)))
 	unstaged := indexByPath(diff.Parse(string(rawUnstaged)))
 
-	m := &Model{Repo: r, Branch: branch, Detached: detached, Remotes: remotes, Pending: r.pending()}
+	m := &Model{
+		Repo:     r,
+		Branch:   branch,
+		Detached: detached,
+		Remotes:  remotes,
+		Pending:  r.pending(),
+		HasHead:  base != emptyTree,
+	}
 	appendFile := func(f File) {
 		m.Files = append(m.Files, f)
 		m.TotalAdd += f.AddCount

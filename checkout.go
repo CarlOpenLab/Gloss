@@ -171,6 +171,8 @@ func (a *app) refMenu(m *ui.Menu, ref gitrepo.Ref) {
 		a.remoteBranchMenu(m, ref)
 	case gitrepo.RefTag:
 		a.tagMenu(m, ref)
+	case gitrepo.RefStash:
+		a.stashMenu(m, ref)
 	default:
 		plan, ok := a.planCheckout(ref)
 		if !ok {
@@ -251,6 +253,27 @@ func (a *app) tagMenu(m *ui.Menu, ref gitrepo.Ref) {
 	}
 	m.Separator()
 	if m.Item("复制标签名").Disabled(busy).Chosen() {
+		a.copyText = ref.Name
+	}
+}
+
+// stashMenu 是储藏条目的右键菜单：应用、取出、丢弃、复制储藏名。
+func (a *app) stashMenu(m *ui.Menu, ref gitrepo.Ref) {
+	busy := a.op != gitrepo.OpNone
+	held := busy || a.pending.Active()
+
+	if m.Item("应用储藏（Apply）").Disabled(held).Chosen() {
+		a.stashApply(ref)
+	}
+	if m.Item("应用并丢弃（Pop）").Disabled(held).Chosen() {
+		a.stashPop(ref)
+	}
+	m.Separator()
+	if m.Item("丢弃储藏（Drop）…").Disabled(busy).Chosen() {
+		a.promptStashDrop(ref)
+	}
+	m.Separator()
+	if m.Item("复制储藏名").Disabled(busy).Chosen() {
 		a.copyText = ref.Name
 	}
 }

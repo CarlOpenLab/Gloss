@@ -44,6 +44,7 @@ type appMenu struct {
 	commit    *mygo.MenuItem
 	newBranch *mygo.MenuItem
 	newTag    *mygo.MenuItem
+	stash     *mygo.MenuItem
 	fetch     *mygo.MenuItem
 	pull      *mygo.MenuItem
 	push      *mygo.MenuItem
@@ -63,6 +64,7 @@ func buildAppMenu(a *app) *mygo.Menu {
 	m.commit = a.menuCmd("提交", "CmdOrCtrl+Return", a.doCommit)
 	m.newBranch = a.menuCmd("新建分支…", "CmdOrCtrl+Shift+N", a.newBranchAtHead)
 	m.newTag = a.menuCmd("新建标签…", "", a.newTagAtHead)
+	m.stash = a.menuCmd("储藏工作区改动…", "", a.openStashDialog)
 
 	// 抓取 / 拉取 / 推送的键是挑出来的：F 和 P 是 Fetch 和 Pull，U 是「上传」
 	// 那个 up（Push 的 P 被拉取占了）。三个都带 ⇧ —— ⌘F 已经是「筛选文件」，
@@ -100,6 +102,7 @@ func buildAppMenu(a *app) *mygo.Menu {
 			a.menuCmd("打开仓库…", "CmdOrCtrl+O", a.chooseFolder),
 			mygo.Separator(),
 			m.commit,
+			m.stash,
 			m.newBranch,
 			m.newTag,
 			mygo.Separator(),
@@ -239,6 +242,7 @@ func (a *app) syncMenu() {
 	enableItem(m.tabDiff, !noRepo)
 	enableItem(m.tabHist, !noRepo)
 	enableItem(m.commit, a.canCommit())
+	enableItem(m.stash, !noRepo && a.op == gitrepo.OpNone)
 	enableItem(m.newBranch, !noRepo && a.op == gitrepo.OpNone)
 	enableItem(m.newTag, !noRepo && a.op == gitrepo.OpNone)
 

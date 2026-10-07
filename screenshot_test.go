@@ -361,6 +361,29 @@ func TestDumpScreenshot(t *testing.T) {
 	ht.SetDark(false)
 	hist.confirm = confirmState{}
 
+	// 储藏工作区改动对话框
+	hist.openStashDialog()
+	hist.stashDlg.message = "正在重构的临时改动"
+	ht.SetDark(false)
+	ht.Frame()
+	writePNG(t, "/tmp/de-shot-stash.png", ht.Image())
+	ht.SetDark(true)
+	ht.Frame()
+	writePNG(t, "/tmp/de-shot-stash-dark.png", ht.Image())
+	ht.SetDark(false)
+	hist.stashDlg = stashState{}
+
+	// 丢弃储藏二次确认对话框
+	hist.promptStashDrop(gitrepo.Ref{Name: "stash@{0}", Subject: "On main: 正在重构的临时改动"})
+	ht.SetDark(false)
+	ht.Frame()
+	writePNG(t, "/tmp/de-shot-stash-drop.png", ht.Image())
+	ht.SetDark(true)
+	ht.Frame()
+	writePNG(t, "/tmp/de-shot-stash-drop-dark.png", ht.Image())
+	ht.SetDark(false)
+	hist.confirm = confirmState{}
+
 	// 分离 HEAD：工具栏那枚分支芯片换成警示色，把话说全
 	det := branchApp(t)
 	runGit(t, det.repoPath, "checkout", "-q", "--detach", "HEAD")

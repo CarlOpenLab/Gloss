@@ -246,6 +246,10 @@ func Describe(op Op, err error) Failure {
 		strings.Contains(low, "cannot pull with rebase"):
 		f.Title = "有未提交的改动挡着"
 		f.Hint = "先提交或者储藏这些改动再继续 —— 切换、合并、变基都要求先把手头这份放下。储藏会把它们收进一个条目，随时能取回。"
+	case errors.Is(err, ErrNoChangesToStash),
+		strings.Contains(low, "no local changes to save"):
+		f.Title = "没有未提交的改动可储藏"
+		f.Hint = "工作区是干净的，没有未提交的改动需要储藏。"
 
 	// —— 仓库被占 / 引用消失 / 名称冲突 ——
 	case strings.Contains(low, "index.lock"):

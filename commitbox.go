@@ -249,11 +249,17 @@ func (a *app) countSection(s gitrepo.Section) int {
 	return n
 }
 
-// canCommit 是提交按钮的可用条件：有东西暂存着、消息不是空的、没有别的
-// 写操作在飞。
+// canCommit 是提交按钮的可用条件：
+// - 普通提交：有东西暂存着、消息不是空的、没有别的写操作在飞；
+// - 修改上次提交：有 HEAD、消息不是空的、没有别的写操作在飞（即使暂存区为 0 也允许仅改提交信息）。
 func (a *app) canCommit() bool {
-	return a.repoReady() && a.op == gitrepo.OpNone &&
-		a.stagedCount() > 0 && strings.TrimSpace(a.commitMsg) != ""
+	if !a.repoReady() || a.op != gitrepo.OpNone || strings.TrimSpace(a.commitMsg) == "" {
+		return false
+	}
+	if a.amend {
+		return a.hasHead
+	}
+	return a.stagedCount() > 0
 }
 
 // commitBoxOn 决定这一帧要不要画提交栏。
@@ -329,10 +335,17 @@ func (a *app) commitBox(c *ui.Context, pal palette) {
 // 自己灰着就是那句说明的颜色。
 func (a *app) commitButton(c *ui.Context) {
 	label := "提交"
-	if n := a.stagedCount(); n > 0 {
+	tip := "提交已暂存的改动 ⌘⏎"
+	if a.amend {
+		label = "修改上次提交"
+		tip = "修改上一次提交（--amend）⌘⏎"
+		if n := a.stagedCount(); n > 0 {
+			label = "修改上次提交 (" + strconv.Itoa(n) + " 个文件)"
+		}
+	} else if n := a.stagedCount(); n > 0 {
 		label = "提交 " + strconv.Itoa(n) + " 个文件"
 	}
-	btn := ui.PrimaryButton(c, label).Shrink(0).Tooltip("提交已暂存的改动 ⌘⏎").
+	btn := ui.PrimaryButton(c, label).Shrink(0).Tooltip(tip).
 		Disabled(!a.canCommit())
 	if btn.Clicked() {
 		a.doCommit()
@@ -342,7 +355,7 @@ func (a *app) commitButton(c *ui.Context) {
 // commitStatus 是提交栏底下那行：暂存了什么、还差什么、正在忙什么。
 func (a *app) commitStatus(c *ui.Context, t *ui.Theme) {
 	ui.Row(c).Shrink(0).Gap(6).AlignItems(ui.Center).Children(func() {
-		if a.op == gitrepo.OpCommit {
+		if a.op == gitrepo.OpCommit || a.op == gitrepo.OpAmend {
 			ui.Spinner(c)
 			ui.Text(c, a.opName).FontSize(11).TextColor(t.TextMuted)
 			ui.Spacer(c)
@@ -351,6 +364,14 @@ func (a *app) commitStatus(c *ui.Context, t *ui.Theme) {
 
 		n, m := a.stagedCount(), a.unstagedCount()
 		switch {
+		case a.amend:
+			if n == 0 {
+				ui.Text(c, "未暂存新改动，仅修改上次提交的信息。").
+					FontSize(11).TextColor(t.TextMuted)
+			} else {
+				ui.Textf(c, "已暂存 %d 个文件，将合并入上次提交", n).FontSize(11).Font("monospace").
+					FontFeatures("tnum").TextColor(t.TextMuted)
+			}
 		case n == 0:
 			ui.Text(c, "还没有暂存的文件 —— 勾上文件左边的方框，把要提交的改动放进来。").
 				FontSize(11).TextColor(t.TextMuted)
@@ -363,6 +384,16 @@ func (a *app) commitStatus(c *ui.Context, t *ui.Theme) {
 					TextColor(t.TextMuted)
 			}
 		}
+
+		if a.hasHead {
+			ui.Text(c, "·").FontSize(11).TextColor(t.TextMuted)
+			amendVal := a.amend
+			ui.Checkbox(c, &amendVal, "修改上次提交").Label("修改上次提交")
+			if amendVal != a.amend {
+				a.toggleAmend(amendVal)
+			}
+		}
+
 		ui.Spacer(c)
 		if a.canCommit() {
 			// 不用等宽字体：⌘ 在等宽字体里多半落到后备字体上，垂直度量
@@ -372,7 +403,7 @@ func (a *app) commitStatus(c *ui.Context, t *ui.Theme) {
 	})
 }
 
-// doCommit 提交 index 里的内容。
+// doCommit 提交 index 里的内容（或修改上次提交）。
 //
 // 成功后清掉消息和草稿 —— 但那要在「用户没在这期间又打下一段话」的前提下
 // 才成立：提交是异步的，消息框一直可编辑，直接清空会吃掉刚敲进去的字。
@@ -381,6 +412,24 @@ func (a *app) doCommit() {
 		return
 	}
 	msg := a.commitMsg
+	if a.amend {
+		a.startOp(gitrepo.OpAmend, "正在修改上次提交…", func(ctx context.Context, repo *gitrepo.Repo) (string, error) {
+			if err := repo.CommitAmend(ctx, msg); err != nil {
+				return "", err
+			}
+			return "已修改上次提交 " + repo.ShortHead(ctx), nil
+		}, func(ok bool) {
+			if ok {
+				a.amend = false
+				if a.commitMsg == msg {
+					a.commitMsg = ""
+					a.saveCommitDraft()
+				}
+			}
+			a.reloadAfterOp()
+		})
+		return
+	}
 	a.startOp(gitrepo.OpCommit, "正在提交…", func(ctx context.Context, repo *gitrepo.Repo) (string, error) {
 		if err := repo.Commit(ctx, msg); err != nil {
 			return "", err
