@@ -69,6 +69,13 @@ func (a *app) handleKeys(c *ui.Context) {
 		a.openSettings()
 	}
 
+	// ⌘I 触发 AI 提交信息生成。
+	if c.Shortcut(ui.Cmd, ui.KeyI) {
+		if a.stagedCount() > 0 && !a.aiCommitLoading {
+			a.startAICommit()
+		}
+	}
+
 	// ⌘⏎ 提交。
 	//
 	// 用 ⌘ 而不是裸回车：输入框里回车是换行，提交信息本来就常常是多行的。
