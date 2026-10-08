@@ -202,9 +202,9 @@ internal/
 - [x] Commit context menu: Cherry-pick / Revert / Reset / Branch from here
 - [x] Local branch operations: New branch (`⌘⇧N`), rename, safe deletion
 - [x] Remote branch & integration: Delete remote branch, merge/rebase, force-with-lease push
-- [x] Stash operations & commit amend: Push / apply / pop / drop stash, commit amend
-- [ ] Draggable sidebar resizing
+- [x] Draggable sidebar resizing
 - [ ] Keyboard navigation for commit history (`J` / `K` in commit list)
+- [ ] AI commit message & branch generation
 - [ ] GitHub PR integration: Review PR diffs and publish AI explanations as comments
 - [ ] Pre-flight risk scan: Full-diff scan highlighting potential vulnerabilities
 - [ ] Single-line explanation / selection-based query
