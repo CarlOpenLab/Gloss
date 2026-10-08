@@ -191,6 +191,25 @@ func (a *app) loadCommit(i int) {
 	})
 }
 
+// navCommit 在历史提交列表中按方向导航（dir > 0 往下/向旧提交，dir < 0 往上/向新提交）。
+func (a *app) navCommit(dir int) {
+	if len(a.commits) == 0 {
+		return
+	}
+	var newIdx int
+	if a.commitSel < 0 {
+		newIdx = 0
+	} else if a.commitSel >= len(a.commits) {
+		newIdx = len(a.commits) - 1
+	} else {
+		newIdx = clampSel(a.commitSel+dir, len(a.commits))
+	}
+	if newIdx != a.commitSel {
+		a.loadCommit(newIdx)
+	}
+	a.commitList.ScrollIntoView(newIdx)
+}
+
 // selectStash 是点了一条储藏。
 //
 // 储藏不进提交列表：它不是任何一条分支历史的一部分，硬塞进去会打断拓扑图，
