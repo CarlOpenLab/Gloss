@@ -309,9 +309,70 @@ func (a *app) noteRow(c *ui.Context, pal palette, r row) {
 	})
 }
 
-// codeRow 画一行代码：左右对照（Split）。
+// codeRow 画一行代码：unified 是一条行占满宽度，split 是左右对照。
 func (a *app) codeRow(c *ui.Context, pal palette, r row) {
-	a.splitRow(c, pal, r)
+	if a.split {
+		a.splitRow(c, pal, r)
+		return
+	}
+	a.unifiedRow(c, pal, r)
+}
+
+func (a *app) unifiedRow(c *ui.Context, pal palette, r row) {
+	f := a.fileAt(r.file)
+	if f == nil {
+		return
+	}
+
+	var (
+		text   string
+		oldNo  int
+		newNo  int
+		lineBg = pal.codeBg
+		gutBg  = pal.gutterBg
+		bar    = ui.Transparent
+		// 这一行该去哪份高亮里查：新侧的行看新文件，删除的行看还原出来的旧文件。
+		hlFile *highlight.File
+		old    bool
+	)
+	switch {
+	case r.fromGap:
+		// 展开出来的未改动行：内容不在 patch 里，按行号去文件内容里取。
+		oldNo, newNo = r.oldNo, r.newNo
+		text = a.contentLine(*f, r.newNo)
+	case r.hunk < len(f.Hunks) && r.lineIdx < len(f.Hunks[r.hunk].Lines):
+		l := f.Hunks[r.hunk].Lines[r.lineIdx]
+		oldNo, newNo, text = l.OldNum, l.NewNum, l.Content
+		switch l.Type {
+		case diff.LineAdd:
+			lineBg, gutBg, bar = pal.addBg, pal.addGutter, pal.addBar
+		case diff.LineDel:
+			lineBg, gutBg, bar = pal.delBg, pal.delGutter, pal.delBar
+			old = true
+		}
+	default:
+		// 文件列表换了但 rows 还没重建，这一帧先不画。
+		return
+	}
+	newHL, oldHL := a.highlightFor(*f)
+	if old {
+		// 删除行在新侧没有行号，行号栏右边留空，高亮改查旧文件
+		hlFile, newNo = oldHL, 0
+	} else {
+		hlFile = newHL
+	}
+
+	size := a.codeSizeValue()
+	// 高亮是按展开 tab 之后的文本切的，这里必须做同样的展开，
+	// 否则字节下标对不上，颜色会整段错位。
+	text = expandTabs(text)
+
+	ui.Row(c).Height(lineH).Shrink(0).FillWidth().Background(lineBg).Children(func() {
+		ui.Box(c).Width(barW).AlignSelf(ui.Stretch).Background(bar)
+		a.gutter(c, pal, oldNo, gutBg)
+		a.gutter(c, pal, newNo, gutBg)
+		a.code(c, pal, hlFile, lineNoOf(r, oldNo, newNo), text, size)
+	})
 }
 
 // sideLine 是 split 模式下某一侧的半行。empty 表示这一侧空着 ——
@@ -401,9 +462,14 @@ func (a *app) sideOf(f gitrepo.File, hunk, idx int, old bool) sideLine {
 }
 
 // code 是半行/整行里代码那一块：可伸缩、横向裁掉超出的部分。
+// 支持鼠标悬停 Tooltip 显示完整代码，避免单行超长被省略截断时看不到全貌。
 func (a *app) code(c *ui.Context, pal palette, hl *highlight.File, lineNo int, text string, size float32) {
-	ui.Box(c).Grow(1).MinWidth(0).ClipX().Padding(0, 0, 0, codeGap).
-		Justify(ui.Center).Children(func() {
+	b := ui.Box(c).Grow(1).MinWidth(0).ClipX().Padding(0, 0, 0, codeGap).
+		Justify(ui.Center)
+	if strings.TrimSpace(text) != "" {
+		b.Tooltip(text)
+	}
+	b.Children(func() {
 		ui.RichText(c, lineSpans(pal, hl, lineNo, text)...).
 			Font("monospace").FontSize(size).SingleLine().TextColor(pal.code)
 	})

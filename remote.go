@@ -150,143 +150,48 @@ func (a *app) remoteBar(c *ui.Context) {
 // iconDraw 是画一颗图标的函数（和 toolButton 收的是同一种）。
 type iconDraw = func(p *ui.Painter, r ui.Rect, col ui.Color)
 
-// drawFetchIcon 画「抓取」：远端云朵 + 向下穿出箭头（从远端云拉取远端引用与提交）。
-//
-// 隐喻：云朵代表远程服务器（remote），向下箭头代表从云端拉取元数据到本地缓存，
-// 并不合并修改本地分支。
+// drawFetchIcon 画「抓取」（Lucide cloud-download）。
 func drawFetchIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
-	pt := func(x, y float32) (float32, float32) { return iconPt(r, x, y) }
-
-	// 云朵轮廓（顶部居中，左右饱满，底部留空）
-	var cloud ui.Path
-	cloud.MoveTo(pt(0.16, 0.58))
-	// 左弧升起
-	c1x, c1y := pt(0.12, 0.36)
-	c2x, c2y := pt(0.24, 0.22)
-	x, y := pt(0.36, 0.24)
-	cloud.CubeTo(c1x, c1y, c2x, c2y, x, y)
-	// 云顶中央大圆弧
-	c1x, c1y = pt(0.40, 0.08)
-	c2x, c2y = pt(0.60, 0.08)
-	x, y = pt(0.64, 0.24)
-	cloud.CubeTo(c1x, c1y, c2x, c2y, x, y)
-	// 右弧落下
-	c1x, c1y = pt(0.76, 0.22)
-	c2x, c2y = pt(0.88, 0.36)
-	x, y = pt(0.84, 0.58)
-	cloud.CubeTo(c1x, c1y, c2x, c2y, x, y)
-	// 右底收拢
-	x, y = pt(0.64, 0.58)
-	cloud.LineTo(x, y)
-	p.StrokePath(&cloud, 1.3, col)
-
-	// 左底收拢
-	var leftBase ui.Path
-	leftBase.MoveTo(pt(0.16, 0.58)).LineTo(pt(0.36, 0.58))
-	p.StrokePath(&leftBase, 1.3, col)
-
-	// 从云心穿出的向下箭头（从 0.28 贯穿至 0.88）
-	iconArrow(p, r, 0.50, 0.28, 0.88, col)
+	p.Icon(iconFetch, r, col)
 }
 
-// drawPullIcon 画「拉取」：向下箭头落入本地分支线与提交节点（合入当前分支）。
-//
-// 隐喻：一条清晰的本地分支基线带提交圆点（—●—），向下箭头直落节点，
-// 表达“将远端改动合入当前本地分支”。
+// drawPullIcon 画「拉取」（Lucide arrow-down-to-line）。
 func drawPullIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
-	pt := func(x, y float32) (float32, float32) { return iconPt(r, x, y) }
-
-	// 本地水平分支线
-	var branch ui.Path
-	x0, y := pt(0.14, 0.82)
-	x1, _ := pt(0.86, 0.82)
-	branch.MoveTo(x0, y).LineTo(x1, y)
-	p.StrokePath(&branch, 1.4, col)
-
-	// 本地分支上的提交节点（圆点）
-	cx, cy := pt(0.50, 0.82)
-	rad := r.W * 0.10
-	var dot ui.Path
-	arcTo(&dot, cx, cy, rad, 0, 360)
-	p.FillPath(&dot, col)
-
-	// 向下落入分支节点的箭头（从顶部落向节点）
-	iconArrow(p, r, 0.50, 0.10, 0.65, col)
+	p.Icon(iconPull, r, col)
 }
 
-// drawPushIcon 画「推送」：从本地分支提交节点向上发射至远端。
-//
-// 隐喻：与拉取形成完美对偶，底部同样是分支线与节点（—●—），箭头从节点向上射出，
-// 表达“将本地提交推送到远端”。
+// drawPushIcon 画「推送」（Lucide arrow-up-from-line）。
 func drawPushIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
-	pt := func(x, y float32) (float32, float32) { return iconPt(r, x, y) }
-
-	// 本地水平分支线
-	var branch ui.Path
-	x0, y := pt(0.14, 0.82)
-	x1, _ := pt(0.86, 0.82)
-	branch.MoveTo(x0, y).LineTo(x1, y)
-	p.StrokePath(&branch, 1.4, col)
-
-	// 本地分支上的提交节点（圆点）
-	cx, cy := pt(0.50, 0.82)
-	rad := r.W * 0.10
-	var dot ui.Path
-	arcTo(&dot, cx, cy, rad, 0, 360)
-	p.FillPath(&dot, col)
-
-	// 从分支节点向上发射的箭头（从节点向上指向远端）
-	iconArrow(p, r, 0.50, 0.67, 0.12, col)
-}
-
-// iconArrow 画一支竖直的箭头：从 y0 到 y1，尖端在 y1（y1 在上就是向上的箭头）。
-//
-// 头是实心三角，和工具栏上另外几颗图标一致：15px 上描边画的箭头只有一两个
-// 像素粗，看不出朝向。三角要给得足（半宽 0.23、长 0.30 个方盒）—— 试过
-// 0.19/0.26 那种「更秀气」的比例，缩到 15px 就成了一枚细钉子，指向要盯着
-// 看才认得出。
-func iconArrow(p *ui.Painter, r ui.Rect, x, y0, y1 float32, col ui.Color) {
-	dir := float32(1)
-	if y1 < y0 {
-		dir = -1
-	}
-	x0, py0 := iconPt(r, x, y0)
-	_, py1 := iconPt(r, x, y1)
-
-	var shaft ui.Path
-	shaft.MoveTo(x0, py0).LineTo(x0, py1)
-	p.StrokePath(&shaft, 1.5, col)
-
-	hw := r.W * 0.23 // 头的一半宽
-	hl := r.H * 0.30 // 头的长度
-	var head ui.Path
-	head.MoveTo(x0, py1)
-	head.LineTo(x0-hw, py1-dir*hl)
-	head.LineTo(x0+hw, py1-dir*hl)
-	head.Close()
-	p.FillPath(&head, col)
+	p.Icon(iconPush, r, col)
 }
 
 // iconToolButton 是工具栏上一颗只有图标的按钮。
-//
-// 和 toolButton 分开而不是加个开关：带字那颗的 Padding 和 Gap 是按「图标+
-// 文字」定的，图标单摆时同样的内边距会撑出一颗偏宽的按钮。
-//
-// Label 是无障碍名字，也是测试找它的凭据（屏幕上没有字可找）；Tooltip 给
-// 鼠标用户 —— 灰掉的按钮尤其靠它：三颗按钮都不带字，一个灰方块不说自己
-// 为什么灰，就只剩猜了。
-//
-// Tooltip 必须写在 Disabled 前头：框架的 Tooltip 是**构建时**判一次 hover
-// （ui/widgets.go），而 Hovered() 对禁用元素报 false —— 先 Disabled 再
-// Tooltip，那句解释永远不会浮出来。这个次序没有别的东西守着，钉它的是
-// TestDisabledRemoteButtonExplainsItself。
+// 精确尺寸 28x28 方形，图标 16x16 居中（留白 6px），圆角 6px。
+// 悬停与按下展现细腻的灰度微交互，彻底解决长椭圆/不对称变形问题。
 func iconToolButton(c *ui.Context, label, tip string, off bool, icon iconDraw) bool {
-	btn := ui.Button(c, "").Label(label).Tooltip(tip).Padding(0, 8).Disabled(off)
+	t := c.Theme()
+	btn := ui.ButtonBase(c).Size(28, 28).Shrink(0).Radius(t.Radius).
+		Center().Cursor(ui.CursorPointer).Label(label).Tooltip(tip).Disabled(off)
+
+	bg := ui.Transparent
+	fg := t.TextMuted
+	switch {
+	case off:
+		fg = t.TextMuted.Alpha(0.38)
+		btn.Cursor(ui.CursorDefault)
+	case btn.Pressed():
+		bg = t.SurfacePressed
+		fg = t.Text
+	case btn.Hovered():
+		bg = t.SurfaceHover
+		fg = t.Text
+	}
+	btn.Background(bg)
 	fadeColors(btn)
+
 	btn.Children(func() {
-		col := c.Theme().Text
-		ui.Box(c).Size(toolIconSize, toolIconSize).Shrink(0).
-			Draw(func(p *ui.Painter, r ui.Rect) { icon(p, r, col) })
+		ui.Box(c).Size(16, 16).Shrink(0).
+			Draw(func(p *ui.Painter, r ui.Rect) { icon(p, r, fg) })
 	})
 	return btn.Clicked()
 }

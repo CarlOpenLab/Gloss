@@ -1,7 +1,6 @@
 package main
 
 import (
-	"math"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -52,22 +51,9 @@ const sparkleSize = 11
 //
 // 不打死 ✨：这类符号会落到彩色 emoji 字体上，各机器上的形状、颜色和基线
 // 都不一样 —— 在 12px 上是一团糊的橙黄，而且没法跟着主题变色（浅色下和深色下
-// 该是同一个亮度，emoji 的写死色做不到）。这是这个应用的动作图标，值得自己画。
-//
-// 形状：四个尖在正上/正右/正下/正左，每个象限用一条二次曲线连，控制点落在
-// 中心 —— 边因此朝里凹，是「闪」的形状。控制点写在中心是这类星形的老做法，
-// 比调贝塞尔手柄省事，改边长也不用重算比例。
+// drawSparkle 画一颗火花星（Lucide sparkle）。
 func drawSparkle(p *ui.Painter, r ui.Rect, c ui.Color) {
-	cx, cy := r.X+r.W/2, r.Y+r.H/2
-	rx, ry := r.W/2, r.H/2
-	var path ui.Path
-	path.MoveTo(cx, cy-ry)
-	path.QuadTo(cx, cy, cx+rx, cy)
-	path.QuadTo(cx, cy, cx, cy+ry)
-	path.QuadTo(cx, cy, cx-rx, cy)
-	path.QuadTo(cx, cy, cx, cy-ry)
-	path.Close()
-	p.FillPath(&path, c)
+	p.Icon(iconSparkle, r, c)
 }
 
 // sparkleIcon 是一个只有火花的方盒，用来摆在按钮或标题里。
@@ -77,20 +63,10 @@ func sparkleIcon(c *ui.Context, size float32, color ui.Color) {
 	})
 }
 
-// sparkleCluster 是「一大两小」的星群，用在卡片标题上。
-//
-// 和按钮里那颗单星分开：12px 上三颗星会糊成一团，而卡片标题那块有 16px 的
-// 空间，一大两小才认得出是 ✨ 而不是一个菱形。小的两颗压暗一档，星群才有
-// 主次，不然三个等重的形状挤在一起。
+// sparkleCluster 是星群（Lucide sparkles），用在卡片标题上。
 func sparkleCluster(c *ui.Context, size float32, color ui.Color) {
 	ui.Box(c).Size(size, size).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
-		big, small := size*0.72, size*0.34
-		at := func(x, y, s float32) ui.Rect {
-			return ui.Rect{X: r.X + x, Y: r.Y + y, W: s, H: s}
-		}
-		drawSparkle(p, at(0, 0, big), color)
-		drawSparkle(p, at(size-small, size*0.04, small), color.Alpha(0.85))
-		drawSparkle(p, at(size*0.06, size-small, small), color.Alpha(0.6))
+		p.Icon(iconSparkles, r, color)
 	})
 }
 
@@ -165,13 +141,9 @@ const checkSize = 11
 // drawCheckMark 画一个勾：两笔折线，和折叠箭头同一个画法。
 //
 // 不打「✓」字符，理由和叉号、箭头一样：这类几何符号会落到后备字体上，
-// 大小、粗细、基线各机器都不一样，而这个勾要和旁边的绿色数字对齐。
+// drawCheckMark 画一个勾（Lucide check）。
 func drawCheckMark(p *ui.Painter, r ui.Rect, c ui.Color) {
-	var path ui.Path
-	path.MoveTo(r.X+r.W*0.14, r.Y+r.H*0.54)
-	path.LineTo(r.X+r.W*0.40, r.Y+r.H*0.80)
-	path.LineTo(r.X+r.W*0.88, r.Y+r.H*0.20)
-	p.StrokePath(&path, 1.6, c)
+	p.Icon(iconCheck, r, c)
 }
 
 // searchH 是筛选框的高度。比框架默认的输入框（边距 1.5+1.5 个间距单位）
@@ -221,51 +193,137 @@ func searchIcon(c *ui.Context, size float32, color ui.Color) {
 	})
 }
 
-// drawMagnifier 画放大镜：一个镜面加一根斜柄。
-//
-// 柄从镜面的边缘接出去，不是从圆心 —— 从圆心画的话，镜面那条圆弧会横在
-// 柄的中间，看着像一根棒棒糖。
+// drawMagnifier 画放大镜（Lucide search）。
 func drawMagnifier(p *ui.Painter, r ui.Rect, col ui.Color) {
-	rad := min(r.W, r.H) * 0.30
-	cx, cy := r.X+r.W*0.42, r.Y+r.H*0.42
-
-	var lens ui.Path
-	lens.Circle(cx, cy, rad)
-	p.StrokePath(&lens, 1.4, col)
-
-	k := rad * 0.707 // 45° 方向上的余弦
-	var handle ui.Path
-	handle.MoveTo(cx+k, cy+k).LineTo(r.X+r.W*0.92, r.Y+r.H*0.92)
-	p.StrokePath(&handle, 1.6, col)
+	p.Icon(iconSearch, r, col)
 }
 
 // toolIconSize 是工具栏图标方盒的边长。比 13px 的文字略大一圈 —— 图标和
 // 文字视觉等重时，笔画密的图标看着会小一号。
 const toolIconSize = 15
 
+// toolbarDivider 画工具栏上的细分割线。
+func toolbarDivider(c *ui.Context) {
+	t := c.Theme()
+	ui.Box(c).Width(1).Height(16).Shrink(0).Background(t.Border.Alpha(0.6))
+}
+
+// toolbarSegmentedText 是工具栏上的文字分段控件（如「改动 / 历史」）。
+// 严格对齐 28px 高度基准网格，提供细腻的微投影与悬停平滑过渡。
+func toolbarSegmentedText(c *ui.Context, selected *int, off bool, labels ...string) *ui.Element {
+	t := c.Theme()
+	parts := ui.SegmentedBase(c, selected, len(labels))
+	g := parts.Track
+	g.Height(28).AlignItems(ui.Center).Padding(2).Gap(2).Radius(t.Radius).
+		Background(t.Surface).Border(1, t.Border).Disabled(off)
+
+	g.Children(func() {
+		for i, label := range labels {
+			s := parts.Segment(i).Height(24).Padding(0, 10).Radius(t.Radius - 2).
+				Cursor(ui.CursorPointer).Label(label)
+			sel := i == *selected
+			bg := ui.Transparent
+			fg := t.TextMuted
+			switch {
+			case off:
+				fg = t.TextMuted.Alpha(0.4)
+			case sel:
+				bg = t.Background
+				fg = t.Text
+				s.Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.08))
+				if t.Dark {
+					s.Border(1, t.Border.Alpha(0.6))
+				}
+			case s.Hovered():
+				bg = t.SurfaceHover
+				fg = t.Text
+			}
+			s.Background(bg)
+			fadeColors(s)
+			s.Children(func() {
+				ui.Text(c, label).FontSize(12).TextColor(fg).SingleLine()
+			})
+		}
+	})
+	return g
+}
+
+type segmentedIconItem struct {
+	label string
+	tip   string
+	icon  *ui.SVG
+}
+
+// toolbarSegmentedIcons 是工具栏上的图标分段控件（如「Unified / Split」切换）。
+// 紧凑、精确、高度一致（28px），两颗图标均采用 Lucide 标准矢量。
+func toolbarSegmentedIcons(c *ui.Context, selected *int, off bool, items ...segmentedIconItem) *ui.Element {
+	t := c.Theme()
+	parts := ui.SegmentedBase(c, selected, len(items))
+	g := parts.Track
+	g.Height(28).AlignItems(ui.Center).Padding(2).Gap(2).Radius(t.Radius).
+		Background(t.Surface).Border(1, t.Border).Disabled(off)
+
+	g.Children(func() {
+		for i, it := range items {
+			s := parts.Segment(i).Size(26, 24).Radius(t.Radius - 2).
+				Cursor(ui.CursorPointer).Label(it.label).Tooltip(it.tip)
+			sel := i == *selected
+			bg := ui.Transparent
+			fg := t.TextMuted
+			switch {
+			case off:
+				fg = t.TextMuted.Alpha(0.4)
+			case sel:
+				bg = t.Background
+				fg = t.Text
+				s.Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.08))
+				if t.Dark {
+					s.Border(1, t.Border.Alpha(0.6))
+				}
+			case s.Hovered():
+				bg = t.SurfaceHover
+				fg = t.Text
+			}
+			s.Background(bg)
+			fadeColors(s)
+			s.Children(func() {
+				ui.Box(c).Size(14, 14).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
+					p.Icon(it.icon, r, fg)
+				})
+			})
+		}
+	})
+	return g
+}
+
 // toolButton 是工具栏上的一颗动作按钮：矢量图标 + 文字标签。
-//
-// 用 ui.Button 而不是 ui.ButtonBase：它落在 ui.Toolbar 里时自带「平时没有脸、
-// 指上去才浮出底色」的样式（框架按 c.buttons == toolbarButtons 分派），和
-// 系统工具栏一个脾气。描边留给分段控件那种「带着状态」的控件，工具栏才不会
-// 是一排等重的灰盒子 —— 改动/历史 是「现在在看哪个」，刷新是「做一件事」，
-// 两者的分量本来就不同。
-//
-// Label 给的是无障碍名字，也是测试找它的凭据；可见的文字是同一个词，
-// 两者都写上，谁也替代不了谁。
-// off 为真时画成灰的（框架压到半透明）、点也不响应：没有对象可作用时，
-// 一颗点下去什么都没发生的按钮比一颗灰掉的按钮更让人困惑。
-//
-// Tooltip 写在 Disabled 前头：反过来的话灰按钮就弹不出解释了（原因见
-// remote.go 的 iconToolButton）。
+// 高度严格对齐 28px 基准，悬停与按下提供顺滑微交互。
 func toolButton(c *ui.Context, label, tip string, off bool, icon func(p *ui.Painter, r ui.Rect, col ui.Color)) bool {
-	btn := ui.Button(c, "").Label(label).Tooltip(tip).Padding(0, 8).Disabled(off)
+	t := c.Theme()
+	btn := ui.ButtonBase(c).Height(28).Shrink(0).Radius(t.Radius).
+		Padding(0, 9).Gap(6).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer).Label(label).Tooltip(tip).Disabled(off)
+
+	bg := ui.Transparent
+	fg := t.TextMuted
+	switch {
+	case off:
+		fg = t.TextMuted.Alpha(0.38)
+		btn.Cursor(ui.CursorDefault)
+	case btn.Pressed():
+		bg = t.SurfacePressed
+		fg = t.Text
+	case btn.Hovered():
+		bg = t.SurfaceHover
+		fg = t.Text
+	}
+	btn.Background(bg)
 	fadeColors(btn)
+
 	btn.Children(func() {
-		col := c.Theme().Text
 		ui.Box(c).Size(toolIconSize, toolIconSize).Shrink(0).
-			Draw(func(p *ui.Painter, r ui.Rect) { icon(p, r, col) })
-		ui.Text(c, label).FontSize(12).SingleLine()
+			Draw(func(p *ui.Painter, r ui.Rect) { icon(p, r, fg) })
+		ui.Text(c, label).FontSize(12).SingleLine().TextColor(fg)
 	})
 	return btn.Clicked()
 }
@@ -278,140 +336,19 @@ func iconPt(r ui.Rect, x, y float32) (float32, float32) {
 	return r.X + r.W*x, r.Y + r.H*y
 }
 
-// arcPoint 是圆上角度 deg（度）处的点。
-//
-// 0 度在正右方，角度**增大**的方向在屏幕上就是顺时针 —— 屏幕坐标 y 朝下，
-// 和数学课本里的逆时针正好相反。整个文件里的角度都按这一套来。
-func arcPoint(cx, cy, rad, deg float32) (float32, float32) {
-	a := float64(deg) * math.Pi / 180
-	return cx + rad*float32(math.Cos(a)), cy + rad*float32(math.Sin(a))
-}
-
-// arcTo 把一段顺时针圆弧加进 path。
-//
-// ui.Path 只有直线和贝塞尔，圆得自己拼。每段不超过 90°，控制点长度取
-// 4/3·tan(Δ/4)：这是拿三次贝塞尔逼近圆弧的经典取法，90° 一段的误差在
-// 千分之一以内，这个尺寸上完全看不出来。
-func arcTo(path *ui.Path, cx, cy, rad, from, to float32) {
-	sweep := to - from
-	for sweep <= 0 {
-		sweep += 360
-	}
-	segs := int(math.Ceil(float64(sweep) / 90))
-	step := sweep / float32(segs)
-	k := 4.0 / 3.0 * math.Tan(float64(step)*math.Pi/720)
-
-	x0, y0 := arcPoint(cx, cy, rad, from)
-	path.MoveTo(x0, y0)
-	for i := 0; i < segs; i++ {
-		a0 := from + step*float32(i)
-		a1 := a0 + step
-		// 切线方向：对 (cos a, sin a) 求导得 (-sin a, cos a)
-		t0x, t0y := -math.Sin(float64(a0)*math.Pi/180), math.Cos(float64(a0)*math.Pi/180)
-		t1x, t1y := -math.Sin(float64(a1)*math.Pi/180), math.Cos(float64(a1)*math.Pi/180)
-		c1x, c1y := x0+rad*float32(k)*float32(t0x), y0+rad*float32(k)*float32(t0y)
-		x1, y1 := arcPoint(cx, cy, rad, a1)
-		c2x, c2y := x1-rad*float32(k)*float32(t1x), y1-rad*float32(k)*float32(t1y)
-		path.CubeTo(c1x, c1y, c2x, c2y, x1, y1)
-		x0, y0 = x1, y1
-	}
-}
-
-// drawRefreshIcon 画「刷新」：一段留缺口的圆弧加一个箭头。
-//
-// 缺口开在右上，箭头停在缺口边上、指着顺时针方向 —— 这是刷新符号通行的
-// 样子，少一段弧加一个头，一眼就知道是「转一圈重来」，而不是一个问号。
+// drawRefreshIcon 画「刷新」（Lucide rotate-cw）。
 func drawRefreshIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
-	cx, cy := r.X+r.W/2, r.Y+r.H/2
-	rad := min(r.W, r.H) * 0.36
-
-	// 缺口 80° 开在正上方（偏右一点），箭头长在**收笔的那一头**（左上），
-	// 指着顺时针方向。
-	//
-	// 画在收笔那头而不是起笔那头：起笔那头的箭头会和弧线叠在一起，15px 上
-	// 两个形状一糊就成了个疙瘩。收笔这头的箭头正好落在缺口里，底边和弧的
-	// 端点接上，是一支看得清的箭头。
-	//
-	// 缺口的角度是量出来的：
-	//
-	//   - 60°（弧走 300°）时，头再小也和弧粘成一坨 —— 缺口里挤不下一个
-	//     三角形的轮廓，整个图标读作「一个带尖的实心圆」；
-	//   - 95° 往上，头是清楚了，可圈本身断成了一牙「C」；
-	//   - 80° 是两头都成立的那一档：圈还闭得起来，头也还立得住。
-	var path ui.Path
-	arcTo(&path, cx, cy, rad, 325, 245)
-	p.StrokePath(&path, 1.3, col)
-
-	px, py := arcPoint(cx, cy, rad, 245)
-	a := float32(245) * math.Pi / 180
-	tx, ty := -float32(math.Sin(float64(a))), float32(math.Cos(float64(a))) // 切线（画弧的方向）
-	nx, ny := -ty, tx                                                       // 法线
-
-	// 箭头是个实心三角：底边横在弧的端点上（和切线垂直），尖顺着切线往
-	// 前探 0.85 个半径。
-	//
-	// 试过把倒钩画成两笔描边（羽毛那一路）：在这个尺寸上笔画太细，反倒
-	// 认不出是个头。实心三角靠的是「比弧粗」——底宽是弧线的三倍多，眼睛
-	// 一眼就分得出哪段是圈、哪个是箭头。
-	var head ui.Path
-	l, wd := rad*0.85, rad*0.46
-	head.MoveTo(px+tx*l, py+ty*l)
-	head.LineTo(px+nx*wd, py+ny*wd)
-	head.LineTo(px-nx*wd, py-ny*wd)
-	head.Close()
-	p.FillPath(&head, col)
+	p.Icon(iconRefresh, r, col)
 }
 
-// drawSlidersIcon 画「设置」：两条横轨，各挂一个滑钮，位置错开。
-//
-// 两条而不是三条：三条横线在 15px 里只剩 4px 的间距，笔画一挤就糊成一团。
-// 两个错开的滑钮已经足够说出「调参数」这层意思。
+// drawSlidersIcon 画「设置」（Lucide sliders-horizontal）。
 func drawSlidersIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
-	ys := [2]float32{0.3, 0.7}
-	knobs := [2]float32{0.66, 0.34}
-
-	var rails ui.Path
-	for _, y := range ys {
-		x0, py := iconPt(r, 0.07, y)
-		x1, _ := iconPt(r, 0.93, y)
-		rails.MoveTo(x0, py).LineTo(x1, py)
-	}
-	p.StrokePath(&rails, 1.3, col)
-
-	var dots ui.Path
-	for i, kx := range knobs {
-		x, y := iconPt(r, kx, ys[i])
-		dots.Circle(x, y, 2.1)
-	}
-	p.FillPath(&dots, col)
+	p.Icon(iconSliders, r, col)
 }
 
-// drawFolderIcon 画「打开仓库」：一个文件夹。
-//
-// 画的是轮廓不是实心块：15px 的实心文件夹是一小坨色块，轮廓才看得出形状。
-// 右上角往里收一点的那条斜边是折页，少了它就是个方框。
+// drawFolderIcon 画「打开仓库」（Lucide folder）。
 func drawFolderIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
-	pt := func(x, y float32) (float32, float32) { return iconPt(r, x, y) }
-
-	var path ui.Path
-	x, y := pt(0.08, 0.80)
-	path.MoveTo(x, y)
-	x, y = pt(0.08, 0.26)
-	path.LineTo(x, y)
-	x, y = pt(0.40, 0.26)
-	path.LineTo(x, y)
-	x, y = pt(0.49, 0.38)
-	path.LineTo(x, y)
-	x, y = pt(0.88, 0.38)
-	path.LineTo(x, y)
-	x, y = pt(0.92, 0.44)
-	path.LineTo(x, y)
-	x, y = pt(0.92, 0.74)
-	path.LineTo(x, y)
-	x, y = pt(0.88, 0.80)
-	path.LineTo(x, y)
-	path.Close()
-	p.StrokePath(&path, 1.4, col)
+	p.Icon(iconFolder, r, col)
 }
 
 // xButton 画一个方形叉号按钮，返回这一帧有没有被点中。

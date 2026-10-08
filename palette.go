@@ -42,6 +42,8 @@ func (a *app) commands() []command {
 		{"查看改动", "⌘1", func(a *app) { a.setTab(0) }},
 		{"查看历史", "⌘2", func(a *app) { a.setTab(1) }},
 		{"筛选文件", "⌘F", func(a *app) { a.focusFilter = true }},
+		{"统一视图（Unified）", "⌘U", func(a *app) { a.setSplit(false) }},
+		{"左右对照（Split）", "", func(a *app) { a.setSplit(true) }},
 		{"模型设置…", "⌘,", func(a *app) { a.openSettings() }},
 		{"放大代码字号", "⌘+", func(a *app) { a.setCodeSize(a.codeSizeValue() + codeSizeStep) }},
 		{"缩小代码字号", "⌘−", func(a *app) { a.setCodeSize(a.codeSizeValue() - codeSizeStep) }},
@@ -59,7 +61,23 @@ func (a *app) commands() []command {
 	if a.explainOpen() {
 		cmds = append(cmds, command{"收起 AI 解释", "Esc", func(a *app) { a.closeExplain() }})
 	}
+	if a.repoReady() {
+		cmds = append(cmds, command{"对比分支代码差异…", "⌘⇧D", func(a *app) { a.openCompareDialog("") }})
+	}
+	if a.compare.on {
+		cmds = append(cmds, command{"退出分支对比", "Esc", func(a *app) { a.exitCompare() }})
+		cmds = append(cmds, command{"交换基准与对比分支方向", "", func(a *app) { a.swapCompare() }})
+	}
 	return cmds
+}
+
+func (a *app) setSplit(on bool) {
+	if a.split == on {
+		return
+	}
+	a.split = on
+	a.rowsDirty = true
+	a.saveViewSettings()
 }
 
 func (a *app) setSidebar(on bool) {

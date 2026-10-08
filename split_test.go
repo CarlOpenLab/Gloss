@@ -165,3 +165,37 @@ func TestSplitIsDefaultRows(t *testing.T) {
 		t.Errorf("当前行数 = %d，want %d", len(a.rows), len(paired))
 	}
 }
+
+// 工具栏上的 Unified / Split 能切换，而且切完行模型要重建。
+func TestSplitToggleRebuildsRows(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+
+	if !a.split {
+		t.Fatal("默认应该是 split")
+	}
+	if err := tt.Click("Unified"); err != nil {
+		t.Fatalf("点 Unified：%v", err)
+	}
+	tt.Frame()
+
+	if a.split {
+		t.Fatal("点了 Unified 之后 a.split 还是 true")
+	}
+	if a.rowsDirty {
+		t.Error("切完视图应该已经重建了行模型")
+	}
+	unified := buildRows(a.files, a.contents, a.expanded, false, nil)
+	if len(a.rows) != len(unified) {
+		t.Errorf("unified 行数 = %d, want %d", len(a.rows), len(unified))
+	}
+
+	if err := tt.Click("Split"); err != nil {
+		t.Fatalf("点 Split：%v", err)
+	}
+	tt.Frame()
+	if !a.split {
+		t.Fatal("点回 Split 之后 a.split 应该是 true")
+	}
+}

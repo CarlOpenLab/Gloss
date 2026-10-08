@@ -252,6 +252,9 @@ type app struct {
 	newBranch branchState
 	rename    renameState
 	stashDlg  stashState
+	// compare 是分支代码差异对比的状态（Fork 风格，见 compare.go）。
+	compare    compareState
+	compareSeq int
 
 	// copyText 是「复制哈希」这类待写进剪贴板的文本。菜单回调里拿不到
 	// *ui.Context（WriteClipboard 是它的方法），先记在这里，view 开头
@@ -340,7 +343,7 @@ func (a *app) attachStore(s *store.Store) {
 	a.store = s
 	cfg := s.Config()
 	a.codeSize = cfg.CodeSize
-	a.split = true
+	a.split = !cfg.Unified
 	a.sidebarOn = !cfg.SidebarOff
 	a.viewed = s.State().Viewed
 	if a.viewed == nil {
@@ -356,13 +359,14 @@ func (a *app) persist() {
 	a.run(func() { _ = s.Save() })
 }
 
-// saveViewSettings 记下跟界面有关的几项设置（侧栏、字号）。
+// saveViewSettings 记下跟界面有关的几项设置（视图模式、侧栏、字号）。
 //
 // 只覆盖这几项，别的字段原样留着 —— 模型设置的保存走 applySettings，
 // 两边各管各的，不会互相冲掉。
 func (a *app) saveViewSettings() {
 	cfg := a.store.Config()
-	cfg.Split = true
+	cfg.Split = a.split
+	cfg.Unified = !a.split
 	cfg.SidebarOff = !a.sidebarOn
 	cfg.CodeSize = a.codeSize
 	a.store.SetConfig(cfg)
@@ -414,13 +418,16 @@ func (a *app) view(c *ui.Context) {
 	a.renameBranchDialog(c, pal)
 	a.confirmDialog(c, pal)
 	a.stashDialog(c, pal)
+	a.compareDialog(c, pal)
 
 	// 卡片画在最后：这一帧的 ✨ 按钮位置刚写好，卡片当帧就能摆对地方。
 	// 它在 Overlay 层，不受上面的布局影响。
 	a.explainCard(c, pal)
 
-	// Esc 关掉卡片。放在最后，让卡片里正在编辑的输入框先有机会处理它。
-	// 命令栏和几个对话框开着的时候它们自己会处理 Esc，这里让位。
+	// Esc 退出分支对比或关掉卡片。放在最后，让对话框里正在编辑的输入框先有机会处理它。
+	if a.compare.on && !a.modalOn() && c.Shortcut(0, ui.KeyEscape) {
+		a.exitCompare()
+	}
 	if a.explainOpen() && !a.modalOn() && c.Shortcut(0, ui.KeyEscape) {
 		a.closeExplain()
 	}
@@ -547,14 +554,29 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 
 		// 改动 / 历史。⌘1 ⌘2 也能切。
 		tab := a.tab
-		ui.Segmented(c, &tab, "改动", "历史").Disabled(noRepo)
+		toolbarSegmentedText(c, &tab, noRepo, "改动", "历史")
 		if tab != a.tab {
 			a.setTab(tab)
 		}
 
-		// 抓取 / 拉取 / 推送。摆在分段控件之后、刷新之前：左边是「在看哪儿」，
-		// 从这里开始才是动作。
-		a.remoteBar(c)
+		// unified / split 切换（Lucide rows-3 / columns-2 矢量图标）。
+		split := a.split
+		mode := 0
+		if split {
+			mode = 1
+		}
+		toolbarSegmentedIcons(c, &mode, noRepo,
+			segmentedIconItem{label: "Unified", tip: "统一视图（单栏） ⌘U", icon: iconUnified},
+			segmentedIconItem{label: "Split", tip: "左右对照（分栏）", icon: iconSplit},
+		)
+		if (mode == 1) != split {
+			a.setSplit(mode == 1)
+		}
+
+		if len(a.remotes) > 0 {
+			toolbarDivider(c)
+			a.remoteBar(c)
+		}
 
 		switch {
 		case a.state == loadLoading:
@@ -567,9 +589,8 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 			ui.Spinner(c)
 			ui.Text(c, a.opName).FontSize(11).TextColor(t.TextMuted).SingleLine()
 		}
-		// 「几个文件」不在这儿报了：正下方文件栏的栏头就写着同一个数字，
-		// 两行隔着几十像素重复一遍不是强调，是啰嗦。工具栏这一格只负责
-		// 「正在读」这类别处没有的状态。
+
+		toolbarDivider(c)
 
 		// 没有仓库时「刷新」什么都不做（reload 会直接返回），画成灰的。
 		// 「模型设置」和「打开仓库」不依赖仓库，照常可点。
@@ -637,6 +658,11 @@ func (a *app) mainArea(c *ui.Context, pal palette) {
 	ui.Column(c).Grow(1).FillWidth().MinHeight(0).Children(func() {
 		a.opBanner(c, pal)
 		a.pendingBar(c)
+		if a.compare.on {
+			a.compareBar(c, pal)
+			a.detailPane(c, pal)
+			return
+		}
 		if a.tab == 1 {
 			a.historyArea(c, pal)
 			return
@@ -929,7 +955,7 @@ func (a *app) workBranch() string {
 // 菜单在系统层拦键、视图在自己那一帧拦，各写各的判断迟早漏掉一处
 // （新加一个对话框，忘了改其中一个，⌘R 就会在对话框背后偷偷刷新）。
 func (a *app) modalOn() bool {
-	return a.palette.on || a.settingsOn || a.tag.on || a.reset.on || a.newBranch.on || a.rename.on || a.confirm.on || a.stashDlg.on
+	return a.palette.on || a.settingsOn || a.tag.on || a.reset.on || a.newBranch.on || a.rename.on || a.confirm.on || a.stashDlg.on || a.compare.dialog
 }
 
 // toggleAmend 切换修改上次提交状态。勾选时预填最近一次提交的说明。

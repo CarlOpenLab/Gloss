@@ -102,23 +102,11 @@ func treeRow(c *ui.Context, t *ui.Theme, o treeRowOpts, content func()) (row, ar
 	return row, arrow
 }
 
-// drawChevron 画折叠箭头：展开时朝下，收起时朝右。
-//
-// 两个方向各写一组点，不转角度 —— 十几像素的箭头转不转都是这一下，写死两组
-// 坐标一眼能看出画的是什么，省得为了 90° 去推旋转矩阵的正负号。
-//
-// 点是按矩形自己的比例算的：侧栏树的箭头槽是 12px、diff 文件头那个是 10px，
-// 两处共用这一份走向，全窗口的折叠三角才是一个样子。
+// drawChevron 画折叠箭头（Lucide chevron-down / chevron-right）。
 func drawChevron(p *ui.Painter, r ui.Rect, c ui.Color, open bool) {
-	var path ui.Path
 	if open {
-		path.MoveTo(r.X+r.W*0.1, r.Y+r.H*0.3)
-		path.LineTo(r.X+r.W*0.5, r.Y+r.H*0.7)
-		path.LineTo(r.X+r.W*0.9, r.Y+r.H*0.3)
+		p.Icon(iconChevronDown, r, c)
 	} else {
-		path.MoveTo(r.X+r.W*0.3, r.Y+r.H*0.1)
-		path.LineTo(r.X+r.W*0.7, r.Y+r.H*0.5)
-		path.LineTo(r.X+r.W*0.3, r.Y+r.H*0.9)
+		p.Icon(iconChevronRight, r, c)
 	}
-	p.StrokePath(&path, 1.4, c)
 }

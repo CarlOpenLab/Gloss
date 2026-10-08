@@ -273,3 +273,14 @@ func TestDiffViewScrollingKeepsRowCountFlat(t *testing.T) {
 		t.Errorf("滚动后构建了 %d 行（滚动前 %d），虚拟化退化了", a.built, first)
 	}
 }
+
+// 代码行带有 Tooltip，悬停可查看完整行内容。
+func TestDiffCodeTooltip(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+
+	if !tt.HasText("line 3: CHANGED AGAIN") {
+		t.Fatal("找不到代码行内容")
+	}
+}

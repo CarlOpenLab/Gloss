@@ -123,6 +123,49 @@ func (r *Repo) StashDiff(ctx context.Context, name string) ([]File, error) {
 	return FilesFromDiff(diff.Parse(string(out))), nil
 }
 
+// BranchDiff 读两个分支之间的改动（产物为 []File）。
+// tripleDot 为 true 时用 base...target（自共同祖先分叉以来的改动，即 PR 模式）；
+// 为 false 时用 base..target（两个分支最新指针的直接差异）。
+func (r *Repo) BranchDiff(ctx context.Context, base, target string, tripleDot bool) ([]File, error) {
+	op := "..."
+	if !tripleDot {
+		op = ".."
+	}
+	rev := base + op + target
+	args := []string{
+		"-c", "core.quotePath=false",
+		"diff", "--no-color", "--no-ext-diff", "--no-textconv",
+		"--src-prefix=a/", "--dst-prefix=b/",
+		"-M", "-U3",
+		rev,
+	}
+	out, err := run(ctx, r.Root, args...)
+	if err != nil {
+		return nil, err
+	}
+	return FilesFromDiff(diff.Parse(string(out))), nil
+}
+
+// BranchCommits 读从 base 到 target 之间的提交列表。
+func (r *Repo) BranchCommits(ctx context.Context, base, target string, limit int) ([]Commit, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rangeRev := base + ".." + target
+	format := "%H%x00%h%x00%an%x00%aI%x00%D%x00%P%x00%s%x1e"
+	args := []string{
+		"-c", "core.quotePath=false", "log", "--no-color",
+		"--date=iso-strict", "--topo-order", "--pretty=format:" + format,
+		"-n", strconv.Itoa(limit),
+		rangeRev,
+	}
+	out, err := run(ctx, r.Root, args...)
+	if err != nil {
+		return nil, err
+	}
+	return parseLog(string(out)), nil
+}
+
 // FilesFromDiff 把解析好的 patch 包成可渲染的 File 列表。
 //
 // git status 那一路（Load）能拿到「未跟踪」「冲突」这类 patch 里没有的信息，

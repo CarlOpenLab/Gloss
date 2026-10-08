@@ -69,6 +69,22 @@ func TestDumpScreenshot(t *testing.T) {
 	tt.Frame()
 	writePNG(t, "/tmp/de-shot-split.png", tt.Image())
 
+	// 分支对比视图（Fork 风格）：两分支比对栏、差异文件、diff
+	a.startCompare("main", "feature", true)
+	a.compare.state = loadReady
+	a.compare.commits = []gitrepo.Commit{
+		{Short: "a1b2c3d", Subject: "feat: add user authentication"},
+		{Short: "e4f5g6h", Subject: "fix: update router handler"},
+	}
+	tt.SetDark(false)
+	tt.Frame()
+	writePNG(t, "/tmp/de-shot-compare.png", tt.Image())
+	tt.SetDark(true)
+	tt.Frame()
+	writePNG(t, "/tmp/de-shot-compare-dark.png", tt.Image())
+	a.exitCompare()
+	tt.SetDark(false)
+
 	// ✨ 解释卡片：定位、Markdown 排版、头尾两块
 	fi, hi := explainFixtures(t, a)
 	a.ex = explainState{
@@ -433,9 +449,23 @@ func TestDumpScreenshot(t *testing.T) {
 	rt.SetTitleBar(realTitleBar)
 	rt.Frame()
 	writePNG(t, "/tmp/de-shot-remote.png", rt.Image())
+	if r, ok := rt.Find("推送"); ok {
+		rt.Move(r.X+r.W/2, r.Y+r.H/2)
+		rt.Frame()
+		writePNG(t, "/tmp/de-shot-hover.png", rt.Image())
+		rt.Move(-100, -100)
+		rt.Frame()
+	}
 	rt.SetDark(true)
 	rt.Frame()
 	writePNG(t, "/tmp/de-shot-remote-dark.png", rt.Image())
+	if r, ok := rt.Find("推送"); ok {
+		rt.Move(r.X+r.W/2, r.Y+r.H/2)
+		rt.Frame()
+		writePNG(t, "/tmp/de-shot-hover-dark.png", rt.Image())
+		rt.Move(-100, -100)
+		rt.Frame()
+	}
 	rt.SetDark(false)
 
 	// 推送被拒：还是让 git 真拒一次再翻 —— Detail 里那几行原话是 gitDetail

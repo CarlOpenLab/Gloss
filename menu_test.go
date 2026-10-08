@@ -122,19 +122,25 @@ func TestMenuMirrorsState(t *testing.T) {
 	wantChecked(t, m, "查看改动", true)
 	wantChecked(t, m, "查看历史", false)
 	wantChecked(t, m, "显示侧栏", true)
+	wantChecked(t, m, "统一视图", false)
+	wantChecked(t, m, "左右对照", true)
 	wantEnabled(t, m, "刷新", true)
 
-	// 这两个状态都不是为菜单改的，菜单这边没人被主动通知过 ——
+	// 这些状态都不是为菜单改的，菜单这边没人被主动通知过 ——
 	// 全靠每帧那一次 syncMenu 自己追上。
 	tt.Key(ui.Cmd, ui.Key2)
 	tt.Frame()
 	tt.Key(ui.Cmd|ui.Shift, ui.KeyB)
+	tt.Frame()
+	a.setSplit(false)
 	tt.Frame()
 	settle(t, a)
 
 	wantChecked(t, m, "查看改动", false)
 	wantChecked(t, m, "查看历史", true)
 	wantChecked(t, m, "显示侧栏", false)
+	wantChecked(t, m, "统一视图", true)
+	wantChecked(t, m, "左右对照", false)
 }
 
 // 没有仓库时，刷新和两个 tab 都没有作用对象，灰掉；打开仓库和字号
@@ -145,6 +151,8 @@ func TestMenuWithoutRepo(t *testing.T) {
 	wantEnabled(t, m, "刷新", false)
 	wantEnabled(t, m, "查看改动", false)
 	wantEnabled(t, m, "查看历史", false)
+	wantEnabled(t, m, "统一视图", false)
+	wantEnabled(t, m, "左右对照", false)
 	wantEnabled(t, m, "新建分支…", false)
 	wantEnabled(t, m, "储藏工作区改动…", false)
 	wantEnabled(t, m, "打开仓库…", true)

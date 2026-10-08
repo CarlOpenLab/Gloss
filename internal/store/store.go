@@ -35,6 +35,8 @@ type Config struct {
 	CodeSize float32 `json:"codeSize,omitempty"`
 	// Split 为 true 时用左右对照视图。
 	Split bool `json:"split,omitempty"`
+	// Unified 为 true 时用单栏统一视图（默认左右对照）。
+	Unified bool `json:"unified,omitempty"`
 	// SidebarOff 而不是 SidebarOn：侧栏默认是开的，零值正好表示这个默认。
 	SidebarOff bool `json:"sidebarOff,omitempty"`
 }

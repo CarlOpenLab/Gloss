@@ -356,3 +356,63 @@ func TestCommitDiffDetectsRename(t *testing.T) {
 		t.Errorf("纯重命名不该有 hunk：%+v", files[0].Hunks)
 	}
 }
+
+// 对比两个分支的改动与提交列表（BranchDiff、BranchCommits）。
+func TestBranchDiffAndCommits(t *testing.T) {
+	r := tempRepo(t)
+	// base 提交
+	write(t, filepath.Join(r.Root, "common.txt"), "base\n")
+	git(t, r.Root, "add", ".")
+	git(t, r.Root, "commit", "-m", "init")
+
+	// 分支 feature
+	git(t, r.Root, "branch", "feature")
+
+	// main 上加一个提交
+	write(t, filepath.Join(r.Root, "main_only.txt"), "hello main\n")
+	git(t, r.Root, "add", ".")
+	git(t, r.Root, "commit", "-m", "commit on main")
+
+	// 切到 feature，加两个提交
+	git(t, r.Root, "checkout", "feature")
+	write(t, filepath.Join(r.Root, "feature.txt"), "hello feature\n")
+	git(t, r.Root, "add", ".")
+	git(t, r.Root, "commit", "-m", "commit on feature 1")
+
+	write(t, filepath.Join(r.Root, "feature.txt"), "hello feature updated\n")
+	git(t, r.Root, "add", ".")
+	git(t, r.Root, "commit", "-m", "commit on feature 2")
+
+	// 1. 三点对比（PR 模式）：main...feature
+	// 只看 feature 从 main 分叉之后新改了什么（feature.txt），不含 main 上的 main_only.txt
+	files, err := r.BranchDiff(context.Background(), "main", "feature", true)
+	if err != nil {
+		t.Fatalf("BranchDiff(main...feature): %v", err)
+	}
+	if len(files) != 1 || files[0].Path() != "feature.txt" {
+		t.Fatalf("三点对比应该只有 feature.txt：%+v", files)
+	}
+
+	// 2. 两点对比（直接对比）：main..feature
+	// 包含 feature.txt（新增）和 main_only.txt（删除）
+	filesDirect, err := r.BranchDiff(context.Background(), "main", "feature", false)
+	if err != nil {
+		t.Fatalf("BranchDiff(main..feature): %v", err)
+	}
+	if len(filesDirect) != 2 {
+		t.Fatalf("两点对比应该有两个文件：%+v", filesDirect)
+	}
+
+	// 3. 提交列表：main..feature
+	// 包含 feature 上的两个提交
+	commits, err := r.BranchCommits(context.Background(), "main", "feature", 10)
+	if err != nil {
+		t.Fatalf("BranchCommits: %v", err)
+	}
+	if len(commits) != 2 {
+		t.Fatalf("提交数 = %d, want 2", len(commits))
+	}
+	if commits[0].Subject != "commit on feature 2" {
+		t.Errorf("最新提交 = %q", commits[0].Subject)
+	}
+}

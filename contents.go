@@ -59,6 +59,11 @@ func (a *app) loadContents(seq int) {
 	}
 	root := a.repoPath
 
+	compareTarget := ""
+	if a.compare.on {
+		compareTarget = a.compare.target
+	}
+
 	// 后台只拿值参数，结果经 dispatch 回主线程 —— 见 app.go 顶部的线程约定
 	a.run(func() {
 		ctx := context.Background()
@@ -88,7 +93,9 @@ func (a *app) loadContents(seq int) {
 
 		for _, rq := range reqs {
 			var lines []string
-			if rq.staged {
+			if compareTarget != "" {
+				lines = repo.NewLinesAt(ctx, compareTarget, rq.path, maxContentBytes)
+			} else if rq.staged {
 				lines = repo.NewLinesAt(ctx, ":0", rq.path, maxContentBytes)
 			} else {
 				lines = repo.NewLines(rq.path, maxContentBytes)

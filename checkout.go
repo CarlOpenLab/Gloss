@@ -189,7 +189,7 @@ func (a *app) refMenu(m *ui.Menu, ref gitrepo.Ref) {
 	}
 }
 
-// localBranchMenu 是本地分支的右键菜单：检出、合并、变基、重命名、删除、复制分支名。
+// localBranchMenu 是本地分支的右键菜单：检出、对比差异、合并、变基、重命名、删除、复制分支名。
 func (a *app) localBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
 	busy := a.op != gitrepo.OpNone
 	isHead := ref.Head || ref.Name == a.branch
@@ -197,6 +197,15 @@ func (a *app) localBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
 
 	if m.Item("检出 " + ref.Name).Disabled(busy || isHead).Chosen() {
 		a.checkoutRef(ref)
+	}
+	m.Separator()
+	if !isHead && a.branch != "" {
+		if m.Item("与当前分支 (" + a.branch + ") 对比代码差异").Disabled(busy).Chosen() {
+			a.startCompare(a.branch, ref.Name, true)
+		}
+	}
+	if m.Item("与其他分支对比代码差异…").Disabled(busy).Chosen() {
+		a.openCompareDialog(ref.Name)
 	}
 	m.Separator()
 	if m.Item("把 " + ref.Name + " 合并进当前分支").Disabled(held).Chosen() {
@@ -218,7 +227,7 @@ func (a *app) localBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
 	}
 }
 
-// remoteBranchMenu 是远程分支的右键菜单：检出、删除远程分支、复制分支名。
+// remoteBranchMenu 是远程分支的右键菜单：检出、对比差异、删除远程分支、复制分支名。
 func (a *app) remoteBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
 	plan, ok := a.planCheckout(ref)
 	if !ok {
@@ -227,6 +236,15 @@ func (a *app) remoteBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
 	busy := a.op != gitrepo.OpNone
 	if m.Item(plan.menu).Disabled(busy || plan.noop).Chosen() {
 		a.checkoutRef(ref)
+	}
+	m.Separator()
+	if a.branch != "" {
+		if m.Item("与当前分支 (" + a.branch + ") 对比代码差异").Disabled(busy).Chosen() {
+			a.startCompare(a.branch, ref.Name, true)
+		}
+	}
+	if m.Item("与其他分支对比代码差异…").Disabled(busy).Chosen() {
+		a.openCompareDialog(ref.Name)
 	}
 	m.Separator()
 	remote := ref.Remote
@@ -244,11 +262,20 @@ func (a *app) remoteBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
 	}
 }
 
-// tagMenu 是标签的右键菜单：检出、推送到远程、复制标签名。
+// tagMenu 是标签的右键菜单：检出、对比差异、推送到远程、复制标签名。
 func (a *app) tagMenu(m *ui.Menu, ref gitrepo.Ref) {
 	busy := a.op != gitrepo.OpNone
 	if m.Item("检出标签 " + ref.Name + "（分离 HEAD）").Disabled(busy).Chosen() {
 		a.checkoutRef(ref)
+	}
+	m.Separator()
+	if a.branch != "" {
+		if m.Item("与当前分支 (" + a.branch + ") 对比代码差异").Disabled(busy).Chosen() {
+			a.startCompare(a.branch, ref.Name, true)
+		}
+	}
+	if m.Item("与其他分支/标签对比代码差异…").Disabled(busy).Chosen() {
+		a.openCompareDialog(ref.Name)
 	}
 	m.Separator()
 	canRemote := a.canReachRemote()

@@ -153,6 +153,9 @@ func (a *app) toggleStageFile(f gitrepo.File) {
 //   - 已暂存的新增，反向：`@@ -0,0 +1,N @@` 反着 apply 会在 index 里留下
 //     一个空文件，而不是把条目删掉（整文件 `git reset` 才是对的）。
 func (a *app) hunkStageable(f gitrepo.File) bool {
+	if a.compare.on || a.tab != 0 {
+		return false
+	}
 	if len(f.Hunks) == 0 || f.Binary || f.TooLarge {
 		return false
 	}

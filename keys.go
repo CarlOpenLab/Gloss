@@ -92,6 +92,9 @@ func (a *app) handleKeys(c *ui.Context) {
 	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyU) {
 		a.doPush()
 	}
+	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyD) {
+		a.openCompareDialog("")
+	}
 
 	// J / K 跳上下一段改动。不给它们加修饰键：review 时手一直在这两个键上。
 	// 历史 tab 里的 diff 是同一套视图，同样能用。

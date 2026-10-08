@@ -161,6 +161,12 @@ func (a *app) emptyTreeMsg() string {
 		return "还没打开仓库"
 	case a.state != loadReady:
 		return "" // 仓库在读，diff 那边有转圈了，这里先空着
+	case a.compare.on && a.compare.state == loadLoading:
+		return "正在计算分支差异…"
+	case a.compare.on && a.compare.state == loadFailed:
+		return "读不到分支差异"
+	case a.compare.on && len(a.allFiles) == 0:
+		return "两分支之间没有改动"
 	case a.tab == 1 && a.hist == loadLoading && len(a.commits) == 0:
 		return "正在读提交…"
 	case a.tab == 1 && a.hist == loadFailed && len(a.commits) == 0:
@@ -368,6 +374,10 @@ func (a *app) detailEmpty(c *ui.Context, t *ui.Theme) {
 		if ui.Button(c, "重试").Clicked() {
 			a.reload()
 		}
+	case a.compare.on:
+		ui.Text(c, "两分支之间没有代码差异").FontSize(18).Bold()
+		ui.Textf(c, "分支 %s 与 %s 完全一致。", a.compare.base, a.compare.target).
+			TextColor(t.TextMuted)
 	case a.tab == 1:
 		a.historyEmpty(c, t)
 	case a.fileFilter != "":
