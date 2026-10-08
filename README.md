@@ -1,16 +1,17 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="resources/logo-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="resources/logo.svg">
-    <img alt="Gloss Logo" src="resources/logo.svg" width="128" height="128">
+    <source media="(prefers-color-scheme: dark)" srcset="resources/logo-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="resources/logo.png">
+    <img alt="Gloss Logo" src="resources/logo.png" width="130" height="130">
   </picture>
 </p>
 
 <h1 align="center">Gloss</h1>
 
 <p align="center">
-  <strong>原生 macOS Git 客户端 · 每个变更块都有 ✨ AI 逐块解释</strong><br>
-  <em>A native macOS Git client with inline AI hunk explanations — Pure Go, GPU Direct Rendering, Zero WebViews.</em>
+  <strong>Native macOS Git client with inline ✨ AI hunk explanations.</strong><br>
+  <em>Pure Go, GPU Direct Rendering, Zero WebViews.</em><br>
+  <sub>原生 macOS Git 客户端 · 每个变更块都有 ✨ AI 逐块解释</sub>
 </p>
 
 <p align="center">
@@ -19,6 +20,10 @@
   <a href="https://github.com/egoist/mygo"><img src="https://img.shields.io/badge/GUI-mygo%20(GPU%20Direct)-4F46E5?style=flat-square" alt="mygo"></a>
   <img src="https://img.shields.io/badge/AI-Claude%20%7C%20DeepSeek%20%7C%20Ollama%20%7C%20OpenAI-6366F1?style=flat-square" alt="Multi-LLM">
   <img src="https://img.shields.io/badge/Architecture-Zero%20WebView-10B981?style=flat-square" alt="Zero WebView">
+</p>
+
+<p align="center">
+  <a href="#why-gloss">English</a> • <a href="#-中文说明">简体中文</a>
 </p>
 
 <p align="center">
@@ -31,7 +36,111 @@
 
 ---
 
-## 为什么是 Gloss？
+## Why Gloss?
+
+When reviewing large pull requests or AI-generated diffs, the biggest bottleneck isn't looking at the lines of code—it's understanding **why** each hunk was changed, what the author intended, and whether there are hidden pitfalls.
+
+**Gloss** is a native macOS Git client crafted for swift code review and safe everyday Git operations:
+
+- **Understand code at a glance**: Every diff hunk has a dedicated ✨ button. AI breaks down changes in plain language—what was modified, the rationale behind it, and potential edge cases.
+- **Blazing native performance**: Powered by [mygo](https://github.com/egoist/mygo), rendered directly via GPU. **Zero WebViews, zero JavaScript runtimes, single native binary**. Sub-second launch, silky smooth 60fps scrolling, minimal memory footprint.
+
+---
+
+## Features
+
+- ⚡ **GPU Direct Rendering**: Pure Go native interface built with `mygo`, styled around GitHub's visual palette.
+- ✨ **Inline AI Hunk Explanations**: Non-intrusive floating cards with streaming output. Grounded with accurate line numbers and prompt-engineered for targeted diff understanding without moving the layout.
+- 🌲 **Fork-Style Layout & Topology Graph**: Custom commit topology graph to visualize branching histories; split / unified diff toggle with chroma syntax highlighting.
+- 🔍 **Viewed Tracking**: Mark files as reviewed to collapse them into clean headers; automatically resets when file contents change.
+- 🛠 **Full Git Workflow**:
+  - **Staging & Commits**: Whole-file staging, **per-hunk staging**, persistent drafts, and Amend (`--amend`).
+  - **Branches & Remotes**: Switch/create/rename/delete branches, safe merge and rebase, push tags, and `--force-with-lease` protected force push.
+  - **Stash Management**: Modal stash dialog with message and untracked files (`-u`); right-click to inspect diff, Apply, Pop, or Drop with confirmation.
+- 🦺 **Human-Friendly Error & Conflict Resolution**:
+  - Plain-language explanations for hook rejections, lock contention, missing credentials, or detached HEAD states.
+  - Dedicated amber banner during active rebase/merge conflicts with two-way side picking and deletion handling.
+- ⌨️ **Keyboard-Driven & Command Palette**: Press `⌘K` for the command palette, `J` / `K` to jump across diff hunks, and full macOS native menu shortcuts.
+- 🤖 **Universal LLM Compatibility**: Built-in presets for Anthropic Claude, DeepSeek, Kimi, Qwen, GLM, OpenRouter, Ollama, and any OpenAI-compatible API.
+
+---
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `⌘K` | Open Command Palette |
+| `J` / `K` | Jump to Next / Previous hunk |
+| `⌘F` | Focus file filter input |
+| `⌘⏎` | Commit staged changes |
+| `⌘O` | Open repository |
+| `⌘1` / `⌘2` | Switch between Changes / History |
+| `⌘⇧B` | Toggle Sidebar |
+| `⌘R` | Refresh repository status |
+| `⌘⇧F` / `⌘⇧P` / `⌘⇧U` | Fetch / Pull / Push |
+| `⌘+` / `⌘−` / `⌘0` | Zoom in / Zoom out / Reset font size |
+| `⌘,` | Model settings |
+| `Esc` | Dismiss explanation card / modal dialogs |
+
+---
+
+## Build & Run
+
+Requires **Go 1.27+** (enforced by `mygo`, pre-configured in `mise.toml`).
+
+```bash
+# 1. Install toolchain via mise
+mise install                 # Installs Go 1.27.1
+
+# 2. Local development with live reload
+go tool mygo dev             # Hot reload on code changes
+
+# 3. Production release
+go tool mygo build           # Builds .app and .dmg into build/darwin-arm64/
+
+# 4. Automated tests
+go test ./...                # Headless rendering tests, no display required
+```
+
+---
+
+## LLM Configuration
+
+Open **Settings (`⌘,`)** from the top right menu to configure your API provider and key. The configuration is securely stored at `~/Library/Application Support/Gloss/config.json` (permissions `0600`).
+
+Alternatively, Gloss falls back to standard environment variables:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+# Optional: export ANTHROPIC_MODEL=claude-sonnet-5-5
+# Optional: export ANTHROPIC_BASE_URL=https://...
+```
+
+---
+
+## Roadmap
+
+- [x] Staging + Commits (file-level + hunk-level)
+- [x] Branching / Checkout / Tags (double-click + context menu)
+- [x] Remotes: Fetch / Pull / Push
+- [x] Conflict management: Amber status bar + Continue / Skip / Abort
+- [x] Conflict side picking: Use ours / Use theirs / Mark resolved
+- [x] Commit context menu: Cherry-pick / Revert / Reset / Branch from here
+- [x] Local branch operations: New branch (`⌘⇧N`), rename, safe deletion
+- [x] Remote branch & integration: Delete remote branch, merge/rebase, force-with-lease push
+- [x] Stash operations & commit amend: Push / apply / pop / drop stash, commit amend
+- [ ] Draggable sidebar resizing
+- [ ] Keyboard navigation for commit history (`J` / `K` in commit list)
+- [ ] GitHub PR integration: Review PR diffs and publish AI explanations as comments
+- [ ] Pre-flight risk scan: Full-diff scan highlighting potential vulnerabilities
+- [ ] Single-line explanation / selection-based query
+
+---
+---
+
+## 🇨🇳 中文说明
+
+### 为什么是 Gloss？
 
 日常 Review 别人（或者 AI 助手）写的大量改动代码时，最痛苦的不是看 diff，而是**看不懂这几行具体在解决什么、意图是什么、有没有暗坑**。
 
@@ -41,10 +150,10 @@ Gloss 是一款专注于**高效代码阅读与安全 Git 操作**的原生 macO
 
 ---
 
-## 核心特性
+### 核心特性
 
 - ⚡ **原生 GPU 直绘**：零 Web 框架开销，极低内存占用，对齐 GitHub 视觉美学与 macOS 原生体验。
-- ✨ **逐块 AI 解释（悬浮卡片）**：流式输出、不挤动 diff 排版。精准携带真实行号上下文，只针对当前 hunk 深度拆解，支持缓存去重。
+- ✨ **逐块 AI 解释（悬浮卡片）**：流式输出、不挤动 diff 排版。精准携带真实行号上下文，只针对当前 hunk 深度拆解，支持内容哈希去重缓存。
 - 🌲 **Fork 式上下分 & 拓扑图**：自研提交拓扑图，直观梳理分支合并脉络；下半区分立文件树与详细 diff。
 - 🔍 **Viewed 联动折叠**：标记已 review 的文件在 diff 中自动折叠，一屏扫完未审阅代码，文件变动标记自动失效。
 - 🛠 **硬核 Git 工作流**：
@@ -59,7 +168,7 @@ Gloss 是一款专注于**高效代码阅读与安全 Git 操作**的原生 macO
 
 ---
 
-## 功能详述
+### 功能详述
 
 - **本地 git 仓库**：打开一个工作副本，看未提交的改动；侧栏列着分支 / 远程 / 标签 / 储藏，点一条分支就只看它的历史，点一条储藏直接看它的改动。
 - **暂存与提交**：文件行左边的方框按整个文件暂存，hunk 头上的按钮按块暂存 —— 改动因此分成「已暂存 / 未暂存」两段，同一个文件可以两边各占一份；提交栏里写信息（`⌘⏎` 提交），写了一半的消息按仓库记着，切走再回来还在。
@@ -88,62 +197,7 @@ Gloss 是一款专注于**高效代码阅读与安全 Git 操作**的原生 macO
 
 ---
 
-## 快捷键
-
-| 快捷键 | 作用 |
-|---|---|
-| `⌘K` | 命令栏 |
-| `J` / `K` | 跳到下一段 / 上一段改动 |
-| `⌘F` | 聚焦文件筛选框 |
-| `⌘⏎` | 提交（输入框里回车是换行，所以带 `⌘`） |
-| `⌘O` | 打开仓库 |
-| `⌘1` / `⌘2` | 改动 / 历史 |
-| `⌘⇧B` | 收起 / 展开侧栏 |
-| `⌘R` | 刷新 |
-| `⌘⇧F` / `⌘⇧P` / `⌘⇧U` | 抓取 / 拉取 / 推送 |
-| `⌘+` / `⌘−` / `⌘0` | 代码字号放大 / 缩小 / 恢复默认 |
-| `⌘,` | 模型设置 |
-| `Esc` | 关掉解释卡片、确认框 |
-
-> 菜单栏（`menu.go`）里每一项都带着同一个快捷键：真实 macOS 应用里原生菜单会先把键吃掉，视图那条路走不到，两处的按键映射保持一致。
-
----
-
-## 构建与运行
-
-需要 **Go 1.27+**（mygo 的硬要求，`mise.toml` 里已经预设好）。
-
-```bash
-# 1. 安装指定版本环境
-mise install                 # 装 Go 1.27.1
-
-# 2. 本地开发调试（改动自动重载）
-go tool mygo dev             # 开发模式，改完自动重启
-
-# 3. 生产打包
-go tool mygo build           # 出 .app 和 .dmg（build/darwin-arm64/）
-
-# 4. 自动化测试
-go test ./...                # 界面是无头的，测试不需要物理开窗口
-```
-
----
-
-## 配置模型
-
-界面右上角「模型设置…」里添加一个供应商即可。API key 保存在 `~/Library/Application Support/Gloss/config.json`（权限 0600）。
-
-若未在 UI 中配置，会自动回退读取环境变量：
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-# 可选：export ANTHROPIC_MODEL=claude-sonnet-5-5
-# 可选：export ANTHROPIC_BASE_URL=https://...   # 中转/代理地址
-```
-
----
-
-## 源码架构
+### 源码架构
 
 ```
 main.go / app.go         窗口、菜单、app 状态、每帧的根布局
@@ -197,22 +251,3 @@ internal/
 ```
 
 > **线程约定**（详见 `app.go` 顶部）：只有主线程读写 app 的字段，后台 goroutine 只收值参数、结果一律走 `dispatch` 回主线程调度。
-
----
-
-## 后续路线
-
-- [x] 暂存 + 提交（文件级 + hunk 级）
-- [x] 切分支 / 检出标签 / 打标签（双击 + 右键菜单）
-- [x] 远程：fetch / pull / push
-- [x] 停在冲突里：状态条 + 继续 / 跳过 / 中止（中止前确认）
-- [x] 冲突文件逐个解决：用我这边 / 用对方那边 / 在编辑器打开 / 标记为已解决
-- [x] 提交右键：拣选 / 回退 / 重置（软·混合·硬）/ 从这里建分支 / 复制哈希
-- [x] 本地分支管理：新建（快捷键 ⌘⇧N / 菜单 / 提交行）/ 重命名 / 删除（未合并两段确认）
-- [x] 远程分支与分支集成：删除远程分支，merge / rebase 进当前分支，force-with-lease 强推，推标签
-- [x] 储藏管理与提交修正：储藏工作区改动（可选说明与未跟踪文件）、侧栏储藏右键（apply / pop / drop 确认），提交栏「修改上次提交」（--amend，预填上次提交信息）
-- [ ] 侧栏可拖宽
-- [ ] 提交列表的键盘上下选择（`J` / `K` 现在只在 diff 里跳）
-- [ ] GitHub PR：直接看 PR 的 diff、把解释回写成评论
-- [ ] 风险预扫：AI 预扫全量 hunk，可疑变更标红
-- [ ] 单行级解释 / 选中追问
