@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 
 	"github.com/egoist/mygo/ui"
 
@@ -121,27 +123,33 @@ func (a *app) remoteBar(c *ui.Context) {
 		if common != "" {
 			fetchTip = common
 		}
-		if iconToolButton(c, "抓取", fetchTip, off, drawFetchIcon) {
+		if iconToolButton(c, "抓取", fetchTip, off, drawFetchIcon, 0) {
 			a.doFetch()
 		}
 
 		pullTip := "把当前分支的上游拉下来合进来"
+		if a.behind > 0 {
+			pullTip = fmt.Sprintf("把当前分支的上游拉下来合进来（落后 %d 个提交）", a.behind)
+		}
 		if common != "" {
 			pullTip = common
 		} else if branchOff != "" {
 			pullTip = branchOff
 		}
-		if iconToolButton(c, "拉取", pullTip, off || a.detached, drawPullIcon) {
+		if iconToolButton(c, "拉取", pullTip, off || a.detached, drawPullIcon, a.behind) {
 			a.doPull()
 		}
 
 		pushTip := "把当前分支推上去（第一次会自动设好上游）"
+		if a.ahead > 0 {
+			pushTip = fmt.Sprintf("把当前分支推上去（超前 %d 个提交）", a.ahead)
+		}
 		if common != "" {
 			pushTip = common
 		} else if branchOff != "" {
 			pushTip = branchOff
 		}
-		if iconToolButton(c, "推送", pushTip, off || a.detached, drawPushIcon) {
+		if iconToolButton(c, "推送", pushTip, off || a.detached, drawPushIcon, a.ahead) {
 			a.doPush()
 		}
 	})
@@ -165,10 +173,10 @@ func drawPushIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
 	p.Icon(iconPush, r, col)
 }
 
-// iconToolButton 是工具栏上一颗只有图标的按钮。
+// iconToolButton 是工具栏上一颗带有徽标（badge）展示能力的图标按钮。
 // 精确尺寸 28x28 方形，图标 16x16 居中（留白 6px），圆角 6px。
-// 悬停与按下展现细腻的灰度微交互，彻底解决长椭圆/不对称变形问题。
-func iconToolButton(c *ui.Context, label, tip string, off bool, icon iconDraw) bool {
+// 当 badge > 0 时，在按钮右上角呈现高对比、带切口环（cutout ring）的精致微胶囊徽标。
+func iconToolButton(c *ui.Context, label, tip string, off bool, icon iconDraw, badge int) bool {
 	t := c.Theme()
 	btn := ui.ButtonBase(c).Size(28, 28).Shrink(0).Radius(t.Radius).
 		Center().Cursor(ui.CursorPointer).Label(label).Tooltip(tip).Disabled(off)
@@ -193,5 +201,64 @@ func iconToolButton(c *ui.Context, label, tip string, off bool, icon iconDraw) b
 		ui.Box(c).Size(16, 16).Shrink(0).
 			Draw(func(p *ui.Painter, r ui.Rect) { icon(p, r, fg) })
 	})
+
+	if badge > 0 {
+		btn.DrawOver(func(p *ui.Painter, r ui.Rect) {
+			drawButtonBadge(p, r, badge, bg, off, t)
+		})
+	}
+
 	return btn.Clicked()
+}
+
+// drawButtonBadge 在按钮右上角绘制工艺级微徽标。
+// 遵循 Apple HIG / Awwwards 级别视觉精度：
+// 1. 采用纯净切口环（cutout ring），在图标与微徽标交界处营造清晰空间层级。
+// 2. 动态自适应形态：个位数呈现完美的 13x13 几何正圆；多位数平滑过渡为精炼胶囊。
+// 3. 数字采用半粗体高对比度排版，包含针对无衬线数字的 -0.5px 光学垂直基准微调。
+func drawButtonBadge(p *ui.Painter, r ui.Rect, count int, btnBg ui.Color, off bool, t *ui.Theme) {
+	text := strconv.Itoa(count)
+	if count > 99 {
+		text = "99+"
+	}
+
+	fontSize := float32(9)
+	span := ui.Span{Text: text, Size: fontSize, Weight: 600}
+	tw, th := p.MeasureText(0, span)
+
+	// 高度 13px，圆角 6.5px。单数正圆 13x13，双数及以上自适应胶囊
+	badgeH := float32(13)
+	badgeW := badgeH
+	if tw+7 > badgeW {
+		badgeW = tw + 7
+	}
+
+	// 坐标吸附在 28x28 方块右上角
+	bx := r.X + r.W - badgeW - 1
+	by := r.Y + 1
+
+	// 切口外环（Knockout Cutout）：1.5px 纯净背景层
+	cutout := btnBg
+	if cutout.A == 0 {
+		cutout = t.Background
+	}
+	cutoutR := ui.Rect{X: bx - 1.5, Y: by - 1.5, W: badgeW + 3, H: badgeH + 3}
+	p.Fill(cutoutR, cutout, (badgeH+3)/2)
+
+	// 徽标胶囊
+	badgeBg := t.Accent
+	badgeFg := t.AccentText
+	if off {
+		badgeBg = t.Accent.Alpha(0.4)
+		badgeFg = t.AccentText.Alpha(0.7)
+	}
+
+	badgeR := ui.Rect{X: bx, Y: by, W: badgeW, H: badgeH}
+	p.Fill(badgeR, badgeBg, badgeH/2)
+
+	// 光学对齐绘制文字
+	tx := bx + (badgeW-tw)/2
+	ty := by + (badgeH-th)/2 - 0.5
+	span.Color = badgeFg
+	p.RichText(tx, ty, 0, span)
 }

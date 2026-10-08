@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
+
+	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
 )
 
 // 窗口用的是隐藏标题栏，红绿灯直接浮在内容上。侧栏顶到窗口最上边，
@@ -396,3 +398,182 @@ func TestFileCountReportedOnce(t *testing.T) {
 		t.Errorf("「%d 个文件」该只出现一次，实际 %d 次：%q", len(a.files), n, tt.Texts())
 	}
 }
+
+// 刷新过程中工具栏按钮零偏移：无论是在 ready 还是 loading 态，
+// 刷新、设置、打开仓库按钮的 X 坐标严格一致，不产生任何横向抖动。
+func TestRefreshLoadingLayoutDoesNotShift(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+
+	refreshReady, ok1 := tt.Find("刷新")
+	settingsReady, ok2 := tt.Find("模型设置…")
+	openReady, ok3 := tt.Find("打开仓库…")
+	if !ok1 || !ok2 || !ok3 {
+		t.Fatalf("找不到工具栏按钮: %v %v %v", ok1, ok2, ok3)
+	}
+
+	// 切换到刷新中状态
+	a.state = loadLoading
+	tt.Frame()
+
+	refreshLoading, _ := tt.Find("刷新")
+	settingsLoading, _ := tt.Find("模型设置…")
+	openLoading, _ := tt.Find("打开仓库…")
+
+	if refreshLoading.X != refreshReady.X {
+		t.Errorf("刷新按钮 X 坐标偏移：ready=%.1f, loading=%.1f", refreshReady.X, refreshLoading.X)
+	}
+	if settingsLoading.X != settingsReady.X {
+		t.Errorf("设置按钮 X 坐标偏移：ready=%.1f, loading=%.1f", settingsReady.X, settingsLoading.X)
+	}
+	if openLoading.X != openReady.X {
+		t.Errorf("打开仓库按钮 X 坐标偏移：ready=%.1f, loading=%.1f", openReady.X, openLoading.X)
+	}
+}
+
+// 暂存/取消暂存时不展示工具栏操作文字，避免剧烈拉扯工具栏造成页面抖动。
+func TestStageOpDoesNotShowInToolbar(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+
+	// 模拟正在暂存
+	a.op = gitrepo.OpStage
+	a.opName = "正在暂存 README.md"
+	tt.Frame()
+
+	if tt.HasText("正在暂存 README.md") {
+		t.Error("暂存属于瞬时操作，不应在工具栏插入长文字导致抖动")
+	}
+
+	// 模拟耗时写操作（如拉取），应展示在 Spacer 之前
+	a.op = gitrepo.OpPull
+	a.opName = "正在拉取…"
+	tt.Frame()
+
+	if !tt.HasText("正在拉取…") {
+		t.Error("远程写操作应在工具栏提示")
+	}
+}
+
+// 刷新同一个仓库时，侧栏分支树、筛选框与底部提交栏必须平稳保留，
+// 绝不能在加载期间卸载闪烁或变成空状态。
+func TestReloadKeepsSidebarAndCommitBoxMounted(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	settle(t, a)
+	tt.Frame()
+
+	// 确认准备就绪时存在分支树与提交栏
+	if !tt.HasText("筛选分支") {
+		t.Fatal("准备就绪时侧栏应有分支筛选框")
+	}
+	if !tt.HasText("提交信息") {
+		t.Fatal("准备就绪时应有底部提交框")
+	}
+
+	// 触发重新加载同一个仓库（模拟刷新中）
+	a.state = loadLoading
+	a.loadingPath = a.repoPath
+	a.refsState = loadLoading
+	tt.Frame()
+
+	// 刷新期间侧栏与提交栏继续平稳驻留，绝不卸载
+	if !tt.HasText("筛选分支") {
+		t.Errorf("刷新期间侧栏分支筛选框被卸载闪烁：%q", tt.Texts())
+	}
+	if tt.HasText("正在读分支…") {
+		t.Errorf("已有分支时刷新期间不该闪现「正在读分支…」：%q", tt.Texts())
+	}
+	if !tt.HasText("提交信息") {
+		t.Errorf("刷新期间底部提交框被卸载闪烁：%q", tt.Texts())
+	}
+
+	// 模拟真实 a.reload() 调用
+	settle(t, a)
+	a.reload()
+	tt.Frame()
+	t.Logf("Texts after a.reload(): %v", tt.Texts())
+	if !tt.HasText("筛选分支") {
+		t.Errorf("调用 a.reload() 第一帧侧栏分支筛选框被卸载闪烁：%q", tt.Texts())
+	}
+	if tt.HasText("正在读分支…") {
+		t.Errorf("调用 a.reload() 第一帧已有分支时不该闪现「正在读分支…」：%q", tt.Texts())
+	}
+	if !tt.HasText("提交信息") {
+		t.Errorf("调用 a.reload() 第一帧底部提交框被卸载闪烁：%q", tt.Texts())
+	}
+
+	settle(t, a)
+	tt.Frame()
+	t.Logf("Texts after settle: %v", tt.Texts())
+	if !tt.HasText("筛选分支") {
+		t.Errorf("刷新完成侧栏分支筛选框缺失：%q", tt.Texts())
+	}
+	if !tt.HasText("main") {
+		t.Errorf("刷新完成分支 main 缺失：%q", tt.Texts())
+	}
+}
+
+// 测试快速暂存写操作（OpStage / OpUnstage）期间，提交按钮和快捷键提示不闪烁禁用。
+func TestStagingOpKeepsCommitButtonAndHintStable(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	settle(t, a)
+	tt.Frame()
+
+	// 模拟已暂存 1 个文件并输入提交信息
+	a.commitMsg = "test commit"
+	a.allFiles[0].Section = gitrepo.SectionStaged
+	tt.Frame()
+
+	if !a.canCommit() {
+		t.Fatal("有暂存和消息时应允许提交")
+	}
+	if !tt.HasText("⌘⏎") {
+		t.Fatal("允许提交时应显示 ⌘⏎ 提示")
+	}
+
+	// 模拟点击暂存另一个文件，触发 OpStage
+	a.op = gitrepo.OpStage
+	tt.Frame()
+
+	if !a.canCommit() {
+		t.Error("暂存写操作进行中，canCommit 不应闪退禁用导致透明度闪烁")
+	}
+	if !tt.HasText("⌘⏎") {
+		t.Error("暂存写操作进行中，⌘⏎ 快捷键提示不应闪退消失")
+	}
+}
+
+// 测试干净仓库（无改动）刷新时，主区提示稳定不出现闪烁。
+func TestCleanRepoReloadDoesNotFlickerEmptyMessage(t *testing.T) {
+	a := richApp(t)
+	// 将所有文件标记为无改动（空列表）
+	a.files = nil
+	a.allFiles = nil
+	a.tree = nil
+	tt := ui.NewTester(a.view, 1280, 860)
+	settle(t, a)
+	tt.Frame()
+
+	if !tt.HasText("没有未提交的改动") {
+		t.Fatalf("干净仓库主区应显示无未提交改动：%q", tt.Texts())
+	}
+
+	// 刷新第一帧
+	a.state = loadLoading
+	a.loadingPath = a.repoPath
+	tt.Frame()
+
+	if !tt.HasText("没有未提交的改动") {
+		t.Errorf("刷新第一帧不该将干净仓库提示换成转圈或空白：%q", tt.Texts())
+	}
+	if tt.HasText("正在读取仓库…") {
+		t.Errorf("已有仓库刷新时不应在主区居中闪现「正在读取仓库…」：%q", tt.Texts())
+	}
+}
+
+
+

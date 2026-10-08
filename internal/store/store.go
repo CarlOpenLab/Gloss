@@ -39,6 +39,10 @@ type Config struct {
 	Unified bool `json:"unified,omitempty"`
 	// SidebarOff 而不是 SidebarOn：侧栏默认是开的，零值正好表示这个默认。
 	SidebarOff bool `json:"sidebarOff,omitempty"`
+	// SidebarWidth 是侧栏宽度，0 表示默认值。
+	SidebarWidth float32 `json:"sidebarWidth,omitempty"`
+	// FilePaneWidth 是主区文件列表栏宽度，0 表示默认值。
+	FilePaneWidth float32 `json:"filePaneWidth,omitempty"`
 }
 
 // Provider 是当前选中的供应商配置。没有配置任何供应商时返回 nil，
@@ -57,7 +61,8 @@ func (c Config) Provider() *llm.Provider {
 
 // State 是跟着仓库走的界面状态。
 type State struct {
-	LastRepo string `json:"lastRepo,omitempty"`
+	LastRepo    string            `json:"lastRepo,omitempty"`
+	RecentRepos []string          `json:"recentRepos,omitempty"`
 	// Viewed 是「已 review」标记：文件路径 -> 当时的内容指纹。
 	Viewed map[string]string `json:"viewed,omitempty"`
 	// Drafts 是各仓库的提交信息草稿：仓库根路径 -> 还没提交出去的消息。
@@ -167,11 +172,45 @@ func (s *Store) SetDraft(repo, msg string) {
 	s.st.Drafts[repo] = msg
 }
 
-// SetLastRepo 记住最后打开的仓库，下次启动直接打开。
-func (s *Store) SetLastRepo(path string) {
+const maxRecentRepos = 10
+
+// AddRecentRepo 将 path 记为最近打开的仓库（最新的在最前），并更新 LastRepo。
+func (s *Store) AddRecentRepo(path string) {
+	if path == "" {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.st.LastRepo = path
+	var updated []string
+	updated = append(updated, path)
+	for _, p := range s.st.RecentRepos {
+		if p != path && p != "" {
+			updated = append(updated, p)
+		}
+		if len(updated) >= maxRecentRepos {
+			break
+		}
+	}
+	s.st.RecentRepos = updated
+}
+
+// ClearRecentRepos 清空最近打开的仓库列表。
+func (s *Store) ClearRecentRepos() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.st.RecentRepos = nil
+}
+
+// SetLastRepo 记住最后打开的仓库，下次启动直接打开。
+func (s *Store) SetLastRepo(path string) {
+	if path == "" {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.st.LastRepo = ""
+		return
+	}
+	s.AddRecentRepo(path)
 }
 
 // Lookup 取一条解释缓存。

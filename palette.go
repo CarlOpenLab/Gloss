@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path/filepath"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -67,6 +68,18 @@ func (a *app) commands() []command {
 	if a.compare.on {
 		cmds = append(cmds, command{"退出分支对比", "Esc", func(a *app) { a.exitCompare() }})
 		cmds = append(cmds, command{"交换基准与对比分支方向", "", func(a *app) { a.swapCompare() }})
+	}
+	for _, p := range a.store.State().RecentRepos {
+		if p == "" {
+			continue
+		}
+		pathCopy := p
+		base := filepath.Base(p)
+		cmds = append(cmds, command{
+			label: "打开最近项目: " + base,
+			hint:  p,
+			run:   func(a *app) { a.openRepo(pathCopy) },
+		})
 	}
 	return cmds
 }

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"path/filepath"
+
 	"github.com/egoist/mygo"
 
 	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
@@ -100,6 +102,7 @@ func buildAppMenu(a *app) *mygo.Menu {
 		{Label: appName, Submenu: a.appSubmenu()},
 		{Label: "文件", Submenu: []*mygo.MenuItem{
 			a.menuCmd("打开仓库…", "CmdOrCtrl+O", a.chooseFolder),
+			a.recentReposMenuItem(),
 			mygo.Separator(),
 			m.commit,
 			m.stash,
@@ -271,5 +274,37 @@ func checkItem(it *mygo.MenuItem, on bool) {
 func enableItem(it *mygo.MenuItem, on bool) {
 	if it.IsEnabled() != on {
 		it.SetEnabled(on)
+	}
+}
+
+// recentReposMenuItem 构建菜单栏「文件 -> 最近打开的项目」子菜单。
+func (a *app) recentReposMenuItem() *mygo.MenuItem {
+	recent := a.store.State().RecentRepos
+	var items []*mygo.MenuItem
+	for _, p := range recent {
+		if p == "" {
+			continue
+		}
+		pathCopy := p
+		base := filepath.Base(p)
+		items = append(items, a.menuCmd(base+"  ("+p+")", "", func() {
+			a.openRepo(pathCopy)
+		}))
+	}
+	if len(items) > 0 {
+		items = append(items, mygo.Separator())
+		items = append(items, a.menuCmd("清除最近打开记录", "", func() {
+			a.store.ClearRecentRepos()
+			a.persist()
+		}))
+	} else {
+		items = append(items, &mygo.MenuItem{
+			Label:    "无最近项目",
+			Disabled: true,
+		})
+	}
+	return &mygo.MenuItem{
+		Label:   "最近打开的项目",
+		Submenu: items,
 	}
 }

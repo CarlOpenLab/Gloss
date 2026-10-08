@@ -2,6 +2,7 @@ package gitrepo
 
 import (
 	"context"
+	"strconv"
 	"strings"
 )
 
@@ -82,15 +83,60 @@ type Change struct {
 //
 // --untracked-files=all 是必须的：默认模式下 git 会把未跟踪的目录折叠成
 // 一条记录（只给 "internal/"，不列里面的文件），那样整个目录的改动都看不见。
-func (r *Repo) Status(ctx context.Context) ([]Change, error) {
-	out, err := run(ctx, r.Root,
+func (r *Repo) statusRaw(ctx context.Context) ([]byte, error) {
+	return run(ctx, r.Root,
 		"-c", "core.quotePath=false",
 		"status", "--porcelain=v2", "--branch", "--untracked-files=all", "-z",
 	)
+}
+
+func (r *Repo) Status(ctx context.Context) ([]Change, error) {
+	out, err := r.statusRaw(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return parseStatus(out), nil
+}
+
+// parseStatusBranch 解析 `git status --porcelain=v2 --branch -z` 中的上游分支与超前/落后数。
+// 当未设置上游或处于分离 HEAD 时，返回 0, 0, ""。
+func parseStatusBranch(out []byte) (ahead, behind int, upstream string) {
+	fields := strings.Split(string(out), "\x00")
+	for _, f := range fields {
+		if !strings.HasPrefix(f, "# branch.") {
+			continue
+		}
+		if strings.HasPrefix(f, "# branch.ab ") {
+			// 格式：# branch.ab +<ahead> -<behind>
+			parts := strings.Fields(f)
+			for _, p := range parts[2:] {
+				if strings.HasPrefix(p, "+") {
+					ahead, _ = strconv.Atoi(p[1:])
+				} else if strings.HasPrefix(p, "-") {
+					behind, _ = strconv.Atoi(p[1:])
+				}
+			}
+		} else if strings.HasPrefix(f, "# branch.upstream ") {
+			upstream = strings.TrimSpace(strings.TrimPrefix(f, "# branch.upstream "))
+		}
+	}
+	return
+}
+
+// UpstreamCounts 查询当前分支相对其配置的上游分支的超前（ahead）与落后（behind）提交数。
+// 若无上游分支、处于分离 HEAD 或无提交，返回 0, 0, nil。
+func (r *Repo) UpstreamCounts(ctx context.Context) (ahead, behind int, err error) {
+	out, err := run(ctx, r.Root, "rev-list", "--left-right", "--count", "HEAD...@{upstream}")
+	if err != nil {
+		return 0, 0, nil
+	}
+	fields := strings.Fields(string(out))
+	if len(fields) >= 2 {
+		ahead, _ = strconv.Atoi(fields[0])
+		behind, _ = strconv.Atoi(fields[1])
+		return ahead, behind, nil
+	}
+	return 0, 0, nil
 }
 
 // parseStatus 解析 `git status --porcelain=v2 --branch -z` 的输出。

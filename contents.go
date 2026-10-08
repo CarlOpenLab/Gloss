@@ -38,6 +38,7 @@ func (a *app) loadContents(seq int) {
 	// 只会把行号和颜色悄悄画错（见 gitrepo.NewLinesAt）。
 	type req struct {
 		key, path string
+		fp        string
 		staged    bool
 	}
 	var reqs []req
@@ -51,7 +52,12 @@ func (a *app) loadContents(seq int) {
 		if f.NewPath == "" || f.TooLarge || a.contents[p] != nil {
 			continue
 		}
-		reqs = append(reqs, req{key: p, path: pathOf(*f), staged: f.Section == gitrepo.SectionStaged})
+		reqs = append(reqs, req{
+			key:    p,
+			path:   pathOf(*f),
+			fp:     f.Fingerprint,
+			staged: f.Section == gitrepo.SectionStaged,
+		})
 		diffs[p] = f.FileDiff
 	}
 	if len(reqs) == 0 {
@@ -72,20 +78,28 @@ func (a *app) loadContents(seq int) {
 			return
 		}
 
-		batch := make(map[string]*fileContent, contentBatch)
+		type contentResult struct {
+			fc *fileContent
+			fp string
+		}
+		batch := make(map[string]contentResult, contentBatch)
 		flush := func() {
 			if len(batch) == 0 {
 				return
 			}
 			// 交给 dispatch 的是这一批的快照：batch 会继续被后面的读入填充
 			done := batch
-			batch = make(map[string]*fileContent, contentBatch)
+			batch = make(map[string]contentResult, contentBatch)
 			a.dispatch(func() {
 				if a.contentSeq != seq {
 					return // 已经切到别的仓库了，这批结果作废
 				}
-				for p, cc := range done {
-					a.contents[p] = cc
+				for p, res := range done {
+					a.contents[p] = res.fc
+					if a.contentFP == nil {
+						a.contentFP = map[string]string{}
+					}
+					a.contentFP[p] = res.fp
 				}
 				a.rowsDirty = true
 			})
@@ -103,7 +117,10 @@ func (a *app) loadContents(seq int) {
 			if lines == nil {
 				continue
 			}
-			batch[rq.key] = buildContent(rq.path, lines, diffs[rq.key])
+			batch[rq.key] = contentResult{
+				fc: buildContent(rq.path, lines, diffs[rq.key]),
+				fp: rq.fp,
+			}
 			if len(batch) >= contentBatch {
 				flush()
 			}

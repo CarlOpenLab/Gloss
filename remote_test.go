@@ -470,6 +470,57 @@ func TestDisabledRemoteButtonExplainsItself(t *testing.T) {
 	}
 }
 
+// 远程分支落后与超前：推送和拉取按钮上展示对应的 badge 计数。
+func TestAheadBehindBadges(t *testing.T) {
+	a, bare := remoteApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+
+	// 先推第一次，把上游跟踪设好
+	if err := tt.Click("推送"); err != nil {
+		t.Fatal(err)
+	}
+	settle(t, a)
+	tt.Frame()
+
+	// 此时已同步：ahead = 0, behind = 0
+	if a.ahead != 0 || a.behind != 0 {
+		t.Fatalf("刚推完应该是同步状态：ahead=%d, behind=%d", a.ahead, a.behind)
+	}
+
+	// 1. 本地新增一个提交，未推上去：ahead 应该为 1
+	commitIn(t, a.repoPath, "local.txt", "hello", "local commit")
+	a.reload()
+	settle(t, a)
+	tt.Frame()
+
+	if a.ahead != 1 {
+		t.Errorf("本地提交后 a.ahead = %d, want 1", a.ahead)
+	}
+	if a.behind != 0 {
+		t.Errorf("a.behind = %d, want 0", a.behind)
+	}
+
+	// 2. 另一个人在远端提交，本地抓取后：behind 应该为 1
+	other := cloneOf(t, bare)
+	commitIn(t, other, "remote.txt", "world", "remote commit")
+	runGit(t, other, "push", "origin", "main")
+
+	// 点抓取拉下远程引用
+	if err := tt.Click("抓取"); err != nil {
+		t.Fatal(err)
+	}
+	settle(t, a)
+	tt.Frame()
+
+	if a.ahead != 1 {
+		t.Errorf("抓取后 a.ahead = %d, want 1", a.ahead)
+	}
+	if a.behind != 1 {
+		t.Errorf("抓取后 a.behind = %d, want 1", a.behind)
+	}
+}
+
 // hasAnnouncement 说播报里有没有这句话（包含匹配）。
 func hasAnnouncement(all []string, want string) bool {
 	for _, s := range all {

@@ -118,7 +118,7 @@ func stageLabel(f gitrepo.File) string {
 // 重命名得新旧两个都给：只给新路径的话，旧路径在 index 里还挂着「已跟踪」，
 // 暂存完是一半重命名一半还没，用户得再点一次（见 gitrepo.StageFile）。
 func stagePaths(f gitrepo.File) []string {
-	if f.OldPath != "" && f.OldPath != f.NewPath {
+	if f.OldPath != "" && f.NewPath != "" && f.OldPath != f.NewPath {
 		return []string{f.OldPath, f.NewPath}
 	}
 	return []string{pathOf(f)}
@@ -256,7 +256,7 @@ func (a *app) countSection(s gitrepo.Section) int {
 // - 普通提交：有东西暂存着、消息不是空的、没有别的写操作在飞；
 // - 修改上次提交：有 HEAD、消息不是空的、没有别的写操作在飞（即使暂存区为 0 也允许仅改提交信息）。
 func (a *app) canCommit() bool {
-	if !a.repoReady() || a.op != gitrepo.OpNone || strings.TrimSpace(a.commitMsg) == "" {
+	if !a.repoReady() || a.op == gitrepo.OpCommit || a.op == gitrepo.OpAmend || strings.TrimSpace(a.commitMsg) == "" {
 		return false
 	}
 	if a.amend {
@@ -309,7 +309,7 @@ func (a *app) commitBox(c *ui.Context, pal palette) {
 		inMin, inMax = commitInputCompactH, commitInputCompactH
 	}
 
-	ui.Column(c).Shrink(0).FillWidth().Padding(10, 12).Gap(8).
+	ui.Column(c).Key("commit-box-wrap").Shrink(0).FillWidth().Padding(10, 12).Gap(8).
 		Background(t.Surface).
 		BorderWidth(1, 0, 0, 0).BorderColor(pal.border).Children(func() {
 		var in *ui.Element

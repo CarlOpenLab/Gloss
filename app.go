@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -64,6 +65,11 @@ type app struct {
 	// 可用性看它：`git fetch --all` 在一条远程都没有时是**静默成功**的，
 	// 等命令报错等不到「这个仓库没有远程」。
 	remotes []string
+	// ahead 和 behind 是当前分支相对配置上游的超前和落后提交数。
+	// 用于在推送/拉取按钮上渲染徽标，让用户一目了然待同步的提交数。
+	ahead    int
+	behind   int
+	upstream string
 	// pending 是仓库正卡在哪一步写操作中间（合并/变基撞了冲突停着），跟着
 	// 每次 Load 一起读回来。状态条（pendingbar.go）和分支芯片靠它说话。
 	pending gitrepo.Pending
@@ -103,7 +109,9 @@ type app struct {
 	histListID string
 	// contents 按路径缓存文件在新侧的内容，用于展开未改动区间和语法高亮。
 	// 用路径而不是下标索引：筛选会让文件列表变短，下标会错位。
-	contents map[string]*fileContent
+	// contentFP 记录已缓存内容对应的文件指纹，指纹没变的内容跨刷新复用。
+	contents  map[string]*fileContent
+	contentFP map[string]string
 
 	// —— 派生的行模型 ——
 	// rows 是喂给虚拟化列表的扁平行数组。它只在 rowsDirty 时重建 ——
@@ -158,9 +166,13 @@ type app struct {
 	dblAt  time.Time
 
 	// —— 主区文件栏（原来的侧栏文件树）——
-	tree           []*filetree.Node
-	filesList      ui.ListState
-	sidebarOn      bool
+	tree             []*filetree.Node
+	filesList        ui.ListState
+	sidebarOn        bool
+	sidebarWidthVal  float32 // 侧栏宽度，0 时取默认值
+	sidebarDragging  bool
+	filePaneWidthVal float32 // 主区文件列表栏宽度，0 时取默认值
+	filePaneDragging bool
 	fileFilter     string
 	fileTreeFilter string // 建树时用的筛选词，和 fileFilter 不一致就说明该重建了
 	// filesClosed 记的是用户收起过的目录，同 refsClosed：默认展开。
@@ -345,6 +357,8 @@ func (a *app) attachStore(s *store.Store) {
 	a.codeSize = cfg.CodeSize
 	a.split = !cfg.Unified
 	a.sidebarOn = !cfg.SidebarOff
+	a.sidebarWidthVal = cfg.SidebarWidth
+	a.filePaneWidthVal = cfg.FilePaneWidth
 	a.viewed = s.State().Viewed
 	if a.viewed == nil {
 		a.viewed = map[string]string{}
@@ -359,7 +373,7 @@ func (a *app) persist() {
 	a.run(func() { _ = s.Save() })
 }
 
-// saveViewSettings 记下跟界面有关的几项设置（视图模式、侧栏、字号）。
+// saveViewSettings 记下跟界面有关的几项设置（视图模式、侧栏、字号、面板宽度）。
 //
 // 只覆盖这几项，别的字段原样留着 —— 模型设置的保存走 applySettings，
 // 两边各管各的，不会互相冲掉。
@@ -369,6 +383,12 @@ func (a *app) saveViewSettings() {
 	cfg.Unified = !a.split
 	cfg.SidebarOff = !a.sidebarOn
 	cfg.CodeSize = a.codeSize
+	if a.sidebarWidthVal > 0 {
+		cfg.SidebarWidth = a.sidebarWidthVal
+	}
+	if a.filePaneWidthVal > 0 {
+		cfg.FilePaneWidth = a.filePaneWidthVal
+	}
 	a.store.SetConfig(cfg)
 	a.persist()
 }
@@ -450,13 +470,45 @@ const titleMinW = 140
 // 右边就少一寸：窗口收到最小（720）时标题块还占满 300 的话，连「改动 /
 // 历史」都会被挤进菜单，而那是主区唯一的导航。
 //
-// 按主区宽度算而不是窗口宽度：侧栏那 280 是固定的，不归工具栏。
+// 按主区宽度算而不是窗口宽度：侧栏不归工具栏。
 func (a *app) titleWidth(c *ui.Context) float32 {
 	winW, _ := c.Size()
 	if a.sidebarOn {
-		winW -= sidebarWidth
+		winW -= a.sidebarWidth(c)
 	}
 	return clamp(winW*0.4, titleMinW, titleMaxW)
+}
+
+func (a *app) sidebarWidth(c *ui.Context) float32 {
+	w := a.sidebarWidthVal
+	if w <= 0 {
+		w = sidebarDefaultW
+	}
+	maxW := sidebarMaxW
+	if c != nil {
+		if winW, _ := c.Size(); winW > 0 {
+			maxW = min(sidebarMaxW, max(sidebarMinW, winW-360))
+		}
+	}
+	return clamp(w, sidebarMinW, maxW)
+}
+
+func (a *app) setSidebarWidth(c *ui.Context, w float32) {
+	maxW := sidebarMaxW
+	if c != nil {
+		if winW, _ := c.Size(); winW > 0 {
+			maxW = min(sidebarMaxW, max(sidebarMinW, winW-360))
+		}
+	}
+	clamped := clamp(w, sidebarMinW, maxW)
+	if clamped != a.sidebarWidthVal {
+		a.sidebarWidthVal = clamped
+	}
+}
+
+func (a *app) resetSidebarWidth() {
+	a.sidebarWidthVal = sidebarDefaultW
+	a.saveViewSettings()
 }
 
 // shortPath 把仓库路径压到 width 以内，从**头上**截。
@@ -524,23 +576,17 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 		// 那几颗工具按钮顶到「»」菜单里去 —— 路径是「我在看哪儿」的
 		// 补充信息，按钮才是要点的东西，谁让位不该反过来。
 		// 名和路径都是 SingleLine，各自的截法见 shortPath。
-		tw := a.titleWidth(c)
-		ui.Column(c).Gap(1).MinWidth(0).MaxWidth(tw).Children(func() {
-			name := a.repoName
-			if name == "" {
-				name = "Gloss"
-			}
-			ui.Text(c, name).Bold().SingleLine()
-			sub := "未打开仓库"
-			if a.repoPath != "" {
-				sub = shortPath(c, a.repoPath, tw)
-			}
-			if sub != "" {
-				ui.Text(c, sub).FontSize(11).TextColor(t.TextMuted).SingleLine()
-			}
-		})
+		a.repoHeader(c, t, pal)
 
-		a.branchChip(c, t, pal)
+		// 耗时写操作（抓取/拉取/推送/变基/合并/检出等）在标题和 Spacer 之间展示，
+		// 宽度由 Spacer 弹性吸收，避免右侧核心工具栏发生任何水平抖动与重排。
+		// 暂存/取消暂存为瞬时操作，提交在底部提交栏展示，均不在此喧宾夺主。
+		if a.toolbarOpVisible() {
+			ui.Row(c).Gap(6).AlignItems(ui.Center).Shrink(0).Children(func() {
+				ui.Spinner(c).Size(toolIconSize, toolIconSize)
+				ui.Text(c, a.opName).FontSize(11).TextColor(t.TextMuted).SingleLine()
+			})
+		}
 
 		ui.Spacer(c)
 
@@ -578,29 +624,23 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 			a.remoteBar(c)
 		}
 
-		switch {
-		case a.state == loadLoading:
-			ui.Spinner(c)
-		case a.tab == 1 && (a.hist == loadLoading || a.histDiff == loadLoading):
-			ui.Spinner(c)
-		case a.op != gitrepo.OpNone && a.op != gitrepo.OpCommit:
-			// 写操作在进行中。提交不走这里 —— 它自己的状态行就在提交栏上，
-			// 眼睛本来就在那儿，工具栏再报一遍是重复。
-			ui.Spinner(c)
-			ui.Text(c, a.opName).FontSize(11).TextColor(t.TextMuted).SingleLine()
-		}
-
 		toolbarDivider(c)
 
 		// 没有仓库时「刷新」什么都不做（reload 会直接返回），画成灰的。
-		// 「模型设置」和「打开仓库」不依赖仓库，照常可点。
-		if toolButton(c, "刷新", "重新读取仓库 ⌘R", noRepo, drawRefreshIcon) {
+		// 当正在刷新时，按钮内部 15x15 图标平滑切换为 Spinner 原地旋转，
+		// 彻底杜绝在刷新按钮外部横向弹出额外 icon 造成的剧烈布局偏移。
+		refreshing := a.state == loadLoading
+		refreshTip := "重新读取仓库 ⌘R"
+		if refreshing {
+			refreshTip = "正在重新读取仓库…"
+		}
+		if toolButton(c, "刷新", refreshTip, noRepo, refreshing, drawRefreshIcon) {
 			a.reload()
 		}
-		if toolButton(c, "模型设置…", "配置模型和 API Key", false, drawSlidersIcon) {
+		if toolButton(c, "模型设置…", "配置模型和 API Key", false, false, drawSlidersIcon) {
 			a.openSettings()
 		}
-		if toolButton(c, "打开仓库…", "选一个本地 git 仓库", false, drawFolderIcon) {
+		if toolButton(c, "打开仓库…", "选一个本地 git 仓库", false, false, drawFolderIcon) {
 			a.chooseFolder()
 		}
 	}).Height(a.toolbarHeight(c)).Shrink(0).
@@ -612,41 +652,135 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 		Label("工具栏")
 }
 
+// repoHeader 是工具栏左侧的仓库选择器与分支状态徽章：
+// 第一行是仓库名（带下拉箭头，点击展开最近项目）与分支徽章（同行基线对齐），第二行是精简路径。
+func (a *app) repoHeader(c *ui.Context, t *ui.Theme, pal palette) {
+	tw := a.titleWidth(c)
+	name := a.repoName
+	if name == "" {
+		name = "Gloss"
+	}
+	sub := "未打开仓库"
+	if a.repoPath != "" {
+		sub = shortPath(c, a.repoPath, tw)
+	}
+
+	ui.Column(c).Gap(2).MinWidth(0).MaxWidth(tw).Children(func() {
+		// 第一行：[仓库名 ▾] 与 [分支徽章]，处于同一水平线上
+		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+			repoBtn := ui.ButtonBase(c).Radius(4).Padding(1, 4, 1, 0).
+				Tooltip("点击切换最近项目（或 ⌘O 打开本地仓库）")
+			repoBtn.Children(func() {
+				ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, name).Bold().FontSize(13).SingleLine()
+					drawIcon(c, iconChevronDown, 10, t.TextMuted)
+				})
+			})
+			repoBtn.Menu(func(m *ui.Menu) {
+				a.recentReposMenu(m)
+			})
+
+			a.branchChip(c, t, pal)
+		})
+
+		// 第二行：仓库路径（微型次级提示）
+		if sub != "" {
+			ui.Text(c, sub).FontSize(11).TextColor(t.TextMuted.Alpha(0.85)).SingleLine().
+				Tooltip(a.repoPath)
+		}
+	})
+}
+
 // branchChip 是工具栏上那枚「现在在哪条分支上」的小牌子。
-//
-// 分离 HEAD 时换成警示色并把话说全：这时候提交是能提交的，只是没有分支
-// 接着它 —— 用户看不到任何异常，直到切走之后才发现那个提交找不回来了。
-// 芯片是唯一一个常驻的分支指示，这一句必须在它身上说。
-//
-// 变基期间是第三种状态，而且比分离 HEAD 更容易说错话：git 那边 HEAD 确实
-// 是分离的，但「分离 HEAD：a1b2c3d，先新建一条分支」在这里是主动误导 ——
-// 用户正停在一次变基中间，该说的是它在变基、变到哪一步了。
+// 采用 Lucide 矢量分支图标与微交互设计，点击可弹出本地分支快捷切换列表。
 func (a *app) branchChip(c *ui.Context, t *ui.Theme, pal palette) {
 	if a.branch == "" {
 		return
 	}
-	name, fg, bg := a.branch, pal.ref, t.Surface
-	border := ui.Transparent
-	tip := "当前分支 " + a.branch
+	name, fg, bg := a.branch, pal.ref, pal.ref.Alpha(0.12)
+	border := pal.ref.Alpha(0.30)
+	tip := "当前分支 " + a.branch + "（点击切换分支）"
 	switch {
 	case a.pending.Kind == gitrepo.PendingRebase:
 		name = a.rebaseLabel()
 		fg = t.Warning
-		// 底色只加一点点，靠一圈描边立住（和分离 HEAD 同一套做法）
-		bg = t.Warning.Alpha(0.10)
+		bg = t.Warning.Alpha(0.12)
 		border = t.Warning.Alpha(0.45)
 		tip = "变基还没做完。顶上的状态条里有「继续」「跳过」「中止」。"
 	case a.detached:
-		name, fg = "分离 HEAD："+a.branch, t.Warning
-		// 底色只加一点点，靠一圈描边立住：琥珀色全铺在这条浅灰的工具栏上
-		// 是一块发闷的脏黄，加了边才读得出是「一块标出来的状态」。
-		bg = t.Warning.Alpha(0.10)
+		name = "分离 HEAD：" + a.branch
+		fg = t.Warning
+		bg = t.Warning.Alpha(0.12)
 		border = t.Warning.Alpha(0.45)
 		tip = "HEAD 没有附在任何分支上（检出标签或某个提交之后就是这样）。" +
 			"在这里提交会成为游离提交 —— 要留下它，先新建一条分支。"
 	}
-	ui.Text(c, name).FontSize(11).SingleLine().TextColor(fg).
-		Padding(2, 8).Radius(4).Background(bg).Border(1, border).Tooltip(tip)
+
+	chip := ui.ButtonBase(c).Radius(5).Padding(2, 7).
+		Background(bg).Border(1, border).Tooltip(tip)
+	if chip.Hovered() {
+		chip.Background(bg.Alpha(0.20))
+	}
+	chip.Children(func() {
+		ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
+			drawIcon(c, iconGitBranch, 11, fg)
+			ui.Text(c, name).FontSize(11).Bold().SingleLine().TextColor(fg)
+		})
+	})
+	chip.Menu(func(m *ui.Menu) {
+		a.branchQuickMenu(m)
+	})
+}
+
+// recentReposMenu 弹出最近打开的项目菜单。
+func (a *app) recentReposMenu(m *ui.Menu) {
+	recent := a.store.State().RecentRepos
+	hasRecent := false
+	for _, p := range recent {
+		if p == "" {
+			continue
+		}
+		hasRecent = true
+		base := filepath.Base(p)
+		pathCopy := p
+		isCurrent := (p == a.repoPath)
+		label := base + "  (" + p + ")"
+		it := m.Item(label).Checked(isCurrent)
+		if it.Chosen() && !isCurrent {
+			a.openRepo(pathCopy)
+		}
+	}
+	if hasRecent {
+		m.Separator()
+	}
+	if m.Item("打开其他本地仓库… ⌘O").Chosen() {
+		a.chooseFolder()
+	}
+	if hasRecent {
+		if m.Item("清除最近打开记录").Chosen() {
+			a.store.ClearRecentRepos()
+			a.persist()
+		}
+	}
+}
+
+// branchQuickMenu 弹出本地分支快速切换菜单。
+func (a *app) branchQuickMenu(m *ui.Menu) {
+	local, _, _, _ := splitRefs(a.refs)
+	if len(local) == 0 {
+		m.Item("没有其他本地分支").Disabled(true)
+		return
+	}
+	busy := a.op != gitrepo.OpNone
+	for _, b := range local {
+		bName := b.Name
+		isCurrent := (bName == a.branch)
+		it := m.Item(bName).Checked(isCurrent).Disabled(busy || isCurrent)
+		bRef := b
+		if it.Chosen() {
+			a.checkoutRef(bRef)
+		}
+	}
 }
 
 // mainArea 是右侧主区：顶上可能有一条操作结果横幅和一条「卡住了」状态条，
@@ -766,7 +900,7 @@ func (a *app) openRepo(path string) {
 	// 换了个仓库，上一个仓库的分支和「在看哪条历史」全部作废。刷新
 	//（reload 也走这里，path 没变）时留着 —— 用户点过的分支不该被一次
 	// 刷新弹掉。
-	if path != a.repoPath {
+	if !sameRepo(path, a.repoPath) {
 		// 老仓库的提交草稿先落盘（draftFor 还是老仓库的根）。
 		a.saveCommitDraft()
 		a.refs = nil
@@ -783,6 +917,11 @@ func (a *app) openRepo(path string) {
 		a.histListID = ""
 		a.hist = loadIdle
 		a.histDiff = loadIdle
+		a.ahead = 0
+		a.behind = 0
+		a.upstream = ""
+		a.contents = map[string]*fileContent{}
+		a.contentFP = map[string]string{}
 	}
 
 	a.run(func() {
@@ -821,7 +960,60 @@ func (a *app) openRepo(path string) {
 // 只能问 state，不能问 repoPath：打开失败时 repoPath 也记着东西（试的是哪个
 // 文件夹）。这条判据原来在四个地方各写了一份，改一处漏三处，就出现了「按钮
 // 灰着、菜单却亮着」这种各说各话，所以收成一份。
-func (a *app) repoReady() bool { return a.state == loadReady }
+//
+// 重新读取同一个仓库（reload）时也算 Ready：手上已经有开好的仓库数据，
+// 界面各区域（提交栏、分支筛选框、视图切换）继续正常展示旧状态，
+// 绝不能在重读的几十毫秒内闪退成「未打开」再弹回来。
+func (a *app) repoReady() bool {
+	switch a.state {
+	case loadReady:
+		return true
+	case loadLoading:
+		return a.repoPath != "" && sameRepo(a.loadingPath, a.repoPath)
+	}
+	return false
+}
+
+// sameRepo 判断两个路径指向的是否是同一个 git 仓库目录。
+// 能自动处理绝对/相对路径、末尾斜杠、以及符号链接（如 macOS /var 与 /private/var）。
+func sameRepo(p1, p2 string) bool {
+	if p1 == "" || p2 == "" {
+		return false
+	}
+	c1 := filepath.Clean(p1)
+	c2 := filepath.Clean(p2)
+	if c1 == c2 {
+		return true
+	}
+	abs1, err1 := filepath.Abs(c1)
+	abs2, err2 := filepath.Abs(c2)
+	if err1 == nil && err2 == nil {
+		if abs1 == abs2 {
+			return true
+		}
+		r1, err1 := filepath.EvalSymlinks(abs1)
+		r2, err2 := filepath.EvalSymlinks(abs2)
+		if err1 == nil && err2 == nil && r1 == r2 {
+			return true
+		}
+	}
+	return false
+}
+
+// toolbarOpVisible 决定是否在工具栏展示当前正在运行的写操作。
+//
+// 暂存/取消暂存是瞬时（几毫秒）的本地索引操作，用户焦点在勾选框或 hunk 按钮本身；
+// 提交和修改上次提交在主区底部的提交栏有专属状态行与转圈；
+// 这几项若在工具栏短暂插播文字，会导致工具栏水平尺寸剧烈拉扯抖动。
+// 其余耗时操作（如网络交互的抓取/拉取/推送，或较重的变基/合并/检出）才在此展示。
+func (a *app) toolbarOpVisible() bool {
+	switch a.op {
+	case gitrepo.OpNone, gitrepo.OpStage, gitrepo.OpUnstage, gitrepo.OpCommit, gitrepo.OpAmend:
+		return false
+	default:
+		return true
+	}
+}
 
 // startOp 是唯一的写操作入口。有写操作在飞、或者仓库没开好时直接返回 false，
 // 调用方什么都不做（界面本来就把那些控件画成灰的，这里只是最后一道兜底）。
@@ -830,7 +1022,7 @@ func (a *app) repoReady() bool { return a.state == loadReady }
 // 返回 error。done 在主线程上、a.op 已经清掉之后调用，参数是这次成没成 ——
 // 重载之类的收尾放在那里。失败会被翻成人话放进 a.opErr（顶部横幅）。
 func (a *app) startOp(kind gitrepo.Op, name string, work func(context.Context, *gitrepo.Repo) (string, error), done func(ok bool)) bool {
-	if a.op != gitrepo.OpNone || !a.repoReady() {
+	if a.op != gitrepo.OpNone || a.state != loadReady {
 		return false
 	}
 	a.op = kind
@@ -913,6 +1105,9 @@ func (a *app) applyModel(m *gitrepo.Model) {
 	a.remotes = m.Remotes
 	a.pending = m.Pending
 	a.hasHead = m.HasHead
+	a.ahead = m.Ahead
+	a.behind = m.Behind
+	a.upstream = m.Upstream
 	a.amend = false
 
 	// 换到另一个仓库（或者第一次打开）时把这个仓库存下的提交草稿拾回来。
@@ -926,6 +1121,7 @@ func (a *app) applyModel(m *gitrepo.Model) {
 
 	// 记住这个仓库，下次启动直接打开
 	a.store.SetLastRepo(a.repoPath)
+	a.persist()
 
 	// 正在看历史时别把主区切回工作区 —— 用户下一次刷新可能只是想
 	// 更新一下提交列表。
@@ -990,8 +1186,10 @@ func (a *app) loadRefs() {
 	if a.repoPath == "" {
 		return
 	}
-	a.refsState = loadLoading
-	a.refErr = ""
+	if len(a.refs) == 0 {
+		a.refsState = loadLoading
+		a.refErr = ""
+	}
 
 	a.refsSeq++
 	seq := a.refsSeq
@@ -999,8 +1197,10 @@ func (a *app) loadRefs() {
 	a.run(func() {
 		repo, err := gitrepo.Open(context.Background(), dir)
 		var refs []gitrepo.Ref
+		var ahead, behind int
 		if err == nil {
 			refs, err = repo.Refs(context.Background())
+			ahead, behind, _ = repo.UpstreamCounts(context.Background())
 		}
 		a.dispatch(func() {
 			if a.refsSeq != seq {
@@ -1011,6 +1211,8 @@ func (a *app) loadRefs() {
 				a.refErr = err.Error()
 				return
 			}
+			a.ahead = ahead
+			a.behind = behind
 			a.setRefs(refs)
 			a.refsState = loadReady
 		})
@@ -1021,6 +1223,9 @@ func (a *app) loadRefs() {
 //
 // 顺带按 Full 建一张索引：树节点里只存 key，点一行时得靠它找回是哪个引用。
 func (a *app) setRefs(refs []gitrepo.Ref) {
+	if slices.Equal(a.refs, refs) {
+		return
+	}
 	a.refs = refs
 	a.refByFull = make(map[string]*gitrepo.Ref, len(refs))
 	for i := range refs {
@@ -1039,12 +1244,23 @@ func (a *app) setRefs(refs []gitrepo.Ref) {
 func (a *app) showFiles(files []gitrepo.File, id string) {
 	// 上一个列表的异步结果（内容加载）从此作废
 	a.contentSeq++
-	// 已读内容一律作废，跨刷新不复用：暂存之后正文的基线就变了 ——
-	// 未暂存那份比的是新 index，已暂存那份读的是 index 本身。
-	a.contents = map[string]*fileContent{}
 	if a.listID == id {
 		a.pruneExpanded(files)
+		// 跨刷新只让真正变了的文件作废：指纹相同的文件（未动过的那些）保留已读内容，
+		// 彻底避免每次暂存导致所有未修改文件的语法高亮和末尾未改动区间瞬间闪烁。
+		liveKeys := make(map[string]string, len(files))
+		for _, f := range files {
+			liveKeys[fileKey(f)] = f.Fingerprint
+		}
+		for k, fp := range a.contentFP {
+			if liveFP, ok := liveKeys[k]; !ok || liveFP != fp {
+				delete(a.contents, k)
+				delete(a.contentFP, k)
+			}
+		}
 	} else {
+		a.contents = map[string]*fileContent{}
+		a.contentFP = map[string]string{}
 		a.expanded = nil
 		a.listID = id
 	}

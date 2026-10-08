@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -197,6 +198,32 @@ func TestUnstageFileAdded(t *testing.T) {
 	// 撤销「已暂存的新增」要回到未跟踪，而不是 index 里留一个空文件
 	if got := gitOut(t, r.Root, "status", "--porcelain"); !strings.Contains(got, "?? new.txt") {
 		t.Errorf("new.txt 该回到未跟踪，实际 %q", got)
+	}
+}
+
+func TestStageFileDeleted(t *testing.T) {
+	r := tempRepo(t)
+	ctx := context.Background()
+	write(t, filepath.Join(r.Root, "del.txt"), "hello\n")
+	git(t, r.Root, "add", "del.txt")
+	git(t, r.Root, "commit", "-m", "init del.txt")
+
+	if err := os.Remove(filepath.Join(r.Root, "del.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := r.StageFile(ctx, "del.txt"); err != nil {
+		t.Fatalf("StageFile deleted: %v", err)
+	}
+	if got := gitOut(t, r.Root, "diff", "--cached", "--name-only"); strings.TrimSpace(got) != "del.txt" {
+		t.Errorf("index 里该有 del.txt，实际 %q", got)
+	}
+
+	if err := r.UnstageFile(ctx, "del.txt"); err != nil {
+		t.Fatalf("UnstageFile deleted: %v", err)
+	}
+	if got := gitOut(t, r.Root, "diff", "--cached", "--name-only"); strings.TrimSpace(got) != "" {
+		t.Errorf("取消暂存后 index 该是空的，实际 %q", got)
 	}
 }
 

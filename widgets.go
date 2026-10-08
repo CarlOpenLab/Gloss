@@ -298,16 +298,19 @@ func toolbarSegmentedIcons(c *ui.Context, selected *int, off bool, items ...segm
 
 // toolButton 是工具栏上的一颗动作按钮：矢量图标 + 文字标签。
 // 高度严格对齐 28px 基准，悬停与按下提供顺滑微交互。
-func toolButton(c *ui.Context, label, tip string, off bool, icon func(p *ui.Painter, r ui.Rect, col ui.Color)) bool {
+// 支持 loading 态：正在加载时内部 15x15 图标平滑切换为 Spinner 原地旋转，
+// 保持按钮总尺寸与布局毫厘不差，彻底杜绝在按钮外侧横向弹出额外 icon 造成的剧烈布局偏移。
+func toolButton(c *ui.Context, label, tip string, off, loading bool, icon func(p *ui.Painter, r ui.Rect, col ui.Color)) bool {
 	t := c.Theme()
+	disabled := off || loading
 	btn := ui.ButtonBase(c).Height(28).Shrink(0).Radius(t.Radius).
 		Padding(0, 9).Gap(6).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).Label(label).Tooltip(tip).Disabled(off)
+		Cursor(ui.CursorPointer).Label(label).Tooltip(tip).Disabled(disabled)
 
 	bg := ui.Transparent
 	fg := t.TextMuted
 	switch {
-	case off:
+	case disabled:
 		fg = t.TextMuted.Alpha(0.38)
 		btn.Cursor(ui.CursorDefault)
 	case btn.Pressed():
@@ -321,11 +324,15 @@ func toolButton(c *ui.Context, label, tip string, off bool, icon func(p *ui.Pain
 	fadeColors(btn)
 
 	btn.Children(func() {
-		ui.Box(c).Size(toolIconSize, toolIconSize).Shrink(0).
-			Draw(func(p *ui.Painter, r ui.Rect) { icon(p, r, fg) })
+		if loading {
+			ui.Spinner(c).Size(toolIconSize, toolIconSize)
+		} else {
+			ui.Box(c).Size(toolIconSize, toolIconSize).Shrink(0).
+				Draw(func(p *ui.Painter, r ui.Rect) { icon(p, r, fg) })
+		}
 		ui.Text(c, label).FontSize(12).SingleLine().TextColor(fg)
 	})
-	return btn.Clicked()
+	return btn.Clicked() && !loading
 }
 
 // iconPt 把 0..1 的归一化坐标落进矩形里。

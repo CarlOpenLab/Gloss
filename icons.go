@@ -49,6 +49,16 @@ var (
 	// 分支对比（git-compare）
 	iconGitCompare = lucide(`<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/>`)
 
+	// 分支（git-branch）
+	iconGitBranch = lucide(`<line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>`)
+
 	// 交换分支（arrow-left-right）
 	iconSwap = lucide(`<path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/>`)
 )
+
+// drawIcon 是绘制指定尺寸与颜色的矢量图标的通用控件。
+func drawIcon(c *ui.Context, svg *ui.SVG, size float32, color ui.Color) *ui.Element {
+	return ui.Box(c).Size(size, size).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
+		p.Icon(svg, r, color)
+	})
+}

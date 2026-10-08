@@ -14,21 +14,86 @@ import (
 // 文件列表原来在侧栏，布局改成 Fork 那样之后侧栏让给了分支树，它搬到
 // 这里 —— 也因此才放得下「点一下跳到那个文件」这种交互。
 const (
-	filePaneW      = 300
-	filePaneWSplit = 220 // split 模式下 diff 要并排两栏，让点宽度给它
+	filePaneW      = float32(300)
+	filePaneWSplit = float32(220) // split 模式下 diff 要并排两栏，让点宽度给它
+	filePaneMinW   = float32(140)
 )
+
+func (a *app) filePaneDefaultW() float32 {
+	if a.split {
+		return filePaneWSplit
+	}
+	return filePaneW
+}
 
 // filePaneWidth 是文件列表那一栏的宽度。
 //
-// 窗口窄的时候要收：侧栏 280 + 文件栏 300 = 580，720 的窗口（最小尺寸）
-// 只剩 140 给 diff。夹到「至少给 diff 留 240」为止。
+// 窗口窄的时候要收：至少给 diff 留 240。支持拖动调整与记住用户偏好。
 func (a *app) filePaneWidth(c *ui.Context) float32 {
-	w := float32(filePaneWSplit)
-	avail, _ := c.Size()
-	if a.sidebarOn {
-		avail -= sidebarWidth
+	maxW := float32(1000)
+	if c != nil {
+		avail, _ := c.Size()
+		if a.sidebarOn {
+			avail -= a.sidebarWidth(c)
+		}
+		maxW = max(filePaneMinW, avail-240)
 	}
-	return min(w, max(120, avail-240))
+
+	w := a.filePaneWidthVal
+	if w <= 0 {
+		w = a.filePaneDefaultW()
+	}
+	return clamp(w, filePaneMinW, maxW)
+}
+
+func (a *app) setFilePaneWidth(c *ui.Context, w float32) {
+	maxW := float32(1000)
+	if c != nil {
+		avail, _ := c.Size()
+		if a.sidebarOn {
+			avail -= a.sidebarWidth(c)
+		}
+		maxW = max(filePaneMinW, avail-240)
+	}
+	clamped := clamp(w, filePaneMinW, maxW)
+	if clamped != a.filePaneWidthVal {
+		a.filePaneWidthVal = clamped
+	}
+}
+
+func (a *app) resetFilePaneWidth() {
+	a.filePaneWidthVal = a.filePaneDefaultW()
+	a.saveViewSettings()
+}
+
+// filePaneSplitter 是文件列表与 Diff 视图之间的可拖拽分隔条。
+func (a *app) filePaneSplitter(c *ui.Context, pal palette) {
+	t := c.Theme()
+	grip := float32(6)
+
+	ui.Box(c).Width(1).Shrink(0).FillHeight().Children(func() {
+		handle := ui.Box(c).Absolute().
+			Top(0).Bottom(0).Left(-(grip - 1) / 2).Width(grip).
+			Cursor(ui.CursorResizeEW).Role(ui.RoleNone)
+
+		if handle.DoubleClicked() {
+			a.resetFilePaneWidth()
+		}
+		if dx, _, held := handle.Dragged(); held && dx != 0 {
+			a.setFilePaneWidth(c, a.filePaneWidth(c)+dx)
+			a.filePaneDragging = true
+		} else if a.filePaneDragging && !held {
+			a.filePaneDragging = false
+			a.saveViewSettings()
+		}
+		handle.Draw(func(p *ui.Painter, r ui.Rect) {
+			line := pal.border
+			if handle.Hovered() || handle.Pressed() {
+				line = t.Accent
+			}
+			p.Fill(ui.Rect{X: r.X + (grip-1)/2, Y: r.Y, W: 1, H: r.H}, line, 0)
+		})
+	})
 }
 
 // detailPane 是主区下半：文件列表 + diff。
@@ -53,7 +118,7 @@ func (a *app) detailPane(c *ui.Context, pal palette) {
 
 	ui.Row(c).Grow(1).FillWidth().AlignItems(ui.Stretch).Children(func() {
 		a.fileListPane(c, pal, t)
-		ui.Box(c).Width(1).Shrink(0).FillHeight().Background(pal.border)
+		a.filePaneSplitter(c, pal)
 		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
 			if a.hasDiff() {
 				a.diffView(c, pal)
@@ -82,7 +147,7 @@ func (a *app) hasDiff() bool {
 	case loadReady:
 		return true
 	case loadLoading:
-		return a.loadingPath == a.repoPath
+		return sameRepo(a.loadingPath, a.repoPath)
 	}
 	return false
 }
@@ -93,7 +158,7 @@ func (a *app) fileListPane(c *ui.Context, pal palette, t *ui.Theme) {
 		Background(pal.sideBg.Alpha(0.35)).Children(func() {
 		ui.Row(c).Shrink(0).Padding(8, 12).Gap(8).AlignItems(ui.Center).Children(func() {
 			n := "文件"
-			if a.state == loadReady {
+			if a.hasDiff() || a.state == loadReady {
 				n = strconv.Itoa(len(a.files)) + " 个文件"
 			}
 			ui.Text(c, n).FontSize(11).Font("monospace").FontFeatures("tnum").
@@ -102,17 +167,19 @@ func (a *app) fileListPane(c *ui.Context, pal palette, t *ui.Theme) {
 			// 增删分开上色，和文件行、栏脚是同一套：同一份数据在哪儿都长
 			// 一个样。原来整串用一个橙色，那是「引用名 / hash」这类元信息
 			// 的颜色，用在这里和行里的绿红对不上。
-			if a.state == loadReady && len(a.files) > 0 {
+			if (a.hasDiff() || a.state == loadReady) && len(a.files) > 0 {
 				ui.Textf(c, "+%d", a.totalAdd()).FontSize(11).
 					Font("monospace").FontFeatures("tnum").TextColor(pal.addBar)
 				ui.Textf(c, "−%d", a.totalDel()).FontSize(11).
 					Font("monospace").FontFeatures("tnum").TextColor(pal.delBar)
 			}
 		})
-		ui.Box(c).Shrink(0).Padding(0, 12, 8, 12).Children(func() {
+		ui.Box(c).Key("file-filter-wrap").Shrink(0).Padding(0, 12, 8, 12).Children(func() {
 			a.fileFilterInput(c)
 		})
-		a.treeView(c, pal, t)
+		ui.Box(c).Key("file-tree-wrap").Grow(1).FillWidth().Children(func() {
+			a.treeView(c, pal, t)
+		})
 		a.filePaneFooter(c, pal, t)
 	})
 }
@@ -148,6 +215,7 @@ func (a *app) treeView(c *ui.Context, pal palette, t *ui.Theme) {
 
 	// 筛选态一律展开：搜出来的文件藏在收起的目录里，等于没搜到。
 	rows := filetree.Flatten(a.tree, a.filesClosed, a.fileFilter != "")
+	a.filesList.Key = func(i int) any { return rows[i].Node.Key }
 	ui.List(c, &a.filesList, len(rows), func(i int) {
 		a.treeRow(c, pal, rows[i])
 	}).Grow(1)
@@ -159,7 +227,7 @@ func (a *app) emptyTreeMsg() string {
 	switch {
 	case a.state == loadIdle:
 		return "还没打开仓库"
-	case a.state != loadReady:
+	case a.state != loadReady && !a.repoReady():
 		return "" // 仓库在读，diff 那边有转圈了，这里先空着
 	case a.compare.on && a.compare.state == loadLoading:
 		return "正在计算分支差异…"
@@ -354,7 +422,7 @@ func (a *app) detailEmpty(c *ui.Context, t *ui.Theme) {
 		}
 		// 第一眼的地方，顺手把菜单里的那个键说一遍：下次就不用找按钮了。
 		ui.Text(c, "也可以按 ⌘O 打开").FontSize(11).TextColor(t.TextMuted)
-	case a.state == loadLoading:
+	case a.state == loadLoading && !a.repoReady():
 		ui.Spinner(c)
 		ui.Text(c, "正在读取仓库…").TextColor(t.TextMuted)
 	case a.state == loadFailed && a.errNotRepo:

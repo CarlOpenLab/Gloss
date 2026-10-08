@@ -86,6 +86,13 @@ type Model struct {
 
 	// HasHead 表示仓库是否已有提交（HEAD 存在，可用于修改上次提交）。
 	HasHead bool
+
+	// Ahead 和 Behind 是当前分支相对配置上游的超前和落后提交数。
+	Ahead  int
+	Behind int
+
+	// Upstream 是当前分支跟踪的远程分支名（如 origin/main）。若无上游则为空。
+	Upstream string
 }
 
 // Load 读取工作区相对 HEAD 的全部变更，按「已暂存」「未暂存」分成两段。
@@ -99,10 +106,12 @@ type Model struct {
 // Files 里「已暂存」是连续的前缀，之后才是未暂存 —— 界面的分组和段落键
 // 都建立在这条性质上。
 func (r *Repo) Load(ctx context.Context) (*Model, error) {
-	changes, err := r.Status(ctx)
+	statusRaw, err := r.statusRaw(ctx)
 	if err != nil {
 		return nil, err
 	}
+	changes := parseStatus(statusRaw)
+	ahead, behind, upstream := parseStatusBranch(statusRaw)
 	branch, detached, err := r.branchInfo(ctx)
 	if err != nil {
 		return nil, err
@@ -131,6 +140,9 @@ func (r *Repo) Load(ctx context.Context) (*Model, error) {
 		Remotes:  remotes,
 		Pending:  r.pending(),
 		HasHead:  base != emptyTree,
+		Ahead:    ahead,
+		Behind:   behind,
+		Upstream: upstream,
 	}
 	appendFile := func(f File) {
 		m.Files = append(m.Files, f)

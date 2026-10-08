@@ -176,3 +176,38 @@ func TestStateReturnsCopy(t *testing.T) {
 		t.Errorf("State() 返回的不是副本：%+v", again.Viewed)
 	}
 }
+
+func TestRecentReposPersistence(t *testing.T) {
+	dir := t.TempDir()
+	s := Open(dir)
+
+	s.AddRecentRepo("/repo/a")
+	s.AddRecentRepo("/repo/b")
+	s.AddRecentRepo("/repo/a") // 重复打开，应移到最前
+
+	st := s.State()
+	if st.LastRepo != "/repo/a" {
+		t.Errorf("LastRepo = %q, want /repo/a", st.LastRepo)
+	}
+	if len(st.RecentRepos) != 2 || st.RecentRepos[0] != "/repo/a" || st.RecentRepos[1] != "/repo/b" {
+		t.Errorf("RecentRepos = %v, want [/repo/a, /repo/b]", st.RecentRepos)
+	}
+
+	if err := s.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	reopened := Open(dir)
+	rSt := reopened.State()
+	if rSt.LastRepo != "/repo/a" {
+		t.Errorf("重载后 LastRepo = %q, want /repo/a", rSt.LastRepo)
+	}
+	if len(rSt.RecentRepos) != 2 || rSt.RecentRepos[0] != "/repo/a" || rSt.RecentRepos[1] != "/repo/b" {
+		t.Errorf("重载后 RecentRepos = %v, want [/repo/a, /repo/b]", rSt.RecentRepos)
+	}
+
+	reopened.ClearRecentRepos()
+	if len(reopened.State().RecentRepos) != 0 {
+		t.Errorf("清空后 RecentRepos 该为空")
+	}
+}

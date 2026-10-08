@@ -351,6 +351,32 @@ func TestParseStatusSynthetic(t *testing.T) {
 	}
 }
 
+func TestParseStatusBranch(t *testing.T) {
+	raw := "# branch.oid abc\x00" +
+		"# branch.head feat\x00" +
+		"# branch.upstream origin/feat\x00" +
+		"# branch.ab +5 -2\x00" +
+		"1 M. N... 100644 100644 100644 aaa bbb staged.txt\x00"
+
+	ahead, behind, upstream := parseStatusBranch([]byte(raw))
+	if ahead != 5 {
+		t.Errorf("ahead = %d, want 5", ahead)
+	}
+	if behind != 2 {
+		t.Errorf("behind = %d, want 2", behind)
+	}
+	if upstream != "origin/feat" {
+		t.Errorf("upstream = %q, want origin/feat", upstream)
+	}
+
+	// 测试没有上游的普通分支
+	rawNoUpstream := "# branch.oid abc\x00# branch.head feat\x00"
+	ahead, behind, upstream = parseStatusBranch([]byte(rawNoUpstream))
+	if ahead != 0 || behind != 0 || upstream != "" {
+		t.Errorf("no upstream parsed = (+%d, -%d, %q), want (+0, -0, \"\")", ahead, behind, upstream)
+	}
+}
+
 func TestStatusLetterAndLabel(t *testing.T) {
 	cases := []struct {
 		s      Status

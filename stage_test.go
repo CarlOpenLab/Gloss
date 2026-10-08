@@ -146,6 +146,40 @@ func TestStageBoxStagesFile(t *testing.T) {
 	}
 }
 
+// 删掉的文件点勾选框能放进 index，再点一次能拿出来。
+func TestStageBoxStagesDeletedFile(t *testing.T) {
+	a := richApp(t)
+	// 在工作区删掉已提交的 a.go / README.md
+	if err := os.Remove(filepath.Join(a.repoPath, "README.md")); err != nil {
+		t.Fatal(err)
+	}
+	a.reload()
+	settle(t, a)
+
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+
+	clickStageBox(t, tt, "README.md")
+	settle(t, a)
+	tt.Frame()
+
+	if got := gitOut(t, a.repoPath, "diff", "--cached", "--name-only"); !strings.Contains(got, "README.md") {
+		t.Errorf("index 里该有 README.md，实际: %q", got)
+	}
+	if f := fileIn(t, a, gitrepo.SectionStaged, "README.md"); f.Status != gitrepo.StatusDeleted {
+		t.Errorf("README.md 在已暂存段里该是删除，实际 %v", f.Status)
+	}
+
+	// 再点一次取消暂存
+	clickStageBox(t, tt, "README.md")
+	settle(t, a)
+	tt.Frame()
+
+	if got := gitOut(t, a.repoPath, "diff", "--cached", "--name-only"); strings.Contains(got, "README.md") {
+		t.Errorf("取消暂存后 index 不该有 README.md，实际: %q", got)
+	}
+}
+
 // 点 hunk 上的「暂存这一段」只把那一段放进 index，同一个文件别的段留在
 // 工作区 —— 这是 hunk 级暂存的全部意义。
 func TestStageHunkStagesOnlyThatHunk(t *testing.T) {
@@ -587,3 +621,25 @@ func TestCommitGateIgnoresSecondClick(t *testing.T) {
 		t.Errorf("最后一次提交的信息是 %q", got)
 	}
 }
+
+// 刷新同一份列表时，未变更文件的已读内容和高亮缓存保留，不被整体清空导致重读闪烁。
+func TestContentPreservedAcrossReloads(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	settle(t, a)
+	tt.Frame()
+
+	key := fileKey(a.files[0])
+	if a.contents[key] == nil {
+		t.Fatal("richApp 应该已经读过文件内容")
+	}
+	oldContent := a.contents[key]
+
+	// 重新读取同一个仓库
+	a.showFiles(a.allFiles, workListID(a.repoPath, a.branch))
+
+	if a.contents[key] == nil || a.contents[key] != oldContent {
+		t.Errorf("同一个仓库刷新，文件指纹未变的内容应该保留，实际: %v", a.contents[key])
+	}
+}
+

@@ -23,8 +23,22 @@ var ErrHunkGone = errors.New("这个改动已经变了")
 // 路径是变参：重命名要新旧两个路径一起给。只给新路径的话，旧路径在 index
 // 里还是「已跟踪」，暂存完的 index 就成了「新文件是新增、旧文件还在」，
 // 得再点一次才真的变成重命名 —— 用户看到的是一次莫名其妙的中间态。
+func cleanPaths(paths []string) []string {
+	var clean []string
+	for _, p := range paths {
+		if p != "" {
+			clean = append(clean, p)
+		}
+	}
+	return clean
+}
+
 func (r *Repo) StageFile(ctx context.Context, paths ...string) error {
-	args := append([]string{"add", "-A", "--"}, paths...)
+	clean := cleanPaths(paths)
+	if len(clean) == 0 {
+		return nil
+	}
+	args := append([]string{"add", "-A", "--"}, clean...)
 	_, err := run(ctx, r.Root, args...)
 	return err
 }
@@ -36,7 +50,11 @@ func (r *Repo) StageFile(ctx context.Context, paths ...string) error {
 // 变参的理由和 StageFile 一样：撤销一个已暂存的重命名，得把新旧两个路径
 // 都从 index 里退回去，只退一个会留下半截删除。
 func (r *Repo) UnstageFile(ctx context.Context, paths ...string) error {
-	args := append([]string{"reset", "-q", "--"}, paths...)
+	clean := cleanPaths(paths)
+	if len(clean) == 0 {
+		return nil
+	}
+	args := append([]string{"reset", "-q", "--"}, clean...)
 	_, err := run(ctx, r.Root, args...)
 	return err
 }

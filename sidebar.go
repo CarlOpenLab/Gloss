@@ -10,7 +10,12 @@ import (
 	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
 )
 
-const sidebarWidth = 280
+const (
+	sidebarWidth    = 280
+	sidebarDefaultW = float32(sidebarWidth)
+	sidebarMinW     = float32(180)
+	sidebarMaxW     = float32(600)
+)
 
 // sidebar 是左侧栏：筛选框 + 分支/远程/标签/储藏树。
 //
@@ -26,8 +31,10 @@ func (a *app) sidebar(c *ui.Context, pal palette) {
 	// 这条空带子顺手当成标题栏用，拖着能移窗口。工具栏是自己画的，那边用
 	// bar.Left 在水平方向让位，这里是垂直方向。
 	bar := c.TitleBar()
+	t := c.Theme()
+	sw := a.sidebarWidth(c)
 
-	ui.Column(c).Width(sidebarWidth).Shrink(0).
+	ui.Column(c).Width(sw).Shrink(0).
 		Background(pal.sideBg.Alpha(0.55)).
 		Children(func() {
 			if bar.Height > 0 {
@@ -40,11 +47,33 @@ func (a *app) sidebar(c *ui.Context, pal palette) {
 			// 判 state 不判 repoPath：打开失败时 repoPath 也记着东西
 			//（试的是哪个文件夹，标题栏要摆），那时候框子照样没得筛。
 			if a.repoReady() {
-				ui.Box(c).Padding(8).Shrink(0).Children(func() {
+				ui.Box(c).Key("ref-filter-wrap").Padding(8).Shrink(0).Children(func() {
 					a.refFilterInput(c)
 				})
 			}
-			a.refsView(c, pal)
+			ui.Box(c).Key("sidebar-refs-wrap").Grow(1).FillWidth().Children(func() {
+				a.refsView(c, pal)
+			})
+
+			// 侧栏右边缘拖动手柄：鼠标悬停显示双向箭头，可拖拽实时调节侧栏宽度，双击复位默认
+			grip := float32(6)
+			resizer := ui.Box(c).Absolute().Top(0).Bottom(0).Right(0).Width(grip).
+				Cursor(ui.CursorResizeEW).Role(ui.RoleNone)
+			if resizer.DoubleClicked() {
+				a.resetSidebarWidth()
+			}
+			if dx, _, held := resizer.Dragged(); held && dx != 0 {
+				a.setSidebarWidth(c, sw+dx)
+				a.sidebarDragging = true
+			} else if a.sidebarDragging && !held {
+				a.sidebarDragging = false
+				a.saveViewSettings()
+			}
+			resizer.Draw(func(p *ui.Painter, r ui.Rect) {
+				if resizer.Hovered() || resizer.Pressed() {
+					p.Fill(ui.Rect{X: r.X + r.W - 1, Y: r.Y, W: 1, H: r.H}, t.Accent, 0)
+				}
+			})
 		})
 }
 
@@ -66,11 +95,15 @@ func (a *app) refsView(c *ui.Context, pal palette) {
 		emptyNote(c, t, "打开一个仓库后，这里会列出它的分支、远程和标签。")
 		return
 	case loadLoading:
-		emptyNote(c, t, "正在读分支…")
-		return
+		if len(a.refs) == 0 {
+			emptyNote(c, t, "正在读分支…")
+			return
+		}
 	case loadFailed:
-		emptyNote(c, t, "读不到分支")
-		return
+		if len(a.refs) == 0 {
+			emptyNote(c, t, "读不到分支")
+			return
+		}
 	}
 
 	if a.refFilter != a.refsFilter {
@@ -83,6 +116,7 @@ func (a *app) refsView(c *ui.Context, pal palette) {
 
 	// 筛选态一律展开：搜出来的分支藏在收起的分组里，等于没搜到。
 	rows := filetree.Flatten(a.refTree, a.refsClosed, a.refFilter != "")
+	a.refsList.Key = func(i int) any { return rows[i].Node.Key }
 	ui.List(c, &a.refsList, len(rows), func(i int) {
 		a.refRow(c, pal, rows[i])
 	}).Grow(1)
