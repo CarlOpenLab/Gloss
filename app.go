@@ -297,6 +297,9 @@ type app struct {
 	aiCommitCancel  context.CancelFunc
 	aiCommitMail    *explainMail
 
+	// —— 变更预检 ——
+	riskScan riskScanState
+
 	// amend 记录是否勾选了「修改上次提交（Amend）」。
 	amend   bool
 	hasHead bool
@@ -450,6 +453,7 @@ func (a *app) view(c *ui.Context) {
 	a.compareDialog(c, pal)
 	a.prDialog(c, pal)
 	a.prReviewModal(c, pal)
+	a.riskScanDialog(c, pal)
 
 	// 卡片画在最后：这一帧的 ✨ 按钮位置刚写好，卡片当帧就能摆对地方。
 	// 它在 Overlay 层，不受上面的布局影响。
@@ -1173,7 +1177,7 @@ func (a *app) workBranch() string {
 // 菜单在系统层拦键、视图在自己那一帧拦，各写各的判断迟早漏掉一处
 // （新加一个对话框，忘了改其中一个，⌘R 就会在对话框背后偷偷刷新）。
 func (a *app) modalOn() bool {
-	return a.palette.on || a.settingsOn || a.tag.on || a.reset.on || a.newBranch.on || a.rename.on || a.confirm.on || a.stashDlg.on || a.compare.dialog || a.prDlg.on || a.prReview.reviewModal
+	return a.palette.on || a.settingsOn || a.tag.on || a.reset.on || a.newBranch.on || a.rename.on || a.confirm.on || a.stashDlg.on || a.compare.dialog || a.prDlg.on || a.prReview.reviewModal || a.riskScan.dialog
 }
 
 // toggleAmend 切换修改上次提交状态。勾选时预填最近一次提交的说明。

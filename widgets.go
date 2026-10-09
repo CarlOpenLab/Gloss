@@ -70,6 +70,11 @@ func sparkleCluster(c *ui.Context, size float32, color ui.Color) {
 	})
 }
 
+// shieldIcon 是一个盾牌图标方盒，用来摆在安全预检按钮或对话框标题中。
+func shieldIcon(c *ui.Context, size float32, color ui.Color) {
+	drawIcon(c, iconShield, size, color)
+}
+
 // explainBtnH 是 hunk 行上那颗小按钮的高度。比 hunk 行（26）矮一圈：上下
 // 各留 3px。填满整行的按钮看着是「贴」在色带上的，四周留出缝才像放上去的
 // 控件。
@@ -117,6 +122,33 @@ func explainButton(c *ui.Context, pal palette, on bool) *ui.Element {
 		sparkleIcon(c, sparkleSize, fg)
 		ui.Text(c, "解释").FontSize(11).SingleLine().TextColor(fg)
 	})
+}
+
+// lineExplainButton 是代码行右侧悬停或激活时出现的「✨ 解释」小按钮。
+func lineExplainButton(c *ui.Context, pal palette, on bool) *ui.Element {
+	t := c.Theme()
+	btn := ui.ButtonBase(c).Height(18).Shrink(0).Radius(4).
+		Padding(0, 5).Gap(3).AlignItems(ui.Center).Margin(0, 6, 0, 0).
+		Cursor(ui.CursorPointer).Label("AI 解释这一行").Tooltip("让 AI 解释这一行代码")
+
+	hovered := btn.Hovered()
+	var bg, border, fg ui.Color
+	switch {
+	case on:
+		bg, border, fg = t.Accent, ui.Transparent, t.AccentText
+	case hovered:
+		bg, border, fg = pal.explainHover, pal.hunkText.Alpha(0.7), pal.hunkText
+	default:
+		bg, border, fg = ui.Transparent, pal.hunkText.Alpha(0.38), pal.hunkText
+	}
+	btn.Background(bg).Border(1, border)
+	fadeColors(btn)
+
+	btn.Children(func() {
+		sparkleIcon(c, 11, fg)
+		ui.Text(c, "解释").FontSize(10).SingleLine().TextColor(fg)
+	})
+	return btn
 }
 
 // stageHunkButton 是「暂存 / 取消暂存这一段」。
