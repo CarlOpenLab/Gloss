@@ -260,7 +260,7 @@ func (a *app) countSection(s gitrepo.Section) int {
 // - 普通提交：有东西暂存着、消息不是空的、没有别的写操作在飞；
 // - 修改上次提交：有 HEAD、消息不是空的、没有别的写操作在飞（即使暂存区为 0 也允许仅改提交信息）。
 func (a *app) canCommit() bool {
-	if !a.repoReady() || a.op == gitrepo.OpCommit || a.op == gitrepo.OpAmend || a.aiCommitLoading || strings.TrimSpace(a.commitMsg) == "" {
+	if !a.repoReady() || a.op == gitrepo.OpCommit || a.op == gitrepo.OpAmend || a.aiCommitLoading || a.riskScan.loading || strings.TrimSpace(a.commitMsg) == "" {
 		return false
 	}
 	if a.amend {
@@ -321,6 +321,7 @@ func (a *app) commitBox(c *ui.Context, pal palette) {
 			in = ui.TextArea(c, &a.commitMsg).Grow(1).MinWidth(0).
 				MinHeight(inMin).MaxHeight(inMax).
 				Placeholder("提交信息…").Label("提交信息")
+			a.riskScanButton(c)
 			a.aiCommitButton(c)
 			a.commitButton(c)
 		})
@@ -380,6 +381,53 @@ func (a *app) aiCommitButton(c *ui.Context) {
 			a.cancelAICommit()
 		} else {
 			a.startAICommit()
+		}
+	}
+}
+
+// riskScanButton 是代码变更安全与风险预检按钮（🛡️ 变更预检）。
+func (a *app) riskScanButton(c *ui.Context) {
+	t := c.Theme()
+	tip := "预检暂存区代码中的潜在漏洞与凭证泄露"
+	if a.riskScan.loading {
+		tip = "正在进行代码安全预检… 点击取消"
+	}
+	disabled := !a.riskScan.loading && (a.stagedCount() == 0 || !a.store.Provider().Ready())
+	btn := ui.ButtonBase(c).Shrink(0).Height(28).Radius(t.Radius).
+		Padding(0, 10).Gap(6).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer).Label("🛡️ 变更预检").Tooltip(tip).
+		Disabled(disabled)
+
+	hovered := btn.Hovered() && !disabled
+	var bg, border, fg ui.Color
+	switch {
+	case a.riskScan.loading:
+		bg, border, fg = t.Accent.Alpha(0.12), t.Accent, t.Accent
+	case disabled:
+		bg, border, fg = t.Surface, t.Border.Alpha(0.4), t.TextMuted.Alpha(0.4)
+	case hovered:
+		bg, border, fg = t.SurfaceHover, t.Border, t.Text
+	default:
+		bg, border, fg = t.Surface, t.Border, t.TextMuted
+	}
+	btn.Background(bg).Border(1, border)
+	fadeColors(btn)
+
+	btn.Children(func() {
+		if a.riskScan.loading {
+			ui.Spinner(c)
+			ui.Text(c, "预检中…").FontSize(12).TextColor(fg)
+		} else {
+			shieldIcon(c, 12, fg)
+			ui.Text(c, "变更预检").FontSize(12).TextColor(fg)
+		}
+	})
+
+	if btn.Clicked() {
+		if a.riskScan.loading {
+			a.cancelRiskScan()
+		} else {
+			a.startRiskScan()
 		}
 	}
 }
@@ -524,6 +572,12 @@ func (a *app) commitStatus(c *ui.Context, t *ui.Theme) {
 		if a.aiCommitLoading {
 			ui.Spinner(c)
 			ui.Text(c, "正在 AI 生成提交信息…").FontSize(11).TextColor(t.TextMuted)
+			ui.Spacer(c)
+			return
+		}
+		if a.riskScan.loading {
+			ui.Spinner(c)
+			ui.Text(c, "正在进行代码安全预检…").FontSize(11).TextColor(t.TextMuted)
 			ui.Spacer(c)
 			return
 		}
