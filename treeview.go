@@ -30,8 +30,11 @@ const (
 	//
 	// 高度必须写死，不能靠 Margin：底色块原来用 FillHeight（height:100%），
 	// 百分比高度会把上下 margin 顶掉，写 Margin(1) 量出来还是整整 24。
-	treeSelInset  = 2
-	treeSelRadius = 5
+	treeSelInset = 2 // 选中/悬停的底色块上下各往里收多少
+
+	// treeSelRadius 是选中底带的圆角。规范 §3 把「树节点选中底带」归到
+	// sm(6)：和旁边的分支芯片、分段单元是同一档，扫一列下来圆角一致。
+	treeSelRadius = radiusSM
 )
 
 // treeRowOpts 是一行的画法。
@@ -57,7 +60,7 @@ type treeRowOpts struct {
 // 里面那个往里缩 8px 的圆角块负责好看 —— 底色直接铺到窗口边上会显得很生硬。
 //
 // 箭头画在行里面，点它会同时命中整行，所以调用方要先问 Arrow 再问 Row。
-func treeRow(c *ui.Context, t *ui.Theme, o treeRowOpts, content func()) (row, arrow *ui.Element) {
+func treeRow(c *ui.Context, t *ui.Theme, pal palette, o treeRowOpts, content func()) (row, arrow *ui.Element) {
 	row = ui.Row(c).Height(treeRowH).Shrink(0).FillWidth().Cursor(ui.CursorPointer)
 	// 悬停要在建行的当口就问：这时读的是上一帧的命中结果，等子元素都建完
 	// 再问也行，但那时已经过了画底色的地方。
@@ -69,9 +72,9 @@ func treeRow(c *ui.Context, t *ui.Theme, o treeRowOpts, content func()) (row, ar
 			Padding(0, 6).Radius(treeSelRadius).Gap(6).AlignItems(ui.Center)
 		switch {
 		case o.Selected:
-			band.Background(t.Accent.Alpha(selAlpha))
+			band.Background(pal.selection)
 		case hovered:
-			band.Background(t.Surface)
+			band.Background(pal.surface2)
 		}
 		fadeColors(band)
 

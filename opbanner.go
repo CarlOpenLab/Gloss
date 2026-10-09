@@ -32,17 +32,18 @@ func (a *app) opBanner(c *ui.Context, pal palette) {
 		Children(func() {
 			warnIcon(c, 14, t.Danger)
 			ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
-				ui.Text(c, f.Title).FontSize(12).Bold().TextColor(t.Text)
+				ui.Text(c, f.Title).FontSize(textBodySM).FontWeight(weightSemibold).
+					TextColor(pal.ink)
 				if f.Hint != "" {
-					ui.Text(c, f.Hint).FontSize(11).TextColor(t.TextMuted)
+					ui.Text(c, f.Hint).FontSize(textCaption).TextColor(pal.inkMuted)
 				}
 				if f.Detail != "" {
 					// git 的原话：等宽、小一号、压过色。它是证据不是结论。
-					ui.Text(c, f.Detail).Font("monospace").FontSize(11).
-						TextColor(t.TextMuted).Opacity(0.85)
+					ui.Text(c, f.Detail).Font("monospace").FontSize(textCaption).
+						TextColor(pal.inkSubtle)
 				}
 			})
-			if closeButton(c) {
+			if closeButton(c, pal) {
 				a.opErr = nil
 			}
 		})
@@ -89,22 +90,24 @@ func warnIcon(c *ui.Context, size float32, col ui.Color) {
 //
 // 对话框开着时的失败留在这里而不是顶上：用户在改的正是出问题的那个字段
 // （标签名、分支名），把话搬到对话框背后等于让他两头看。空失败什么都不画。
-func failureBox(c *ui.Context, t *ui.Theme, f gitrepo.Failure) {
+func failureBox(c *ui.Context, pal palette, t *ui.Theme, f gitrepo.Failure) {
 	if f.Empty() {
 		return
 	}
 	ui.Row(c).Shrink(0).FillWidth().Padding(8, 10).Gap(8).AlignItems(ui.Start).
-		Radius(t.Radius).Background(t.Danger.Alpha(0.10)).
+		Radius(radiusMD).Background(t.Danger.Alpha(0.10)).
+		Border(1, t.Danger.Alpha(0.30)).
 		Children(func() {
 			warnIcon(c, 13, t.Danger)
 			ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
-				ui.Text(c, f.Title).FontSize(12).Bold().TextColor(t.Text)
+				ui.Text(c, f.Title).FontSize(textBodySM).FontWeight(weightSemibold).
+					TextColor(pal.ink)
 				if f.Hint != "" {
-					ui.Text(c, f.Hint).FontSize(11).TextColor(t.TextMuted)
+					ui.Text(c, f.Hint).FontSize(textCaption).TextColor(pal.inkMuted)
 				}
 				if f.Detail != "" {
-					ui.Text(c, f.Detail).Font("monospace").FontSize(11).
-						TextColor(t.TextMuted).Opacity(0.85)
+					ui.Text(c, f.Detail).Font("monospace").FontSize(textCaption).
+						TextColor(pal.inkSubtle)
 				}
 			})
 		})

@@ -168,13 +168,15 @@ func (a *app) paletteDialog(c *ui.Context, pal palette) {
 	open := true
 	ui.DialogBase(c, &open, func(back, panel *ui.Element) {
 		back.Background(ui.RGBA(0, 0, 0, 0.25))
-		panel.Width(520).Padding(0).Radius(t.Radius+4).
-			Background(t.Background).Border(1, pal.border).
-			Shadow(0, 12, 36, 0, ui.RGBA(0, 0, 0, 0.28))
+		// 模态落 Surface 4（§2.1），圆角 xl(16)（§3）；投影收到贴着边的一圈 ——
+		// 阶梯已经把「它浮在最上面」说清楚了，大模糊只会糊出一圈灰边。
+		panel.Width(520).Padding(0).Radius(radiusXL).
+			Background(pal.surface4).Border(1, pal.hairline).
+			Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.24))
 		panel.Children(func() {
 			var in *ui.Element
 			ui.Box(c).Padding(10, 12).Shrink(0).
-				BorderWidth(0, 0, 1, 0).BorderColor(pal.border).Children(func() {
+				BorderWidth(0, 0, 1, 0).BorderColor(pal.hairline).Children(func() {
 				in = ui.TextInput(c, &a.palette.query).Placeholder(T("输入命令…", "Type a command…")).Focus()
 			})
 
@@ -201,11 +203,12 @@ func (a *app) paletteDialog(c *ui.Context, pal palette) {
 			ui.Column(c).Padding(palettePad).Gap(paletteGap).
 				Height(paletteListH(len(cmds))).Children(func() {
 				if len(cmds) == 0 {
-					ui.Text(c, T("没有匹配的命令", "No matching commands")).FontSize(12).TextColor(t.TextMuted).Padding(8)
+					ui.Text(c, T("没有匹配的命令", "No matching commands")).
+						FontSize(textBodySM).TextColor(pal.inkSubtle).Padding(8)
 					return
 				}
 				for i := range cmds {
-					a.paletteRow(c, t, i, cmds)
+					a.paletteRow(c, t, pal, i, cmds)
 				}
 			})
 		})
@@ -215,31 +218,37 @@ func (a *app) paletteDialog(c *ui.Context, pal palette) {
 	}
 }
 
-func (a *app) paletteRow(c *ui.Context, t *ui.Theme, i int, cmds []command) {
+func (a *app) paletteRow(c *ui.Context, t *ui.Theme, pal palette, i int, cmds []command) {
 	cmd := cmds[i]
 	sel := i == a.palette.sel
 
+	// 选中那一行原来是**整块实心强调色**。命令栏一屏十几行，一片蓝底上
+	// 白字反而更不好读；§5 也把全屏的薰衣草蓝压在 1~2 处。选中用中性底带
+	// （和树、列表同一档），选中的那一行靠底带 + 文字提亮到 Ink 说话。
 	bg := ui.Transparent
 	if sel {
-		bg = t.Accent
+		bg = pal.selection
 	}
-	text := t.Text
+	text := pal.inkMuted
 	if sel {
-		text = t.AccentText
+		text = pal.ink
 	}
 
-	row := ui.Row(c).Height(paletteRowH).Shrink(0).Padding(0, 10).Radius(t.Radius).Gap(10).
+	row := ui.Row(c).Height(paletteRowH).Shrink(0).Padding(0, 10).Radius(radiusSM).Gap(10).
 		AlignItems(ui.Center).Background(bg).Cursor(ui.CursorPointer)
 	if row.Hovered() && !sel {
-		row.Background(t.Surface)
+		row.Background(pal.surface2)
 	}
 	fadeColors(row)
 	var clicked bool
 	row.Children(func() {
-		ui.Text(c, cmd.label).FontSize(12.5).Grow(1).SingleLine().TextColor(text)
+		txt := ui.Text(c, cmd.label).FontSize(12.5).Grow(1).SingleLine().TextColor(text)
+		if sel {
+			txt.FontWeight(weightMedium)
+		}
 		if cmd.hint != "" {
-			ui.Text(c, cmd.hint).FontSize(11).SingleLine().
-				TextColor(t.TextMuted).Opacity(0.9)
+			ui.Text(c, cmd.hint).FontSize(textCaption).SingleLine().
+				TextColor(pal.inkSubtle)
 		}
 	})
 	clicked = row.Clicked()

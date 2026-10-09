@@ -85,7 +85,7 @@ func (a *app) filePaneSplitter(c *ui.Context, pal palette) {
 			a.saveViewSettings()
 		}
 		handle.Draw(func(p *ui.Painter, r ui.Rect) {
-			line := pal.border
+			line := pal.hairline
 			if handle.Hovered() || handle.Pressed() {
 				line = t.Accent
 			}
@@ -108,7 +108,7 @@ func (a *app) detailPane(c *ui.Context, pal palette) {
 	if !a.hasDiff() && (a.state == loadIdle || a.state == loadFailed) {
 		ui.Box(c).Grow(1).FillWidth().Children(func() {
 			ui.Column(c).Fill().Center().Gap(10).Padding(24).Children(func() {
-				a.detailEmpty(c, t)
+				a.detailEmpty(c, t, pal)
 			})
 		})
 		return
@@ -124,7 +124,7 @@ func (a *app) detailPane(c *ui.Context, pal palette) {
 			}
 			ui.Box(c).Grow(1).FillWidth().Children(func() {
 				ui.Column(c).Fill().Center().Gap(10).Padding(24).Children(func() {
-					a.detailEmpty(c, t)
+					a.detailEmpty(c, t, pal)
 				})
 			})
 		})
@@ -153,10 +153,10 @@ func (a *app) hasDiff() bool {
 // fileListPane 是文件列表那一栏：栏头 + 筛选框 + 文件树 + footer。
 func (a *app) fileListPane(c *ui.Context, pal palette, t *ui.Theme) {
 	ui.Column(c).Width(a.filePaneWidth(c)).Shrink(0).FillHeight().
-		Background(pal.sideBg.Alpha(0.35)).Children(func() {
+		Background(pal.surface1).Children(func() {
 		ui.Row(c).Shrink(0).Padding(7, 12).Gap(6).AlignItems(ui.Center).Children(func() {
 			if a.tab == 0 && a.repoReady() && len(a.files) > 0 {
-				a.masterStageBox(c, t)
+				a.masterStageBox(c, t, pal)
 			}
 			n := T("文件", "Files")
 			if a.hasDiff() || a.state == loadReady {
@@ -166,12 +166,12 @@ func (a *app) fileListPane(c *ui.Context, pal palette, t *ui.Theme) {
 				TextColor(t.TextMuted)
 			if a.tab == 0 && a.repoReady() && len(a.files) > 0 {
 				if a.unstagedCount() > 0 {
-					if stageAllPill(c, t, a.op != gitrepo.OpNone) {
+					if stageAllPill(c, pal, a.op != gitrepo.OpNone) {
 						a.stageAll()
 					}
 				}
 				if a.stagedCount() > 0 {
-					if unstageAllPill(c, t, a.op != gitrepo.OpNone) {
+					if unstageAllPill(c, pal, a.op != gitrepo.OpNone) {
 						a.unstageAll()
 					}
 				}
@@ -188,7 +188,7 @@ func (a *app) fileListPane(c *ui.Context, pal palette, t *ui.Theme) {
 			}
 		})
 		ui.Box(c).Key("file-filter-wrap").Shrink(0).Padding(0, 12, 8, 12).Children(func() {
-			a.fileFilterInput(c)
+			a.fileFilterInput(c, pal)
 		})
 		ui.Box(c).Key("file-tree-wrap").Grow(1).FillWidth().Children(func() {
 			a.treeView(c, pal, t)
@@ -198,14 +198,14 @@ func (a *app) fileListPane(c *ui.Context, pal palette, t *ui.Theme) {
 }
 
 // masterStageBox 画全选/全不选的主勾选框（三态：全暂存、全未暂存、部分暂存）。
-func (a *app) masterStageBox(c *ui.Context, t *ui.Theme) {
+func (a *app) masterStageBox(c *ui.Context, t *ui.Theme, pal palette) {
 	staged := a.stagedCount()
 	unstaged := a.unstagedCount()
 	if staged == 0 && unstaged == 0 {
 		return
 	}
 	lock := a.op != gitrepo.OpNone
-	btn := ui.ButtonBase(c).Size(stageBoxSize, stageBoxSize).Shrink(0).Radius(4).
+	btn := ui.ButtonBase(c).Size(stageBoxSize, stageBoxSize).Shrink(0).Radius(radiusXS).
 		Cursor(ui.CursorPointer).Disabled(lock)
 
 	allStaged := unstaged == 0 && staged > 0
@@ -224,18 +224,20 @@ func (a *app) masterStageBox(c *ui.Context, t *ui.Theme) {
 	var border, fill ui.Color
 	switch {
 	case allStaged, indeterminate:
+		// 勾上是一个「开着」的控件，和主按钮同属于 §5 留给强调色的那几处，
+		// 不改成中性。
 		fill, border = t.Accent, t.Accent
 		if hovered {
 			fill, border = t.AccentHover, t.AccentHover
 		}
 	default:
-		border = t.TextMuted.Alpha(0.4)
+		border = pal.hairlineStrong
 		if hovered {
-			border = t.TextMuted
-			fill = t.Surface
+			border = pal.hairlineTertiary
+			fill = pal.surface2
 		}
 	}
-	btn.Background(fill).Border(1.5, border)
+	btn.Background(fill).Border(1, border)
 	fadeColors(btn)
 
 	if allStaged {
@@ -260,51 +262,60 @@ func (a *app) masterStageBox(c *ui.Context, t *ui.Theme) {
 }
 
 // stageAllPill 画文件栏顶部的「全部暂存」微型药丸按钮。
-func stageAllPill(c *ui.Context, t *ui.Theme, disabled bool) bool {
-	btn := ui.ButtonBase(c).Shrink(0).Height(20).Radius(4).
+//
+// 静息态是一枚中性芯片（Surface 1 底 + hairline 边），悬停升到 Surface 2 ——
+// 和工具栏那些工具按钮同一条规则。原来静息态就染着强调色：文件栏顶上两个
+// 并排的小药丸，一个蓝色一个灰色，读起来像是「这个按钮比那个重要」，
+// 而它们只是同一件事的两个方向。
+func stageAllPill(c *ui.Context, pal palette, disabled bool) bool {
+	btn := ui.ButtonBase(c).Shrink(0).Height(20).Radius(radiusXS).
 		Padding(0, 6).Gap(3).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).Label(T("全部暂存", "Stage All")).Tooltip(T("全部暂存所有未暂存改动", "Stage all unstaged changes")).
 		Disabled(disabled)
 
 	hovered := btn.Hovered() && !disabled
 	var bg, border, fg ui.Color
-	if disabled {
-		bg, border, fg = ui.Transparent, t.Border.Alpha(0.2), t.TextMuted.Alpha(0.3)
-	} else if hovered {
-		bg, border, fg = t.Accent.Alpha(0.14), t.Accent.Alpha(0.4), t.Accent
-	} else {
-		bg, border, fg = t.Surface, t.Border.Alpha(0.5), t.TextMuted
+	switch {
+	case disabled:
+		bg, border, fg = ui.Transparent, pal.hairline, pal.inkTertiary
+	case hovered:
+		bg, border, fg = pal.surface2, pal.hairlineStrong, pal.ink
+	default:
+		bg, border, fg = pal.surface1, pal.hairlineStrong, pal.inkMuted
 	}
 	btn.Background(bg).Border(1, border)
 	fadeColors(btn)
 
 	btn.Children(func() {
-		ui.Text(c, T("全部暂存", "Stage All")).FontSize(10.5).TextColor(fg)
+		ui.Text(c, T("全部暂存", "Stage All")).FontSize(textCaption).
+			FontWeight(weightMedium).TextColor(fg)
 	})
 	return btn.Clicked()
 }
 
 // unstageAllPill 画文件栏顶部的「全部取消」微型药丸按钮。
-func unstageAllPill(c *ui.Context, t *ui.Theme, disabled bool) bool {
-	btn := ui.ButtonBase(c).Shrink(0).Height(20).Radius(4).
+func unstageAllPill(c *ui.Context, pal palette, disabled bool) bool {
+	btn := ui.ButtonBase(c).Shrink(0).Height(20).Radius(radiusXS).
 		Padding(0, 6).Gap(3).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).Label(T("全部取消", "Unstage All")).Tooltip(T("全部取消暂存所有已暂存改动", "Unstage all staged changes")).
 		Disabled(disabled)
 
 	hovered := btn.Hovered() && !disabled
 	var bg, border, fg ui.Color
-	if disabled {
-		bg, border, fg = ui.Transparent, t.Border.Alpha(0.2), t.TextMuted.Alpha(0.3)
-	} else if hovered {
-		bg, border, fg = t.SurfaceHover, t.Border, t.Text
-	} else {
-		bg, border, fg = t.Surface, t.Border.Alpha(0.5), t.TextMuted
+	switch {
+	case disabled:
+		bg, border, fg = ui.Transparent, pal.hairline, pal.inkTertiary
+	case hovered:
+		bg, border, fg = pal.surface2, pal.hairlineStrong, pal.ink
+	default:
+		bg, border, fg = pal.surface1, pal.hairlineStrong, pal.inkMuted
 	}
 	btn.Background(bg).Border(1, border)
 	fadeColors(btn)
 
 	btn.Children(func() {
-		ui.Text(c, T("全部取消", "Unstage All")).FontSize(10.5).TextColor(fg)
+		ui.Text(c, T("全部取消", "Unstage All")).FontSize(textCaption).
+			FontWeight(weightMedium).TextColor(fg)
 	})
 	return btn.Clicked()
 }
@@ -313,8 +324,8 @@ func unstageAllPill(c *ui.Context, t *ui.Theme, disabled bool) bool {
 //
 // Label 和侧栏那个（「筛选分支」）必须分得开：两个框筛的是完全不同的东西，
 // 名字一样的话测试和无障碍工具都认不出找的是哪一个。
-func (a *app) fileFilterInput(c *ui.Context) {
-	in := searchField(c, &a.fileFilter, T("筛选文件", "Filter files"))
+func (a *app) fileFilterInput(c *ui.Context, pal palette) {
+	in := searchField(c, pal, &a.fileFilter, T("筛选文件", "Filter files"))
 	// ⌘F（以及命令栏里的「筛选文件」）之后把焦点放进来。
 	//
 	// 置位的那一帧文件栏可能已经画过（命令栏在覆盖层里，晚于它），所以要
@@ -387,7 +398,7 @@ func (a *app) treeRow(c *ui.Context, pal palette, r filetree.Row) {
 
 	if n.Dir {
 		open := !a.filesClosed[n.Key]
-		row, arrow := treeRow(c, t, treeRowOpts{Depth: r.Depth, HasKids: true, Open: open}, func() {
+		row, arrow := treeRow(c, t, pal, treeRowOpts{Depth: r.Depth, HasKids: true, Open: open}, func() {
 			ui.Text(c, n.Label).FontSize(12).SingleLine().Grow(1).MinWidth(0).
 				TextColor(t.TextMuted)
 		})
@@ -398,7 +409,7 @@ func (a *app) treeRow(c *ui.Context, pal palette, r filetree.Row) {
 	}
 
 	if n.FileIdx < 0 || n.FileIdx >= len(a.files) {
-		treeRow(c, t, treeRowOpts{Depth: r.Depth}, func() {
+		treeRow(c, t, pal, treeRowOpts{Depth: r.Depth}, func() {
 			ui.Text(c, n.Label).FontSize(12).SingleLine()
 		})
 		return
@@ -411,11 +422,11 @@ func (a *app) treeRow(c *ui.Context, pal palette, r filetree.Row) {
 	// 了文件又跳转了 diff。
 	var box *ui.Element
 
-	row, _ := treeRow(c, t, treeRowOpts{Depth: r.Depth, Selected: n.FileIdx == a.fileSel}, func() {
+	row, _ := treeRow(c, t, pal, treeRowOpts{Depth: r.Depth, Selected: n.FileIdx == a.fileSel}, func() {
 		// 历史提交和储藏的 diff 是只读的（SectionNone），那里不摆勾选框：
 		// 一个点了会对别的仓库状态动手的方框，比没有方框更糟。
 		if f.Section != gitrepo.SectionNone {
-			box = stageBox(c, stageStateOf(f), a.op != gitrepo.OpNone)
+			box = stageBox(c, pal, stageStateOf(f), a.op != gitrepo.OpNone)
 		}
 
 		// 已 review 的文件名变灰，一眼能看出哪些还没看
@@ -486,9 +497,9 @@ func (a *app) toggleFileDir(key string, open bool) {
 // 一个样，扫一眼就知道是对得上的。
 func (a *app) filePaneFooter(c *ui.Context, pal palette, t *ui.Theme) {
 	ui.Row(c).Shrink(0).Padding(7, 12).Gap(6).AlignItems(ui.Center).
-		Background(t.Surface).
-		BorderWidth(1, 0, 0, 0).BorderColor(pal.border).Children(func() {
-		ui.Text(c, T("总计", "Total")).FontSize(11).TextColor(t.TextMuted)
+		Background(pal.surface2).
+		BorderWidth(1, 0, 0, 0).BorderColor(pal.hairline).Children(func() {
+		ui.Text(c, T("总计", "Total")).FontSize(textCaption).TextColor(pal.inkSubtle)
 		ui.Textf(c, "+%d", a.totalAdd()).FontSize(11).Bold().
 			Font("monospace").FontFeatures("tnum").TextColor(pal.addBar)
 		ui.Textf(c, "−%d", a.totalDel()).FontSize(11).Bold().
@@ -533,44 +544,44 @@ func statusColor(s gitrepo.Status, pal palette) ui.Color {
 }
 
 // detailEmpty 是下半区没有 diff 可画时的几种情况。
-func (a *app) detailEmpty(c *ui.Context, t *ui.Theme) {
+func (a *app) detailEmpty(c *ui.Context, t *ui.Theme, pal palette) {
 	switch {
 	case a.state == loadIdle:
-		ui.Text(c, T("还没有打开仓库", "No Repository Opened")).FontSize(18).Bold()
+		headline(c, pal, T("还没有打开仓库", "No Repository Opened"))
 		ui.Text(c, T("请选择本地 Git 仓库以浏览与审查代码变更。", "Select a local Git repository to inspect changes.")).
 			TextColor(t.TextMuted)
-		if ui.PrimaryButton(c, T("打开仓库…", "Open Repository…")).Clicked() {
+		if primaryAction(c, pal, T("打开仓库…", "Open Repository…"), "", false).Clicked() {
 			a.chooseFolder()
 		}
 		// 第一眼的地方，顺手把菜单里的那个键说一遍：下次就不用找按钮了。
-		ui.Text(c, T("快捷键 ⌘O", "Press ⌘O to open")).FontSize(11).TextColor(t.TextMuted)
+		ui.Text(c, T("快捷键 ⌘O", "Press ⌘O to open")).FontSize(textCaption).TextColor(t.TextMuted)
 	case a.state == loadLoading && !a.repoReady():
 		ui.Spinner(c)
 		ui.Text(c, T("正在读取仓库…", "Loading repository…")).TextColor(t.TextMuted)
 	case a.state == loadFailed && a.errNotRepo:
-		ui.Text(c, T("打不开这个仓库", "Unable to Open Repository")).FontSize(18).Bold()
+		headline(c, pal, T("打不开这个仓库", "Unable to Open Repository"))
 		ui.Text(c, T("这个文件夹不是 git 仓库。", "The selected folder is not a valid Git repository.")).TextColor(t.TextMuted)
-		if ui.PrimaryButton(c, T("换一个文件夹…", "Choose Another Folder…")).Clicked() {
+		if primaryAction(c, pal, T("换一个文件夹…", "Choose Another Folder…"), "", false).Clicked() {
 			a.chooseFolder()
 		}
 	case a.state == loadFailed:
-		ui.Text(c, T("无法打开仓库", "Unable to Open Repository")).FontSize(18).Bold()
-		ui.Text(c, a.errMsg).Font("monospace").FontSize(12).TextColor(t.TextMuted)
-		if ui.Button(c, T("重试", "Retry")).Clicked() {
+		headline(c, pal, T("无法打开仓库", "Unable to Open Repository"))
+		ui.Text(c, a.errMsg).Font("monospace").FontSize(textBodySM).TextColor(t.TextMuted)
+		if secondaryAction(c, pal, T("重试", "Retry"), "", false).Clicked() {
 			a.reload()
 		}
 	case a.compare.on:
-		ui.Text(c, T("两分支之间无代码差异", "No Code Differences")).FontSize(18).Bold()
+		headline(c, pal, T("两分支之间无代码差异", "No Code Differences"))
 		ui.Textf(c, T("分支 %s 与 %s 内容完全一致。", "Branches %s and %s are identical."), a.compare.base, a.compare.target).
 			TextColor(t.TextMuted)
 	case a.tab == 1:
-		a.historyEmpty(c, t)
+		a.historyEmpty(c, t, pal)
 	case a.fileFilter != "":
-		ui.Text(c, T("没有匹配的文件", "No Matching Files")).FontSize(18).Bold()
+		headline(c, pal, T("没有匹配的文件", "No Matching Files"))
 		ui.Textf(c, T("未检索到包含「%s」的改动文件。", "No changed files matching \"%s\"."), a.fileFilter).
 			TextColor(t.TextMuted)
 	default:
-		ui.Text(c, T("没有未提交的改动", "No Uncommitted Changes")).FontSize(18).Bold()
+		headline(c, pal, T("没有未提交的改动", "No Uncommitted Changes"))
 		ui.Text(c, T("工作区状态良好，暂无代码变更。", "Working tree is clean, no uncommitted changes.")).TextColor(t.TextMuted)
 	}
 }

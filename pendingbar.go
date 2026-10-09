@@ -26,7 +26,7 @@ import (
 // 按钮比不摆更让人困惑。
 
 // pendingBar 画状态条。没开仓库、没卡住、也没有冲突文件时什么都不画。
-func (a *app) pendingBar(c *ui.Context) {
+func (a *app) pendingBar(c *ui.Context, pal palette) {
 	if !a.repoReady() {
 		// 打开失败/正在打开时，workFiles 可能还是上一个仓库的 —— 一条
 		// 说着旧仓库冲突的状态条摆在错误卡片上面，比不画更糟。
@@ -47,16 +47,17 @@ func (a *app) pendingBar(c *ui.Context) {
 		Children(func() {
 			warnIcon(c, 14, t.Warning)
 			ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
-				ui.Text(c, title).FontSize(12).Bold().TextColor(t.Text)
-				ui.Text(c, hint).FontSize(11).TextColor(t.TextMuted)
+				ui.Text(c, title).FontSize(textBodySM).FontWeight(weightSemibold).
+					TextColor(pal.ink)
+				ui.Text(c, hint).FontSize(textCaption).TextColor(pal.inkMuted)
 			})
-			a.pendingButtons(c, conflicts, busy)
+			a.pendingButtons(c, pal, conflicts, busy)
 		})
 }
 
 // pendingButtons 画「继续 / 跳过 / 中止」。顺序照 macOS 的老规矩：肯定的、
 // 主要的那个在最右 —— 手指往右下走的默认落点是「继续」，「中止」离得最远。
-func (a *app) pendingButtons(c *ui.Context, conflicts int, busy bool) {
+func (a *app) pendingButtons(c *ui.Context, pal palette, conflicts int, busy bool) {
 	p := a.pending
 	if !p.Active() {
 		// 没有可继续的步骤（储藏撞的冲突就长这样）：一颗按钮都不摆。
@@ -75,17 +76,19 @@ func (a *app) pendingButtons(c *ui.Context, conflicts int, busy bool) {
 		blocker = fmt.Sprintf("还有 %d 个冲突文件没解决 —— 列表里标 ! 的就是", conflicts)
 	}
 
+	blocked := blocker != ""
+
 	ui.Row(c).Gap(6).Shrink(0).Children(func() {
-		if ui.Button(c, "中止").Clicked() {
+		if secondaryAction(c, pal, "中止", "", false).Clicked() {
 			a.abortOp()
 		}
 		// merge 没有 --skip：合并是你自己发起的一件事，要么做完要么中止。
 		if p.Kind != gitrepo.PendingMerge {
-			if ui.Button(c, "跳过").Tooltip(blocker).Disabled(blocker != "").Clicked() {
+			if secondaryAction(c, pal, "跳过", blocker, blocked).Clicked() {
 				a.skipOp()
 			}
 		}
-		if ui.PrimaryButton(c, "继续").Tooltip(blocker).Disabled(blocker != "").Clicked() {
+		if primaryAction(c, pal, "继续", blocker, blocked).Clicked() {
 			a.continueOp()
 		}
 	})

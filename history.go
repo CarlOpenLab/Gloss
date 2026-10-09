@@ -303,7 +303,7 @@ func (a *app) clampHistSplit(c *ui.Context) {
 func (a *app) commitListPane(c *ui.Context, pal palette) {
 	t := c.Theme()
 
-	ui.Column(c).Grow(1).FillHeight().Background(pal.sideBg.Alpha(0.35)).Children(func() {
+	ui.Column(c).Grow(1).FillHeight().Background(pal.surface1).Children(func() {
 		// 栏头。提交条数原来挂在侧栏底部，侧栏让给分支树之后搬到这里
 		// —— 它说的就是这份列表，放在列表头上比放在屏幕另一头合适。
 		ui.Row(c).Shrink(0).Padding(8, 12).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -396,13 +396,13 @@ func (a *app) commitRow(c *ui.Context, pal palette, i int) {
 
 	bg := ui.Transparent
 	if sel {
-		bg = t.Accent.Alpha(selAlpha)
+		bg = pal.selection
 	}
 
 	row := ui.Row(c).Height(commitH).Shrink(0).AlignItems(ui.Center).
 		Background(bg).Cursor(ui.CursorPointer)
 	if row.Hovered() && !sel {
-		row.Background(t.Surface)
+		row.Background(pal.surface2)
 	}
 	fadeColors(row)
 	row.Children(func() {
@@ -428,15 +428,17 @@ func (a *app) commitRow(c *ui.Context, pal palette, i int) {
 				overflow = len(badges) - (maxVisibleBadges - 1)
 			}
 			for _, b := range visible {
-				fg, bg, border := badgeColors(t, pal, b.Kind)
-				ui.Text(c, b.Label).FontSize(10).Bold().SingleLine().Shrink(0).
-					Padding(1, 6).Radius(4).
-					TextColor(fg).Background(bg).Border(1, border)
+				// 四枚芯片共用同一副面孔，靠圆点分本地 / 远程 / 标签。
+				// 逐个染色的版本见 git 历史：一行里蓝、绿、灰三色并排，
+				// 扫过去只看见色块，认不出分支名。
+				specChip(c, pal, b.Label, badgeDot(t, pal, b.Kind), rowChipH, rowChipText)
 			}
 			if overflow > 0 {
-				ui.Text(c, fmt.Sprintf("+%d", overflow)).FontSize(10).Bold().SingleLine().Shrink(0).
-					Padding(1, 5).Radius(4).
-					TextColor(t.TextMuted).Background(t.Surface).Border(1, t.Border.Alpha(0.5))
+				ui.Text(c, fmt.Sprintf("+%d", overflow)).FontSize(rowChipText).
+					FontWeight(weightMedium).SingleLine().Shrink(0).
+					Padding(1, 5).Radius(radiusXS).
+					TextColor(pal.inkSubtle).Background(pal.surface2).
+					Border(1, pal.hairline)
 			}
 			ui.Spacer(c)
 
@@ -476,25 +478,20 @@ type refBadge struct {
 	Kind  refBadgeKind
 }
 
-func badgeColors(t *ui.Theme, pal palette, kind refBadgeKind) (fg, bg, border ui.Color) {
+// badgeDot 是芯片上那颗圆点的颜色。
+//
+// 三种引用各给一个语义，但都只落在 6px 的点上：本地分支跟顶部那颗「当前分支」
+// 圆点同一个薰衣草蓝（读的人能把「这条分支」和「我在哪」对上），远程是安静的
+// 灰（跟踪分支是背景信息），标签用琥珀（发布标记是唯一带时间重量的一种）。
+func badgeDot(t *ui.Theme, pal palette, kind refBadgeKind) ui.Color {
 	switch kind {
 	case refBadgeRemote:
-		// 远程跟踪分支（如 origin/beta）：使用链接/强调蓝标识
-		fg = t.Accent
-		bg = t.Accent.Alpha(0.10)
-		border = t.Accent.Alpha(0.28)
+		return pal.inkTertiary
 	case refBadgeTag:
-		// 标签（如 tag: v1.0）：使用成功绿
-		fg = t.Success
-		bg = t.Success.Alpha(0.10)
-		border = t.Success.Alpha(0.28)
+		return t.Warning
 	default: // refBadgeLocal
-		// 本地分支与 HEAD（如 HEAD → beta、main）：使用 Gloss 统一的分支琥珀色
-		fg = pal.ref
-		bg = pal.ref.Alpha(0.10)
-		border = pal.ref.Alpha(0.28)
+		return pal.laneColor(0)
 	}
-	return
 }
 
 func refPriority(b refBadge) int {

@@ -68,7 +68,7 @@ func (a *app) resetDialog(c *ui.Context, pal palette) {
 		return
 	}
 	open := true
-	ui.Modal(c, &open, func() { a.resetBody(c, pal) })
+	specModal(c, pal, &open, func() { a.resetBody(c, pal) })
 	if !open {
 		a.reset = resetState{}
 	}
@@ -90,7 +90,7 @@ func (a *app) resetBody(c *ui.Context, pal palette) {
 	rs := &a.reset
 
 	ui.Column(c).Width(460).Gap(12).Children(func() {
-		ui.Text(c, "重置 "+rs.target+" 到 "+rs.short).Bold().FontSize(15)
+		ui.Text(c, "重置 "+rs.target+" 到 "+rs.short).FontSize(textHeadline).FontWeight(weightSemibold)
 		ui.Text(c, "只挪这条分支的指向，提交本身不会丢 —— 弄错了随时能重置回去。").
 			FontSize(11).TextColor(t.TextMuted)
 
@@ -107,18 +107,16 @@ func (a *app) resetBody(c *ui.Context, pal palette) {
 			ui.Text(c, hardResetWarning(rs.dirty)).FontSize(12).TextColor(t.Danger)
 		}
 
-		failureBox(c, t, rs.err)
+		failureBox(c, pal, t, rs.err)
 
 		ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
-			if ui.Button(c, "取消").Clicked() {
+			if secondaryAction(c, pal, "取消", "", false).Clicked() {
 				a.reset = resetState{}
 				return
 			}
 			// 按钮上写全档名（「硬重置」），不写「确定」：档位是这个
 			// 对话框唯一的选择，按钮把那句话再说一遍，用户不用回头找。
-			if ui.PrimaryButton(c, resetButtonLabel(rs.mode)).
-				Tooltip("把这颗按钮做的事说全，它就是选中的那一档").
-				Disabled(a.op != gitrepo.OpNone).Clicked() {
+			if primaryAction(c, pal, resetButtonLabel(rs.mode), "把这颗按钮做的事说全，它就是选中的那一档", a.op != gitrepo.OpNone).Clicked() {
 				a.resetTo()
 			}
 		})

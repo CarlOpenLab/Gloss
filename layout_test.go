@@ -216,13 +216,35 @@ func TestTreeSelectionIsPill(t *testing.T) {
 		return float32(r*255/al) / 255, float32(g*255/al) / 255, float32(b*255/al) / 255
 	}
 
-	// bluish 是「这像素属于蓝色胶囊」的判据：b-r 超过它才算数。
+	// lum 是同一套还原之后的相对亮度。
+	lum := func(x, y int) float32 {
+		r, g, b := rgb(x, y)
+		return 0.2126*r + 0.7152*g + 0.0722*b
+	}
+
+	// bandLum 是「亮到算底带」的门槛。
 	//
-	// 不能只写「蓝比红多」这么松 —— 主题里的次要文字色本身就是冷灰
-	// （深色下 #8b949e，b-r≈0.075），分组行的灰字也落在扫描的那一列上，
-	// 阈值取 0.06 时它们会被当成胶囊的一部分，纵向量出来的高度就串到
-	// 隔壁分组行去了。胶囊底色 b-r≈0.30，0.15 把两者分得干干净净。
-	const bluish = 0.15
+	// 判据从「偏蓝」换成亮度了：设计规范把选中底带从中性的灰阶里取色
+	// （见 palette.selection），不再用强调色淡染，所以 b-r 这条老判据
+	// 在底带上约等于 0，量不出任何东西。亮度这一头分得很开 —— 侧栏底色
+	// 约 0.035、悬停的 Surface 约 0.062、选中底带约 0.126，0.09 落在
+	// 悬停和选中之间，既认得出选中，又不会把悬停误当选中。
+	const bandLum = 0.09
+
+	// bandRow 判断 y 这一行是不是选中底带：数整行里「够亮」的像素占比。
+	//
+	// 占比而不是「有没有」——分组行的灰字和折叠箭头也够亮，但那只是一条细线，
+	// 铺不满一行；底带铺满整行，占比接近 1。老判据靠色相把灰字排除在外，
+	// 换成亮度之后灰字和底带同色了，只能改用「铺开没有」来分。
+	bandRow := func(y int) bool {
+		lit := 0
+		for x := treePadX; x < sidebarWidth-treePadX; x++ {
+			if lum(x, y) > bandLum {
+				lit++
+			}
+		}
+		return float32(lit)/float32(sidebarWidth-2*treePadX) > 0.5
+	}
 
 	label, ok := tt.Find("feat1")
 	if !ok {
@@ -236,8 +258,7 @@ func TestTreeSelectionIsPill(t *testing.T) {
 
 	top, bot := -1, -1
 	for y := int(label.Y) - 20; y < int(label.Y+label.H)+20; y++ {
-		r, _, b := rgb(col, y)
-		if b-r > bluish { // 底色偏蓝 = 胶囊
+		if bandRow(y) { // 整行都亮 = 底带
 			if top < 0 {
 				top = y
 			}
@@ -260,8 +281,7 @@ func TestTreeSelectionIsPill(t *testing.T) {
 	y := (top + bot) / 2
 	left, right := -1, -1
 	for x := 0; x < sidebarWidth; x++ {
-		r, _, b := rgb(x, y)
-		if b-r > bluish {
+		if lum(x, y) > bandLum {
 			if left < 0 {
 				left = x
 			}
@@ -574,6 +594,3 @@ func TestCleanRepoReloadDoesNotFlickerEmptyMessage(t *testing.T) {
 		t.Errorf("已有仓库刷新时不应在主区居中闪现「正在读取仓库…」：%q", tt.Texts())
 	}
 }
-
-
-

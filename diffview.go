@@ -147,7 +147,7 @@ func (a *app) sectionRow(c *ui.Context, pal palette, r row) {
 	ui.Row(c).Height(sectionH).Shrink(0).FillWidth().
 		Padding(0, codeGap).Gap(8).AlignItems(ui.Center).
 		Background(pal.gapBg).
-		BorderWidth(0, 0, 1, 0).BorderColor(pal.border).Children(func() {
+		BorderWidth(0, 0, 1, 0).BorderColor(pal.hairline).Children(func() {
 		ui.Text(c, r.note).FontSize(11).Bold().SingleLine().TextColor(t.TextMuted)
 		ui.Spacer(c)
 		ui.Textf(c, "%d 个文件", n).FontSize(11).FontFeatures("tnum").
@@ -188,7 +188,7 @@ func (a *app) fileHeaderRow(c *ui.Context, pal palette, r row) {
 	row := ui.Row(c).Height(fileH).Shrink(0).FillWidth().
 		Padding(0, 12).Gap(10).AlignItems(ui.Center).
 		Background(pal.fileBg).Cursor(ui.CursorPointer).
-		BorderWidth(0, 0, 1, 0).BorderColor(pal.border)
+		BorderWidth(0, 0, 1, 0).BorderColor(pal.hairline)
 	row.Children(func() {
 		foldChevron(c, !folded, t.TextMuted)
 
@@ -234,12 +234,19 @@ func (a *app) hunkHeaderRow(c *ui.Context, pal palette, r row) {
 	}
 	h := f.Hunks[r.hunk]
 
+	// hunk 带按 §2.5 来：Surface 2 底 + 1px hairline 边 + Ink Subtle 等宽文字。
+	// 原来只有底色没有边 —— 带子上下都挨着代码行，缺这道线时它在视觉上和
+	// 上下文行糊在一起，看不出「这一段的头在这儿」。
+	//
+	// 文字用 mono(12) 而不是 11：hunk 头是给人读行号的（`@@ -12,7 +12,9 @@`），
+	// 10 和 11 那两档是给元信息用的字号，读一串数字偏挤。
 	ui.Row(c).Height(hunkH).Shrink(0).FillWidth().Padding(0, codeGap).Gap(12).
-		AlignItems(ui.Center).Background(pal.hunkBg).Children(func() {
-		ui.Text(c, hunkHeaderText(h)).Font("monospace").FontSize(11).SingleLine().
+		AlignItems(ui.Center).Background(pal.hunkBg).
+		Border(1, pal.hairline).Children(func() {
+		ui.Text(c, hunkHeaderText(h)).Font("monospace").FontSize(textMono).SingleLine().
 			Shrink(3).TextColor(pal.hunkText)
 		if h.Section != "" {
-			ui.Text(c, h.Section).Font("monospace").FontSize(11).SingleLine().
+			ui.Text(c, h.Section).Font("monospace").FontSize(textMono).SingleLine().
 				Grow(1).MinWidth(0).TextColor(pal.hunkText).Opacity(0.7)
 		} else {
 			ui.Spacer(c)
@@ -424,7 +431,7 @@ func (a *app) splitRow(c *ui.Context, pal palette, r row) {
 	size := a.codeSizeValue()
 	ui.Row(c).Height(lineH).Shrink(0).FillWidth().Children(func() {
 		a.splitHalf(c, pal, left, size, r.file)
-		ui.Box(c).Width(1).AlignSelf(ui.Stretch).Background(pal.border)
+		ui.Box(c).Width(1).AlignSelf(ui.Stretch).Background(pal.hairline)
 		a.splitHalf(c, pal, right, size, r.file)
 	})
 }

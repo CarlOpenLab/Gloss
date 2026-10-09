@@ -189,26 +189,28 @@ func (a *app) compareBar(c *ui.Context, pal palette) {
 
 	ui.Row(c).Height(38).Shrink(0).FillWidth().
 		Padding(0, 16).Gap(8).AlignItems(ui.Center).
-		Background(t.Surface).Border(1, pal.border).Children(func() {
+		Background(pal.surface1).Border(1, pal.hairline).Children(func() {
 
 		// 1. 图标与标题
 		ui.Box(c).Size(16, 16).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
-			p.Icon(iconGitCompare, r, t.Accent)
+			p.Icon(iconGitCompare, r, pal.inkMuted)
 		})
-		ui.Text(c, "分支对比").Bold().FontSize(12).TextColor(t.Text)
+		ui.Text(c, "分支对比").FontSize(textCaption).
+			FontWeight(weightSemibold).TextColor(pal.inkSubtle)
 
 		// 2. 基准分支选择按钮
-		baseBtn := ui.ButtonBase(c).Height(26).Shrink(0).Padding(0, 8).Radius(5).
-			Background(t.Background).Border(1, t.Border).AlignItems(ui.Center).Gap(4).
+		baseBtn := ui.ButtonBase(c).Height(26).Shrink(0).Padding(0, 8).Radius(radiusMD).
+			Background(pal.surface2).Border(1, pal.hairlineStrong).AlignItems(ui.Center).Gap(4).
 			Cursor(ui.CursorPointer).Tooltip("更换基准分支 (Base)").Label("基准分支")
 		if baseBtn.Hovered() {
-			baseBtn.Background(t.SurfaceHover)
+			baseBtn.Background(pal.surface3)
 		}
 		fadeColors(baseBtn)
 		baseBtn.Children(func() {
-			ui.Text(c, "基准:").FontSize(11).TextColor(t.TextMuted)
-			ui.Text(c, a.compare.base).FontSize(11.5).Bold().TextColor(t.Text)
-			ui.Text(c, "▾").FontSize(9).TextColor(t.TextMuted)
+			ui.Text(c, "基准:").FontSize(textCaption).TextColor(pal.inkSubtle)
+			ui.Text(c, a.compare.base).FontSize(textButton).
+				FontWeight(weightMedium).TextColor(pal.ink)
+			ui.Text(c, "▾").FontSize(textCaption).TextColor(pal.inkSubtle)
 		})
 		baseBtn.Menu(func(m *ui.Menu) {
 			for _, b := range branches {
@@ -220,15 +222,15 @@ func (a *app) compareBar(c *ui.Context, pal palette) {
 		})
 
 		// 3. 交换方向按钮 ⇄
-		swapBtn := ui.ButtonBase(c).Size(26, 26).Shrink(0).Radius(5).Center().
+		swapBtn := ui.ButtonBase(c).Size(26, 26).Shrink(0).Radius(radiusMD).Center().
 			Cursor(ui.CursorPointer).Tooltip("交换基准与对比分支方向").Label("交换分支")
 		if swapBtn.Hovered() {
-			swapBtn.Background(t.SurfaceHover)
+			swapBtn.Background(pal.surface2)
 		}
 		fadeColors(swapBtn)
 		swapBtn.Children(func() {
 			ui.Box(c).Size(14, 14).Draw(func(p *ui.Painter, r ui.Rect) {
-				p.Icon(iconSwap, r, t.Text)
+				p.Icon(iconSwap, r, pal.inkMuted)
 			})
 		})
 		if swapBtn.Clicked() {
@@ -236,17 +238,18 @@ func (a *app) compareBar(c *ui.Context, pal palette) {
 		}
 
 		// 4. 对比分支选择按钮
-		targetBtn := ui.ButtonBase(c).Height(26).Shrink(0).Padding(0, 8).Radius(5).
-			Background(t.Background).Border(1, t.Border).AlignItems(ui.Center).Gap(4).
+		targetBtn := ui.ButtonBase(c).Height(26).Shrink(0).Padding(0, 8).Radius(radiusMD).
+			Background(pal.surface2).Border(1, pal.hairlineStrong).AlignItems(ui.Center).Gap(4).
 			Cursor(ui.CursorPointer).Tooltip("更换对比分支 (Compare)").Label("对比分支")
 		if targetBtn.Hovered() {
-			targetBtn.Background(t.SurfaceHover)
+			targetBtn.Background(pal.surface3)
 		}
 		fadeColors(targetBtn)
 		targetBtn.Children(func() {
-			ui.Text(c, "对比:").FontSize(11).TextColor(t.TextMuted)
-			ui.Text(c, a.compare.target).FontSize(11.5).Bold().TextColor(t.Text)
-			ui.Text(c, "▾").FontSize(9).TextColor(t.TextMuted)
+			ui.Text(c, "对比:").FontSize(textCaption).TextColor(pal.inkSubtle)
+			ui.Text(c, a.compare.target).FontSize(textButton).
+				FontWeight(weightMedium).TextColor(pal.ink)
+			ui.Text(c, "▾").FontSize(textCaption).TextColor(pal.inkSubtle)
 		})
 		targetBtn.Menu(func(m *ui.Menu) {
 			for _, b := range branches {
@@ -262,30 +265,30 @@ func (a *app) compareBar(c *ui.Context, pal palette) {
 		if !a.compare.tripleDot {
 			modeIdx = 1
 		}
-		toolbarSegmentedText(c, &modeIdx, false, "PR 模式 (...)", "两端对比 (..)")
+		toolbarSegmentedText(c, pal, &modeIdx, false, "PR 模式 (...)", "两端对比 (..)")
 		if (modeIdx == 0) != a.compare.tripleDot {
 			a.setCompareTripleDot(modeIdx == 0)
 		}
 
-		toolbarDivider(c)
+		toolbarDivider(c, pal)
 
 		// 6. 状态与统计
 		switch a.compare.state {
 		case loadLoading:
 			ui.Spinner(c)
-			ui.Text(c, "正在计算改动…").FontSize(11).TextColor(t.TextMuted)
+			ui.Text(c, "正在计算改动…").FontSize(textCaption).TextColor(pal.inkSubtle)
 		case loadFailed:
-			ui.Text(c, "对比失败: "+a.compare.err).FontSize(11).TextColor(t.Danger)
+			ui.Text(c, "对比失败: "+a.compare.err).FontSize(textCaption).TextColor(t.Danger)
 		default:
 			commitText := fmt.Sprintf("%d 个提交", len(a.compare.commits))
-			cBtn := ui.ButtonBase(c).Height(24).Padding(0, 6).Radius(4).AlignItems(ui.Center).Gap(4).
+			cBtn := ui.ButtonBase(c).Height(24).Padding(0, 6).Radius(radiusSM).AlignItems(ui.Center).Gap(4).
 				Cursor(ui.CursorPointer).Tooltip("查看差异提交列表").Label("差异提交")
 			if cBtn.Hovered() {
-				cBtn.Background(t.SurfaceHover)
+				cBtn.Background(pal.surface2)
 			}
 			cBtn.Children(func() {
-				ui.Text(c, commitText).FontSize(11.5).TextColor(t.TextMuted)
-				ui.Text(c, "▾").FontSize(9).TextColor(t.TextMuted)
+				ui.Text(c, commitText).FontSize(textCaption).TextColor(pal.inkSubtle)
+				ui.Text(c, "▾").FontSize(textCaption).TextColor(pal.inkSubtle)
 			})
 			cBtn.Menu(func(m *ui.Menu) {
 				if len(a.compare.commits) == 0 {
@@ -297,22 +300,23 @@ func (a *app) compareBar(c *ui.Context, pal palette) {
 				}
 			})
 
-			ui.Textf(c, "·  %d 个改动文件", len(a.allFiles)).FontSize(11.5).TextColor(t.TextMuted)
+			ui.Textf(c, "·  %d 个改动文件", len(a.allFiles)).FontSize(textCaption).TextColor(pal.inkSubtle)
 		}
 
 		ui.Spacer(c)
 
 		// 7. 退出对比按钮
-		exitBtn := ui.ButtonBase(c).Height(26).Padding(0, 10).Radius(5).Gap(4).
+		exitBtn := ui.ButtonBase(c).Height(26).Padding(0, 10).Radius(radiusMD).Gap(4).
 			AlignItems(ui.Center).Cursor(ui.CursorPointer).
-			Background(ui.Transparent).Border(1, t.Border).
+			Background(ui.Transparent).Border(1, pal.hairline).
 			Label("退出对比").Tooltip("退出分支对比 (Esc)")
 		if exitBtn.Hovered() {
-			exitBtn.Background(t.SurfaceHover)
+			exitBtn.Background(pal.surface2)
 		}
 		fadeColors(exitBtn)
 		exitBtn.Children(func() {
-			ui.Text(c, "✕  退出对比").FontSize(11.5).TextColor(t.Text)
+			ui.Text(c, "✕  退出对比").FontSize(textButton).
+				FontWeight(weightMedium).TextColor(pal.inkMuted)
 		})
 		if exitBtn.Clicked() {
 			a.exitCompare()
@@ -331,28 +335,29 @@ func (a *app) compareDialog(c *ui.Context, pal palette) {
 	open := true
 	ui.DialogBase(c, &open, func(back, panel *ui.Element) {
 		back.Background(ui.RGBA(0, 0, 0, 0.25))
-		panel.Width(460).Padding(20).Radius(t.Radius + 4).
-			Background(t.Background).Border(1, pal.border).
-			Shadow(0, 12, 36, 0, ui.RGBA(0, 0, 0, 0.28))
+		panel.Width(460).Padding(20).Radius(radiusXL).
+			Background(pal.surface4).Border(1, pal.hairline).
+			Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.24))
 		panel.Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
 				ui.Box(c).Size(18, 18).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
-					p.Icon(iconGitCompare, r, t.Accent)
+					p.Icon(iconGitCompare, r, pal.inkMuted)
 				})
-				ui.Text(c, "对比分支代码差异").FontSize(15).Bold().TextColor(t.Text)
+				ui.Text(c, "对比分支代码差异").FontSize(textHeadline).
+					FontWeight(weightSemibold).TextColor(pal.ink)
 			})
 
 			ui.Box(c).Height(16)
 
 			// 基准分支 (Base)
-			ui.Text(c, "基准分支 (Base):").FontSize(12).TextColor(t.TextMuted)
+			ui.Text(c, "基准分支 (Base):").FontSize(textBodySM).TextColor(pal.inkMuted)
 			ui.Box(c).Height(4)
-			baseBtn := ui.ButtonBase(c).Height(30).FillWidth().Padding(0, 10).Radius(t.Radius).
-				Background(t.Surface).Border(1, t.Border).AlignItems(ui.Center).Justify(ui.SpaceBetween).
+			baseBtn := ui.ButtonBase(c).Height(30).FillWidth().Padding(0, 10).Radius(radiusMD).
+				Background(pal.surface2).Border(1, pal.hairlineStrong).AlignItems(ui.Center).Justify(ui.SpaceBetween).
 				Cursor(ui.CursorPointer)
 			baseBtn.Children(func() {
-				ui.Text(c, a.compare.pickBase).FontSize(13).TextColor(t.Text)
-				ui.Text(c, "▾").FontSize(10).TextColor(t.TextMuted)
+				ui.Text(c, a.compare.pickBase).FontSize(textBody).TextColor(pal.ink)
+				ui.Text(c, "▾").FontSize(textCaption).TextColor(pal.inkSubtle)
 			})
 			baseBtn.Menu(func(m *ui.Menu) {
 				for _, b := range branches {
@@ -367,15 +372,15 @@ func (a *app) compareDialog(c *ui.Context, pal palette) {
 
 			// 快速交换按钮
 			ui.Row(c).Justify(ui.Center).Children(func() {
-				sw := ui.ButtonBase(c).Size(28, 28).Radius(t.Radius).Center().
+				sw := ui.ButtonBase(c).Size(28, 28).Radius(radiusMD).Center().
 					Cursor(ui.CursorPointer).Tooltip("交换两分支").Label("交换基准与对比分支")
 				if sw.Hovered() {
-					sw.Background(t.SurfaceHover)
+					sw.Background(pal.surface2)
 				}
 				fadeColors(sw)
 				sw.Children(func() {
 					ui.Box(c).Size(14, 14).Draw(func(p *ui.Painter, r ui.Rect) {
-						p.Icon(iconSwap, r, t.Text)
+						p.Icon(iconSwap, r, pal.inkMuted)
 					})
 				})
 				if sw.Clicked() {
@@ -386,14 +391,14 @@ func (a *app) compareDialog(c *ui.Context, pal palette) {
 			ui.Box(c).Height(12)
 
 			// 对比分支 (Compare)
-			ui.Text(c, "对比分支 (Compare):").FontSize(12).TextColor(t.TextMuted)
+			ui.Text(c, "对比分支 (Compare):").FontSize(textBodySM).TextColor(pal.inkMuted)
 			ui.Box(c).Height(4)
-			targetBtn := ui.ButtonBase(c).Height(30).FillWidth().Padding(0, 10).Radius(t.Radius).
-				Background(t.Surface).Border(1, t.Border).AlignItems(ui.Center).Justify(ui.SpaceBetween).
+			targetBtn := ui.ButtonBase(c).Height(30).FillWidth().Padding(0, 10).Radius(radiusMD).
+				Background(pal.surface2).Border(1, pal.hairlineStrong).AlignItems(ui.Center).Justify(ui.SpaceBetween).
 				Cursor(ui.CursorPointer)
 			targetBtn.Children(func() {
-				ui.Text(c, a.compare.pickTarget).FontSize(13).TextColor(t.Text)
-				ui.Text(c, "▾").FontSize(10).TextColor(t.TextMuted)
+				ui.Text(c, a.compare.pickTarget).FontSize(textBody).TextColor(pal.ink)
+				ui.Text(c, "▾").FontSize(textCaption).TextColor(pal.inkSubtle)
 			})
 			targetBtn.Menu(func(m *ui.Menu) {
 				for _, b := range branches {
@@ -413,7 +418,7 @@ func (a *app) compareDialog(c *ui.Context, pal palette) {
 			}
 			ui.Text(c, "对比模式:").FontSize(12).TextColor(t.TextMuted)
 			ui.Box(c).Height(4)
-			toolbarSegmentedText(c, &mode, false, "PR 模式 (三点 ...)", "直接对比 (两点 ..)")
+			toolbarSegmentedText(c, pal, &mode, false, "PR 模式 (三点 ...)", "直接对比 (两点 ..)")
 			if (mode == 0) != a.compare.tripleDot {
 				a.compare.tripleDot = (mode == 0)
 			}
@@ -422,10 +427,10 @@ func (a *app) compareDialog(c *ui.Context, pal palette) {
 
 			// 底部按钮
 			ui.Row(c).Justify(ui.End).Gap(10).Children(func() {
-				if ui.Button(c, "取消").Clicked() {
+				if secondaryAction(c, pal, "取消", "", false).Clicked() {
 					a.compare.dialog = false
 				}
-				startBtn := ui.PrimaryButton(c, "开始对比")
+				startBtn := primaryAction(c, pal, "开始对比", "", false)
 				if a.compare.pickBase == "" || a.compare.pickTarget == "" || a.compare.pickBase == a.compare.pickTarget {
 					startBtn.Disabled(true)
 				}

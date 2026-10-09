@@ -103,7 +103,7 @@ func (a *app) riskScanDialog(c *ui.Context, pal palette) {
 		return
 	}
 	open := true
-	ui.Modal(c, &open, func() { a.riskScanBody(c, pal) })
+	specModal(c, pal, &open, func() { a.riskScanBody(c, pal) })
 	if !open {
 		a.closeRiskScan()
 	}
@@ -117,10 +117,11 @@ func (a *app) riskScanBody(c *ui.Context, pal palette) {
 	ui.Column(c).Width(620).MaxHeight(540).Gap(14).Children(func() {
 		// 顶部标题栏
 		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-			shieldIcon(c, 16, t.Accent)
-			ui.Text(c, "代码变更安全与风险预检").Bold().FontSize(15)
+			shieldIcon(c, 16, pal.inkMuted)
+			ui.Text(c, "代码变更安全与风险预检").FontSize(textHeadline).
+				FontWeight(weightSemibold).TextColor(pal.ink)
 			ui.Spacer(c)
-			if closeButton(c) {
+			if closeButton(c, pal) {
 				a.closeRiskScan()
 				return
 			}
@@ -131,11 +132,11 @@ func (a *app) riskScanBody(c *ui.Context, pal palette) {
 			ui.Column(c).Padding(36, 0).Gap(12).AlignItems(ui.Center).Children(func() {
 				ui.Spinner(c)
 				ui.Text(c, "正在全面预检暂存区代码中的潜在漏洞与凭证泄露…").
-					Bold().FontSize(13).TextColor(t.Text)
+					FontSize(textBody).FontWeight(weightMedium).TextColor(pal.ink)
 				ui.Text(c, "分析凭证泄露、代码注入、并发异常及破坏性变更").
-					FontSize(11).TextColor(t.TextMuted)
+					FontSize(textCaption).TextColor(pal.inkSubtle)
 				ui.Row(c).Padding(8, 0).Children(func() {
-					if ui.Button(c, "取消预检").Clicked() {
+					if secondaryAction(c, pal, "取消预检", "", false).Clicked() {
 						a.closeRiskScan()
 					}
 				})
@@ -143,22 +144,24 @@ func (a *app) riskScanBody(c *ui.Context, pal palette) {
 			return
 		}
 
-		// 错误状态
+		// 错误状态。走「横幅」那条规则：语义底色可以留（§5 允许语义色），
+		// 因为这里说的正是「出事了」，而不是某种装饰。
 		if rs.err != "" {
-			ui.Column(c).Padding(16).Radius(t.Radius).
+			ui.Column(c).Padding(16).Radius(radiusMD).
 				Background(t.Danger.Alpha(0.10)).Border(1, t.Danger.Alpha(0.35)).Gap(8).Children(func() {
 				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 					warnIcon(c, 14, t.Danger)
-					ui.Text(c, "预检扫描失败").Bold().FontSize(13).TextColor(t.Danger)
+					ui.Text(c, "预检扫描失败").FontSize(textBody).
+						FontWeight(weightSemibold).TextColor(t.Danger)
 				})
-				ui.Text(c, rs.err).FontSize(12).TextColor(t.Text)
+				ui.Text(c, rs.err).FontSize(textBodySM).TextColor(pal.inkMuted)
 			})
 
 			ui.Row(c).Justify(ui.End).Gap(8).Children(func() {
-				if ui.Button(c, "关闭").Clicked() {
+				if secondaryAction(c, pal, "关闭", "", false).Clicked() {
 					a.closeRiskScan()
 				}
-				if ui.PrimaryButton(c, "重试").Clicked() {
+				if primaryAction(c, pal, "重试", "", false).Clicked() {
 					a.startRiskScan()
 				}
 			})
@@ -166,44 +169,48 @@ func (a *app) riskScanBody(c *ui.Context, pal palette) {
 		}
 
 		// 整体安全徽标 (Security Badge)
+		//
+		// 结论用一颗语义圆点带出来，而不是把整条横幅涂成红/黄/绿：这条带子
+		// 后面还跟着一段结论摘要，底色一染，摘要那些字就得挑颜色配它 ——
+		// 而摘要本身就是普通正文。
 		badgeIcon, badgeText := rs.report.StatusBadge()
-		var badgeBg, badgeBorder, badgeFg ui.Color
+		var badgeDot ui.Color
 		switch badgeText {
 		case "安全通过":
-			badgeBg = t.Success.Alpha(0.12)
-			badgeBorder = t.Success.Alpha(0.40)
-			badgeFg = t.Success
+			badgeDot = t.Success
 		case "需注意":
-			badgeBg = t.Warning.Alpha(0.12)
-			badgeBorder = t.Warning.Alpha(0.40)
-			badgeFg = t.Warning
+			badgeDot = t.Warning
 		default: // "高危发现"
-			badgeBg = t.Danger.Alpha(0.12)
-			badgeBorder = t.Danger.Alpha(0.40)
-			badgeFg = t.Danger
+			badgeDot = t.Danger
 		}
 
-		ui.Row(c).Padding(10, 14).Radius(t.Radius).
-			Background(badgeBg).Border(1, badgeBorder).AlignItems(ui.Center).Gap(10).Children(func() {
-			ui.Text(c, badgeIcon+" "+badgeText).Bold().FontSize(14).TextColor(badgeFg)
-			ui.Text(c, "·").FontSize(12).TextColor(badgeFg.Alpha(0.6))
-			ui.Text(c, rs.report.Summary).FontSize(12).TextColor(t.Text).Grow(1)
+		ui.Row(c).Padding(10, 14).Radius(radiusMD).
+			Background(pal.surface2).Border(1, pal.hairline).
+			AlignItems(ui.Center).Gap(10).Children(func() {
+			ui.Row(c).Shrink(0).Gap(6).AlignItems(ui.Center).Children(func() {
+				ui.Box(c).Size(chipDot, chipDot).Shrink(0).Radius(chipDot / 2).
+					Background(badgeDot)
+				ui.Text(c, badgeIcon+" "+badgeText).FontSize(textBody).
+					FontWeight(weightSemibold).TextColor(pal.ink)
+			})
+			ui.Text(c, "·").FontSize(textBodySM).TextColor(pal.inkTertiary)
+			ui.Text(c, rs.report.Summary).FontSize(textBodySM).TextColor(pal.inkMuted).Grow(1)
 		})
 
 		// 发现项列表 (Findings List)
 		if len(rs.report.Findings) == 0 {
-			ui.Box(c).Padding(24, 16).Radius(t.Radius).
-				Background(t.Surface).Border(1, t.Border.Alpha(0.4)).Children(func() {
+			ui.Box(c).Padding(24, 16).Radius(radiusMD).
+				Background(pal.surface2).Border(1, pal.hairline).Children(func() {
 				ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
 					ui.Text(c, "✅ 暂存区代码未检出已知安全漏洞、凭证机密或危险并发缺陷。").
-						FontSize(12).TextColor(t.TextMuted)
+						FontSize(textBodySM).TextColor(pal.inkMuted)
 				})
 			})
 		} else {
 			ui.Scroll(c).TrackScroll(&rs.scroll).MaxHeight(280).Grow(1).Children(func() {
 				ui.Column(c).Gap(8).Children(func() {
 					for _, f := range rs.report.Findings {
-						riskFindingCard(c, t, f)
+						riskFindingCard(c, t, pal, f)
 					}
 				})
 			})
@@ -213,13 +220,13 @@ func (a *app) riskScanBody(c *ui.Context, pal palette) {
 		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
 			if len(rs.report.Findings) > 0 {
 				ui.Textf(c, "共发现 %d 处风险项", len(rs.report.Findings)).
-					FontSize(11).TextColor(t.TextMuted)
+					FontSize(textCaption).TextColor(pal.inkSubtle)
 			}
 			ui.Spacer(c)
-			if ui.Button(c, "关闭").Clicked() {
+			if secondaryAction(c, pal, "关闭", "", false).Clicked() {
 				a.closeRiskScan()
 			}
-			commitBtn := ui.PrimaryButton(c, "继续提交").Tooltip("确认预检结果并提交已暂存改动")
+			commitBtn := primaryAction(c, pal, "继续提交", "确认预检结果并提交已暂存改动", false)
 			if commitBtn.Clicked() {
 				a.proceedToCommitFromScan()
 			}
@@ -228,54 +235,49 @@ func (a *app) riskScanBody(c *ui.Context, pal palette) {
 }
 
 // riskFindingCard 渲染单条安全或代码风险卡片。
-func riskFindingCard(c *ui.Context, t *ui.Theme, f explain.RiskFinding) {
-	var pillBg, pillBorder, pillFg ui.Color
+func riskFindingCard(c *ui.Context, t *ui.Theme, pal palette, f explain.RiskFinding) {
+	// 严重度是「这一条有多要紧」，正落在 §2.5 那张表上：语义靠 6px 圆点，
+	// 整块芯片保持中性。低危不再借用强调色 —— 它既不重要也不该抢眼。
+	var dot ui.Color
 	switch f.Severity {
 	case explain.RiskCritical, explain.RiskHigh:
-		pillBg = t.Danger.Alpha(0.12)
-		pillBorder = t.Danger.Alpha(0.40)
-		pillFg = t.Danger
+		dot = t.Danger
 	case explain.RiskMedium:
-		pillBg = t.Warning.Alpha(0.12)
-		pillBorder = t.Warning.Alpha(0.40)
-		pillFg = t.Warning
+		dot = t.Warning
 	default:
-		pillBg = t.Accent.Alpha(0.10)
-		pillBorder = t.Accent.Alpha(0.35)
-		pillFg = t.Accent
+		dot = pal.inkTertiary
 	}
 
-	ui.Column(c).Padding(10, 12).Radius(t.Radius).
-		Background(t.Surface).Border(1, t.Border.Alpha(0.5)).Gap(6).Children(func() {
-		// 行 1: 严重度 Pill + 标题 + 文件路径与行号
+	ui.Column(c).Padding(10, 12).Radius(radiusMD).
+		Background(pal.surface2).Border(1, pal.hairline).Gap(6).Children(func() {
+		// 行 1: 严重度芯片 + 标题 + 文件路径与行号
 		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-			ui.Box(c).Padding(2, 6).Radius(3).
-				Background(pillBg).Border(1, pillBorder).Children(func() {
-				ui.Text(c, string(f.Severity)).FontSize(10).Bold().TextColor(pillFg)
-			})
-			ui.Text(c, f.Title).Bold().FontSize(12).TextColor(t.Text).Grow(1)
+			specChip(c, pal, string(f.Severity), dot, rowChipH, rowChipText)
+			ui.Text(c, f.Title).FontSize(textBodySM).FontWeight(weightSemibold).
+				TextColor(pal.ink).Grow(1)
 			if f.FilePath != "" {
 				loc := f.FilePath
 				if f.Line > 0 {
 					loc = fmt.Sprintf("%s:%d", f.FilePath, f.Line)
 				}
-				ui.Text(c, loc).Font("monospace").FontSize(11).TextColor(t.TextMuted)
+				ui.Text(c, loc).Font("monospace").FontSize(textCaption).TextColor(pal.inkSubtle)
 			}
 		})
 
 		// 行 2: 风险描述
 		if f.Description != "" {
 			ui.Row(c).Gap(6).AlignItems(ui.Start).Children(func() {
-				ui.Text(c, "风险描述:").FontSize(11).TextColor(t.TextMuted).Shrink(0)
-				ui.Text(c, f.Description).FontSize(11).TextColor(t.Text).Grow(1)
+				ui.Text(c, "风险描述:").FontSize(textCaption).TextColor(pal.inkSubtle).Shrink(0)
+				ui.Text(c, f.Description).FontSize(textCaption).TextColor(pal.inkMuted).Grow(1)
 			})
 		}
 
-		// 行 3: 建议修复
+		// 行 3: 建议修复。标签用严重度那档色 —— 这是全文唯一一处「带颜色的字」，
+		// 而它指的正是上面那颗圆点，一眼能对上是哪一条。
 		if f.Suggestion != "" {
 			ui.Row(c).Gap(6).AlignItems(ui.Start).Children(func() {
-				ui.Text(c, "建议修复:").FontSize(11).TextColor(pillFg).Shrink(0)
-				ui.Text(c, f.Suggestion).FontSize(11).TextColor(t.Text).Grow(1)
+				ui.Text(c, "建议修复:").FontSize(textCaption).TextColor(dot).Shrink(0)
+				ui.Text(c, f.Suggestion).FontSize(textCaption).TextColor(pal.inkMuted).Grow(1)
 			})
 		}
 	})

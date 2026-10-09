@@ -23,18 +23,8 @@ const (
 	cardGap  = 10  // 卡片和 ✨ 按钮之间的间距
 	cardMinH = 180 // 上方/下方空间再小也要给这么高
 
-	// cardRadius 是卡片的圆角。比框架控件的圆角大一圈：它是一块浮在
-	// diff 上面的整板，圆角跟着按钮走会显得方。
-	cardRadius = 10
-
-	// headTint 是卡片头部那层强调色底的不透明度。
-	//
-	// 头部（标题 + 在解释哪一段）和正文本来只隔一条细线，深色下几乎看不出
-	// 分界，整张卡是一片平的黑。给头部叠一层很淡的强调色：它是「这张卡的
-	// 头」，不是正文的一部分；浅色下是几乎看不出的浅蓝，深色下是抬高一档的
-	// 蓝灰。值再大就成了一块色带，抢正文的注意力。
-	headTintLight float32 = 0.07
-	headTintDark  float32 = 0.13
+	// cardRadius 是卡片的圆角。§3 把「悬浮卡片、AI 解释卡片」归到 lg(12)。
+	cardRadius = radiusLG
 
 	// cardMotion 是卡片出现/消失的时长。
 	//
@@ -410,7 +400,6 @@ func (a *app) explainCard(c *ui.Context, pal palette) {
 		a.closeExplain()
 		return
 	}
-	t := c.Theme()
 	winW, winH := c.Size()
 
 	w := min(cardMaxW, winW-24)
@@ -419,9 +408,10 @@ func (a *app) explainCard(c *ui.Context, pal palette) {
 	panel := ui.Box(c)
 	ui.Overlay(c, func() {
 		panel = ui.Box(c).Absolute().Left(at.x).Width(w).MaxHeight(at.maxH).
-			Radius(cardRadius).Background(t.Background).
-			Border(1, pal.border).
-			Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.22))
+			// 卡片是浮层：Surface 3 + 一道 hairline（§2.1），投影只留一点收边。
+			Radius(cardRadius).Background(pal.surface3).
+			Border(1, pal.hairline).
+			Shadow(0, 4, 12, 0, ui.RGBA(0, 0, 0, 0.16))
 		if at.up {
 			// 往上排时钉住下沿：内容短的话卡片贴着按钮，不会浮在半空
 			panel.Bottom(winH - at.y)
@@ -499,37 +489,36 @@ func clamp(v, lo, hi float32) float32 { return min(max(v, lo), hi) }
 
 // explainHead 是卡片顶部：标题、缓存标记、关闭按钮，下面一行是 hunk 头。
 func (a *app) explainHead(c *ui.Context, pal palette) {
-	t := c.Theme()
-	tint := headTintLight
-	if t.Dark {
-		tint = headTintDark
-	}
+	// 头部和正文靠明度分界，不叠强调色（§5 禁止装饰性染色）：深色下头部
+	// 比卡片低一档，浅色下比卡片灰一档，两种模式里它都是一条「带子」。
 	ui.Column(c).Shrink(0).Padding(10, 12).Gap(4).
-		Background(t.Accent.Alpha(tint)).
+		Background(pal.surface2).
 		// 圆角只给上面两角，和卡片一致：头部贴着卡片顶边，四角都给就会
 		// 把下面两个角也切掉，和正文之间出现两道缺口。
 		Radius(cardRadius, cardRadius, 0, 0).
-		BorderWidth(0, 0, 1, 0).BorderColor(pal.border).Children(func() {
+		BorderWidth(0, 0, 1, 0).BorderColor(pal.hairline).Children(func() {
 		ui.Row(c).Gap(7).AlignItems(ui.Center).Children(func() {
-			sparkleCluster(c, 15, t.Accent)
+			sparkleCluster(c, 15, pal.inkMuted)
 			title := "AI 解释"
 			if a.ex.isSelection {
 				title = "AI 单行解释"
 			}
-			ui.Text(c, title).Bold().FontSize(13)
+			ui.Text(c, title).FontSize(textBody).FontWeight(weightSemibold).TextColor(pal.ink)
 			if a.ex.cached {
-				ui.Text(c, "缓存").FontSize(10).Padding(1, 6).Radius(4).
-					Background(t.Surface).TextColor(t.TextMuted)
+				// 「缓存」说的是这条解释的来源，不是状态告警 —— 一枚安静的
+				// 规范芯片就够，靠不着强调色。
+				specChip(c, pal, "缓存", ui.Transparent, statusChipH, statusChipText)
 			}
 			ui.Spacer(c)
-			if closeButton(c) {
+			if closeButton(c, pal) {
 				a.closeExplain()
 			}
 		})
-		ui.Text(c, a.ex.head).Font("monospace").FontSize(11).
-			SingleLine().TextColor(t.TextMuted)
+		ui.Text(c, a.ex.head).Font("monospace").FontSize(textCaption).
+			SingleLine().TextColor(pal.inkSubtle)
 		if a.ex.question != "" {
-			ui.Text(c, "追问: "+a.ex.question).FontSize(11).SingleLine().TextColor(t.Accent)
+			ui.Text(c, "追问: "+a.ex.question).FontSize(textCaption).
+				SingleLine().TextColor(pal.inkMuted)
 		}
 	})
 }
@@ -574,11 +563,11 @@ func (a *app) explainText(c *ui.Context, t *ui.Theme, pal palette) {
 			// 别处了（环境变量、供应商控制台）」留的路。两颗都摆出来，
 			// 设置那颗做成主按钮 —— 它才是这个错的正解。
 			if a.ex.fail.Auth {
-				if ui.PrimaryButton(c, "模型设置…").Clicked() {
+				if primaryAction(c, pal, "模型设置…", "", false).Clicked() {
 					a.openSettings()
 				}
 			}
-			if ui.Button(c, "重试").Clicked() {
+			if secondaryAction(c, pal, "重试", "", false).Clicked() {
 				a.retryExplain()
 			}
 		})
@@ -589,7 +578,7 @@ func (a *app) explainText(c *ui.Context, t *ui.Theme, pal palette) {
 		ui.Text(c, "解释代码要接一个模型，填上 API key 就能用了。").
 			FontSize(12).TextColor(t.TextMuted)
 		cardActions(c, func() {
-			if ui.PrimaryButton(c, "模型设置…").Clicked() {
+			if primaryAction(c, pal, "模型设置…", "", false).Clicked() {
 				a.openSettings()
 			}
 		})
@@ -664,16 +653,15 @@ func (a *app) explainPromptBar(c *ui.Context, pal palette) {
 	if !a.ex.isSelection {
 		return
 	}
-	t := c.Theme()
 	ui.Row(c).Shrink(0).Padding(6, 12).Gap(6).AlignItems(ui.Center).
-		Background(t.Surface).
-		BorderWidth(1, 0, 0, 0).BorderColor(pal.border).Children(func() {
+		Background(pal.surface2).
+		BorderWidth(1, 0, 0, 0).BorderColor(pal.hairline).Children(func() {
 		in := ui.TextInput(c, &a.ex.promptInput).Placeholder("输入追问或关注重点…").Grow(1)
 		if a.ex.focusPrompt {
 			in.Focus()
 			a.ex.focusPrompt = false
 		}
-		btn := ui.Button(c, "提问")
+		btn := secondaryAction(c, pal, "提问", "", false)
 		if (in.Submitted() || btn.Clicked()) && !a.ex.loading {
 			q := strings.TrimSpace(a.ex.promptInput)
 			if q != "" {
@@ -743,7 +731,7 @@ func (a *app) mdBlock(c *ui.Context, st mdStyle, b mdBlock, gap float32) {
 	switch b.kind {
 	case mdCode:
 		// 代码块有自己的底、内边距和圆角 —— 一片贴字的灰底认不出是代码块
-		ui.Box(c).Margin(gap, 0, 0, 0).Padding(7, 9).Radius(6).
+		ui.Box(c).Margin(gap, 0, 0, 0).Padding(7, 9).Radius(radiusSM).
 			Background(st.codeBg).Children(func() {
 			ui.RichText(c, ui.Span{Text: b.code, Font: st.mono, Color: st.code}).
 				FontSize(12)
@@ -760,6 +748,8 @@ func (a *app) mdBlock(c *ui.Context, st mdStyle, b mdBlock, gap float32) {
 		// 左边一条竖线，而不是行首一个「▏」字符：字符会跟着折行跑到第二行
 		// 的行首，看着像正文里混进了一个怪符号
 		ui.Row(c).Margin(gap, 0, 0, 0).AlignItems(ui.Start).Gap(8).Children(func() {
+			// 圆角取宽度的一半，竖线两端才是圆的 —— 这是几何，不是 §3 的
+			// 角 token，所以写出来而不是套一个 token。
 			ui.Box(c).Width(2).Shrink(0).Radius(1).AlignSelf(ui.Stretch).
 				Background(st.bullet.Alpha(0.4))
 			ui.RichText(c, b.spans...).Grow(1).MinWidth(0).FontSize(13)
@@ -780,7 +770,7 @@ func (a *app) explainFoot(c *ui.Context, pal palette) {
 	viewed := a.isViewed(*f)
 
 	ui.Row(c).Shrink(0).Padding(8, 12).Gap(8).AlignItems(ui.Center).
-		BorderWidth(1, 0, 0, 0).BorderColor(pal.border).Children(func() {
+		BorderWidth(1, 0, 0, 0).BorderColor(pal.hairline).Children(func() {
 		v := viewed
 		ui.Checkbox(c, &v, "已 review")
 		if v != viewed {
@@ -788,7 +778,7 @@ func (a *app) explainFoot(c *ui.Context, pal palette) {
 		}
 		ui.Spacer(c)
 		if a.ex.loading {
-			ui.Text(c, "生成中…").FontSize(11).TextColor(c.Theme().TextMuted)
+			ui.Text(c, "生成中…").FontSize(textCaption).TextColor(pal.inkSubtle)
 		}
 	})
 }

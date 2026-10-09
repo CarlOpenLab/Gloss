@@ -41,7 +41,7 @@ func (a *app) renameBranchDialog(c *ui.Context, pal palette) {
 		return
 	}
 	open := true
-	ui.Modal(c, &open, func() { a.renameBranchBody(c, pal) })
+	specModal(c, pal, &open, func() { a.renameBranchBody(c, pal) })
 	if !open {
 		a.rename = renameState{}
 	}
@@ -52,7 +52,7 @@ func (a *app) renameBranchBody(c *ui.Context, pal palette) {
 	rs := &a.rename
 
 	ui.Column(c).Width(440).Gap(12).Children(func() {
-		ui.Text(c, "重命名分支").Bold().FontSize(15)
+		ui.Text(c, "重命名分支").FontSize(textHeadline).FontWeight(weightSemibold)
 		ui.Text(c, "将 "+rs.oldName+" 改名为").FontSize(11).SingleLine().TextColor(t.TextMuted)
 
 		ui.Column(c).Gap(3).Children(func() {
@@ -70,16 +70,14 @@ func (a *app) renameBranchBody(c *ui.Context, pal palette) {
 		if msg := renameBlocker(rs); msg != "" {
 			ui.Text(c, msg).FontSize(11).TextColor(t.TextMuted)
 		}
-		failureBox(c, t, rs.err)
+		failureBox(c, pal, t, rs.err)
 
 		ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
-			if ui.Button(c, "取消").Clicked() {
+			if secondaryAction(c, pal, "取消", "", false).Clicked() {
 				a.rename = renameState{}
 				return
 			}
-			btn := ui.PrimaryButton(c, "重命名").
-				Tooltip("将 " + rs.oldName + " 重命名为 " + strings.TrimSpace(rs.newName)).
-				Disabled(renameBlocker(rs) != "" || a.op != gitrepo.OpNone)
+			btn := primaryAction(c, pal, "重命名", "将 "+rs.oldName+" 重命名为 "+strings.TrimSpace(rs.newName), renameBlocker(rs) != "" || a.op != gitrepo.OpNone)
 			if btn.Clicked() {
 				a.renameBranch()
 			}

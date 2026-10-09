@@ -31,7 +31,7 @@ func (a *app) stashDialog(c *ui.Context, pal palette) {
 		return
 	}
 	open := true
-	ui.Modal(c, &open, func() { a.stashDialogBody(c, pal) })
+	specModal(c, pal, &open, func() { a.stashDialogBody(c, pal) })
 	if !open {
 		a.stashDlg = stashState{}
 	}
@@ -42,7 +42,7 @@ func (a *app) stashDialogBody(c *ui.Context, pal palette) {
 	s := &a.stashDlg
 
 	ui.Column(c).Width(460).Gap(12).Children(func() {
-		ui.Text(c, "储藏工作区改动").Bold().FontSize(15)
+		ui.Text(c, "储藏工作区改动").FontSize(textHeadline).FontWeight(weightSemibold)
 		ui.Text(c, "将手头未提交的修改存入储藏栈，工作区与暂存区恢复干净。").
 			FontSize(11).SingleLine().TextColor(t.TextMuted)
 
@@ -62,16 +62,14 @@ func (a *app) stashDialogBody(c *ui.Context, pal palette) {
 		ui.Text(c, "勾上会把尚未 git add 的新建文件一并收进储藏；不勾则只储藏已跟踪文件的修改。").
 			FontSize(11).TextColor(t.TextMuted)
 
-		failureBox(c, t, s.err)
+		failureBox(c, pal, t, s.err)
 
 		ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
-			if ui.Button(c, "取消").Clicked() {
+			if secondaryAction(c, pal, "取消", "", false).Clicked() {
 				a.stashDlg = stashState{}
 				return
 			}
-			btn := ui.PrimaryButton(c, "保存储藏").
-				Tooltip("把当前改动保存到储藏").
-				Disabled(a.op != gitrepo.OpNone)
+			btn := primaryAction(c, pal, "保存储藏", "把当前改动保存到储藏", a.op != gitrepo.OpNone)
 			if btn.Clicked() {
 				a.saveStash()
 			}

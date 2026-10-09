@@ -186,7 +186,19 @@ func (a *app) settingsDialog(c *ui.Context, pal palette) {
 		return
 	}
 	open := true
-	ui.Modal(c, &open, func() { a.settingsBody(c, pal) })
+	ui.DialogBase(c, &open, func(back, panel *ui.Element) {
+		back.Background(ui.RGBA(0, 0, 0, 0.25))
+		// 设置窗口是最顶层的一块浮层，按 §2.1 落 Surface 4、圆角 xl(16)（§3）。
+		//
+		// 用 DialogBase 而不是 Modal：Modal 会先铺一层自己的面板（Surface 3、
+		// 圆角 10、四周 20px 内边距），再让内容画上去。设置面板自己就是一块
+		// 920×660 的卡片，套进去等于两层圆角不一致的框叠在一起 —— 截图里
+		// 看得很清楚，外圈的角比内圈的角更方。
+		panel.Width(920).Height(660).Radius(radiusXL).
+			Background(pal.surface4).Border(1, pal.hairline).
+			Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.24))
+		a.settingsBody(c, pal)
+	})
 	if !open {
 		a.settingsOn = false
 	}
@@ -194,9 +206,10 @@ func (a *app) settingsDialog(c *ui.Context, pal palette) {
 
 // settingsSidebarItem 绘制 Linear 风格侧边栏导航条目。
 func settingsSidebarItem(c *ui.Context, t *ui.Theme, label string, icon *ui.SVG, selected bool, onClick func()) {
-	btn := ui.ButtonBase(c).Height(32).FillWidth().Radius(6).Padding(0, 10).
+	btn := ui.ButtonBase(c).Height(32).FillWidth().Radius(radiusSM).Padding(0, 10).
 		Cursor(ui.CursorPointer).Label(label)
 
+	// 选中态用 Surface 阶梯（和主侧栏的分组条目同一档），强调色只留给图标……
 	bg := ui.Transparent
 	fg := t.TextMuted
 	if selected {
@@ -230,23 +243,25 @@ func settingsSidebarItem(c *ui.Context, t *ui.Theme, label string, icon *ui.SVG,
 // settingsBody 呈现参考 Linear/Cursor 设计风格的双栏清爽偏好设置面板。
 func (a *app) settingsBody(c *ui.Context, pal palette) {
 	t := c.Theme()
-	ui.Row(c).Width(920).Height(660).Radius(12).
-		Background(t.Background).Border(1, pal.border).Children(func() {
+	ui.Row(c).FillWidth().FillHeight().Children(func() {
 		// 1. 左侧极简分组导航栏 (Sidebar)
-		ui.Column(c).Width(200).FillHeight().Background(t.Surface).
-			BorderWidth(0, 1, 0, 0).BorderColor(pal.border).
+		ui.Column(c).Width(200).FillHeight().Background(pal.surface1).
+			BorderWidth(0, 1, 0, 0).BorderColor(pal.hairline).
 			Padding(16, 12).Gap(4).Children(func() {
 			// 标题区
 			ui.Row(c).AlignItems(ui.Center).Gap(8).Padding(4, 8, 14, 8).Children(func() {
-				ui.Box(c).Size(22, 22).Radius(5).Background(t.Accent.Alpha(0.12)).
+				// 图标底板是纯装饰：一块中性的方砖，不借用强调色 ——
+				// 它周围没有「选中」也没有「可点」的意思（§5 禁止非语义彩色修饰）。
+				ui.Box(c).Size(22, 22).Radius(radiusSM).Background(pal.surface2).
+					Border(1, pal.hairline).
 					AlignItems(ui.Center).Justify(ui.Center).Children(func() {
-					drawIcon(c, iconSettings, 13, t.Accent)
+					drawIcon(c, iconSettings, 13, pal.inkMuted)
 				})
-				ui.Text(c, "Gloss "+T("设置", "Settings")).Bold().FontSize(13).TextColor(t.Text)
+				ui.Text(c, "Gloss "+T("设置", "Settings")).FontSize(textBody).FontWeight(weightSemibold).TextColor(pal.ink)
 			})
 
 			// 分组 1: 设置分类
-			ui.Text(c, T("设置", "Settings")).FontSize(11).Bold().TextColor(t.TextMuted.Alpha(0.8)).
+			ui.Text(c, T("设置", "Settings")).FontSize(textCaption).FontWeight(weightSemibold).TextColor(pal.inkSubtle).
 				Padding(6, 8, 2, 8)
 
 			settingsSidebarItem(c, t, T("通用偏好", "Preferences"), iconPalette, a.settingsTab == settingsTabGeneral, func() {
@@ -258,7 +273,7 @@ func (a *app) settingsBody(c *ui.Context, pal palette) {
 			})
 
 			// 分组 2: 系统
-			ui.Text(c, T("系统", "System")).FontSize(11).Bold().TextColor(t.TextMuted.Alpha(0.8)).
+			ui.Text(c, T("系统", "System")).FontSize(textCaption).FontWeight(weightSemibold).TextColor(pal.inkSubtle).
 				Padding(12, 8, 2, 8)
 
 			settingsSidebarItem(c, t, T("关于 Gloss", "About Gloss"), iconEye, a.settingsTab == settingsTabAbout, func() {
@@ -269,12 +284,12 @@ func (a *app) settingsBody(c *ui.Context, pal palette) {
 
 			// 底部版本信息
 			ui.Row(c).Padding(8, 8).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "Gloss v1.0.0").FontSize(10.5).TextColor(t.TextMuted.Alpha(0.6))
+				ui.Text(c, "Gloss v1.0.0").FontSize(textCaption).TextColor(pal.inkTertiary)
 			})
 		})
 
 		// 2. 右侧主内容区 (Main Content Pane)
-		ui.Column(c).Grow(1).MinWidth(0).FillHeight().Background(t.Background).Children(func() {
+		ui.Column(c).Grow(1).MinWidth(0).FillHeight().Background(pal.surface3).Children(func() {
 			// 顶部标题栏
 			ui.Row(c).Height(50).AlignItems(ui.Center).Padding(0, 20, 0, 28).FillWidth().Children(func() {
 				ui.Column(c).Gap(1).Children(func() {
@@ -289,10 +304,10 @@ func (a *app) settingsBody(c *ui.Context, pal palette) {
 						desc = T("原生 macOS 智能 Git 客户端", "Native macOS Git GUI with AI-powered diff review")
 					}
 					ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
-						ui.Text(c, title).Bold().FontSize(16).TextColor(t.Text)
+						ui.Text(c, title).FontSize(textHeadline).FontWeight(weightSemibold).TextColor(pal.ink)
 						if a.settingsTab == settingsTabModels && a.magpieOnline {
-							ui.Box(c).Padding(2, 7).Radius(99).Background(t.Success.Alpha(0.12)).Children(func() {
-								ui.Text(c, T("Magpie 在线", "Magpie Online")).FontSize(10.5).Bold().TextColor(t.Success)
+							ui.Box(c).Padding(2, 7).Radius(radiusPill).Background(pal.surface2).Border(1, pal.hairline).Children(func() {
+								ui.Text(c, T("Magpie 在线", "Magpie Online")).FontSize(textCaption).FontWeight(weightMedium).TextColor(t.Success)
 							})
 						}
 					})
@@ -301,13 +316,13 @@ func (a *app) settingsBody(c *ui.Context, pal palette) {
 
 				ui.Spacer(c)
 
-				if closeButton(c) {
+				if closeButton(c, pal) {
 					a.settingsOn = false
 				}
 			})
 
 			// 顶部分界线
-			ui.Box(c).Height(1).FillWidth().Background(pal.border)
+			ui.Box(c).Height(1).FillWidth().Background(pal.hairline)
 
 			// 主体内容区（独立的填满空间，由各 Pane 内部全幅滚动）
 			ui.Box(c).Grow(1).FillWidth().MinHeight(0).Children(func() {
@@ -321,11 +336,16 @@ func (a *app) settingsBody(c *ui.Context, pal palette) {
 			})
 
 			// 底部分界线
-			ui.Box(c).Height(1).FillWidth().Background(pal.border)
+			ui.Box(c).Height(1).FillWidth().Background(pal.hairline)
 
-			// 底部操作栏（固定高度，与上部完全解耦，永不发生溢出重叠）
+			// 底部操作栏（固定高度，与上部完全解耦，永不发生溢出重叠）。
+			//
+			// 不铺自己的底色：这颗条和上面的内容区只差一档明度，铺了也看不出来，
+			// 反而把「取消」压住 —— 次级按钮按 §4.1 就是 Surface 1，底下若是
+			// 同一档的深灰，那颗按钮就只剩一道发丝边，像在条上挖了个洞。让它
+			// 直接坐在面板底（Surface 4）上，靠上面那道发丝线分区就够了。
 			ui.Row(c).Height(48).Shrink(0).AlignItems(ui.Center).Padding(0, 20, 0, 28).
-				FillWidth().Background(t.Surface).Children(func() {
+				FillWidth().Children(func() {
 				ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
 					drawIcon(c, iconShield, 13, t.TextMuted)
 					ui.Text(c, T("设置存储于本地配置文件，所有请求由本机直连服务端", "Preferences stored locally; requests connect directly from this device")).
@@ -335,10 +355,10 @@ func (a *app) settingsBody(c *ui.Context, pal palette) {
 				ui.Spacer(c)
 
 				ui.Row(c).Gap(10).Children(func() {
-					if ui.Button(c, T("取消", "Cancel")).Clicked() {
+					if secondaryAction(c, pal, T("取消", "Cancel"), "", false).Clicked() {
 						a.settingsOn = false
 					}
-					if ui.PrimaryButton(c, T("保存", "Save")).Clicked() {
+					if primaryAction(c, pal, T("保存", "Save"), "", false).Clicked() {
 						a.applySettings()
 					}
 				})
@@ -357,7 +377,7 @@ func (a *app) generalSettingsPane(c *ui.Context, pal palette) {
 			ui.Column(c).Gap(10).FillWidth().Children(func() {
 				ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
 					drawIcon(c, iconMonitor, 15, t.Accent)
-					ui.Text(c, T("外观主题", "Appearance Theme")).Bold().FontSize(13).TextColor(t.Text)
+					ui.Text(c, T("外观主题", "Appearance Theme")).FontSize(textBody).FontWeight(weightSemibold).TextColor(pal.ink)
 				})
 				ui.Text(c, T("选择 Gloss 界面的视觉色彩模式，支持随系统自动切换", "Select color scheme for Gloss, or follow system appearance automatically")).
 					FontSize(11).TextColor(t.TextMuted)
@@ -377,18 +397,21 @@ func (a *app) generalSettingsPane(c *ui.Context, pal palette) {
 					for _, tc := range themeCards {
 						tc := tc
 						selected := a.themeMode == tc.id
-						card := ui.ButtonBase(c).Grow(1).Height(62).Radius(8).Padding(8, 12).
+						card := ui.ButtonBase(c).Grow(1).Height(62).Radius(radiusMD).Padding(8, 12).
 							Cursor(ui.CursorPointer).Label(tc.label)
 
-						border := t.Border.Alpha(0.6)
-						bg := t.Surface
+						// 选中态原来把底、边、图标、圆点四处都染成强调色。
+						// 现在只留两条：边框和图标 —— 「选中的是这个」说两遍
+						// 就够了，底上的那层淡蓝只是把卡片糊成一块。
+						border := pal.hairlineStrong
+						bg := pal.surface1
 						if selected {
 							border = t.Accent
-							bg = t.Accent.Alpha(0.10)
+							bg = pal.selection
 						} else if card.Hovered() {
-							bg = t.SurfaceHover
+							bg = pal.surface3
 						}
-						card.Border(1.5, border).Background(bg)
+						card.Border(1, border).Background(bg)
 						fadeColors(card)
 
 						card.Children(func() {
@@ -400,12 +423,10 @@ func (a *app) generalSettingsPane(c *ui.Context, pal palette) {
 								drawIcon(c, tc.icon, 18, col)
 								ui.Column(c).Gap(2).Grow(1).Children(func() {
 									ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
-										ui.Text(c, tc.label).Bold().FontSize(12).TextColor(t.Text)
-										if selected {
-											ui.Box(c).Size(6, 6).Radius(3).Background(t.Accent)
-										}
+										ui.Text(c, tc.label).FontSize(textBodySM).
+											FontWeight(weightSemibold).TextColor(pal.ink)
 									})
-									ui.Text(c, tc.desc).FontSize(10.5).TextColor(t.TextMuted).SingleLine()
+									ui.Text(c, tc.desc).FontSize(textCaption).TextColor(pal.inkSubtle).SingleLine()
 								})
 							})
 						})
@@ -417,13 +438,13 @@ func (a *app) generalSettingsPane(c *ui.Context, pal palette) {
 				})
 			})
 
-			ui.Box(c).Height(1).FillWidth().Background(t.Border.Alpha(0.5))
+			ui.Box(c).Height(1).FillWidth().Background(pal.hairline)
 
 			// 2. 应用图标 (Application Icon)
 			ui.Column(c).Gap(10).FillWidth().Children(func() {
 				ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
 					drawIcon(c, iconAppWindow, 15, t.Accent)
-					ui.Text(c, T("应用图标", "Application Icon")).Bold().FontSize(13).TextColor(t.Text)
+					ui.Text(c, T("应用图标", "Application Icon")).FontSize(textBody).FontWeight(weightSemibold).TextColor(pal.ink)
 				})
 				ui.Text(c, T("选择 Gloss 在 macOS 坞栏（Dock）及系统的极简图标，免重启即时生效", "Choose minimalist icon style for macOS Dock; applies immediately")).
 					FontSize(11).TextColor(t.TextMuted)
@@ -443,38 +464,39 @@ func (a *app) generalSettingsPane(c *ui.Context, pal palette) {
 					for _, ic := range iconCards {
 						ic := ic
 						selected := a.appIcon == ic.id || (a.appIcon == "" && ic.id == "black")
-						card := ui.ButtonBase(c).Grow(1).Height(64).Radius(8).Padding(8, 12).
+						card := ui.ButtonBase(c).Grow(1).Height(64).Radius(radiusMD).Padding(8, 12).
 							Cursor(ui.CursorPointer).Label(ic.label)
 
-						border := t.Border.Alpha(0.6)
-						bg := t.Surface
+						// 选中态原来把底、边、图标、圆点四处都染成强调色。
+						// 现在只留两条：边框和图标 —— 「选中的是这个」说两遍
+						// 就够了，底上的那层淡蓝只是把卡片糊成一块。
+						border := pal.hairlineStrong
+						bg := pal.surface1
 						if selected {
 							border = t.Accent
-							bg = t.Accent.Alpha(0.10)
+							bg = pal.selection
 						} else if card.Hovered() {
-							bg = t.SurfaceHover
+							bg = pal.surface3
 						}
-						card.Border(1.5, border).Background(bg)
+						card.Border(1, border).Background(bg)
 						fadeColors(card)
 
 						card.Children(func() {
 							ui.Row(c).AlignItems(ui.Center).Gap(12).Fill().Children(func() {
 								if ic.bitmap != nil {
-									ui.Box(c).Size(40, 40).Radius(8).Clip().Children(func() {
+									ui.Box(c).Size(40, 40).Radius(radiusMD).Clip().Children(func() {
 										ui.Image(c, ic.bitmap).Size(40, 40)
 									})
 								} else {
-									ui.Box(c).Size(40, 40).Radius(8).Background(t.SurfaceHover)
+									ui.Box(c).Size(40, 40).Radius(radiusMD).Background(pal.surface3)
 								}
 
 								ui.Column(c).Gap(2).Grow(1).Children(func() {
 									ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
-										ui.Text(c, ic.label).Bold().FontSize(12).TextColor(t.Text)
-										if selected {
-											ui.Box(c).Size(6, 6).Radius(3).Background(t.Accent)
-										}
+										ui.Text(c, ic.label).FontSize(textBodySM).
+											FontWeight(weightSemibold).TextColor(pal.ink)
 									})
-									ui.Text(c, ic.desc).FontSize(10.5).TextColor(t.TextMuted).SingleLine()
+									ui.Text(c, ic.desc).FontSize(textCaption).TextColor(pal.inkSubtle).SingleLine()
 								})
 							})
 						})
@@ -486,13 +508,13 @@ func (a *app) generalSettingsPane(c *ui.Context, pal palette) {
 				})
 			})
 
-			ui.Box(c).Height(1).FillWidth().Background(t.Border.Alpha(0.5))
+			ui.Box(c).Height(1).FillWidth().Background(pal.hairline)
 
 			// 3. 界面语言
 			ui.Column(c).Gap(10).FillWidth().Children(func() {
 				ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
 					drawIcon(c, iconGlobe, 15, t.Accent)
-					ui.Text(c, T("界面语言", "Display Language")).Bold().FontSize(13).TextColor(t.Text)
+					ui.Text(c, T("界面语言", "Display Language")).FontSize(textBody).FontWeight(weightSemibold).TextColor(pal.ink)
 				})
 				ui.Text(c, T("选择界面展示所使用的语言（切换后即时生效）", "Choose display language for the application (applies immediately)")).
 					FontSize(11).TextColor(t.TextMuted)
@@ -510,30 +532,31 @@ func (a *app) generalSettingsPane(c *ui.Context, pal palette) {
 					for _, lc := range langCards {
 						lc := lc
 						selected := a.locale == lc.id
-						card := ui.ButtonBase(c).Grow(1).Height(54).Radius(8).Padding(8, 14).
+						card := ui.ButtonBase(c).Grow(1).Height(54).Radius(radiusMD).Padding(8, 14).
 							Cursor(ui.CursorPointer).Label(lc.label)
 
-						border := t.Border.Alpha(0.6)
-						bg := t.Surface
+						// 选中态原来把底、边、图标、圆点四处都染成强调色。
+						// 现在只留两条：边框和图标 —— 「选中的是这个」说两遍
+						// 就够了，底上的那层淡蓝只是把卡片糊成一块。
+						border := pal.hairlineStrong
+						bg := pal.surface1
 						if selected {
 							border = t.Accent
-							bg = t.Accent.Alpha(0.10)
+							bg = pal.selection
 						} else if card.Hovered() {
-							bg = t.SurfaceHover
+							bg = pal.surface3
 						}
-						card.Border(1.5, border).Background(bg)
+						card.Border(1, border).Background(bg)
 						fadeColors(card)
 
 						card.Children(func() {
 							ui.Row(c).AlignItems(ui.Center).Gap(10).Fill().Children(func() {
 								ui.Column(c).Gap(2).Grow(1).Children(func() {
 									ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
-										ui.Text(c, lc.label).Bold().FontSize(12).TextColor(t.Text)
-										if selected {
-											ui.Box(c).Size(6, 6).Radius(3).Background(t.Accent)
-										}
+										ui.Text(c, lc.label).FontSize(textBodySM).
+											FontWeight(weightSemibold).TextColor(pal.ink)
 									})
-									ui.Text(c, lc.desc).FontSize(10.5).TextColor(t.TextMuted)
+									ui.Text(c, lc.desc).FontSize(textCaption).TextColor(pal.inkSubtle)
 								})
 							})
 						})
@@ -545,53 +568,55 @@ func (a *app) generalSettingsPane(c *ui.Context, pal palette) {
 				})
 			})
 
-			ui.Box(c).Height(1).FillWidth().Background(t.Border.Alpha(0.5))
+			ui.Box(c).Height(1).FillWidth().Background(pal.hairline)
 
 			// 4. Diff 代码字号与视图偏好
 			ui.Column(c).Gap(10).FillWidth().Children(func() {
-				ui.Text(c, T("Diff 与代码视图", "Diff & Code View")).Bold().FontSize(13).TextColor(t.Text)
+				ui.Text(c, T("Diff 与代码视图", "Diff & Code View")).FontSize(textBody).FontWeight(weightSemibold).TextColor(pal.ink)
 
 				ui.Row(c).AlignItems(ui.Center).Gap(12).FillWidth().Children(func() {
 					ui.Column(c).Gap(2).Grow(1).Children(func() {
-						ui.Text(c, T("代码字体大小", "Code Font Size")).FontSize(11.5).Bold().TextColor(t.Text)
+						ui.Text(c, T("代码字体大小", "Code Font Size")).FontSize(textBodySM).FontWeight(weightMedium).TextColor(pal.ink)
 						sizeVal := a.codeSizeValue()
 						sizeLabel := Tf("%.1f px", "%.1f px", sizeVal)
 						if a.codeSize == 0 {
 							sizeLabel = Tf("%.1f px (默认)", "%.1f px (Default)", sizeVal)
 						}
-						ui.Text(c, sizeLabel).FontSize(10.5).TextColor(t.TextMuted)
+						ui.Text(c, sizeLabel).FontSize(textCaption).TextColor(pal.inkSubtle)
 					})
 
 					ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-						minusBtn := ui.ButtonBase(c).Size(28, 28).Radius(5).Background(t.Surface).Border(1, t.Border).
+						minusBtn := ui.ButtonBase(c).Size(28, 28).Radius(radiusSM).Background(pal.surface2).Border(1, pal.hairlineStrong).
 							AlignItems(ui.Center).Justify(ui.Center).Cursor(ui.CursorPointer).Label("−").Tooltip(T("缩小代码字号 ⌘−", "Zoom Out ⌘-"))
 						if minusBtn.Hovered() {
-							minusBtn.Background(t.SurfaceHover)
+							minusBtn.Background(pal.surface3)
 						}
 						fadeColors(minusBtn)
-						minusBtn.Children(func() { ui.Text(c, "−").FontSize(13).Bold().TextColor(t.Text) })
+						minusBtn.Children(func() { ui.Text(c, "−").FontSize(textBody).TextColor(pal.ink) })
 						if minusBtn.Clicked() {
 							a.setCodeSize(a.codeSizeValue() - codeSizeStep)
 						}
 
-						plusBtn := ui.ButtonBase(c).Size(28, 28).Radius(5).Background(t.Surface).Border(1, t.Border).
+						plusBtn := ui.ButtonBase(c).Size(28, 28).Radius(radiusSM).Background(pal.surface2).Border(1, pal.hairlineStrong).
 							AlignItems(ui.Center).Justify(ui.Center).Cursor(ui.CursorPointer).Label("+").Tooltip(T("放大代码字号 ⌘+", "Zoom In ⌘+"))
 						if plusBtn.Hovered() {
-							plusBtn.Background(t.SurfaceHover)
+							plusBtn.Background(pal.surface3)
 						}
 						fadeColors(plusBtn)
-						plusBtn.Children(func() { ui.Text(c, "+").FontSize(13).Bold().TextColor(t.Text) })
+						plusBtn.Children(func() { ui.Text(c, "+").FontSize(textBody).TextColor(pal.ink) })
 						if plusBtn.Clicked() {
 							a.setCodeSize(a.codeSizeValue() + codeSizeStep)
 						}
 
-						resetBtn := ui.ButtonBase(c).Height(28).Padding(0, 10).Radius(5).Background(t.Surface).Border(1, t.Border).
+						resetBtn := ui.ButtonBase(c).Height(28).Padding(0, 10).Radius(radiusSM).Background(pal.surface2).Border(1, pal.hairlineStrong).
 							AlignItems(ui.Center).Justify(ui.Center).Cursor(ui.CursorPointer).Label(T("重置", "Reset")).Tooltip(T("恢复默认字号 ⌘0", "Actual Size ⌘0"))
 						if resetBtn.Hovered() {
-							resetBtn.Background(t.SurfaceHover)
+							resetBtn.Background(pal.surface3)
 						}
 						fadeColors(resetBtn)
-						resetBtn.Children(func() { ui.Text(c, T("重置", "Reset")).FontSize(11).TextColor(t.TextMuted) })
+						resetBtn.Children(func() {
+							ui.Text(c, T("重置", "Reset")).FontSize(textButton).FontWeight(weightMedium).TextColor(pal.inkMuted)
+						})
 						if resetBtn.Clicked() {
 							a.setCodeSize(0)
 						}
@@ -604,7 +629,6 @@ func (a *app) generalSettingsPane(c *ui.Context, pal palette) {
 
 // aboutSettingsPane 呈现关于 Gloss 的产品信息、版本与核心特性。
 func (a *app) aboutSettingsPane(c *ui.Context, pal palette) {
-	t := c.Theme()
 	bmBlack, bmWhite := getIconBitmaps()
 	currentBm := bmBlack
 	if a.appIcon == "white" {
@@ -616,25 +640,27 @@ func (a *app) aboutSettingsPane(c *ui.Context, pal palette) {
 			// 顶部品牌区
 			ui.Row(c).AlignItems(ui.Center).Gap(16).Children(func() {
 				if currentBm != nil {
-					ui.Box(c).Size(64, 64).Radius(14).Clip().Children(func() {
+					ui.Box(c).Size(64, 64).Radius(radiusLG).Clip().Children(func() {
 						ui.Image(c, currentBm).Size(64, 64)
 					})
 				} else {
-					ui.Box(c).Size(64, 64).Radius(14).Background(t.SurfaceHover)
+					ui.Box(c).Size(64, 64).Radius(radiusLG).Background(pal.surface2)
 				}
 				ui.Column(c).Gap(4).Children(func() {
 					ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-						ui.Text(c, "Gloss").Bold().FontSize(20).TextColor(t.Text)
-						ui.Box(c).Padding(2, 8).Radius(99).Background(t.SurfaceHover).Children(func() {
-							ui.Text(c, "v1.0.0").FontSize(11).Bold().TextColor(t.TextMuted)
+						ui.Text(c, "Gloss").FontSize(textDisplay).FontWeight(weightSemibold).TextColor(pal.ink)
+						ui.Box(c).Padding(2, 8).Radius(radiusPill).Background(pal.surface2).
+							Border(1, pal.hairline).Children(func() {
+							ui.Text(c, "v1.0.0").FontSize(textCaption).FontWeight(weightMedium).
+								TextColor(pal.inkSubtle)
 						})
 					})
 					ui.Text(c, T("原生 macOS 智能 Git 客户端", "Native macOS Git GUI with AI-powered diff review")).
-						FontSize(12).TextColor(t.TextMuted)
+						FontSize(textBodySM).TextColor(pal.inkSubtle)
 				})
 			})
 
-			ui.Box(c).Height(1).FillWidth().Background(t.Border.Alpha(0.5))
+			ui.Box(c).Height(1).FillWidth().Background(pal.hairline)
 
 			// 特性卡片列表
 			ui.Column(c).Gap(10).FillWidth().Children(func() {
@@ -661,55 +687,57 @@ func (a *app) aboutSettingsPane(c *ui.Context, pal palette) {
 				}
 
 				for _, f := range features {
-					ui.Row(c).Padding(10, 14).Radius(8).Background(t.Surface).Border(1, t.Border.Alpha(0.5)).
+					ui.Row(c).Padding(10, 14).Radius(radiusMD).Background(pal.surface2).
+						Border(1, pal.hairline).
 						AlignItems(ui.Center).Gap(12).FillWidth().Children(func() {
-						ui.Box(c).Size(28, 28).Radius(6).Background(t.Accent.Alpha(0.10)).
+						// 装饰性图标底板同样去色：三张卡片并排，三个蓝方块
+						// 就成了一种「彩色的墙纸」。
+						ui.Box(c).Size(28, 28).Radius(radiusSM).Background(pal.surface3).
+							Border(1, pal.hairline).
 							AlignItems(ui.Center).Justify(ui.Center).Children(func() {
-							drawIcon(c, f.icon, 15, t.Accent)
+							drawIcon(c, f.icon, 15, pal.inkMuted)
 						})
 						ui.Column(c).Gap(2).Grow(1).Children(func() {
-							ui.Text(c, f.title).Bold().FontSize(12).TextColor(t.Text)
-							ui.Text(c, f.desc).FontSize(11).TextColor(t.TextMuted)
+							ui.Text(c, f.title).FontSize(textBodySM).FontWeight(weightSemibold).
+								TextColor(pal.ink)
+							ui.Text(c, f.desc).FontSize(textCaption).TextColor(pal.inkSubtle)
 						})
 					})
 				}
 			})
 
-			ui.Box(c).Height(1).FillWidth().Background(t.Border.Alpha(0.5))
+			ui.Box(c).Height(1).FillWidth().Background(pal.hairline)
 
 			// 底部版权与声明
 			ui.Row(c).AlignItems(ui.Center).FillWidth().Children(func() {
 				ui.Text(c, "Copyright © 2026 CarlOpenLab. Released under the MIT License.").
-					FontSize(10.5).TextColor(t.TextMuted.Alpha(0.7))
+					FontSize(textCaption).TextColor(pal.inkTertiary)
 			})
 		})
 	})
 }
 
-
 // settingSection 绘制参考 Linear/Cursor 的分组设置卡片外框。
 func settingSection(c *ui.Context, pal palette, title, desc string, content func()) {
-	t := c.Theme()
 	ui.Column(c).Gap(6).FillWidth().Children(func() {
 		ui.Column(c).Gap(1).Children(func() {
-			ui.Text(c, title).Bold().FontSize(12.5).TextColor(t.Text)
+			ui.Text(c, title).FontSize(textBodySM).FontWeight(weightSemibold).TextColor(pal.ink)
 			if desc != "" {
-				ui.Text(c, desc).FontSize(10.5).TextColor(t.TextMuted)
+				ui.Text(c, desc).FontSize(textCaption).TextColor(pal.inkSubtle)
 			}
 		})
-		ui.Column(c).Radius(8).Background(t.Surface).Border(1, pal.border).
+		ui.Column(c).Radius(radiusMD).Background(pal.surface2).Border(1, pal.hairline).
 			FillWidth().Children(content)
 	})
 }
 
 // settingRow 绘制分组卡片内部的单行设置项（左侧标题说明，右侧控件）。
-func settingRow(c *ui.Context, label, sub string, control func()) {
-	t := c.Theme()
+func settingRow(c *ui.Context, pal palette, label, sub string, control func()) {
 	ui.Row(c).Padding(7, 14).AlignItems(ui.Center).FillWidth().Children(func() {
 		ui.Column(c).Gap(1).Grow(1).MinWidth(0).Children(func() {
-			ui.Text(c, label).Bold().FontSize(12).TextColor(t.Text)
+			ui.Text(c, label).FontSize(textBodySM).TextColor(pal.ink)
 			if sub != "" {
-				ui.Text(c, sub).FontSize(10.5).TextColor(t.TextMuted)
+				ui.Text(c, sub).FontSize(textCaption).TextColor(pal.inkSubtle)
 			}
 		})
 		control()
@@ -718,7 +746,7 @@ func settingRow(c *ui.Context, label, sub string, control func()) {
 
 // settingDivider 绘制卡片内行与行之间的发丝微细分割线。
 func settingDivider(c *ui.Context, pal palette) {
-	ui.Box(c).Height(1).FillWidth().Background(pal.border.Alpha(0.6))
+	ui.Box(c).Height(1).FillWidth().Background(pal.hairline)
 }
 
 // modelsSettingsPane 呈现对标 Linear/Cursor 的清爽分组卡片式模型设置页面。
@@ -752,10 +780,10 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 					ui.Row(c).Padding(7, 14).AlignItems(ui.Center).FillWidth().Children(func() {
 						ui.Column(c).Gap(1).Shrink(0).Children(func() {
 							ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
-								ui.Text(c, T("已配置服务商", "Configured Providers")).Bold().FontSize(12).TextColor(t.Text)
-								ui.Text(c, "("+providerLabel(activeP)+")").FontSize(11).TextColor(t.Accent)
+								ui.Text(c, T("已配置服务商", "Configured Providers")).FontSize(textBodySM).FontWeight(weightMedium).TextColor(pal.ink)
+								ui.Text(c, "("+providerLabel(activeP)+")").FontSize(textCaption).TextColor(pal.inkSubtle)
 							})
-							ui.Text(c, T("点击切换编辑项，支持一键生效或删除", "Select provider to edit, activate, or delete")).FontSize(10.5).TextColor(t.TextMuted)
+							ui.Text(c, T("点击切换编辑项，支持一键生效或删除", "Select provider to edit, activate, or delete")).FontSize(textCaption).TextColor(pal.inkSubtle)
 						})
 						ui.Spacer(c)
 						ui.Row(c).Gap(6).AlignItems(ui.Center).Wrap().Children(func() {
@@ -765,28 +793,33 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 								selected := i == a.editIdx
 								isActive := i == a.editCfg.Active
 
-								chip := ui.ButtonBase(c).Height(26).Padding(0, 10).Radius(6).
+								chip := ui.ButtonBase(c).Height(26).Padding(0, 10).Radius(radiusSM).
 									AlignItems(ui.Center).Gap(5).Cursor(ui.CursorPointer).Label(providerLabel(*curr))
-								bg := t.Surface
-								border := t.Border.Alpha(0.6)
+								// 两件事要在一枚芯片上说清楚：哪一枚正在编辑（选中）、
+								// 哪一枚在生效（圆点）。原来两者都用强调色，并排时
+								// 分不出谁是谁 —— 现在只有「生效」那枚带圆点。
+								bg := pal.surface2
+								border := pal.hairlineStrong
 								if selected {
-									bg = t.Accent.Alpha(0.12)
-									border = t.Accent.Alpha(0.4)
+									bg = pal.selection
+									border = pal.hairlineTertiary
 								} else if chip.Hovered() {
-									bg = t.SurfaceHover
+									bg = pal.surface3
 								}
 								chip.Background(bg).Border(1, border)
 								fadeColors(chip)
 
 								chip.Children(func() {
 									if isActive {
-										ui.Box(c).Size(6, 6).Radius(3).Background(t.Accent)
+										ui.Box(c).Size(chipDot, chipDot).Shrink(0).Radius(chipDot / 2).
+											Background(pal.laneColor(0))
 									}
-									txtCol := t.TextMuted
+									txtCol := pal.inkMuted
 									if selected {
-										txtCol = t.Accent
+										txtCol = pal.ink
 									}
-									ui.Text(c, providerLabel(*curr)).Bold().FontSize(11.5).TextColor(txtCol)
+									ui.Text(c, providerLabel(*curr)).FontSize(textButton).
+										FontWeight(weightMedium).TextColor(txtCol)
 								})
 								if chip.Clicked() {
 									a.editIdx = i
@@ -794,15 +827,16 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 							}
 
 							if a.editIdx != a.editCfg.Active {
-								useBtn := ui.ButtonBase(c).Height(26).Padding(0, 10).Radius(6).
-									Background(t.SurfaceHover).Border(1, t.Border).Cursor(ui.CursorPointer).
+								useBtn := ui.ButtonBase(c).Height(26).Padding(0, 10).Radius(radiusSM).
+									Background(pal.surface2).Border(1, pal.hairlineStrong).Cursor(ui.CursorPointer).
 									Label(T("设为当前生效", "Set Active"))
 								if useBtn.Hovered() {
-									useBtn.Background(t.SurfacePressed)
+									useBtn.Background(pal.surface3)
 								}
 								fadeColors(useBtn)
 								useBtn.Children(func() {
-									ui.Text(c, T("设为当前生效", "Set Active")).FontSize(11).TextColor(t.Text)
+									ui.Text(c, T("设为当前生效", "Set Active")).FontSize(textButton).
+										FontWeight(weightMedium).TextColor(pal.ink)
 								})
 								if useBtn.Clicked() {
 									a.editCfg.Active = a.editIdx
@@ -810,9 +844,9 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 							}
 
 							if len(a.editCfg.Providers) > 1 {
-								delBtn := ui.ButtonBase(c).Height(26).Padding(0, 8).Radius(6).
+								delBtn := ui.ButtonBase(c).Height(26).Padding(0, 8).Radius(radiusSM).
 									AlignItems(ui.Center).Gap(4).Background(ui.Transparent).
-									Border(1, t.Border.Alpha(0.6)).Cursor(ui.CursorPointer).
+									Border(1, pal.hairlineStrong).Cursor(ui.CursorPointer).
 									Label(T("删除", "Delete")).Tooltip(T("删除当前选中的服务商", "Delete provider"))
 								if delBtn.Hovered() {
 									delBtn.Background(t.Danger.Alpha(0.12)).Border(1, t.Danger.Alpha(0.3))
@@ -820,7 +854,8 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 								fadeColors(delBtn)
 								delBtn.Children(func() {
 									drawIcon(c, iconTrash, 12, t.Danger)
-									ui.Text(c, T("删除", "Delete")).FontSize(11).TextColor(t.Danger)
+									ui.Text(c, T("删除", "Delete")).FontSize(textButton).
+										FontWeight(weightMedium).TextColor(t.Danger)
 								})
 								if delBtn.Clicked() {
 									a.removeProvider(a.editIdx)
@@ -834,9 +869,9 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 					// 行 2: 快捷添加常用预设
 					ui.Column(c).Padding(7, 14).Gap(6).FillWidth().Children(func() {
 						ui.Row(c).AlignItems(ui.Center).Children(func() {
-							ui.Text(c, T("快捷添加预设", "Quick-Add Presets")).Bold().FontSize(12).TextColor(t.Text)
+							ui.Text(c, T("快捷添加预设", "Quick-Add Presets")).FontSize(textBodySM).FontWeight(weightMedium).TextColor(pal.ink)
 							ui.Spacer(c)
-							ui.Text(c, T("点击一键填入常用服务商模板", "Click to quickly add provider template")).FontSize(10.5).TextColor(t.TextMuted)
+							ui.Text(c, T("点击一键填入常用服务商模板", "Click to quickly add provider template")).FontSize(textCaption).TextColor(pal.inkSubtle)
 						})
 
 						ui.Row(c).Gap(6).Wrap().FillWidth().Children(func() {
@@ -845,15 +880,15 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 								existingIdx := findExistingPreset(a.editCfg.Providers, ps)
 								isAdded := existingIdx >= 0
 
-								btn := ui.ButtonBase(c).Height(26).Padding(0, 8).Radius(6).
+								btn := ui.ButtonBase(c).Height(26).Padding(0, 8).Radius(radiusSM).
 									AlignItems(ui.Center).Gap(4).Cursor(ui.CursorPointer).Label(ps.Label)
-								bg := t.Surface
-								border := t.Border.Alpha(0.6)
+								bg := pal.surface2
+								border := pal.hairlineStrong
 								if isAdded {
-									bg = t.SurfaceHover.Alpha(0.6)
+									bg = pal.surface1
 								} else if btn.Hovered() {
-									bg = t.SurfaceHover
-									border = t.Border
+									bg = pal.surface3
+									border = pal.hairlineTertiary
 								}
 								btn.Background(bg).Border(1, border)
 								fadeColors(btn)
@@ -862,16 +897,19 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 									if isAdded {
 										drawIcon(c, iconCheck, 11, t.Success)
 									} else {
-										ui.Text(c, "+").Bold().FontSize(11).TextColor(t.Accent)
+										ui.Text(c, "+").FontSize(textCaption).TextColor(pal.inkMuted)
 									}
-									ui.Text(c, ps.Label).FontSize(11).TextColor(t.Text).SingleLine()
+									ui.Text(c, ps.Label).FontSize(textCaption).TextColor(pal.ink).SingleLine()
 									if isAdded {
-										ui.Box(c).Padding(1, 4).Radius(3).Background(t.Text.Alpha(0.06)).Children(func() {
-											ui.Text(c, T("已添加", "Added")).FontSize(9).TextColor(t.TextMuted)
+										ui.Box(c).Padding(1, 4).Radius(radiusXS).Background(pal.surface1).
+											Border(1, pal.hairline).Children(func() {
+											ui.Text(c, T("已添加", "Added")).FontSize(9).TextColor(pal.inkTertiary)
 										})
 									} else if strings.HasPrefix(ps.Label, "Magpie") && a.magpieOnline {
-										ui.Box(c).Padding(1, 4).Radius(3).Background(t.Success.Alpha(0.12)).Children(func() {
-											ui.Text(c, T("在线", "Online")).FontSize(9).Bold().TextColor(t.Success)
+										ui.Box(c).Padding(1, 4).Radius(radiusXS).Background(pal.surface1).
+											Border(1, pal.hairline).Children(func() {
+											ui.Text(c, T("在线", "Online")).FontSize(9).
+												FontWeight(weightMedium).TextColor(t.Success)
 										})
 									}
 								})
@@ -891,32 +929,39 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 					settingDivider(c, pal)
 
 					// 行 3: 本地网关状态探测
-					settingRow(c, T("本地网关 (127.0.0.1:3425)", "Local Gateway (127.0.0.1:3425)"),
+					settingRow(c, pal, T("本地网关 (127.0.0.1:3425)", "Local Gateway (127.0.0.1:3425)"),
 						T("免鉴权直连本机运行的 Magpie 或兼容网关", "Direct local connection for Magpie or compatible gateway"),
 						func() {
 							ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-								statusCol := t.TextMuted
+								// 网关在不在线是一句状态，不是一个严重程度：底色
+								// 保持中性，只有那颗圆点和文字跟着语义走。
+								statusCol := pal.inkTertiary
 								statusText := T("未检测到本地网关", "Gateway Offline")
-								statusBg := t.SurfaceHover
+								statusDot := pal.inkTertiary
 								if a.magpieOnline {
 									statusCol = t.Success
-									statusText = T("🟢 本地网关在线", "🟢 Gateway Online")
-									statusBg = t.Success.Alpha(0.12)
+									statusDot = t.Success
+									statusText = T("本地网关在线", "Gateway Online")
 								}
-								ui.Box(c).Padding(2, 8).Radius(6).Background(statusBg).Children(func() {
-									ui.Text(c, statusText).Bold().FontSize(11).TextColor(statusCol)
+								ui.Row(c).Shrink(0).Height(statusChipH).AlignItems(ui.Center).Gap(5).
+									Padding(0, 8).Radius(radiusPill).Background(pal.surface2).
+									Border(1, pal.hairline).Children(func() {
+									ui.Box(c).Size(chipDot, chipDot).Shrink(0).Radius(chipDot / 2).
+										Background(statusDot)
+									ui.Text(c, statusText).FontSize(textCaption).
+										FontWeight(weightMedium).TextColor(statusCol)
 								})
 
-								refreshBtn := ui.ButtonBase(c).Size(24, 24).Radius(6).
-									Background(ui.Transparent).Border(1, t.Border).
+								refreshBtn := ui.ButtonBase(c).Size(24, 24).Radius(radiusSM).
+									Background(ui.Transparent).Border(1, pal.hairlineStrong).
 									AlignItems(ui.Center).Justify(ui.Center).
 									Cursor(ui.CursorPointer).Label(T("检测网关", "Check Gateway")).Tooltip(T("重新探测本地网关", "Re-probe gateway"))
 								if refreshBtn.Hovered() {
-									refreshBtn.Background(t.SurfaceHover)
+									refreshBtn.Background(pal.surface2)
 								}
 								fadeColors(refreshBtn)
 								refreshBtn.Children(func() {
-									drawIcon(c, iconRefresh, 12, t.TextMuted)
+									drawIcon(c, iconRefresh, 12, pal.inkSubtle)
 								})
 								if refreshBtn.Clicked() {
 									a.probeMagpie()
@@ -930,7 +975,7 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 				T("配置当前选定服务商的连接协议、密钥与模型标识", "Configure connection protocol, credentials, and model identifiers for selected provider"),
 				func() {
 					// 字段 1: 服务商名称
-					settingRow(c, T("服务商名称", "Provider Name"),
+					settingRow(c, pal, T("服务商名称", "Provider Name"),
 						T("在列表中显示的自定义标识名称", "Display label for this provider"),
 						func() {
 							ui.TextInput(c, &p.Name).Placeholder(T("例如：Magpie、公司自建", "e.g. Magpie, Custom")).
@@ -940,7 +985,7 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 					settingDivider(c, pal)
 
 					// 字段 2: 接口协议
-					settingRow(c, T("接口协议", "API Protocol"),
+					settingRow(c, pal, T("接口协议", "API Protocol"),
 						T("选择 API 通信协议规范", "Protocol specification format"),
 						func() {
 							mode := 0
@@ -962,7 +1007,7 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 					if isMagpie(p.BaseURL) {
 						hint = T("已连接本地网关 (127.0.0.1:3425)", "Connected to local gateway (127.0.0.1:3425)")
 					}
-					settingRow(c, "Base URL", hint, func() {
+					settingRow(c, pal, "Base URL", hint, func() {
 						ph := "https://api.example.com/v1"
 						if p.Type == "anthropic" {
 							ph = T("留空使用官方接口", "Leave empty for official API")
@@ -979,7 +1024,7 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 					} else if p.APIKey != "" {
 						keyTip = T("✓ 密钥已配置", "✓ API key configured")
 					}
-					settingRow(c, T("API 密钥 (API Key)", "API Key"), keyTip, func() {
+					settingRow(c, pal, T("API 密钥 (API Key)", "API Key"), keyTip, func() {
 						ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
 							keyPh := "sk-…"
 							if isMagpie(p.BaseURL) {
@@ -990,12 +1035,12 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 								in.Password()
 							}
 
-							eyeBtn := ui.ButtonBase(c).Size(26, 26).Radius(6).
-								Background(ui.Transparent).Border(1, t.Border).
+							eyeBtn := ui.ButtonBase(c).Size(26, 26).Radius(radiusSM).
+								Background(ui.Transparent).Border(1, pal.hairlineStrong).
 								AlignItems(ui.Center).Justify(ui.Center).
 								Cursor(ui.CursorPointer).Label(T("切换密钥显示", "Toggle Key Visibility")).Tooltip(T("切换明文/密文显示", "Toggle visibility"))
 							if eyeBtn.Hovered() {
-								eyeBtn.Background(t.SurfaceHover)
+								eyeBtn.Background(pal.surface2)
 							}
 							fadeColors(eyeBtn)
 							eyeSvg := iconEye
@@ -1003,7 +1048,7 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 								eyeSvg = iconEyeOff
 							}
 							eyeBtn.Children(func() {
-								drawIcon(c, eyeSvg, 13, t.TextMuted)
+								drawIcon(c, eyeSvg, 13, pal.inkSubtle)
 							})
 							if eyeBtn.Clicked() {
 								a.showAPIKey = !a.showAPIKey
@@ -1018,7 +1063,7 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 					if p.Type == "anthropic" {
 						modelTip = T("留空默认使用 ", "Default: ") + llm.DefaultModel
 					}
-					settingRow(c, T("模型标识 (Model)", "Model Identifier"), modelTip, func() {
+					settingRow(c, pal, T("模型标识 (Model)", "Model Identifier"), modelTip, func() {
 						phModel := llm.DefaultModel
 						if p.Type == "openai" {
 							phModel = "例如 opencode-go/deepseek-v4.1-flash"
@@ -1031,23 +1076,23 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 						settingDivider(c, pal)
 						ui.Column(c).Padding(7, 14).Gap(6).FillWidth().Children(func() {
 							ui.Row(c).AlignItems(ui.Center).Children(func() {
-								ui.Text(c, T("网关检测可用模型", "Gateway Detected Models")).Bold().FontSize(12).TextColor(t.Text)
+								ui.Text(c, T("网关检测可用模型", "Gateway Detected Models")).FontSize(textBodySM).FontWeight(weightMedium).TextColor(pal.ink)
 								ui.Spacer(c)
-								ui.Text(c, T("点击快速填入模型标识", "Click to select model")).FontSize(10.5).TextColor(t.TextMuted)
+								ui.Text(c, T("点击快速填入模型标识", "Click to select model")).FontSize(textCaption).TextColor(pal.inkSubtle)
 							})
 
 							ui.Row(c).Gap(6).Wrap().Children(func() {
 								for _, m := range a.magpieModels {
 									m := m
 									selected := p.Model == m
-									chip := ui.ButtonBase(c).Height(24).Padding(0, 8).Radius(5).
+									chip := ui.ButtonBase(c).Height(24).Padding(0, 8).Radius(radiusXS).
 										Cursor(ui.CursorPointer).Label(m)
 									if selected {
-										chip.Background(t.Accent.Alpha(0.12)).Border(1, t.Accent.Alpha(0.35))
+										chip.Background(pal.selection).Border(1, pal.hairlineTertiary)
 									} else {
-										chip.Background(t.SurfaceHover).Border(1, t.Border.Alpha(0.5))
+										chip.Background(pal.surface2).Border(1, pal.hairlineStrong)
 										if chip.Hovered() {
-											chip.Background(t.SurfacePressed)
+											chip.Background(pal.surface3)
 										}
 									}
 									fadeColors(chip)
@@ -1061,14 +1106,17 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 									chip.Children(func() {
 										ui.Row(c).AlignItems(ui.Center).Gap(3).Children(func() {
 											if provTag != "" {
+												// 服务商前缀压到最暗一档：它只是
+												// 「这个名字属于谁」的索引。
 												ui.Text(c, provTag+"/").FontSize(9.5).
-													TextColor(t.TextMuted.Mix(t.Accent, 0.3))
+													TextColor(pal.inkTertiary)
 											}
-											col := t.Text
+											col := pal.inkMuted
 											if selected {
-												col = t.Accent
+												col = pal.ink
 											}
-											ui.Text(c, modelTag).FontSize(10.5).Bold().TextColor(col)
+											ui.Text(c, modelTag).FontSize(textCaption).
+												FontWeight(weightMedium).TextColor(col)
 										})
 									})
 									if chip.Clicked() {

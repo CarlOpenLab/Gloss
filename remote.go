@@ -89,7 +89,7 @@ func (a *app) canReachRemote() bool {
 // 只有图标没有字 —— 工具栏已经排了四颗带字的按钮，再加三颗带字的，720px 的
 // 窗口宽度下整排都会被收进「»」菜单；而这三颗图标是 Git 客户端里通行的那三个
 // （向下的箭头、进托盘、出托盘），配上 tooltip 足够认。
-func (a *app) remoteBar(c *ui.Context) {
+func (a *app) remoteBar(c *ui.Context, pal palette) {
 	// 一条远程都没有的仓库（本地新建的那种）根本不画这一组：三颗永远灰着的
 	// 按钮占掉的是「刷新」的地方 —— 720px 的最小宽度下，这三颗正好是把刷新
 	// 挤进「»」的那些像素。有没有远程是仓库的固有属性、不是一时的状态，用户
@@ -127,7 +127,7 @@ func (a *app) remoteBar(c *ui.Context) {
 		if common != "" {
 			fetchTip = common
 		}
-		if iconToolButton(c, "抓取", fetchTip, off, drawFetchIcon, 0, fetchBusy) {
+		if iconToolButton(c, pal, "抓取", fetchTip, off, drawFetchIcon, 0, fetchBusy) {
 			a.doFetch()
 		}
 
@@ -140,7 +140,7 @@ func (a *app) remoteBar(c *ui.Context) {
 		} else if branchOff != "" {
 			pullTip = branchOff
 		}
-		if iconToolButton(c, "拉取", pullTip, off || a.detached, drawPullIcon, a.behind, pullBusy) {
+		if iconToolButton(c, pal, "拉取", pullTip, off || a.detached, drawPullIcon, a.behind, pullBusy) {
 			a.doPull()
 		}
 
@@ -153,7 +153,7 @@ func (a *app) remoteBar(c *ui.Context) {
 		} else if branchOff != "" {
 			pushTip = branchOff
 		}
-		if iconToolButton(c, "推送", pushTip, off || a.detached, drawPushIcon, a.ahead, pushBusy) {
+		if iconToolButton(c, pal, "推送", pushTip, off || a.detached, drawPushIcon, a.ahead, pushBusy) {
 			a.doPush()
 		}
 	})
@@ -179,18 +179,20 @@ func drawPushIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
 
 // iconToolButton 是工具栏上一颗带有徽标（badge）展示能力的图标按钮。
 // 当 badge == 0 时，为精确 28x28 方形无干扰微按钮，图标居中呈现；
-// 当 badge > 0 时，遵循 HeroUI 设计规范平滑扩展为带状态胶囊的 Action Pill：
-// 1. 图标 14x14 居左，100% 完整可视，绝不采用遮挡图标切口。
-// 2. 徽标计数以等宽半粗体数字并列居右，搭配高精 HeroUI 平板微染色（soft accent tint），
-//    在保证操作视觉识别度的同时与顶栏融为一体。
-// 3. 当 inFlight 为真时，按钮内平滑旋转 Spinner，提供即时本地触觉反馈。
-func iconToolButton(c *ui.Context, label, tip string, off bool, icon iconDraw, badge int, inFlight bool) bool {
-	t := c.Theme()
-	btn := ui.ButtonBase(c).Height(28).Shrink(0).Radius(t.Radius).
+// 当 badge > 0 时，右侧并列一枚计数徽标。
+//
+// 徽标本身是**中性**的：Surface 1 底 + hairline 边 + 计数 pill。原来整颗按钮
+// 在静息态就染着强调色（底、边、图标、数字四处），超前/落后几个提交于是变成
+// 工具栏上最响的东西 —— 而 §5 只留给核心动作一到两处强调色，旁边那颗实心的
+// 「提交」才是。数字本身（等宽 + tnum）已经把「有几个提交要走」说清楚了。
+//
+// 悬停与按下照工具按钮的规矩升 Surface 阶梯，不再叠外发光（§5 禁止）。
+func iconToolButton(c *ui.Context, pal palette, label, tip string, off bool, icon iconDraw, badge int, inFlight bool) bool {
+	btn := ui.ButtonBase(c).Height(28).Shrink(0).Radius(radiusSM).
 		Cursor(ui.CursorPointer).Label(label).Tooltip(tip).Disabled(off)
 
 	if badge > 0 {
-		btn.Padding(0, 8).Gap(5).AlignItems(ui.Center)
+		btn.Padding(0, 7).Gap(5).AlignItems(ui.Center)
 	} else {
 		btn.Width(28).Center()
 	}
@@ -198,42 +200,33 @@ func iconToolButton(c *ui.Context, label, tip string, off bool, icon iconDraw, b
 	bg := ui.Transparent
 	border := ui.Transparent
 	borderW := float32(0)
-	fg := t.TextMuted
+	fg := pal.inkSubtle
 
 	if badge > 0 {
-		// HeroUI Flat / Soft Accent Pill 样式
 		borderW = 1
 		switch {
 		case off:
-			bg = t.Accent.Alpha(0.04)
-			border = t.Accent.Alpha(0.14)
-			fg = t.Accent.Alpha(0.38)
+			// 禁用时连边框都不给：一枚灰按钮还描着边，看着仍像能点的。
+			bg, border, fg = ui.Transparent, ui.Transparent, pal.inkTertiary
 			btn.Cursor(ui.CursorDefault)
 		case btn.Pressed():
-			bg = t.Accent.Alpha(0.24)
-			border = t.Accent.Alpha(0.55)
-			fg = t.Accent
+			bg, border, fg = pal.surface3, pal.hairlineStrong, pal.ink
 		case btn.Hovered():
-			bg = t.Accent.Alpha(0.18)
-			border = t.Accent.Alpha(0.48)
-			fg = t.Accent
-			btn.Shadow(0, 2, 6, 0, t.Accent.Alpha(0.20))
+			bg, border, fg = pal.surface2, pal.hairlineStrong, pal.ink
 		default:
-			bg = t.Accent.Alpha(0.09)
-			border = t.Accent.Alpha(0.24)
-			fg = t.Accent
+			bg, border, fg = pal.surface1, pal.hairline, pal.inkMuted
 		}
 	} else {
 		switch {
 		case off:
-			fg = t.TextMuted.Alpha(0.38)
+			fg = pal.inkTertiary
 			btn.Cursor(ui.CursorDefault)
 		case btn.Pressed():
-			bg = t.SurfacePressed
-			fg = t.Text
+			bg = pal.surface3
+			fg = pal.ink
 		case btn.Hovered():
-			bg = t.SurfaceHover
-			fg = t.Text
+			bg = pal.surface2
+			fg = pal.ink
 		}
 	}
 
@@ -245,18 +238,22 @@ func iconToolButton(c *ui.Context, label, tip string, off bool, icon iconDraw, b
 
 	btn.Children(func() {
 		if badge > 0 {
-			if inFlight {
-				ui.Spinner(c).Size(14, 14)
-			} else {
-				ui.Box(c).Size(14, 14).Shrink(0).
-					Draw(func(p *ui.Painter, r ui.Rect) { icon(p, r, fg) })
-			}
-			countStr := strconv.Itoa(badge)
-			if badge > 99 {
-				countStr = "99+"
-			}
-			ui.Text(c, countStr).FontSize(11).Bold().
-				FontFeatures("tnum").TextColor(fg)
+			// 图标和数字排在一条中线上：数字用等宽 + tnum，一列扫下来位数不同
+			// 也不会把图标推来推去。
+			ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
+				if inFlight {
+					ui.Spinner(c).Size(14, 14)
+				} else {
+					ui.Box(c).Size(14, 14).Shrink(0).
+						Draw(func(p *ui.Painter, r ui.Rect) { icon(p, r, fg) })
+				}
+				countStr := strconv.Itoa(badge)
+				if badge > 99 {
+					countStr = "99+"
+				}
+				ui.Text(c, countStr).FontSize(textCaption).FontWeight(weightMedium).
+					FontFeatures("tnum").TextColor(fg)
+			})
 		} else {
 			if inFlight {
 				ui.Spinner(c).Size(16, 16)

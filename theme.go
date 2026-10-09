@@ -12,6 +12,29 @@ import (
 // 但 diff 需要的是它没有的一层：行背景、行号栏底色、增删色条、未改动区间。
 // 深浅两套跟随系统，取值贴近 Web 版那套 GitHub 配色，观感能对上。
 type palette struct {
+	// 表面阶梯与发丝线、灰阶（§2.1~2.3）。
+	//
+	// 这四档以前是拿 t.Surface / t.Background 凑的：mygo 的主题只有「控件面」
+	// 和「浮层底」两个语义，而 Linear 这套要的是四级明度阶梯，还得能指名道姓
+	// 地说「这是 Surface 3」。凑出来的后果是层级错位 —— popover 用 Surface 1、
+	// 模态和卡片都挤在 Surface 2，深度全靠 24~36px 的大投影撑，正是 §1.3
+	// 「明度阶梯代替阴影」要消除的做法。
+	//
+	// 有了这四个字段，组件直接写「我是第几级」，深度由明度表达。
+	surface1 ui.Color // 侧栏、文件列表、提交消息面板、主要容器
+	surface2 ui.Color // 卡片、hunk 栏、列表悬停态、徽章底
+	surface3 ui.Color // 浮层、下拉菜单、右键菜单、AI 解释卡片
+	surface4 ui.Color // 模态弹窗、设置窗口顶层面板
+
+	hairline         ui.Color // 基础 1px 细线（§2.2）
+	hairlineStrong   ui.Color // 输入框外框、激活态卡片
+	hairlineTertiary ui.Color // 悬停态边框、弹窗外围
+
+	ink         ui.Color // 高亮标题、正文基准（§2.3）
+	inkMuted    ui.Color // 常规正文、文件名、按钮文字
+	inkSubtle   ui.Color // 行号、辅助元信息、未激活图标
+	inkTertiary ui.Color // 快捷键提示、占位符、禁用态
+
 	appBg     ui.Color // 窗口底色
 	codeBg    ui.Color // 普通代码行背景
 	code      ui.Color // 代码文字
@@ -34,9 +57,17 @@ type palette struct {
 	// 按钮反而沉下去。浅色下要的是提亮（白），深色下要的是抬高一档的蓝灰。
 	explainHover ui.Color
 	sideBg       ui.Color // 删除侧留白（split 模式下对面没有对应行）
-	border       ui.Color
 	ref          ui.Color // 分支名、commit hash 的强调色
 	viewed       ui.Color // 已 review 的勾与文字
+
+	// selection 是列表与树的选中底带。
+	//
+	// 取中性灰阶而不是拿 Accent 淡染：§1 把 #5e6ad2 限定给「核心 CTA、焦点环、
+	// 主品牌标识与关键选定态」，而 §5 又要求「全屏同时出现的薰衣草蓝不超过
+	// 1~2 处」。侧栏三个列表（refs 树、文件树、提交记录）各有一条选中带，
+	// 再把主按钮和导航指示条算上，accent 立刻超预算。选中位置改由中性底带
+	// 表达之后，蓝就只能出现在真正要引导视线的那几处。
+	selection ui.Color
 
 	// lanes 是提交拓扑图里每条线的颜色。
 	//
@@ -49,10 +80,10 @@ type palette struct {
 	hl *highlight.Palette
 }
 
-// selAlpha 是「选中行」底色的不透明度。
+// selAlpha 是「选中行」底色的不透明度 —— 现在只剩高对比度模式下叠一层用。
 //
-// 侧栏的引用树、下半区的文件树、提交列表共用这一个值 —— 三处的选中态是同一
-// 件事，不该有三种浓度。选中底色都是叠在自己那层的底色上，深浅主题一个值够用。
+// 常规的选中底带走 palette.selection（中性灰阶），不再拿 Accent 淡染，
+// 理由见那个字段的注释。
 const selAlpha = 0.22
 
 // laneCount 是拓扑图的色号数量，palette.lanes 的长度。graph.go 挑色号时按它
@@ -93,13 +124,19 @@ func glossTheme(dark bool) *ui.Theme {
 
 	if dark {
 		// Linear 规范深色系统：
-		// 画布底色由 pal.appBg (#010102) 铺陈，
-		// t.Background 是浮层/弹窗底（Linear Surface 2 #141516 或 Surface 3 #18191a）。
+		// 画布底色由 pal.appBg (#010102) 铺陈；
+		// t.Background 是浮层/弹窗底，即 Surface 3 (#18191a) —— 规范把
+		// 「浮层、下拉菜单、右键菜单」都放在这一级（§2.1），而框架自绘的
+		// 右键菜单、tooltip、toast 读的正是它，改这一处就等于把三样一起摆正。
 		// Surface 阶梯：Surface 1 (#0f1011)，SurfaceHover (#141516)，SurfacePressed (#18191a)。
 		// 边框采用 Linear 1px Hairline (#23252a)。
 		// 文本采用 Ink 灰阶：#f7f8f8 (正文), #8a8f98 (次要)。
 		// 单一主色 Accent：Linear 薰衣草蓝 #5e6ad2。
-		t.Background = ui.Hex("#141516")
+		//
+		// t.Radius 是框架**全部**自绘控件的圆角（按钮、输入框、TextArea、
+		// 下拉框、列表），§3 把它们统一归到 md(8)。规范另外点名要给 6 的
+		// （工具/幽灵按钮、芯片、分段单元）在调用点显式写 radiusSM。
+		t.Background = ui.Hex("#18191a")
 		t.Surface = ui.Hex("#0f1011")
 		t.SurfaceHover = ui.Hex("#141516")
 		t.SurfacePressed = ui.Hex("#18191a")
@@ -116,10 +153,16 @@ func glossTheme(dark bool) *ui.Theme {
 		t.Selection = ui.RGBA(94, 106, 210, 0.22)
 		t.Focus = ui.RGBA(94, 106, 210, 0.50)
 		t.Scrollbar = ui.RGBA(255, 255, 255, 0.16)
+		t.Radius = radiusMD
 		return t
 	}
 
-	// 浅色模式对齐 Linear Inverse 规范
+	// 浅色模式对齐 Linear Inverse 规范。
+	//
+	// 有一处刻意不照搬：规范给的 inverse-surface-3 (#e4e7eb) 比画布和 Surface 1
+	// 都暗，拿它铺浮层会让菜单和模态看着是**凹**下去的。浅色下的「浮起来」靠的是
+	// 往白走（对比深色下的往亮走），所以浮层与模态用 inverse-canvas 的白，
+	// 卡片与容器才用那三级灰。
 	t.Background = ui.Hex("#ffffff")
 	t.Surface = ui.Hex("#f7f8f9")
 	t.SurfaceHover = ui.Hex("#f0f2f5")
@@ -137,6 +180,7 @@ func glossTheme(dark bool) *ui.Theme {
 	t.Selection = ui.RGBA(94, 106, 210, 0.18)
 	t.Focus = ui.RGBA(94, 106, 210, 0.45)
 	t.Scrollbar = ui.RGBA(0, 0, 0, 0.18)
+	t.Radius = radiusMD
 	return t
 }
 
@@ -183,28 +227,44 @@ func paletteFor(t *ui.Theme) palette {
 	hl := hlPalette(t.Dark)
 	if t.Dark {
 		return palette{
-			hl:           hl,
-			appBg:        ui.Hex("#010102"),           // Linear Canvas: 极致纯净深黑
+			hl: hl,
+			// 表面阶梯（§2.1）
+			surface1: ui.Hex("#0f1011"),
+			surface2: ui.Hex("#141516"),
+			surface3: ui.Hex("#18191a"),
+			surface4: ui.Hex("#191a1b"),
+			// 发丝线（§2.2）
+			hairline:         ui.Hex("#23252a"),
+			hairlineStrong:   ui.Hex("#34343a"),
+			hairlineTertiary: ui.Hex("#3e3e44"),
+			// 灰阶（§2.3）
+			ink:         ui.Hex("#f7f8f8"),
+			inkMuted:    ui.Hex("#d0d6e0"),
+			inkSubtle:   ui.Hex("#8a8f98"),
+			inkTertiary: ui.Hex("#62666d"),
+			// 选中底带：Surface 2 与 3 之间的一档灰，比悬停的 SurfaceHover
+			// 重一档，才压得住「选中的是这一行」。
+			selection:    ui.Hex("#1f2023"),
+			appBg:        ui.Hex("#010102"), // Linear Canvas: 极致纯净深黑
 			codeBg:       ui.Hex("#010102"),
-			code:         ui.Hex("#f7f8f8"),           // Linear Ink
-			lineNo:       ui.Hex("#62666d"),           // Linear Ink Tertiary
+			code:         ui.Hex("#f7f8f8"), // Linear Ink
+			lineNo:       ui.Hex("#62666d"), // Linear Ink Tertiary
 			gutterBg:     ui.Hex("#010102"),
-			addBg:        ui.RGBA(39, 166, 68, 0.09),  // 极淡半透明暗苔绿
+			addBg:        ui.RGBA(39, 166, 68, 0.09), // 极淡半透明暗苔绿
 			addGutter:    ui.RGBA(39, 166, 68, 0.14),
-			addBar:       ui.Hex("#27a644"),           // Linear 语义绿发丝条
-			delBg:        ui.RGBA(229, 72, 77, 0.09),  // 极淡半透明暗绯红
+			addBar:       ui.Hex("#27a644"),          // Linear 语义绿发丝条
+			delBg:        ui.RGBA(229, 72, 77, 0.09), // 极淡半透明暗绯红
 			delGutter:    ui.RGBA(229, 72, 77, 0.14),
-			delBar:       ui.Hex("#e5484d"),           // 校准红发丝条
-			gapBg:        ui.Hex("#0f1011"),           // Surface 1
-			gapHover:     ui.Hex("#141516"),           // Surface 2
-			gapText:      ui.Hex("#8a8f98"),           // Ink Subtle
-			fileBg:       ui.Hex("#0f1011"),           // Surface 1
-			hunkBg:       ui.Hex("#141516"),           // Surface 2: 告别旧版刺眼亮蓝！
-			hunkText:     ui.Hex("#8a8f98"),           // Ink Subtle 等宽中性文字
-			explainHover: ui.Hex("#18191a"),           // Surface 3
-			sideBg:       ui.Hex("#08090a"),           // 介于 Canvas 与 Surface 1 之间
-			border:       ui.Hex("#23252a"),           // Linear 1px Hairline
-			ref:          ui.Hex("#d0d6e0"),           // 中性 Ink Muted
+			delBar:       ui.Hex("#e5484d"), // 校准红发丝条
+			gapBg:        ui.Hex("#0f1011"), // Surface 1
+			gapHover:     ui.Hex("#141516"), // Surface 2
+			gapText:      ui.Hex("#8a8f98"), // Ink Subtle
+			fileBg:       ui.Hex("#0f1011"), // Surface 1
+			hunkBg:       ui.Hex("#141516"), // Surface 2: 告别旧版刺眼亮蓝！
+			hunkText:     ui.Hex("#8a8f98"), // Ink Subtle 等宽中性文字
+			explainHover: ui.Hex("#18191a"), // Surface 3
+			sideBg:       ui.Hex("#08090a"), // 介于 Canvas 与 Surface 1 之间
+			ref:          ui.Hex("#d0d6e0"), // 中性 Ink Muted
 			viewed:       ui.Hex("#27a644"),
 			// 拓扑图莫兰迪/精密仪器 8 色谱系（明度与彩度均衡）：
 			lanes: [8]ui.Color{
@@ -220,29 +280,41 @@ func paletteFor(t *ui.Theme) palette {
 		}
 	}
 	return palette{
-		hl:           hl,
-		appBg:        ui.Hex("#ffffff"),
-		codeBg:       ui.Hex("#ffffff"),
-		code:         ui.Hex("#0f1115"),
-		lineNo:       ui.Hex("#8c959f"),
-		gutterBg:     ui.Hex("#ffffff"),
-		addBg:        ui.RGBA(39, 166, 68, 0.10),
-		addGutter:    ui.RGBA(39, 166, 68, 0.16),
-		addBar:       ui.Hex("#27a644"),
-		delBg:        ui.RGBA(229, 72, 77, 0.10),
-		delGutter:    ui.RGBA(229, 72, 77, 0.16),
-		delBar:       ui.Hex("#e5484d"),
-		gapBg:        ui.Hex("#f7f8f9"),
-		gapHover:     ui.Hex("#f0f2f5"),
-		gapText:      ui.Hex("#6e7781"),
-		fileBg:       ui.Hex("#f7f8f9"),
-		hunkBg:       ui.Hex("#f0f2f5"),
-		hunkText:     ui.Hex("#4b535d"),
-		explainHover: ui.Hex("#ffffff"),
-		sideBg:       ui.Hex("#f7f8f9"),
-		border:       ui.Hex("#e1e4e8"),
-		ref:          ui.Hex("#4b535d"),
-		viewed:       ui.Hex("#27a644"),
+		hl: hl,
+		// 浅色下的表面阶梯：容器用灰、浮层往白走（理由见 glossTheme 里那段）。
+		surface1:         ui.Hex("#f7f8f9"),
+		surface2:         ui.Hex("#f0f2f5"),
+		surface3:         ui.Hex("#ffffff"),
+		surface4:         ui.Hex("#ffffff"),
+		hairline:         ui.Hex("#e1e4e8"),
+		hairlineStrong:   ui.Hex("#c9ced6"),
+		hairlineTertiary: ui.Hex("#b8bec7"),
+		ink:              ui.Hex("#0f1115"),
+		inkMuted:         ui.Hex("#4b535d"),
+		inkSubtle:        ui.Hex("#6e7781"),
+		inkTertiary:      ui.Hex("#8c959f"),
+		selection:        ui.Hex("#e4e7eb"),
+		appBg:            ui.Hex("#ffffff"),
+		codeBg:           ui.Hex("#ffffff"),
+		code:             ui.Hex("#0f1115"),
+		lineNo:           ui.Hex("#8c959f"),
+		gutterBg:         ui.Hex("#ffffff"),
+		addBg:            ui.RGBA(39, 166, 68, 0.10),
+		addGutter:        ui.RGBA(39, 166, 68, 0.16),
+		addBar:           ui.Hex("#27a644"),
+		delBg:            ui.RGBA(229, 72, 77, 0.10),
+		delGutter:        ui.RGBA(229, 72, 77, 0.16),
+		delBar:           ui.Hex("#e5484d"),
+		gapBg:            ui.Hex("#f7f8f9"),
+		gapHover:         ui.Hex("#f0f2f5"),
+		gapText:          ui.Hex("#6e7781"),
+		fileBg:           ui.Hex("#f7f8f9"),
+		hunkBg:           ui.Hex("#f0f2f5"),
+		hunkText:         ui.Hex("#4b535d"),
+		explainHover:     ui.Hex("#ffffff"),
+		sideBg:           ui.Hex("#f7f8f9"),
+		ref:              ui.Hex("#4b535d"),
+		viewed:           ui.Hex("#27a644"),
 		lanes: [8]ui.Color{
 			ui.Hex("#5e6ad2"),
 			ui.Hex("#2d9d74"),

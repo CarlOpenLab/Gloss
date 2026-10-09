@@ -38,7 +38,7 @@ func (a *app) sidebar(c *ui.Context, pal palette) {
 
 			if a.repoReady() {
 				ui.Box(c).Key("ref-filter-wrap").Padding(0, 8, 6, 8).Shrink(0).Children(func() {
-					a.refFilterInput(c)
+					a.refFilterInput(c, pal)
 				})
 			}
 			ui.Box(c).Key("sidebar-refs-wrap").Grow(1).FillWidth().Children(func() {
@@ -78,7 +78,7 @@ func (a *app) sidebarHeader(c *ui.Context, t *ui.Theme, pal palette) {
 		a.sidebarWorkspaceNav(c, t, pal)
 
 		// 分割线
-		ui.Box(c).Height(1).FillWidth().Margin(4, 2).Background(pal.border.Alpha(0.4))
+		ui.Box(c).Height(1).FillWidth().Margin(4, 2).Background(pal.hairline)
 	})
 }
 
@@ -95,14 +95,14 @@ func (a *app) sidebarRepoCard(c *ui.Context, t *ui.Theme, pal palette) {
 		sub = shortPath(c, a.repoPath, sw-40)
 	}
 
-	card := ui.ButtonBase(c).FillWidth().Radius(6).
+	card := ui.ButtonBase(c).FillWidth().Radius(radiusSM).
 		Padding(5, 8).
 		Cursor(ui.CursorPointer).Label(name).
 		Tooltip(T("点击切换最近项目（或 ⌘O 打开本地仓库）", "Switch recent repository (⌘O)"))
 
 	bg := ui.Transparent
 	if card.Hovered() || a.repoDropdownOpen {
-		bg = t.SurfaceHover
+		bg = pal.surface2
 	}
 	card.Background(bg)
 	fadeColors(card)
@@ -110,18 +110,19 @@ func (a *app) sidebarRepoCard(c *ui.Context, t *ui.Theme, pal palette) {
 	card.Children(func() {
 		ui.Column(c).Gap(2).FillWidth().Children(func() {
 			ui.Row(c).Gap(7).AlignItems(ui.Center).Children(func() {
-				folderCol := t.TextMuted
+				folderCol := pal.inkSubtle
 				if hasRepo {
-					folderCol = pal.ref
+					folderCol = pal.inkMuted
 				}
 				drawIcon(c, iconFolder, 14, folderCol)
 
-				ui.Text(c, name).FontSize(13).Bold().SingleLine().Grow(1).MinWidth(0).TextColor(t.Text)
+				ui.Text(c, name).FontSize(textBody).FontWeight(weightSemibold).
+					SingleLine().Grow(1).MinWidth(0).TextColor(pal.ink)
 
-				drawIcon(c, iconChevronDown, 10, t.TextMuted)
+				drawIcon(c, iconChevronDown, 10, pal.inkSubtle)
 			})
 			if sub != "" {
-				ui.Text(c, sub).FontSize(10.5).SingleLine().TextColor(t.TextMuted.Alpha(0.85)).
+				ui.Text(c, sub).FontSize(textCaption).SingleLine().TextColor(pal.inkSubtle).
 					Tooltip(a.repoPath)
 			}
 		})
@@ -150,44 +151,59 @@ func (a *app) sidebarWorkspaceNav(c *ui.Context, t *ui.Theme, pal palette) {
 }
 
 // sidebarNavItem 画侧栏主导航的一行（如「改动」或「历史」）。
+//
+// 激活态照 §4.3 来：Surface 2 底色 + 左侧 2px 薰衣草蓝指示条 + 提亮到 Ink 的文字，
+// 不再是原来那块满宽的蓝底。三条线索里只有指示条带颜色 —— 位置、明度、色相
+// 各说一遍「就是这一项」，而全屏同时出现的 #5e6ad2 要压在一两处以内。
 func (a *app) sidebarNavItem(c *ui.Context, t *ui.Theme, pal palette, tabIdx int, label, tip string, svg *ui.SVG, disabled bool, badgeCount int) {
 	selected := a.tab == tabIdx && !disabled
-	btn := ui.ButtonBase(c).Height(28).FillWidth().Radius(6).
+	btn := ui.ButtonBase(c).Height(28).FillWidth().Radius(radiusSM).
 		Padding(0, 8).Gap(7).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).Label(label).Tooltip(tip).Disabled(disabled)
 
 	bg := ui.Transparent
-	fg := t.TextMuted
-	iconCol := t.TextMuted
+	fg := pal.inkMuted
+	iconCol := pal.inkMuted
 	switch {
 	case disabled:
-		fg = t.TextMuted.Alpha(0.38)
-		iconCol = t.TextMuted.Alpha(0.38)
+		// 禁用态用 Ink Tertiary（§2.3），不是把 Ink Subtle 调暗 ——
+		// 那一档本身就是给「还没轮到你」的东西留的。
+		fg = pal.inkTertiary
+		iconCol = pal.inkTertiary
 		btn.Cursor(ui.CursorDefault)
 	case selected:
-		bg = t.Accent.Alpha(0.12)
-		fg = t.Accent
-		iconCol = t.Accent
+		bg = pal.surface2
+		fg = pal.ink
+		iconCol = pal.ink
 	case btn.Hovered():
-		bg = t.SurfaceHover
-		fg = t.Text
-		iconCol = t.Text
+		bg = pal.surface2
+		fg = pal.ink
+		iconCol = pal.ink
 	}
 	btn.Background(bg)
+	if selected {
+		// 指示条直接画在按钮左沿：放进内容流里当第一个子元素的话，它会落在
+		// 8px 内边距之后，看着像内容的一部分，而不是「这一行被选中了」。
+		btn.Draw(func(p *ui.Painter, r ui.Rect) {
+			p.Fill(ui.Rect{X: r.X, Y: r.Y + 6, W: 2, H: r.H - 12}, t.Accent, 1)
+		})
+	}
 	fadeColors(btn)
 
 	btn.Children(func() {
 		drawIcon(c, svg, 14, iconCol)
 
-		txt := ui.Text(c, label).FontSize(12.5).Grow(1).SingleLine().TextColor(fg)
+		txt := ui.Text(c, label).FontSize(textButton).Grow(1).SingleLine().TextColor(fg)
 		if selected {
-			txt.Bold()
+			txt.FontWeight(weightSemibold)
 		}
 
 		if badgeCount > 0 && !disabled {
-			ui.Box(c).Radius(10).Padding(1, 6).
-				Background(t.SurfaceHover).Children(func() {
-				ui.Text(c, strconv.Itoa(badgeCount)).FontSize(11).Bold().
+			// 计数角标是 §3 里唯一用 pill 的地方。
+			ui.Box(c).Radius(radiusPill).Padding(1, 6).
+				Background(pal.surface3).Children(func() {
+				ui.Text(c, strconv.Itoa(badgeCount)).FontSize(textCaption).
+					FontWeight(weightMedium).
 					Font("monospace").FontFeatures("tnum").
 					TextColor(t.TextMuted)
 			})
@@ -203,8 +219,8 @@ func (a *app) sidebarNavItem(c *ui.Context, t *ui.Theme, pal palette, tabIdx int
 //
 // 名字写成「筛选分支」而不是「筛选」：主区下半还有一个筛选框（筛文件），
 // 两个框名字一样的话，测试和无障碍工具都分不出找的是哪一个。
-func (a *app) refFilterInput(c *ui.Context) {
-	searchField(c, &a.refFilter, T("筛选分支", "Filter branches"))
+func (a *app) refFilterInput(c *ui.Context, pal palette) {
+	searchField(c, pal, &a.refFilter, T("筛选分支", "Filter branches"))
 }
 
 func (a *app) refsView(c *ui.Context, pal palette) {
@@ -267,7 +283,7 @@ func (a *app) refRow(c *ui.Context, pal palette, r filetree.Row) {
 		opts.Dot = &c
 	}
 
-	row, _ := treeRow(c, t, opts, func() {
+	row, _ := treeRow(c, t, pal, opts, func() {
 		if ref.Kind == gitrepo.RefStash {
 			// 储藏的名字（stash@{0}）人人都一样，认出它是哪一条全靠信息；
 			// 两个都画，名字压暗当索引，信息才是给人读的。
@@ -278,12 +294,14 @@ func (a *app) refRow(c *ui.Context, pal palette, r filetree.Row) {
 			return
 		}
 
-		txt := ui.Text(c, n.Label).FontSize(12).SingleLine().Grow(1).MinWidth(0)
+		// 常规分支名用 Ink Muted，只有当前检出的那条提到 Ink（§2.3）：
+		// 一列分支读的是「有哪几条」，「我在哪条」才需要更亮的那一档。
+		txt := ui.Text(c, n.Label).FontSize(12).SingleLine().
+			Grow(1).MinWidth(0).TextColor(pal.inkMuted)
 		if ref.Head {
-			txt.Bold().TextColor(t.Text)
-			ui.Box(c).Radius(3).Padding(1, 4).Background(pal.ref.Alpha(0.12)).Children(func() {
-				ui.Text(c, "HEAD").FontSize(9.5).Bold().TextColor(pal.ref)
-			})
+			txt.FontWeight(weightSemibold).TextColor(pal.ink)
+			// HEAD 芯片走 §2.5 的配方，和提交行里那些引用芯片同一副面孔。
+			specChip(c, pal, "HEAD", pal.laneColor(0), rowChipH, rowChipText)
 		}
 	})
 
@@ -330,9 +348,9 @@ func (a *app) refGroupRow(c *ui.Context, t *ui.Theme, pal palette, r filetree.Ro
 	open := len(r.Node.Children) > 0 && !a.refsClosed[r.Node.Key]
 
 	// 分组行不参与选中：它不是一个可以「去看历史」的东西
-	row, arrow := treeRow(c, t, treeRowOpts{Depth: r.Depth, HasKids: true, Open: open}, func() {
-		ui.Text(c, r.Node.Label).FontSize(11).Bold().SingleLine().
-			TextColor(t.TextMuted)
+	row, arrow := treeRow(c, t, pal, treeRowOpts{Depth: r.Depth, HasKids: true, Open: open}, func() {
+		ui.Text(c, r.Node.Label).FontSize(textCaption).FontWeight(weightSemibold).
+			SingleLine().TextColor(pal.inkSubtle)
 	})
 
 	if arrow.Clicked() || row.Clicked() {

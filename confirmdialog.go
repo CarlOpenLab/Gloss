@@ -51,7 +51,7 @@ func (a *app) confirmDialog(c *ui.Context, pal palette) {
 		return
 	}
 	open := true
-	ui.Modal(c, &open, func() { a.confirmBody(c, pal) })
+	specModal(c, pal, &open, func() { a.confirmBody(c, pal) })
 	if !open {
 		// Esc 和点背景走到这里，效果等于「取消」——不必再问一次。
 		a.confirm = confirmState{}
@@ -63,13 +63,13 @@ func (a *app) confirmBody(c *ui.Context, pal palette) {
 	cf := &a.confirm
 
 	ui.Column(c).Width(420).Gap(12).Children(func() {
-		ui.Text(c, cf.title).Bold().FontSize(15)
+		ui.Text(c, cf.title).FontSize(textHeadline).FontWeight(weightSemibold)
 		if cf.body != "" {
 			ui.Text(c, cf.body).FontSize(12).TextColor(t.TextMuted)
 		}
 
 		ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
-			cancel := ui.Button(c, "取消")
+			cancel := secondaryAction(c, pal, "取消", "", false)
 			if cf.focusNo {
 				// 焦点只送一次（同 tagdialog.go 的名称框）：每帧都送的话，
 				// Tab 永远跳不到确认键上，这道闸就成了死路。
@@ -80,7 +80,7 @@ func (a *app) confirmBody(c *ui.Context, pal palette) {
 				a.confirm = confirmState{}
 				return
 			}
-			if ui.PrimaryButton(c, cf.yes).Clicked() {
+			if primaryAction(c, pal, cf.yes, "", false).Clicked() {
 				// 先把状态清掉再跑回调：回调里可能把它换成别的对话框
 				//（比如失败时留话），别让这里的事后清理把新的那个抹掉。
 				run := cf.onYes

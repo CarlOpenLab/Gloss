@@ -263,7 +263,7 @@ func (a *app) prDialog(c *ui.Context, pal palette) {
 		return
 	}
 	open := true
-	ui.Modal(c, &open, func() { a.prDialogBody(c, pal) })
+	specModal(c, pal, &open, func() { a.prDialogBody(c, pal) })
 	if !open {
 		a.prDlg.on = false
 	}
@@ -276,65 +276,68 @@ func (a *app) prDialogBody(c *ui.Context, pal palette) {
 	ui.Column(c).Width(580).Gap(14).Children(func() {
 		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
 			ui.Box(c).Size(18, 18).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
-				p.Icon(iconGitPullRequest, r, t.Accent)
+				p.Icon(iconGitPullRequest, r, pal.inkMuted)
 			})
-			ui.Text(c, "GitHub Pull Requests").Bold().FontSize(15).TextColor(t.Text)
+			ui.Text(c, "GitHub Pull Requests").FontSize(textHeadline).
+				FontWeight(weightSemibold).TextColor(pal.ink)
 		})
 		ui.Text(c, "查看当前仓库中开放的 Pull Request，检视代码差异并生成 AI Review 评论。").
-			FontSize(11.5).TextColor(t.TextMuted)
+			FontSize(textBodySM).TextColor(pal.inkSubtle)
 
 		switch {
 		case s.loading:
 			ui.Row(c).Height(120).Center().Gap(8).Children(func() {
 				ui.Spinner(c)
-				ui.Text(c, "正在从 GitHub 获取 Pull Requests…").FontSize(12).TextColor(t.TextMuted)
+				ui.Text(c, "正在从 GitHub 获取 Pull Requests…").
+					FontSize(textBodySM).TextColor(pal.inkSubtle)
 			})
 		case s.err != "":
 			ui.Column(c).Gap(10).Children(func() {
-				ui.Box(c).Padding(10, 12).Radius(6).Background(t.Danger.Alpha(0.08)).
+				ui.Box(c).Padding(10, 12).Radius(radiusMD).Background(t.Danger.Alpha(0.08)).
 					Border(1, t.Danger.Alpha(0.25)).Children(func() {
-					ui.Text(c, "获取 PR 列表失败").Bold().FontSize(12).TextColor(t.Danger)
-					ui.Text(c, s.err).FontSize(11).TextColor(t.TextMuted).Margin(4, 0, 0, 0)
+					ui.Text(c, "获取 PR 列表失败").FontSize(textBodySM).
+						FontWeight(weightSemibold).TextColor(t.Danger)
+					ui.Text(c, s.err).FontSize(textCaption).TextColor(pal.inkSubtle).Margin(4, 0, 0, 0)
 				})
 				ui.Row(c).Justify(ui.End).Children(func() {
-					if ui.Button(c, "重试").Clicked() {
+					if secondaryAction(c, pal, "重试", "", false).Clicked() {
 						a.openPRDialog()
 					}
 				})
 			})
 		case len(s.items) == 0:
 			ui.Column(c).Height(100).Center().Gap(6).Children(func() {
-				ui.Text(c, "暂无开放的 Pull Request").FontSize(13).TextColor(t.TextMuted)
+				ui.Text(c, "暂无开放的 Pull Request").FontSize(textBody).TextColor(pal.inkMuted)
 				ui.Text(c, "所有 PR 均已合并或关闭，或者当前仓库未包含打开的 PR。").
-					FontSize(11).TextColor(t.TextMuted.Alpha(0.6))
+					FontSize(textCaption).TextColor(pal.inkTertiary)
 			})
 		default:
 			ui.Scroll(c).TrackScroll(&s.scroll).MaxHeight(320).FillWidth().Children(func() {
 				ui.Column(c).Gap(6).FillWidth().Children(func() {
 					for _, item := range s.items {
 						pr := item
-						row := ui.ButtonBase(c).FillWidth().Padding(10, 12).Radius(6).
-							Background(t.Background).Border(1, t.Border).Gap(6).
+						row := ui.ButtonBase(c).FillWidth().Padding(10, 12).Radius(radiusMD).
+							Background(pal.surface2).Border(1, pal.hairline).Gap(6).
 							Cursor(ui.CursorPointer).Label(fmt.Sprintf("PR #%d: %s", pr.Number, pr.Title))
 						if row.Hovered() {
-							row.Background(t.SurfaceHover)
+							row.Background(pal.surface3)
 						}
 						fadeColors(row)
 						row.Children(func() {
 							ui.Row(c).AlignItems(ui.Center).Gap(8).FillWidth().Children(func() {
-								ui.Box(c).Padding(2, 6).Radius(4).Background(t.Accent.Alpha(0.12)).Children(func() {
-									ui.Textf(c, "#%d", pr.Number).Bold().FontSize(11.5).TextColor(t.Accent)
-								})
-								ui.Text(c, pr.Title).Bold().FontSize(12.5).TextColor(t.Text).Grow(1).SingleLine()
-								ui.Text(c, "检视 Diff →").FontSize(11).TextColor(t.TextMuted)
+								// PR 编号是一枚引用芯片，走 §2.5 的配方。
+								specChip(c, pal, fmt.Sprintf("#%d", pr.Number), pal.laneColor(0), statusChipH, statusChipText)
+								ui.Text(c, pr.Title).FontSize(textBodySM).
+									FontWeight(weightMedium).TextColor(pal.ink).Grow(1).SingleLine()
+								ui.Text(c, "检视 Diff →").FontSize(textCaption).TextColor(pal.inkSubtle)
 							})
 							ui.Row(c).AlignItems(ui.Center).Gap(10).Margin(4, 0, 0, 0).Children(func() {
 								if pr.Author != "" {
-									ui.Text(c, "@"+pr.Author).FontSize(11).TextColor(t.TextMuted)
-									ui.Text(c, "·").FontSize(11).TextColor(t.TextMuted.Alpha(0.5))
+									ui.Text(c, "@"+pr.Author).FontSize(textCaption).TextColor(pal.inkSubtle)
+									ui.Text(c, "·").FontSize(textCaption).TextColor(pal.inkTertiary)
 								}
 								ui.Textf(c, "%s → %s", pr.HeadBranch, pr.BaseBranch).
-									Font("monospace").FontSize(10.5).TextColor(t.TextMuted)
+									Font("monospace").FontSize(textCaption).TextColor(pal.inkSubtle)
 							})
 						})
 						if row.Clicked() {
@@ -347,7 +350,7 @@ func (a *app) prDialogBody(c *ui.Context, pal palette) {
 		}
 
 		ui.Row(c).Justify(ui.End).Children(func() {
-			if ui.Button(c, "关闭").Clicked() {
+			if secondaryAction(c, pal, "关闭", "", false).Clicked() {
 				a.prDlg.on = false
 			}
 		})
@@ -361,72 +364,80 @@ func (a *app) prReviewBar(c *ui.Context, pal palette) {
 
 	ui.Row(c).Height(38).Shrink(0).FillWidth().
 		Padding(0, 16).Gap(8).AlignItems(ui.Center).
-		Background(t.Surface).Border(1, pal.border).Children(func() {
+		Background(pal.surface1).Border(1, pal.hairline).Children(func() {
 
 		ui.Box(c).Size(16, 16).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
-			p.Icon(iconGitPullRequest, r, t.Accent)
+			p.Icon(iconGitPullRequest, r, pal.inkMuted)
 		})
-		ui.Text(c, "PR 检视").Bold().FontSize(12).TextColor(t.Text)
+		ui.Text(c, "PR 检视").FontSize(textCaption).
+			FontWeight(weightSemibold).TextColor(pal.inkSubtle)
 
-		ui.Box(c).Padding(1, 5).Radius(3).Background(t.Accent.Alpha(0.12)).Children(func() {
-			ui.Textf(c, "#%d", pr.Number).Bold().FontSize(11).TextColor(t.Accent)
-		})
+		specChip(c, pal, fmt.Sprintf("#%d", pr.Number), pal.laneColor(0), statusChipH, statusChipText)
 
-		ui.Text(c, pr.Title).FontSize(12).Bold().TextColor(t.Text).
+		ui.Text(c, pr.Title).FontSize(textBodySM).FontWeight(weightMedium).TextColor(pal.ink).
 			Tooltip(fmt.Sprintf("#%d: %s (%s → %s)", pr.Number, pr.Title, pr.HeadBranch, pr.BaseBranch))
 
-		ui.Box(c).Padding(1, 6).Radius(3).Background(t.Background).Border(1, t.Border).Children(func() {
+		// 分支对（head → base）是一枚等宽信息芯片，不染强调色 ——
+		// 它是「这条 PR 从哪儿到哪儿」，读的是那两个名字。
+		ui.Box(c).Padding(2, 6).Radius(radiusXS).Background(pal.surface2).
+			Border(1, pal.hairline).Children(func() {
 			ui.Textf(c, "%s → %s", pr.HeadBranch, pr.BaseBranch).
-				Font("monospace").FontSize(10.5).TextColor(t.TextMuted)
+				Font("monospace").FontSize(textCaption).TextColor(pal.inkMuted)
 		})
 
 		if pr.Author != "" {
-			ui.Text(c, "@"+pr.Author).FontSize(11).TextColor(t.TextMuted)
+			ui.Text(c, "@"+pr.Author).FontSize(textCaption).TextColor(pal.inkSubtle)
 		}
 
-		toolbarDivider(c)
+		toolbarDivider(c, pal)
 
 		switch a.prReview.state {
 		case loadLoading:
 			ui.Spinner(c)
-			ui.Text(c, "正在读取 PR Diff…").FontSize(11).TextColor(t.TextMuted)
+			ui.Text(c, "正在读取 PR Diff…").FontSize(textCaption).TextColor(pal.inkSubtle)
 		case loadFailed:
-			ui.Text(c, "Diff 读取失败: "+a.prReview.err).FontSize(11).TextColor(t.Danger)
-			if ui.ButtonBase(c).Height(22).Padding(0, 6).Radius(3).Cursor(ui.CursorPointer).Label("重试").
-				Children(func() { ui.Text(c, "重试").FontSize(11) }).Clicked() {
+			ui.Text(c, "Diff 读取失败: "+a.prReview.err).FontSize(textCaption).TextColor(t.Danger)
+			if ui.ButtonBase(c).Height(22).Padding(0, 6).Radius(radiusSM).Cursor(ui.CursorPointer).Label("重试").
+				Children(func() {
+					ui.Text(c, "重试").FontSize(textCaption).TextColor(pal.inkMuted)
+				}).Clicked() {
 				a.openPRReview(pr)
 			}
 		default:
-			ui.Textf(c, "%d 个改动文件", len(a.allFiles)).FontSize(11.5).TextColor(t.TextMuted)
+			ui.Textf(c, "%d 个改动文件", len(a.allFiles)).FontSize(textCaption).TextColor(pal.inkSubtle)
 		}
 
-		// ✨ 生成并发布 AI Review 评论 按钮
-		reviewBtn := ui.ButtonBase(c).Height(26).Padding(0, 10).Radius(5).Gap(4).
+		// ✨ 生成并发布 AI Review 评论：静息态是次级按钮（Surface 1 + hairline），
+		// 悬停才升一档。工具栏上已经有「提交」那种实心主按钮的场合，这里
+		// 再来一块蓝底就会打架 —— 而且它并不比「退出检视」更重要。
+		reviewBtn := ui.ButtonBase(c).Height(26).Padding(0, 10).Radius(radiusMD).Gap(4).
 			AlignItems(ui.Center).Cursor(ui.CursorPointer).
-			Background(t.Accent.Alpha(0.12)).Border(1, t.Accent.Alpha(0.3)).
+			Background(pal.surface2).Border(1, pal.hairlineStrong).
 			Label("✨ 生成并发布 AI Review 评论").Tooltip("AI 智能分析 PR 改动并提交 Review 评论")
 		if reviewBtn.Hovered() {
-			reviewBtn.Background(t.Accent.Alpha(0.2))
+			reviewBtn.Background(pal.surface3)
 		}
 		fadeColors(reviewBtn)
 		reviewBtn.Children(func() {
-			sparkleIcon(c, sparkleSize, t.Accent)
-			ui.Text(c, "✨ 生成并发布 AI Review 评论").FontSize(11.5).Bold().TextColor(t.Accent)
+			sparkleIcon(c, sparkleSize, pal.inkMuted)
+			ui.Text(c, "✨ 生成并发布 AI Review 评论").FontSize(textButton).
+				FontWeight(weightMedium).TextColor(pal.ink)
 		})
 		if reviewBtn.Clicked() {
 			a.openPRReviewModal()
 		}
 
 		// 切换 PR 按钮
-		switchBtn := ui.ButtonBase(c).Height(26).Padding(0, 8).Radius(5).
-			Background(t.Background).Border(1, t.Border).AlignItems(ui.Center).
+		switchBtn := ui.ButtonBase(c).Height(26).Padding(0, 8).Radius(radiusMD).
+			Background(ui.Transparent).Border(1, pal.hairline).AlignItems(ui.Center).
 			Cursor(ui.CursorPointer).Tooltip("查看其他 PR 列表").Label("切换 PR")
 		if switchBtn.Hovered() {
-			switchBtn.Background(t.SurfaceHover)
+			switchBtn.Background(pal.surface2)
 		}
 		fadeColors(switchBtn)
 		switchBtn.Children(func() {
-			ui.Text(c, "切换 PR…").FontSize(11.5).TextColor(t.TextMuted)
+			ui.Text(c, "切换 PR…").FontSize(textButton).FontWeight(weightMedium).
+				TextColor(pal.inkMuted)
 		})
 		if switchBtn.Clicked() {
 			a.openPRDialog()
@@ -435,16 +446,17 @@ func (a *app) prReviewBar(c *ui.Context, pal palette) {
 		ui.Spacer(c)
 
 		// 退出 PR 检视
-		exitBtn := ui.ButtonBase(c).Height(26).Padding(0, 10).Radius(5).Gap(4).
+		exitBtn := ui.ButtonBase(c).Height(26).Padding(0, 10).Radius(radiusMD).Gap(4).
 			AlignItems(ui.Center).Cursor(ui.CursorPointer).
-			Background(ui.Transparent).Border(1, t.Border).
+			Background(ui.Transparent).Border(1, pal.hairline).
 			Label("退出 PR 检视").Tooltip("退出 PR 检视并恢复工作区 (Esc)")
 		if exitBtn.Hovered() {
-			exitBtn.Background(t.SurfaceHover)
+			exitBtn.Background(pal.surface2)
 		}
 		fadeColors(exitBtn)
 		exitBtn.Children(func() {
-			ui.Text(c, "✕  退出检视").FontSize(11.5).TextColor(t.Text)
+			ui.Text(c, "✕  退出检视").FontSize(textButton).FontWeight(weightMedium).
+				TextColor(pal.inkMuted)
 		})
 		if exitBtn.Clicked() {
 			a.exitPRReview()
@@ -458,7 +470,7 @@ func (a *app) prReviewModal(c *ui.Context, pal palette) {
 		return
 	}
 	open := true
-	ui.Modal(c, &open, func() { a.prReviewModalBody(c, pal) })
+	specModal(c, pal, &open, func() { a.prReviewModalBody(c, pal) })
 	if !open {
 		a.prReview.reviewModal = false
 	}
@@ -471,27 +483,30 @@ func (a *app) prReviewModalBody(c *ui.Context, pal palette) {
 
 	ui.Column(c).Width(640).Gap(12).Children(func() {
 		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-			sparkleIcon(c, 16, t.Accent)
+			sparkleIcon(c, 16, pal.inkMuted)
 			ui.Textf(c, "AI Review 评论: #%d %s", pr.Number, pr.Title).
-				Bold().FontSize(14).TextColor(t.Text).Grow(1).SingleLine()
+				FontSize(textHeadline).FontWeight(weightSemibold).
+				TextColor(pal.ink).Grow(1).SingleLine()
 		})
 		ui.Text(c, "由 AI 模型结合变更 Diff 自动生成评审建议，支持编辑修改后一键回写至 GitHub PR。").
-			FontSize(11.5).TextColor(t.TextMuted)
+			FontSize(textBodySM).TextColor(pal.inkSubtle)
 
 		if r.postSuccess {
-			ui.Box(c).Padding(8, 12).Radius(5).Background(t.Success.Alpha(0.1)).
+			// 结果是横幅：语义底色留着（§5 允许语义色），因为这一整条说的
+			// 就是「成了」这件事。
+			ui.Box(c).Padding(8, 12).Radius(radiusMD).Background(t.Success.Alpha(0.1)).
 				Border(1, t.Success.Alpha(0.3)).Children(func() {
 				ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
-					ui.Text(c, "✓").Bold().TextColor(t.Success)
+					ui.Text(c, "✓").FontWeight(weightSemibold).TextColor(t.Success)
 					ui.Textf(c, "已成功将 Review 评论发布至 GitHub PR #%d！", pr.Number).
-						FontSize(12).TextColor(t.Success)
+						FontSize(textBodySM).TextColor(t.Success)
 				})
 			})
 		}
 		if r.postErr != "" {
-			ui.Box(c).Padding(8, 12).Radius(5).Background(t.Danger.Alpha(0.08)).
+			ui.Box(c).Padding(8, 12).Radius(radiusMD).Background(t.Danger.Alpha(0.08)).
 				Border(1, t.Danger.Alpha(0.25)).Children(func() {
-				ui.Text(c, r.postErr).FontSize(11.5).TextColor(t.Danger)
+				ui.Text(c, r.postErr).FontSize(textBodySM).TextColor(t.Danger)
 			})
 		}
 
@@ -500,13 +515,13 @@ func (a *app) prReviewModalBody(c *ui.Context, pal palette) {
 			if r.editMode {
 				modeIdx = 1
 			}
-			toolbarSegmentedText(c, &modeIdx, false, "Markdown 预览", "编辑原文")
+			toolbarSegmentedText(c, pal, &modeIdx, false, "Markdown 预览", "编辑原文")
 			r.editMode = (modeIdx == 1)
 
 			if r.loading {
 				ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
 					ui.Spinner(c)
-					ui.Text(c, "正在 AI 生成 Review 评论…").FontSize(11.5).TextColor(t.Accent)
+					ui.Text(c, "正在 AI 生成 Review 评论…").FontSize(textBodySM).TextColor(t.Accent)
 				})
 			}
 		})
@@ -518,11 +533,11 @@ func (a *app) prReviewModalBody(c *ui.Context, pal palette) {
 				Label("Review 评论正文")
 		} else {
 			ui.Box(c).FillWidth().MinHeight(260).MaxHeight(320).
-				Padding(12, 14).Radius(6).Background(t.Background).Border(1, t.Border).
+				Padding(12, 14).Radius(radiusLG).Background(pal.surface2).Border(1, pal.hairline).
 				Children(func() {
 					if r.reviewText == "" && !r.loading {
 						ui.Text(c, "暂无评论内容，点击下方「开始生成」启动 AI 评审。").
-							FontSize(12).TextColor(t.TextMuted)
+							FontSize(textBodySM).TextColor(pal.inkSubtle)
 					} else {
 						ui.Scroll(c).TrackScroll(&r.scroll).FillWidth().Children(func() {
 							ui.Column(c).FillWidth().Children(func() {
@@ -534,7 +549,7 @@ func (a *app) prReviewModalBody(c *ui.Context, pal palette) {
 								if r.loading {
 									ui.Row(c).Margin(8, 0, 0, 0).AlignItems(ui.Center).Gap(6).Children(func() {
 										ui.Spinner(c)
-										ui.Text(c, "生成中…").FontSize(11).TextColor(t.TextMuted)
+										ui.Text(c, "生成中…").FontSize(textCaption).TextColor(pal.inkSubtle)
 									})
 								}
 							})
@@ -545,7 +560,7 @@ func (a *app) prReviewModalBody(c *ui.Context, pal palette) {
 
 		ui.Row(c).AlignItems(ui.Center).FillWidth().Children(func() {
 			if r.loading {
-				if ui.Button(c, "停止生成").Clicked() {
+				if secondaryAction(c, pal, "停止生成", "", false).Clicked() {
 					a.cancelAIReview()
 				}
 			} else {
@@ -553,21 +568,19 @@ func (a *app) prReviewModalBody(c *ui.Context, pal palette) {
 				if r.reviewText == "" {
 					regenLabel = "开始生成"
 				}
-				if ui.Button(c, regenLabel).Clicked() {
+				if secondaryAction(c, pal, regenLabel, "", false).Clicked() {
 					a.startAIReview()
 				}
 			}
 
 			ui.Spacer(c)
 
-			if ui.Button(c, "关闭").Clicked() {
+			if secondaryAction(c, pal, "关闭", "", false).Clicked() {
 				r.reviewModal = false
 			}
 
 			publishDisabled := r.loading || r.posting || strings.TrimSpace(r.reviewText) == ""
-			publishBtn := ui.PrimaryButton(c, "发布到 GitHub").
-				Tooltip("通过 gh CLI 将评论回写至 GitHub PR").
-				Disabled(publishDisabled)
+			publishBtn := primaryAction(c, pal, "发布到 GitHub", "通过 gh CLI 将评论回写至 GitHub PR", publishDisabled)
 			if r.posting {
 				publishBtn.Children(func() {
 					ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {

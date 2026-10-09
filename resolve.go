@@ -139,13 +139,13 @@ func (a *app) conflictRow(c *ui.Context, pal palette, r row) {
 		// Wrap：最小宽度（720）下三颗按钮一行摆不下，与其让第三颗被
 		// 窗沿切掉半个，不如让它整颗折到第二行。
 		ui.Row(c).Wrap().Gap(6).AlignItems(ui.Center).Children(func() {
-			if conflictButton(c, act.ours, act.oursTip, busy).Clicked() {
+			if conflictButton(c, pal, act.ours, act.oursTip, busy).Clicked() {
 				a.resolveFile(*f, gitrepo.SideOurs, act.ours)
 			}
-			if conflictButton(c, act.theirs, act.theirsTip, busy).Clicked() {
+			if conflictButton(c, pal, act.theirs, act.theirsTip, busy).Clicked() {
 				a.resolveFile(*f, gitrepo.SideTheirs, act.theirs)
 			}
-			if conflictButton(c, "在编辑器打开", "在这个文件的外部编辑器里打开，手工改冲突", busy).Clicked() {
+			if conflictButton(c, pal, "在编辑器打开", "在这个文件的外部编辑器里打开，手工改冲突", busy).Clicked() {
 				a.openInEditor(*f)
 			}
 		})
@@ -154,10 +154,11 @@ func (a *app) conflictRow(c *ui.Context, pal palette, r row) {
 
 // conflictButton 是冲突卡片上的一颗按钮。
 //
-// Tooltip 必须写在 Disabled 之前：框架的 Tooltip 构建时问一次 Hovered()，
-// 而禁用元素不报 hover（和 pendingbar、remote.go 里同一个坑）。
-func conflictButton(c *ui.Context, label, tip string, busy bool) *ui.Element {
-	return ui.Button(c, label).Tooltip(tip).Disabled(busy).Shrink(0)
+// 只是给 secondaryAction 起个短名字：tip 和 busy 收进实参，那颗按钮自己
+// 保证 Tooltip 记在 Disabled 之前（框架的 Tooltip 构建时问一次 Hovered()，
+// 而禁用元素不报 hover —— 顺序反了那句解释就永远浮不出来）。
+func conflictButton(c *ui.Context, pal palette, label, tip string, busy bool) *ui.Element {
+	return secondaryAction(c, pal, label, tip, busy).Shrink(0)
 }
 
 // resolveFile 用某一边解决一个冲突文件。

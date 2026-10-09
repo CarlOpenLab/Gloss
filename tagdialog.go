@@ -61,7 +61,7 @@ func (a *app) tagDialog(c *ui.Context, pal palette) {
 		return
 	}
 	open := true
-	ui.Modal(c, &open, func() { a.tagBody(c, pal) })
+	specModal(c, pal, &open, func() { a.tagBody(c, pal) })
 	if !open {
 		a.tag = tagState{}
 	}
@@ -73,7 +73,7 @@ func (a *app) tagBody(c *ui.Context, pal palette) {
 	tg := &a.tag
 
 	ui.Column(c).Width(460).Gap(12).Children(func() {
-		ui.Text(c, "新建标签").Bold().FontSize(15)
+		ui.Text(c, "新建标签").FontSize(textHeadline).FontWeight(weightSemibold)
 		// 打在哪儿必须写在脸上：右键是从某一行发起的，但用户的视线可能已经
 		// 跟着菜单走了，回来时得能确认自己点的是哪个提交。
 		ui.Text(c, "打在 "+tg.revLabel).FontSize(11).SingleLine().TextColor(t.TextMuted)
@@ -112,16 +112,14 @@ func (a *app) tagBody(c *ui.Context, pal palette) {
 		if msg := tagBlocker(tg); msg != "" {
 			ui.Text(c, msg).FontSize(11).TextColor(t.TextMuted)
 		}
-		failureBox(c, t, tg.err)
+		failureBox(c, pal, t, tg.err)
 
 		ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
-			if ui.Button(c, "取消").Clicked() {
+			if secondaryAction(c, pal, "取消", "", false).Clicked() {
 				a.tag = tagState{}
 				return
 			}
-			btn := ui.PrimaryButton(c, "创建标签").
-				Tooltip("在 " + tg.revLabel + " 上打一个标签").
-				Disabled(tagBlocker(tg) != "" || a.op != gitrepo.OpNone)
+			btn := primaryAction(c, pal, "创建标签", "在 "+tg.revLabel+" 上打一个标签", tagBlocker(tg) != "" || a.op != gitrepo.OpNone)
 			if btn.Clicked() {
 				a.createTag()
 			}

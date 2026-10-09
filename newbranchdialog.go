@@ -59,7 +59,7 @@ func (a *app) newBranchDialog(c *ui.Context, pal palette) {
 		return
 	}
 	open := true
-	ui.Modal(c, &open, func() { a.newBranchBody(c, pal) })
+	specModal(c, pal, &open, func() { a.newBranchBody(c, pal) })
 	if !open {
 		a.cancelAIBranch()
 		a.newBranch = branchState{}
@@ -71,7 +71,7 @@ func (a *app) newBranchBody(c *ui.Context, pal palette) {
 	bs := &a.newBranch
 
 	ui.Column(c).Width(460).Gap(12).Children(func() {
-		ui.Text(c, "新建分支").Bold().FontSize(15)
+		ui.Text(c, "新建分支").FontSize(textHeadline).FontWeight(weightSemibold)
 		ui.Text(c, "从 "+bs.revLabel+" 起步").FontSize(11).SingleLine().TextColor(t.TextMuted)
 
 		ui.Column(c).Gap(3).Children(func() {
@@ -86,7 +86,7 @@ func (a *app) newBranchBody(c *ui.Context, pal palette) {
 				if in.Submitted() {
 					a.createBranch()
 				}
-				a.aiBranchButton(c)
+				a.aiBranchButton(c, pal)
 			})
 		})
 
@@ -97,17 +97,15 @@ func (a *app) newBranchBody(c *ui.Context, pal palette) {
 		if msg := branchBlocker(bs); msg != "" {
 			ui.Text(c, msg).FontSize(11).TextColor(t.TextMuted)
 		}
-		failureBox(c, t, bs.err)
+		failureBox(c, pal, t, bs.err)
 
 		ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
-			if ui.Button(c, "取消").Clicked() {
+			if secondaryAction(c, pal, "取消", "", false).Clicked() {
 				a.cancelAIBranch()
 				a.newBranch = branchState{}
 				return
 			}
-			btn := ui.PrimaryButton(c, "创建分支").
-				Tooltip("从 " + bs.revLabel + " 新建一条分支").
-				Disabled(branchBlocker(bs) != "" || a.op != gitrepo.OpNone)
+			btn := primaryAction(c, pal, "创建分支", "从 "+bs.revLabel+" 新建一条分支", branchBlocker(bs) != "" || a.op != gitrepo.OpNone)
 			if btn.Clicked() {
 				a.createBranch()
 			}
@@ -116,31 +114,29 @@ func (a *app) newBranchBody(c *ui.Context, pal palette) {
 }
 
 // aiBranchButton 是「✨ AI 建议分支名」按钮。
-func (a *app) aiBranchButton(c *ui.Context) {
+//
+// 走 §4.1 的次级按钮：Surface 1 底 + hairline 边 + Ink Muted 文字。这个
+// 对话框里没有主操作键（「创建」走的是回车），所以它不该是蓝的 ——
+// 生成中才用强调色文字说明「正在跑」。
+func (a *app) aiBranchButton(c *ui.Context, pal palette) {
 	t := c.Theme()
 	bs := &a.newBranch
 	tip := "✨ AI 建议分支名"
 	if bs.aiLoading {
 		tip = "正在生成建议… 点击取消"
 	}
-	btn := ui.ButtonBase(c).Height(28).Shrink(0).Radius(t.Radius).
+	btn := ui.ButtonBase(c).Height(28).Shrink(0).Radius(radiusMD).
 		Padding(0, 10).Gap(6).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).Label("✨ AI 建议分支名").Tooltip(tip)
 
 	hovered := btn.Hovered()
 	var bg, border, fg ui.Color
 	if bs.aiLoading {
-		bg = t.Accent.Alpha(0.12)
-		border = t.Accent
-		fg = t.Accent
+		bg, border, fg = pal.surface2, pal.hairlineStrong, t.Accent
 	} else if hovered {
-		bg = t.SurfaceHover
-		border = t.Border
-		fg = t.Text
+		bg, border, fg = pal.surface3, pal.hairlineStrong, pal.ink
 	} else {
-		bg = t.Surface
-		border = t.Border
-		fg = t.TextMuted
+		bg, border, fg = pal.surface1, pal.hairline, pal.inkMuted
 	}
 	btn.Background(bg).Border(1, border)
 	fadeColors(btn)
@@ -148,10 +144,11 @@ func (a *app) aiBranchButton(c *ui.Context) {
 	btn.Children(func() {
 		if bs.aiLoading {
 			ui.Spinner(c)
-			ui.Text(c, "推荐中…").FontSize(12).TextColor(fg)
+			ui.Text(c, "推荐中…").FontSize(textButton).FontWeight(weightMedium).TextColor(fg)
 		} else {
-			sparkleIcon(c, sparkleSize, t.Accent)
-			ui.Text(c, "✨ AI 建议分支名").FontSize(12).TextColor(fg)
+			sparkleIcon(c, sparkleSize, fg)
+			ui.Text(c, "✨ AI 建议分支名").FontSize(textButton).
+				FontWeight(weightMedium).TextColor(fg)
 		}
 	})
 
