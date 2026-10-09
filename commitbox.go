@@ -4,10 +4,14 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
+	"github.com/CarlOpenLab/Gloss/internal/diff"
+	"github.com/CarlOpenLab/Gloss/internal/explain"
 	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
+	"github.com/CarlOpenLab/Gloss/internal/llm"
 )
 
 // 暂存与提交：文件行左边的勾选框、hunk 头上的暂存按钮、主区底下的提交栏。
@@ -256,7 +260,7 @@ func (a *app) countSection(s gitrepo.Section) int {
 // - 普通提交：有东西暂存着、消息不是空的、没有别的写操作在飞；
 // - 修改上次提交：有 HEAD、消息不是空的、没有别的写操作在飞（即使暂存区为 0 也允许仅改提交信息）。
 func (a *app) canCommit() bool {
-	if !a.repoReady() || a.op == gitrepo.OpCommit || a.op == gitrepo.OpAmend || strings.TrimSpace(a.commitMsg) == "" {
+	if !a.repoReady() || a.op == gitrepo.OpCommit || a.op == gitrepo.OpAmend || a.aiCommitLoading || strings.TrimSpace(a.commitMsg) == "" {
 		return false
 	}
 	if a.amend {
@@ -317,6 +321,7 @@ func (a *app) commitBox(c *ui.Context, pal palette) {
 			in = ui.TextArea(c, &a.commitMsg).Grow(1).MinWidth(0).
 				MinHeight(inMin).MaxHeight(inMax).
 				Placeholder("提交信息…").Label("提交信息")
+			a.aiCommitButton(c)
 			a.commitButton(c)
 		})
 		a.commitStatus(c, t)
@@ -330,6 +335,158 @@ func (a *app) commitBox(c *ui.Context, pal palette) {
 		}
 		a.commitFocused = focused
 	})
+}
+
+// aiCommitButton 是 AI 生成提交信息按钮（Sparkles ✨）。
+func (a *app) aiCommitButton(c *ui.Context) {
+	t := c.Theme()
+	tip := "✨ AI 生成提交信息 (⌘I)"
+	if a.aiCommitLoading {
+		tip = "正在生成提交信息… 点击取消"
+	}
+	disabled := !a.aiCommitLoading && a.stagedCount() == 0 && !a.amend
+	btn := ui.ButtonBase(c).Shrink(0).Height(28).Radius(t.Radius).
+		Padding(0, 10).Gap(6).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer).Label("✨ AI 生成提交信息").Tooltip(tip).
+		Disabled(disabled)
+
+	hovered := btn.Hovered() && !disabled
+	var bg, border, fg ui.Color
+	switch {
+	case a.aiCommitLoading:
+		bg, border, fg = t.Accent.Alpha(0.12), t.Accent, t.Accent
+	case disabled:
+		bg, border, fg = t.Surface, t.Border.Alpha(0.4), t.TextMuted.Alpha(0.4)
+	case hovered:
+		bg, border, fg = t.SurfaceHover, t.Border, t.Text
+	default:
+		bg, border, fg = t.Surface, t.Border, t.TextMuted
+	}
+	btn.Background(bg).Border(1, border)
+	fadeColors(btn)
+
+	btn.Children(func() {
+		if a.aiCommitLoading {
+			ui.Spinner(c)
+			ui.Text(c, "生成中…").FontSize(12).TextColor(fg)
+		} else {
+			sparkleIcon(c, sparkleSize, t.Accent)
+			ui.Text(c, "AI 生成").FontSize(12).TextColor(fg)
+		}
+	})
+
+	if btn.Clicked() {
+		if a.aiCommitLoading {
+			a.cancelAICommit()
+		} else {
+			a.startAICommit()
+		}
+	}
+}
+
+// startAICommit 发起 AI 提交信息生成。
+func (a *app) startAICommit() {
+	if a.aiCommitLoading {
+		a.cancelAICommit()
+		return
+	}
+	if !a.store.Provider().Ready() {
+		a.openSettings()
+		return
+	}
+	var staged []diff.FileDiff
+	for _, f := range a.allFiles {
+		if f.Section == gitrepo.SectionStaged {
+			staged = append(staged, f.FileDiff)
+		}
+	}
+	if len(staged) == 0 {
+		return
+	}
+
+	a.cancelAICommit()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	a.aiCommitCancel = cancel
+	a.aiCommitLoading = true
+	mail := &explainMail{last: time.Now()}
+	a.aiCommitMail = mail
+
+	existingMsg := strings.TrimSpace(a.commitMsg)
+	a.commitMsg = ""
+
+	system, user := explain.BuildCommitPrompt(staged, existingMsg)
+	prov := a.store.Provider()
+
+	onDelta := func(chunk string) {
+		if mail.fill(chunk) {
+			a.dispatch(func() { a.flushAICommit(mail) })
+		}
+	}
+
+	a.run(func() {
+		text, err := llm.StreamExplanation(ctx, prov, system, user, onDelta)
+		a.dispatch(func() {
+			if a.aiCommitMail != mail {
+				return
+			}
+			a.flushAICommit(mail)
+			a.aiCommitLoading = false
+			a.aiCommitCancel = nil
+			if err != nil {
+				if ctx.Err() == nil {
+					a.opErr = &gitrepo.Failure{
+						Title:  "生成提交信息失败",
+						Hint:   llm.Describe(err).Hint,
+						Detail: err.Error(),
+					}
+				}
+				return
+			}
+			a.commitMsg = cleanCommitMessage(text)
+			a.saveCommitDraft()
+		})
+	})
+}
+
+// flushAICommit 将后台积攒的 token 刷新到界面。
+func (a *app) flushAICommit(mail *explainMail) {
+	if mail != a.aiCommitMail {
+		return
+	}
+	pending := mail.take()
+	if pending == "" {
+		return
+	}
+	a.commitMsg += pending
+}
+
+// cancelAICommit 取消进行中的 AI 提交信息生成。
+func (a *app) cancelAICommit() {
+	if a.aiCommitCancel != nil {
+		a.aiCommitCancel()
+		a.aiCommitCancel = nil
+	}
+	a.aiCommitLoading = false
+	a.aiCommitMail = nil
+}
+
+func cleanCommitMessage(msg string) string {
+	msg = strings.TrimSpace(msg)
+	if strings.HasPrefix(msg, "```") {
+		lines := strings.Split(msg, "\n")
+		var kept []string
+		for _, l := range lines {
+			trimmed := strings.TrimSpace(l)
+			if strings.HasPrefix(trimmed, "```") {
+				continue
+			}
+			kept = append(kept, l)
+		}
+		msg = strings.TrimSpace(strings.Join(kept, "\n"))
+	}
+	msg = strings.Trim(msg, "`\"'")
+	return strings.TrimSpace(msg)
 }
 
 // commitButton 是那颗提交按钮。
@@ -361,6 +518,12 @@ func (a *app) commitStatus(c *ui.Context, t *ui.Theme) {
 		if a.op == gitrepo.OpCommit || a.op == gitrepo.OpAmend {
 			ui.Spinner(c)
 			ui.Text(c, a.opName).FontSize(11).TextColor(t.TextMuted)
+			ui.Spacer(c)
+			return
+		}
+		if a.aiCommitLoading {
+			ui.Spinner(c)
+			ui.Text(c, "正在 AI 生成提交信息…").FontSize(11).TextColor(t.TextMuted)
 			ui.Spacer(c)
 			return
 		}

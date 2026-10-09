@@ -288,6 +288,11 @@ type app struct {
 	// commitFocused 记上一帧提交框有没有焦点：焦点离开的那一帧落盘草稿。
 	commitFocused bool
 
+	// —— AI 提交信息生成 ——
+	aiCommitLoading bool
+	aiCommitCancel  context.CancelFunc
+	aiCommitMail    *explainMail
+
 	// amend 记录是否勾选了「修改上次提交（Amend）」。
 	amend   bool
 	hasHead bool
@@ -901,6 +906,8 @@ func (a *app) openRepo(path string) {
 	//（reload 也走这里，path 没变）时留着 —— 用户点过的分支不该被一次
 	// 刷新弹掉。
 	if !sameRepo(path, a.repoPath) {
+		a.cancelAICommit()
+		a.cancelAIBranch()
 		// 老仓库的提交草稿先落盘（draftFor 还是老仓库的根）。
 		a.saveCommitDraft()
 		a.refs = nil

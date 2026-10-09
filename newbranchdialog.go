@@ -6,7 +6,10 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
+	"github.com/CarlOpenLab/Gloss/internal/diff"
+	"github.com/CarlOpenLab/Gloss/internal/explain"
 	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
+	"github.com/CarlOpenLab/Gloss/internal/llm"
 )
 
 // 新建分支：提交行右键 →「从 a1b2c3d 建分支…」（「文件」菜单里那条
@@ -25,6 +28,10 @@ type branchState struct {
 	revLabel  string // 那个提交在界面上叫什么
 	focusName bool   // 还欠名称框一次焦点
 	err       gitrepo.Failure
+
+	// AI 分支名生成状态
+	aiLoading bool
+	aiCancel  context.CancelFunc
 }
 
 // openNewBranchDialog 打开对话框。rev 为空表示从 HEAD 起步。
@@ -54,6 +61,7 @@ func (a *app) newBranchDialog(c *ui.Context, pal palette) {
 	open := true
 	ui.Modal(c, &open, func() { a.newBranchBody(c, pal) })
 	if !open {
+		a.cancelAIBranch()
 		a.newBranch = branchState{}
 	}
 }
@@ -68,15 +76,18 @@ func (a *app) newBranchBody(c *ui.Context, pal palette) {
 
 		ui.Column(c).Gap(3).Children(func() {
 			ui.Text(c, "名称").FontSize(11).TextColor(t.TextMuted)
-			in := ui.TextInput(c, &bs.name).Placeholder("feature/login").Label("分支名称")
-			if bs.focusName {
-				in.Focus()
-				bs.focusName = false
-			}
-			// 名字框里回车 = 点「创建分支」（和打标签一个做法）。
-			if in.Submitted() {
-				a.createBranch()
-			}
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				in := ui.TextInput(c, &bs.name).Placeholder("feature/login").Label("分支名称").Grow(1)
+				if bs.focusName {
+					in.Focus()
+					bs.focusName = false
+				}
+				// 名字框里回车 = 点「创建分支」（和打标签一个做法）。
+				if in.Submitted() {
+					a.createBranch()
+				}
+				a.aiBranchButton(c)
+			})
 		})
 
 		ui.Checkbox(c, &bs.switchTo, "建好就切过去").Label("建好就切过去")
@@ -90,6 +101,7 @@ func (a *app) newBranchBody(c *ui.Context, pal palette) {
 
 		ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
 			if ui.Button(c, "取消").Clicked() {
+				a.cancelAIBranch()
 				a.newBranch = branchState{}
 				return
 			}
@@ -103,6 +115,119 @@ func (a *app) newBranchBody(c *ui.Context, pal palette) {
 	})
 }
 
+// aiBranchButton 是「✨ AI 建议分支名」按钮。
+func (a *app) aiBranchButton(c *ui.Context) {
+	t := c.Theme()
+	bs := &a.newBranch
+	tip := "✨ AI 建议分支名"
+	if bs.aiLoading {
+		tip = "正在生成建议… 点击取消"
+	}
+	btn := ui.ButtonBase(c).Height(28).Shrink(0).Radius(t.Radius).
+		Padding(0, 10).Gap(6).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer).Label("✨ AI 建议分支名").Tooltip(tip)
+
+	hovered := btn.Hovered()
+	var bg, border, fg ui.Color
+	if bs.aiLoading {
+		bg = t.Accent.Alpha(0.12)
+		border = t.Accent
+		fg = t.Accent
+	} else if hovered {
+		bg = t.SurfaceHover
+		border = t.Border
+		fg = t.Text
+	} else {
+		bg = t.Surface
+		border = t.Border
+		fg = t.TextMuted
+	}
+	btn.Background(bg).Border(1, border)
+	fadeColors(btn)
+
+	btn.Children(func() {
+		if bs.aiLoading {
+			ui.Spinner(c)
+			ui.Text(c, "推荐中…").FontSize(12).TextColor(fg)
+		} else {
+			sparkleIcon(c, sparkleSize, t.Accent)
+			ui.Text(c, "✨ AI 建议分支名").FontSize(12).TextColor(fg)
+		}
+	})
+
+	if btn.Clicked() {
+		if bs.aiLoading {
+			a.cancelAIBranch()
+		} else {
+			a.startAIBranch()
+		}
+	}
+}
+
+// startAIBranch 发起 AI 分支名推荐请求。
+func (a *app) startAIBranch() {
+	bs := &a.newBranch
+	if bs.aiLoading {
+		a.cancelAIBranch()
+		return
+	}
+	if !a.store.Provider().Ready() {
+		a.openSettings()
+		return
+	}
+	a.cancelAIBranch()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	bs.aiCancel = cancel
+	bs.aiLoading = true
+
+	hint := strings.TrimSpace(bs.name)
+	var diffs []diff.FileDiff
+	files := a.allFiles
+	if len(files) == 0 && len(a.workFiles) > 0 {
+		files = a.workFiles
+	}
+	for _, f := range files {
+		diffs = append(diffs, f.FileDiff)
+	}
+
+	system, user := explain.BuildBranchPrompt(hint, diffs)
+	prov := a.store.Provider()
+
+	a.run(func() {
+		text, err := llm.StreamExplanation(ctx, prov, system, user, nil)
+		a.dispatch(func() {
+			if !a.newBranch.on || a.newBranch.aiCancel == nil {
+				return
+			}
+			a.newBranch.aiLoading = false
+			a.newBranch.aiCancel = nil
+			if err != nil {
+				if ctx.Err() == nil {
+					a.newBranch.err = gitrepo.Failure{
+						Title: "AI 推荐分支名失败",
+						Hint:  llm.Describe(err).Hint,
+					}
+				}
+				return
+			}
+			cleaned := explain.CleanBranchName(text)
+			if cleaned != "" {
+				a.newBranch.name = cleaned
+			}
+		})
+	})
+}
+
+// cancelAIBranch 取消进行中的 AI 分支名生成。
+func (a *app) cancelAIBranch() {
+	if a.newBranch.aiCancel != nil {
+		a.newBranch.aiCancel()
+		a.newBranch.aiCancel = nil
+	}
+	a.newBranch.aiLoading = false
+}
+
 // branchBlocker 是「还差什么才能创建」。
 //
 // 和 tagBlocker 一个脾气：名字没开始填时一声不吭（空框加 placeholder 已经
@@ -110,6 +235,9 @@ func (a *app) newBranchBody(c *ui.Context, pal palette) {
 // 由 git 拒绝（” is not a valid branch name →「这个名字不能当分支名」），
 // 不在这里预判。
 func branchBlocker(bs *branchState) string {
+	if bs.aiLoading {
+		return "正在生成分支名建议…"
+	}
 	if name := strings.TrimSpace(bs.name); name != "" {
 		return refNameProblem(name)
 	}
@@ -145,6 +273,7 @@ func (a *app) createBranch() {
 				}
 				return
 			}
+			a.cancelAIBranch()
 			a.newBranch = branchState{}
 			if switchTo {
 				// 切过去了 = 换过 HEAD，收尾和检出一样

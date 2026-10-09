@@ -22,6 +22,9 @@ const DefaultModel = "claude-sonnet-5-5"
 // StreamExplanation 按供应商类型分发到对应实现。
 // p 为 nil 时使用 Anthropic 环境变量默认凭证链（ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN 等）。
 func StreamExplanation(ctx context.Context, p *Provider, system, user string, onDelta func(text string)) (string, error) {
+	if onDelta == nil {
+		onDelta = func(string) {}
+	}
 	switch {
 	case p == nil || p.Type == "" || p.Type == "anthropic":
 		return streamAnthropic(ctx, p, system, user, onDelta)
