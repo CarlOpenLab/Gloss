@@ -70,6 +70,11 @@ func sparkleCluster(c *ui.Context, size float32, color ui.Color) {
 	})
 }
 
+// shieldIcon 是一个盾牌图标方盒，用来摆在安全预检按钮或对话框标题中。
+func shieldIcon(c *ui.Context, size float32, color ui.Color) {
+	drawIcon(c, iconShield, size, color)
+}
+
 // explainBtnH 是 hunk 行上那颗小按钮的高度。比 hunk 行（26）矮一圈：上下
 // 各留 3px。填满整行的按钮看着是「贴」在色带上的，四周留出缝才像放上去的
 // 控件。
