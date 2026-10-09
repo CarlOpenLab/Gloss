@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"strings"
 	"sync"
@@ -91,6 +92,14 @@ type explainState struct {
 	mail *explainMail
 
 	scroll ui.ScrollState
+
+	// 单行与选区解释
+	isSelection bool   // 是否为单行/选区解释
+	lineNum     int    // 行号
+	lineCode    string // 代码内容
+	question    string // 用户提问/追问
+	promptInput string // 追问输入框的文本
+	focusPrompt bool   // 是否聚焦追问输入框
 }
 
 // explainMail 是流式片段的中转站：后台只写，主线程按节流取。
@@ -125,10 +134,123 @@ func (a *app) explainOpen() bool { return a.ex.key != "" }
 
 // isExplaining 判断某个变更块是不是当前打开的那个。
 func (a *app) isExplaining(fi, hi int) bool {
-	if !a.explainOpen() || fi < 0 || fi >= len(a.files) || hi < 0 || hi >= len(a.files[fi].Hunks) {
+	if !a.explainOpen() || a.ex.isSelection || fi < 0 || fi >= len(a.files) || hi < 0 || hi >= len(a.files[fi].Hunks) {
 		return false
 	}
 	return a.ex.key == a.explainKey(a.files[fi], hi)
+}
+
+// isExplainingSelection 判断某个文件某一行是不是当前正在解释的选区。
+func (a *app) isExplainingSelection(fi, lineNum int) bool {
+	if !a.explainOpen() || !a.ex.isSelection || fi < 0 || fi >= len(a.files) {
+		return false
+	}
+	return a.ex.fi == fi && a.ex.lineNum == lineNum
+}
+
+// toggleSelectionExplain 点代码行上的 ✨ 按钮时调用：开着就关掉，关着就打开。
+func (a *app) toggleSelectionExplain(fi int, lineStr string, lineNum int, anchor ui.Rect) {
+	if a.isExplainingSelection(fi, lineNum) {
+		a.closeExplain()
+		return
+	}
+	a.openSelectionExplain(fi, lineStr, lineNum, "", anchor)
+}
+
+// openSelectionExplain 打开针对单行或选区代码的解释卡片：有缓存就直接显示，没有就发起流式请求。
+func (a *app) openSelectionExplain(fi int, lineStr string, lineNum int, question string, anchor ui.Rect) {
+	if fi < 0 || fi >= len(a.files) {
+		return
+	}
+	a.cancelExplain()
+
+	f := a.files[fi]
+	key := explain.SelectionCacheKey(f.Path(), lineStr, question, a.modelName)
+	head := fmt.Sprintf("%s : 第 %d 行", displayPath(f), lineNum)
+	trimmed := strings.TrimSpace(lineStr)
+	if trimmed != "" {
+		if len(trimmed) > 36 {
+			trimmed = trimmed[:36] + "…"
+		}
+		head = fmt.Sprintf("第 %d 行: %s", lineNum, trimmed)
+	}
+
+	a.ex = explainState{
+		fi:          fi,
+		hi:          -1,
+		key:         key,
+		head:        head,
+		anchor:      anchor,
+		isSelection: true,
+		lineNum:     lineNum,
+		lineCode:    lineStr,
+		question:    question,
+		promptInput: question,
+	}
+
+	if text, ok := a.store.Lookup(a.ex.key); ok {
+		a.ex.text = text
+		a.ex.cached = true
+		return
+	}
+	a.startSelectionExplain(f.FileDiff, lineStr, lineNum, question, fileKey(f))
+}
+
+// startSelectionExplain 起一个后台请求解释特定代码行/选区。
+func (a *app) startSelectionExplain(f diff.FileDiff, lineStr string, lineNum int, question string, contentKey string) {
+	if !a.store.Provider().Ready() {
+		a.ex.loading = false
+		a.ex.needKey = true
+		return
+	}
+	a.ex.needKey = false
+
+	var lines []string
+	if cc := a.contents[contentKey]; cc != nil {
+		lines = cc.lines
+	}
+	system, user := explain.BuildSelectionPrompt(explain.SelectionRequest{
+		File:     f,
+		Code:     lineStr,
+		LineNum:  lineNum,
+		Question: question,
+		Context:  explain.LineWindow(lines, lineNum, explainAround, explainMaxCtx),
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	a.ex.cancel = cancel
+	a.ex.loading = true
+	mail := &explainMail{last: time.Now()}
+	a.ex.mail = mail
+
+	key := a.ex.key
+	prov := a.store.Provider()
+
+	onDelta := func(chunk string) {
+		if mail.fill(chunk) {
+			a.dispatch(func() { a.flushExplain(mail) })
+		}
+	}
+
+	a.run(func() {
+		text, err := llm.StreamExplanation(ctx, prov, system, user, onDelta)
+		a.dispatch(func() {
+			if a.ex.key != key {
+				return
+			}
+			a.flushExplain(mail)
+			a.ex.loading = false
+			if err != nil {
+				if ctx.Err() == nil {
+					a.ex.fail = llm.Describe(err)
+				}
+				return
+			}
+			a.ex.text = strings.TrimSpace(text)
+			a.store.Put(key, a.ex.text)
+			a.persist()
+		})
+	})
 }
 
 func (a *app) explainKey(f gitrepo.File, hi int) string {
@@ -279,7 +401,12 @@ func (a *app) explainCard(c *ui.Context, pal palette) {
 	}
 	// 刷新仓库或改筛选之后，fi/hi 可能已经指向别的文件了 —— 那时卡片上的
 	// 「已 review」会勾到别的文件上，不如直接收起。
-	if !a.isExplaining(a.ex.fi, a.ex.hi) {
+	if a.ex.isSelection {
+		if a.ex.fi < 0 || a.ex.fi >= len(a.files) {
+			a.closeExplain()
+			return
+		}
+	} else if !a.isExplaining(a.ex.fi, a.ex.hi) {
 		a.closeExplain()
 		return
 	}
@@ -304,6 +431,9 @@ func (a *app) explainCard(c *ui.Context, pal palette) {
 		panel.Children(func() {
 			a.explainHead(c, pal)
 			a.explainBody(c, pal, at.maxH)
+			if a.ex.isSelection {
+				a.explainPromptBar(c, pal)
+			}
 			a.explainFoot(c, pal)
 		})
 
@@ -382,7 +512,11 @@ func (a *app) explainHead(c *ui.Context, pal palette) {
 		BorderWidth(0, 0, 1, 0).BorderColor(pal.border).Children(func() {
 		ui.Row(c).Gap(7).AlignItems(ui.Center).Children(func() {
 			sparkleCluster(c, 15, t.Accent)
-			ui.Text(c, "AI 解释").Bold().FontSize(13)
+			title := "AI 解释"
+			if a.ex.isSelection {
+				title = "AI 单行解释"
+			}
+			ui.Text(c, title).Bold().FontSize(13)
 			if a.ex.cached {
 				ui.Text(c, "缓存").FontSize(10).Padding(1, 6).Radius(4).
 					Background(t.Surface).TextColor(t.TextMuted)
@@ -394,6 +528,9 @@ func (a *app) explainHead(c *ui.Context, pal palette) {
 		})
 		ui.Text(c, a.ex.head).Font("monospace").FontSize(11).
 			SingleLine().TextColor(t.TextMuted)
+		if a.ex.question != "" {
+			ui.Text(c, "追问: "+a.ex.question).FontSize(11).SingleLine().TextColor(t.Accent)
+		}
 	})
 }
 
@@ -403,6 +540,9 @@ func (a *app) explainBody(c *ui.Context, pal palette, maxH float32) {
 	// 头尾各占一块，剩下的给正文。这里给个保守的估算就够了 ——
 	// 真算出精确值要等布局，而这是绝对定位的元素，量不到。
 	bodyH := maxH - 96
+	if a.ex.isSelection {
+		bodyH -= 38
+	}
 	if bodyH < 60 {
 		bodyH = 60
 	}
@@ -459,7 +599,11 @@ func (a *app) explainText(c *ui.Context, t *ui.Theme, pal palette) {
 		if a.ex.loading {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Spinner(c)
-				ui.Text(c, "正在读这段改动…").FontSize(12).TextColor(t.TextMuted)
+				msg := "正在读这段改动…"
+				if a.ex.isSelection {
+					msg = "正在分析代码…"
+				}
+				ui.Text(c, msg).FontSize(12).TextColor(t.TextMuted)
 			})
 			return
 		}
@@ -489,6 +633,18 @@ func cardActions(c *ui.Context, body func()) {
 // 直接 startExplain 而不是 openExplain：失败的结果不落缓存，重新问本来就
 // 走的是这条路，这里只是把它收成一个名字，好让几个按钮都指过来。
 func (a *app) retryExplain() {
+	if a.ex.isSelection {
+		if a.ex.fi < 0 || a.ex.fi >= len(a.files) {
+			return
+		}
+		f := a.files[a.ex.fi]
+		a.ex.text = ""
+		a.ex.scroll = ui.ScrollState{}
+		a.ex.fail = llm.Failure{}
+		a.ex.needKey = false
+		a.startSelectionExplain(f.FileDiff, a.ex.lineCode, a.ex.lineNum, a.ex.question, fileKey(f))
+		return
+	}
 	if a.ex.fi < 0 || a.ex.fi >= len(a.files) || a.ex.hi < 0 || a.ex.hi >= len(a.files[a.ex.fi].Hunks) {
 		return
 	}
@@ -501,6 +657,30 @@ func (a *app) retryExplain() {
 	a.ex.fail = llm.Failure{}
 	a.ex.needKey = false
 	a.startExplain(f.FileDiff, f.Hunks[a.ex.hi], a.ex.hi, fileKey(f))
+}
+
+// explainPromptBar 是选区解释卡片底部的追问输入框。
+func (a *app) explainPromptBar(c *ui.Context, pal palette) {
+	if !a.ex.isSelection {
+		return
+	}
+	t := c.Theme()
+	ui.Row(c).Shrink(0).Padding(6, 12).Gap(6).AlignItems(ui.Center).
+		Background(t.Surface).
+		BorderWidth(1, 0, 0, 0).BorderColor(pal.border).Children(func() {
+		in := ui.TextInput(c, &a.ex.promptInput).Placeholder("输入追问或关注重点…").Grow(1)
+		if a.ex.focusPrompt {
+			in.Focus()
+			a.ex.focusPrompt = false
+		}
+		btn := ui.Button(c, "提问")
+		if (in.Submitted() || btn.Clicked()) && !a.ex.loading {
+			q := strings.TrimSpace(a.ex.promptInput)
+			if q != "" {
+				a.openSelectionExplain(a.ex.fi, a.ex.lineCode, a.ex.lineNum, q, a.ex.anchor)
+			}
+		}
+	})
 }
 
 // mdMarkerW 是列表符号那一栏的宽度。

@@ -366,13 +366,38 @@ func (a *app) unifiedRow(c *ui.Context, pal palette, r row) {
 	// 高亮是按展开 tab 之后的文本切的，这里必须做同样的展开，
 	// 否则字节下标对不上，颜色会整段错位。
 	text = expandTabs(text)
+	targetLineNo := lineNoOf(r, oldNo, newNo)
 
-	ui.Row(c).Height(lineH).Shrink(0).FillWidth().Background(lineBg).Children(func() {
+	rowEl := ui.Row(c).Height(lineH).Shrink(0).FillWidth().Background(lineBg)
+	rowEl.Children(func() {
 		ui.Box(c).Width(barW).AlignSelf(ui.Stretch).Background(bar)
 		a.gutter(c, pal, oldNo, gutBg)
 		a.gutter(c, pal, newNo, gutBg)
-		a.code(c, pal, hlFile, lineNoOf(r, oldNo, newNo), text, size)
+		a.code(c, pal, hlFile, targetLineNo, text, size)
+		if targetLineNo > 0 {
+			isExp := a.isExplainingSelection(r.file, targetLineNo)
+			if rowEl.Hovered() || isExp {
+				btn := lineExplainButton(c, pal, isExp)
+				if btn.Clicked() {
+					a.toggleSelectionExplain(r.file, text, targetLineNo, btn.Bounds())
+				}
+				if isExp {
+					a.ex.anchor = btn.Bounds()
+				}
+			}
+		}
 	})
+	if targetLineNo > 0 {
+		rowEl.ContextMenu(func(m *ui.Menu) {
+			if m.Item("✨ AI 解释这一行").Chosen() {
+				a.openSelectionExplain(r.file, text, targetLineNo, "", rowEl.Bounds())
+			}
+			if m.Item("✨ AI 解释这一行 / 这一段…").Chosen() {
+				a.openSelectionExplain(r.file, text, targetLineNo, "", rowEl.Bounds())
+				a.ex.focusPrompt = true
+			}
+		})
+	}
 }
 
 // sideLine 是 split 模式下某一侧的半行。empty 表示这一侧空着 ——
@@ -398,15 +423,15 @@ func (a *app) splitRow(c *ui.Context, pal palette, r row) {
 
 	size := a.codeSizeValue()
 	ui.Row(c).Height(lineH).Shrink(0).FillWidth().Children(func() {
-		a.splitHalf(c, pal, left, size)
+		a.splitHalf(c, pal, left, size, r.file)
 		ui.Box(c).Width(1).AlignSelf(ui.Stretch).Background(pal.border)
-		a.splitHalf(c, pal, right, size)
+		a.splitHalf(c, pal, right, size, r.file)
 	})
 }
 
 // splitHalf 画半行：色条 + 行号 + 代码。左右两半除了内容来源不同，
 // 结构完全一样。
-func (a *app) splitHalf(c *ui.Context, pal palette, s sideLine, size float32) {
+func (a *app) splitHalf(c *ui.Context, pal palette, s sideLine, size float32, fi int) {
 	bg, gutBg, bar := pal.codeBg, pal.gutterBg, ui.Transparent
 	switch s.kind {
 	case diff.LineAdd:
@@ -419,7 +444,8 @@ func (a *app) splitHalf(c *ui.Context, pal palette, s sideLine, size float32) {
 		bg, gutBg = pal.sideBg, pal.sideBg
 	}
 
-	ui.Row(c).Grow(1).MinWidth(0).AlignSelf(ui.Stretch).Background(bg).Children(func() {
+	half := ui.Row(c).Grow(1).MinWidth(0).AlignSelf(ui.Stretch).Background(bg)
+	half.Children(func() {
 		ui.Box(c).Width(barW).AlignSelf(ui.Stretch).Background(bar)
 		a.gutter(c, pal, s.no, gutBg)
 		if s.empty {
@@ -427,7 +453,30 @@ func (a *app) splitHalf(c *ui.Context, pal palette, s sideLine, size float32) {
 			return
 		}
 		a.code(c, pal, s.hl, s.no, s.text, size)
+		if s.no > 0 {
+			isExp := a.isExplainingSelection(fi, s.no)
+			if half.Hovered() || isExp {
+				btn := lineExplainButton(c, pal, isExp)
+				if btn.Clicked() {
+					a.toggleSelectionExplain(fi, s.text, s.no, btn.Bounds())
+				}
+				if isExp {
+					a.ex.anchor = btn.Bounds()
+				}
+			}
+		}
 	})
+	if !s.empty && s.no > 0 {
+		half.ContextMenu(func(m *ui.Menu) {
+			if m.Item("✨ AI 解释这一行").Chosen() {
+				a.openSelectionExplain(fi, s.text, s.no, "", half.Bounds())
+			}
+			if m.Item("✨ AI 解释这一行 / 这一段…").Chosen() {
+				a.openSelectionExplain(fi, s.text, s.no, "", half.Bounds())
+				a.ex.focusPrompt = true
+			}
+		})
+	}
 }
 
 // splitSides 返回一行在左右两侧的内容。

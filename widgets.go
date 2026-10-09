@@ -124,6 +124,33 @@ func explainButton(c *ui.Context, pal palette, on bool) *ui.Element {
 	})
 }
 
+// lineExplainButton 是代码行右侧悬停或激活时出现的「✨ 解释」小按钮。
+func lineExplainButton(c *ui.Context, pal palette, on bool) *ui.Element {
+	t := c.Theme()
+	btn := ui.ButtonBase(c).Height(18).Shrink(0).Radius(4).
+		Padding(0, 5).Gap(3).AlignItems(ui.Center).Margin(0, 6, 0, 0).
+		Cursor(ui.CursorPointer).Label("AI 解释这一行").Tooltip("让 AI 解释这一行代码")
+
+	hovered := btn.Hovered()
+	var bg, border, fg ui.Color
+	switch {
+	case on:
+		bg, border, fg = t.Accent, ui.Transparent, t.AccentText
+	case hovered:
+		bg, border, fg = pal.explainHover, pal.hunkText.Alpha(0.7), pal.hunkText
+	default:
+		bg, border, fg = ui.Transparent, pal.hunkText.Alpha(0.38), pal.hunkText
+	}
+	btn.Background(bg).Border(1, border)
+	fadeColors(btn)
+
+	btn.Children(func() {
+		sparkleIcon(c, 11, fg)
+		ui.Text(c, "解释").FontSize(10).SingleLine().TextColor(fg)
+	})
+	return btn
+}
+
 // stageHunkButton 是「暂存 / 取消暂存这一段」。
 //
 // 按下的方向和文件行那颗勾选框一致：填色 = 已经在暂存区里，点它拿出来。
