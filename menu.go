@@ -51,6 +51,7 @@ type appMenu struct {
 	pull      *mygo.MenuItem
 	push      *mygo.MenuItem
 	forcePush *mygo.MenuItem
+	prList    *mygo.MenuItem
 }
 
 // buildAppMenu 搭出应用的菜单栏，并把需要跟着状态走的几项记在 a.menu 上。
@@ -67,6 +68,7 @@ func buildAppMenu(a *app) *mygo.Menu {
 	m.newBranch = a.menuCmd("新建分支…", "CmdOrCtrl+Shift+N", a.newBranchAtHead)
 	m.newTag = a.menuCmd("新建标签…", "", a.newTagAtHead)
 	m.stash = a.menuCmd("储藏工作区改动…", "", a.openStashDialog)
+	m.prList = a.menuCmd("查看 GitHub Pull Requests…", "", a.openPRDialog)
 
 	// 抓取 / 拉取 / 推送的键是挑出来的：F 和 P 是 Fetch 和 Pull，U 是「上传」
 	// 那个 up（Push 的 P 被拉取占了）。三个都带 ⇧ —— ⌘F 已经是「筛选文件」，
@@ -109,6 +111,7 @@ func buildAppMenu(a *app) *mygo.Menu {
 			m.newBranch,
 			m.newTag,
 			a.menuCmd("对比分支代码差异…", "CmdOrCtrl+Shift+D", func() { a.openCompareDialog("") }),
+			m.prList,
 			mygo.Separator(),
 			{Role: mygo.RoleClose, Label: "关闭窗口"},
 		}},
@@ -251,6 +254,7 @@ func (a *app) syncMenu() {
 	enableItem(m.stash, !noRepo && a.op == gitrepo.OpNone)
 	enableItem(m.newBranch, !noRepo && a.op == gitrepo.OpNone)
 	enableItem(m.newTag, !noRepo && a.op == gitrepo.OpNone)
+	enableItem(m.prList, !noRepo)
 
 	// 远程三条：没有远程就没得抓也没得推（`git fetch --all` 在这种情况下
 	// 静默成功，等错误等不到）；分离 HEAD 上拉取和推送没有落点，抓取照常。

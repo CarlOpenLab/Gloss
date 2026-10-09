@@ -268,6 +268,10 @@ type app struct {
 	compare    compareState
 	compareSeq int
 
+	// prDlg 与 prReview 是 GitHub Pull Request 检视与 AI Review 状态（见 prdialog.go）。
+	prDlg    prDialogState
+	prReview prReviewState
+
 	// copyText 是「复制哈希」这类待写进剪贴板的文本。菜单回调里拿不到
 	// *ui.Context（WriteClipboard 是它的方法），先记在这里，view 开头
 	// 写进剪贴板并清掉 —— 一趟只有一帧的延迟。
@@ -447,15 +451,20 @@ func (a *app) view(c *ui.Context) {
 	a.confirmDialog(c, pal)
 	a.stashDialog(c, pal)
 	a.compareDialog(c, pal)
+	a.prDialog(c, pal)
+	a.prReviewModal(c, pal)
 	a.riskScanDialog(c, pal)
 
 	// 卡片画在最后：这一帧的 ✨ 按钮位置刚写好，卡片当帧就能摆对地方。
 	// 它在 Overlay 层，不受上面的布局影响。
 	a.explainCard(c, pal)
 
-	// Esc 退出分支对比或关掉卡片。放在最后，让对话框里正在编辑的输入框先有机会处理它。
+	// Esc 退出分支对比/PR 检视或关掉卡片。放在最后，让对话框里正在编辑的输入框先有机会处理它。
 	if a.compare.on && !a.modalOn() && c.Shortcut(0, ui.KeyEscape) {
 		a.exitCompare()
+	}
+	if a.prReview.on && !a.modalOn() && c.Shortcut(0, ui.KeyEscape) {
+		a.exitPRReview()
 	}
 	if a.explainOpen() && !a.modalOn() && c.Shortcut(0, ui.KeyEscape) {
 		a.closeExplain()
@@ -806,6 +815,11 @@ func (a *app) mainArea(c *ui.Context, pal palette) {
 			a.detailPane(c, pal)
 			return
 		}
+		if a.prReview.on {
+			a.prReviewBar(c, pal)
+			a.detailPane(c, pal)
+			return
+		}
 		if a.tab == 1 {
 			a.historyArea(c, pal)
 			return
@@ -912,6 +926,7 @@ func (a *app) openRepo(path string) {
 	if !sameRepo(path, a.repoPath) {
 		a.cancelAICommit()
 		a.cancelAIBranch()
+		a.exitPRReview()
 		// 老仓库的提交草稿先落盘（draftFor 还是老仓库的根）。
 		a.saveCommitDraft()
 		a.refs = nil
@@ -1162,7 +1177,7 @@ func (a *app) workBranch() string {
 // 菜单在系统层拦键、视图在自己那一帧拦，各写各的判断迟早漏掉一处
 // （新加一个对话框，忘了改其中一个，⌘R 就会在对话框背后偷偷刷新）。
 func (a *app) modalOn() bool {
-	return a.palette.on || a.settingsOn || a.tag.on || a.reset.on || a.newBranch.on || a.rename.on || a.confirm.on || a.stashDlg.on || a.compare.dialog || a.riskScan.dialog
+	return a.palette.on || a.settingsOn || a.tag.on || a.reset.on || a.newBranch.on || a.rename.on || a.confirm.on || a.stashDlg.on || a.compare.dialog || a.prDlg.on || a.prReview.reviewModal || a.riskScan.dialog
 }
 
 // toggleAmend 切换修改上次提交状态。勾选时预填最近一次提交的说明。

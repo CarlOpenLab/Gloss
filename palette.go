@@ -65,10 +65,15 @@ func (a *app) commands() []command {
 	}
 	if a.repoReady() {
 		cmds = append(cmds, command{"对比分支代码差异…", "⌘⇧D", func(a *app) { a.openCompareDialog("") }})
+		cmds = append(cmds, command{"查看 GitHub Pull Requests…", "", func(a *app) { a.openPRDialog() }})
 	}
 	if a.compare.on {
 		cmds = append(cmds, command{"退出分支对比", "Esc", func(a *app) { a.exitCompare() }})
 		cmds = append(cmds, command{"交换基准与对比分支方向", "", func(a *app) { a.swapCompare() }})
+	}
+	if a.prReview.on {
+		cmds = append(cmds, command{"退出 PR 检视", "Esc", func(a *app) { a.exitPRReview() }})
+		cmds = append(cmds, command{"✨ 生成并发布 AI Review 评论…", "", func(a *app) { a.openPRReviewModal() }})
 	}
 	for _, p := range a.store.State().RecentRepos {
 		if p == "" {
