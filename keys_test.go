@@ -322,6 +322,7 @@ func TestShortcutsWithoutRepo(t *testing.T) {
 		{ui.Cmd | ui.Shift, ui.KeyEqual},
 		{ui.Cmd, ui.KeyMinus}, {ui.Cmd, ui.Key0},
 		{0, ui.KeyJ}, {0, ui.KeyK},
+		{0, ui.KeyDown}, {0, ui.KeyUp},
 	} {
 		tt.Key(c.mods, c.key)
 		tt.Frame()

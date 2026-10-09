@@ -85,7 +85,8 @@ When reviewing large pull requests or AI-generated diffs, the biggest bottleneck
 | Shortcut | Action |
 |---|---|
 | `⌘K` | Open Command Palette |
-| `J` / `K` | Jump to Next / Previous hunk |
+| `J` / `K` | Jump to Next / Previous hunk (Changes) or commit (History) |
+| `↓` / `↑` | Select Next / Previous commit (History) |
 | `⌘F` | Focus file filter input |
 | `⌘⏎` | Commit staged changes |
 | `⌘O` | Open repository |

@@ -96,14 +96,23 @@ func (a *app) handleKeys(c *ui.Context) {
 		a.openCompareDialog("")
 	}
 
-	// J / K 跳上下一段改动。不给它们加修饰键：review 时手一直在这两个键上。
-	// 历史 tab 里的 diff 是同一套视图，同样能用。
-	if a.state == loadReady && len(a.files) > 0 {
-		if c.Shortcut(0, ui.KeyJ) {
-			a.jumpHunk(1)
-		}
-		if c.Shortcut(0, ui.KeyK) {
-			a.jumpHunk(-1)
+	// J / K 与方向键导航。
+	// 历史 tab（tab == 1）：浏览历史提交列表时，J / K 与 Down / Up 移动选中的提交。
+	// 改动 tab（tab == 0）：J / K 跳上下一段改动（hunk）。
+	// 在模态对话框或输入框获取焦点时不响应。
+	if !a.modalOn() {
+		if a.tab == 1 && len(a.commits) > 0 {
+			if c.Shortcut(0, ui.KeyJ) || c.Shortcut(0, ui.KeyDown) {
+				a.navCommit(1)
+			} else if c.Shortcut(0, ui.KeyK) || c.Shortcut(0, ui.KeyUp) {
+				a.navCommit(-1)
+			}
+		} else if a.tab == 0 && a.state == loadReady && len(a.files) > 0 {
+			if c.Shortcut(0, ui.KeyJ) {
+				a.jumpHunk(1)
+			} else if c.Shortcut(0, ui.KeyK) {
+				a.jumpHunk(-1)
+			}
 		}
 	}
 }
