@@ -37,16 +37,16 @@ func buildRefTree(refs []gitrepo.Ref, query string) []*filetree.Node {
 	// 组的顺序是固定的：本地 → 远程 → 标签 → 储藏。空组不画。
 	var roots []*filetree.Node
 	if len(local) > 0 {
-		roots = append(roots, refGroupNode("g:local", "本地分支", refLeaves(local)))
+		roots = append(roots, refGroupNode("g:local", T("本地分支", "Local Branches"), refLeaves(local)))
 	}
 	if len(remote) > 0 {
-		roots = append(roots, refGroupNode("g:remote", "远程分支", remoteGroups(remote)))
+		roots = append(roots, refGroupNode("g:remote", T("远程分支", "Remote Branches"), remoteGroups(remote)))
 	}
 	if len(tags) > 0 {
-		roots = append(roots, refGroupNode("g:tag", "标签", refLeaves(tags)))
+		roots = append(roots, refGroupNode("g:tag", T("标签", "Tags"), refLeaves(tags)))
 	}
 	if len(stashes) > 0 {
-		roots = append(roots, refGroupNode("g:stash", "储藏", refLeaves(stashes)))
+		roots = append(roots, refGroupNode("g:stash", T("储藏", "Stashes"), refLeaves(stashes)))
 	}
 	return roots
 }

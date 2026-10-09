@@ -2,6 +2,8 @@ package main
 
 import (
 	"github.com/egoist/mygo/ui"
+
+	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
 )
 
 // 窗口级快捷键集中在 handleKeys 里，view 一开头就调用。
@@ -28,6 +30,15 @@ func (a *app) handleKeys(c *ui.Context) {
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyO) {
 		a.chooseFolder()
+	}
+	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyA) {
+		if a.tab == 0 && a.repoReady() && a.op == gitrepo.OpNone {
+			if a.unstagedCount() > 0 {
+				a.stageAll()
+			} else if a.stagedCount() > 0 {
+				a.unstageAll()
+			}
+		}
 	}
 	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyN) {
 		a.newBranchAtHead()

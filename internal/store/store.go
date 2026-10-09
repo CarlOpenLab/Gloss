@@ -43,6 +43,12 @@ type Config struct {
 	SidebarWidth float32 `json:"sidebarWidth,omitempty"`
 	// FilePaneWidth 是主区文件列表栏宽度，0 表示默认值。
 	FilePaneWidth float32 `json:"filePaneWidth,omitempty"`
+	// ThemeMode 是外观模式偏好："" 或 "system"（跟随系统）、"light"（浅色模式）、"dark"（暗黑模式）。
+	ThemeMode string `json:"themeMode,omitempty"`
+	// Locale 是界面语言设定："" 或 "zh"（简体中文）、"en"（English）。
+	Locale string `json:"locale,omitempty"`
+	// AppIcon 是应用图标风格："black"（纯黑曜石）或 "white"（纯白极简）。
+	AppIcon string `json:"appIcon,omitempty"`
 }
 
 // Provider 是当前选中的供应商配置。没有配置任何供应商时返回 nil，

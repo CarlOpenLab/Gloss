@@ -48,6 +48,7 @@ func main() {
 			Content:              ui.View(a.view),
 		})
 		a.win = win
+		a.syncAppIcon()
 		// 后台 goroutine 改状态必须走这里：它把闭包投到主线程执行，
 		// 并请求重绘。直接改字段不会触发重绘。
 		a.dispatch = win.Update

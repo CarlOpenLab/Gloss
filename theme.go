@@ -81,23 +81,10 @@ func hlPalette(dark bool) *highlight.Palette {
 	return hlPalettes[i]
 }
 
-// glossTheme 把 mygo 的通用控件配色换成 Gloss 自己那一套。
+// glossTheme 把 mygo 的通用控件配色换成 Gloss 对齐 Linear 设计体系的那一套。
 //
-// 不设的话框架用的是 LightTheme/DarkTheme 的默认值：zinc 灰 + #2563eb 蓝，
-// 和下面 palette 里这套 GitHub 色系是两种语言 —— 同一个窗口里，diff 是
-// GitHub 的灰蓝，按钮和对话框却是另一套，边界上一眼看得出来「控件是别人家的」。
-//
-// 取值直接对齐 palette 里的语义色：Surface 就是 fileBg、SurfaceHover 就是
-// gapHover、Border 就是 border。于是 diff 的文件头、面板底、按钮、输入框
-// 全落在同一组灰阶上，深浅两套各自自洽。
-//
-// 每个值为什么是它：
-//   - Accent 用 GitHub 的链接蓝而不是品牌的橙色：橙是 diff 里「元信息」
-//     （引用名、状态字母）的颜色，选中态再用橙会和那些标记抢注意力。
-//   - Focus 是半透明的：输入框的聚焦描边落在浅灰底上，实心蓝太抢眼，
-//     半透明的一圈能指认焦点又不盖住内容。
-//   - Scrollbar 比框架默认淡一档（0.32 → 0.22）：滚动条是随时在的常驻件，
-//     默认那档在浅色长列表里像一条脏边。
+// 参见 DESIGN.md：以 #010102 深邃画布为基准，采用四级表面明度阶梯（Surface 1~4）、
+// 1px Hairline 发丝边框（#23252a），以及 Linear 标志性的薰衣草蓝（#5e6ad2）作为唯一主色。
 func glossTheme(dark bool) *ui.Theme {
 	t := ui.LightTheme()
 	if dark {
@@ -105,49 +92,51 @@ func glossTheme(dark bool) *ui.Theme {
 	}
 
 	if dark {
-		// Background 是深色下的「浮层底」而不是画布底：画布由 pal.appBg
-		// （#0d1117）自己铺，框架拿 Background 画的是对话框面板、弹出层、
-		// 提示气泡这些**浮在内容之上**的东西。取 #161b22（GitHub 的 overlay
-		// 色）：原先跟画布同色，深色对话框的面板边缘就消失了 —— 内容浮在
-		// 一片被压暗的画布上，看不出卡片在哪儿。浅色那边 Background 是纯白，
-		// 和画布同色反而正好（白卡片压在深色遮罩上）。
-		t.Background = ui.Hex("#161b22")
-		t.Surface = ui.Hex("#161b22")
-		t.SurfaceHover = ui.Hex("#21262d")
-		t.SurfacePressed = ui.Hex("#282e37")
-		t.Border = ui.Hex("#30363d")
-		t.Text = ui.Hex("#e6edf3")
-		t.TextMuted = ui.Hex("#8b949e")
-		t.Accent = ui.Hex("#1f6feb")
-		t.AccentHover = ui.Hex("#388bfd")
-		t.AccentPressed = ui.Hex("#1158c7")
+		// Linear 规范深色系统：
+		// 画布底色由 pal.appBg (#010102) 铺陈，
+		// t.Background 是浮层/弹窗底（Linear Surface 2 #141516 或 Surface 3 #18191a）。
+		// Surface 阶梯：Surface 1 (#0f1011)，SurfaceHover (#141516)，SurfacePressed (#18191a)。
+		// 边框采用 Linear 1px Hairline (#23252a)。
+		// 文本采用 Ink 灰阶：#f7f8f8 (正文), #8a8f98 (次要)。
+		// 单一主色 Accent：Linear 薰衣草蓝 #5e6ad2。
+		t.Background = ui.Hex("#141516")
+		t.Surface = ui.Hex("#0f1011")
+		t.SurfaceHover = ui.Hex("#141516")
+		t.SurfacePressed = ui.Hex("#18191a")
+		t.Border = ui.Hex("#23252a")
+		t.Text = ui.Hex("#f7f8f8")
+		t.TextMuted = ui.Hex("#8a8f98")
+		t.Accent = ui.Hex("#5e6ad2")
+		t.AccentHover = ui.Hex("#828fff")
+		t.AccentPressed = ui.Hex("#5e69d1")
 		t.AccentText = ui.Hex("#ffffff")
-		t.Danger = ui.Hex("#f85149")
-		t.Warning = ui.Hex("#d29922")
-		t.Success = ui.Hex("#3fb950")
-		t.Selection = ui.RGBA(31, 111, 235, 0.45)
-		t.Focus = ui.RGBA(88, 166, 255, 0.65)
-		t.Scrollbar = ui.RGBA(255, 255, 255, 0.24)
+		t.Danger = ui.Hex("#e5484d")
+		t.Warning = ui.Hex("#e09f3e")
+		t.Success = ui.Hex("#27a644")
+		t.Selection = ui.RGBA(94, 106, 210, 0.22)
+		t.Focus = ui.RGBA(94, 106, 210, 0.50)
+		t.Scrollbar = ui.RGBA(255, 255, 255, 0.16)
 		return t
 	}
 
+	// 浅色模式对齐 Linear Inverse 规范
 	t.Background = ui.Hex("#ffffff")
-	t.Surface = ui.Hex("#f6f8fa")
-	t.SurfaceHover = ui.Hex("#eaeef2")
-	t.SurfacePressed = ui.Hex("#dfe3e8")
-	t.Border = ui.Hex("#d0d7de")
-	t.Text = ui.Hex("#1f2328")
-	t.TextMuted = ui.Hex("#59636e")
-	t.Accent = ui.Hex("#0969da")
-	t.AccentHover = ui.Hex("#0860c4")
-	t.AccentPressed = ui.Hex("#0550ae")
+	t.Surface = ui.Hex("#f7f8f9")
+	t.SurfaceHover = ui.Hex("#f0f2f5")
+	t.SurfacePressed = ui.Hex("#e4e7eb")
+	t.Border = ui.Hex("#e1e4e8")
+	t.Text = ui.Hex("#0f1115")
+	t.TextMuted = ui.Hex("#6e7781")
+	t.Accent = ui.Hex("#5e6ad2")
+	t.AccentHover = ui.Hex("#4f5bc4")
+	t.AccentPressed = ui.Hex("#414ca8")
 	t.AccentText = ui.Hex("#ffffff")
-	t.Danger = ui.Hex("#cf222e")
-	t.Warning = ui.Hex("#9a6700")
-	t.Success = ui.Hex("#1a7f37")
-	t.Selection = ui.RGBA(9, 105, 218, 0.25)
-	t.Focus = ui.RGBA(9, 105, 218, 0.55)
-	t.Scrollbar = ui.RGBA(0, 0, 0, 0.22)
+	t.Danger = ui.Hex("#e5484d")
+	t.Warning = ui.Hex("#d97706")
+	t.Success = ui.Hex("#27a644")
+	t.Selection = ui.RGBA(94, 106, 210, 0.18)
+	t.Focus = ui.RGBA(94, 106, 210, 0.45)
+	t.Scrollbar = ui.RGBA(0, 0, 0, 0.18)
 	return t
 }
 
@@ -195,38 +184,38 @@ func paletteFor(t *ui.Theme) palette {
 	if t.Dark {
 		return palette{
 			hl:           hl,
-			appBg:        ui.Hex("#0d1117"),
-			codeBg:       ui.Hex("#0d1117"),
-			code:         ui.Hex("#e6edf3"),
-			lineNo:       ui.Hex("#6e7681"),
-			gutterBg:     ui.Hex("#0d1117"),
-			addBg:        ui.Hex("#12261e"),
-			addGutter:    ui.Hex("#1b4721"),
-			addBar:       ui.Hex("#3fb950"),
-			delBg:        ui.Hex("#25171c"),
-			delGutter:    ui.Hex("#4c1f24"),
-			delBar:       ui.Hex("#f85149"),
-			gapBg:        ui.Hex("#161b22"),
-			gapHover:     ui.Hex("#21262d"),
-			gapText:      ui.Hex("#8b949e"),
-			fileBg:       ui.Hex("#161b22"),
-			hunkBg:       ui.Hex("#121d2f"),
-			hunkText:     ui.Hex("#79c0ff"),
-			explainHover: ui.Hex("#1b2b45"),
-			sideBg:       ui.Hex("#11161d"),
-			border:       ui.Hex("#30363d"),
-			ref:          ui.Hex("#d29922"),
-			viewed:       ui.Hex("#3fb950"),
-			// 泳道色：八条线两两要能分开，也得在 #0d1117 上看得清
+			appBg:        ui.Hex("#010102"),           // Linear Canvas: 极致纯净深黑
+			codeBg:       ui.Hex("#010102"),
+			code:         ui.Hex("#f7f8f8"),           // Linear Ink
+			lineNo:       ui.Hex("#62666d"),           // Linear Ink Tertiary
+			gutterBg:     ui.Hex("#010102"),
+			addBg:        ui.RGBA(39, 166, 68, 0.09),  // 极淡半透明暗苔绿
+			addGutter:    ui.RGBA(39, 166, 68, 0.14),
+			addBar:       ui.Hex("#27a644"),           // Linear 语义绿发丝条
+			delBg:        ui.RGBA(229, 72, 77, 0.09),  // 极淡半透明暗绯红
+			delGutter:    ui.RGBA(229, 72, 77, 0.14),
+			delBar:       ui.Hex("#e5484d"),           // 校准红发丝条
+			gapBg:        ui.Hex("#0f1011"),           // Surface 1
+			gapHover:     ui.Hex("#141516"),           // Surface 2
+			gapText:      ui.Hex("#8a8f98"),           // Ink Subtle
+			fileBg:       ui.Hex("#0f1011"),           // Surface 1
+			hunkBg:       ui.Hex("#141516"),           // Surface 2: 告别旧版刺眼亮蓝！
+			hunkText:     ui.Hex("#8a8f98"),           // Ink Subtle 等宽中性文字
+			explainHover: ui.Hex("#18191a"),           // Surface 3
+			sideBg:       ui.Hex("#08090a"),           // 介于 Canvas 与 Surface 1 之间
+			border:       ui.Hex("#23252a"),           // Linear 1px Hairline
+			ref:          ui.Hex("#d0d6e0"),           // 中性 Ink Muted
+			viewed:       ui.Hex("#27a644"),
+			// 拓扑图莫兰迪/精密仪器 8 色谱系（明度与彩度均衡）：
 			lanes: [8]ui.Color{
-				ui.Hex("#58a6ff"), // 蓝
-				ui.Hex("#3fb950"), // 绿
-				ui.Hex("#d29922"), // 琥珀
-				ui.Hex("#bc8cff"), // 紫
-				ui.Hex("#f85149"), // 红
-				ui.Hex("#39c5cf"), // 青
-				ui.Hex("#db61a2"), // 粉
-				ui.Hex("#e3b341"), // 黄
+				ui.Hex("#5e6ad2"), // 主干/HEAD: Linear 薰衣草蓝
+				ui.Hex("#3eb489"), // 鼠尾草绿
+				ui.Hex("#e09f3e"), // 暖琥珀
+				ui.Hex("#9d8df1"), // 柔鸢尾紫
+				ui.Hex("#e5484d"), // 珊瑚红
+				ui.Hex("#45b6fe"), // 天青蓝
+				ui.Hex("#d977a8"), // 暮灰粉
+				ui.Hex("#38b2ac"), // 暗青
 			},
 		}
 	}
@@ -234,36 +223,35 @@ func paletteFor(t *ui.Theme) palette {
 		hl:           hl,
 		appBg:        ui.Hex("#ffffff"),
 		codeBg:       ui.Hex("#ffffff"),
-		code:         ui.Hex("#1f2328"),
-		lineNo:       ui.Hex("#6e7781"),
+		code:         ui.Hex("#0f1115"),
+		lineNo:       ui.Hex("#8c959f"),
 		gutterBg:     ui.Hex("#ffffff"),
-		addBg:        ui.Hex("#dafbe1"),
-		addGutter:    ui.Hex("#aceebb"),
-		addBar:       ui.Hex("#1a7f37"),
-		delBg:        ui.Hex("#ffebe9"),
-		delGutter:    ui.Hex("#ffd7d5"),
-		delBar:       ui.Hex("#cf222e"),
-		gapBg:        ui.Hex("#f6f8fa"),
-		gapHover:     ui.Hex("#eaeef2"),
+		addBg:        ui.RGBA(39, 166, 68, 0.10),
+		addGutter:    ui.RGBA(39, 166, 68, 0.16),
+		addBar:       ui.Hex("#27a644"),
+		delBg:        ui.RGBA(229, 72, 77, 0.10),
+		delGutter:    ui.RGBA(229, 72, 77, 0.16),
+		delBar:       ui.Hex("#e5484d"),
+		gapBg:        ui.Hex("#f7f8f9"),
+		gapHover:     ui.Hex("#f0f2f5"),
 		gapText:      ui.Hex("#6e7781"),
-		fileBg:       ui.Hex("#f6f8fa"),
-		hunkBg:       ui.Hex("#ddf4ff"),
-		hunkText:     ui.Hex("#0550ae"),
+		fileBg:       ui.Hex("#f7f8f9"),
+		hunkBg:       ui.Hex("#f0f2f5"),
+		hunkText:     ui.Hex("#4b535d"),
 		explainHover: ui.Hex("#ffffff"),
-		sideBg:       ui.Hex("#fafbfc"),
-		border:       ui.Hex("#d0d7de"),
-		ref:          ui.Hex("#bc4c00"),
-		viewed:       ui.Hex("#1a7f37"),
-		// 同一套色相，压暗一档，在白底上才够看
+		sideBg:       ui.Hex("#f7f8f9"),
+		border:       ui.Hex("#e1e4e8"),
+		ref:          ui.Hex("#4b535d"),
+		viewed:       ui.Hex("#27a644"),
 		lanes: [8]ui.Color{
-			ui.Hex("#0969da"),
-			ui.Hex("#1a7f37"),
-			ui.Hex("#9a6700"),
-			ui.Hex("#8250df"),
-			ui.Hex("#cf222e"),
-			ui.Hex("#1b7c83"),
-			ui.Hex("#bf3989"),
-			ui.Hex("#7d4e00"),
+			ui.Hex("#5e6ad2"),
+			ui.Hex("#2d9d74"),
+			ui.Hex("#c9822b"),
+			ui.Hex("#7e6cd8"),
+			ui.Hex("#cf3b40"),
+			ui.Hex("#2693db"),
+			ui.Hex("#b85487"),
+			ui.Hex("#288c87"),
 		},
 	}
 }

@@ -272,6 +272,107 @@ func TestRefLabel(t *testing.T) {
 	}
 }
 
+// 提交行应该能同时解析出 HEAD 本地分支、远程分支（如 origin/beta）和标签，
+// 并自动跳过 origin/HEAD 这种符号引用。
+func TestParseRefBadges(t *testing.T) {
+	// 场景 1：用户最关心的分支同步场景 —— 同时包含本地 HEAD 与远程 origin
+	t.Run("HEAD and remote branch", func(t *testing.T) {
+		got := parseRefBadges("HEAD -> beta, origin/beta", []string{"origin"})
+		if len(got) != 2 {
+			t.Fatalf("want 2 badges, got %d: %+v", len(got), got)
+		}
+		if got[0].Label != "HEAD → beta" || got[0].Kind != refBadgeLocal {
+			t.Errorf("badge[0] = %+v, want HEAD → beta (local)", got[0])
+		}
+		if got[1].Label != "origin/beta" || got[1].Kind != refBadgeRemote {
+			t.Errorf("badge[1] = %+v, want origin/beta (remote)", got[1])
+		}
+	})
+
+	// 场景 2：过滤 origin/HEAD 符号引用
+	t.Run("filters origin/HEAD symref", func(t *testing.T) {
+		got := parseRefBadges("HEAD -> main, origin/main, origin/HEAD", []string{"origin"})
+		if len(got) != 2 {
+			t.Fatalf("want 2 badges, got %d: %+v", len(got), got)
+		}
+		if got[0].Label != "HEAD → main" || got[1].Label != "origin/main" {
+			t.Errorf("got %+v, want [HEAD → main, origin/main]", got)
+		}
+	})
+
+	// 场景 3：排序保证 本地分支 > 远程分支 > 标签
+	t.Run("orders local > remote > tag", func(t *testing.T) {
+		got := parseRefBadges("tag: v1.0, origin/main, main", []string{"origin"})
+		if len(got) != 3 {
+			t.Fatalf("want 3 badges, got %d", len(got))
+		}
+		if got[0].Label != "main" || got[0].Kind != refBadgeLocal {
+			t.Errorf("badge[0] = %+v, want main", got[0])
+		}
+		if got[1].Label != "origin/main" || got[1].Kind != refBadgeRemote {
+			t.Errorf("badge[1] = %+v, want origin/main", got[1])
+		}
+		if got[2].Label != "tag: v1.0" || got[2].Kind != refBadgeTag {
+			t.Errorf("badge[2] = %+v, want tag: v1.0", got[2])
+		}
+	})
+
+	// 场景 4：分离 HEAD
+	t.Run("detached HEAD", func(t *testing.T) {
+		got := parseRefBadges("HEAD", nil)
+		if len(got) != 1 || got[0].Label != "HEAD" || got[0].Kind != refBadgeLocal {
+			t.Errorf("got %+v, want [HEAD]", got)
+		}
+	})
+
+	// 场景 5：空引用
+	t.Run("empty refs", func(t *testing.T) {
+		if got := parseRefBadges("", nil); len(got) != 0 {
+			t.Errorf("want empty, got %+v", got)
+		}
+		if got := parseRefBadges("   ", nil); len(got) != 0 {
+			t.Errorf("want empty, got %+v", got)
+		}
+	})
+
+	// 场景 6：多个远程
+	t.Run("multiple remotes", func(t *testing.T) {
+		got := parseRefBadges("upstream/main, origin/main, HEAD -> main", []string{"origin", "upstream"})
+		if len(got) != 3 {
+			t.Fatalf("want 3 badges, got %d", len(got))
+		}
+		if got[0].Label != "HEAD → main" {
+			t.Errorf("badge[0] = %+v, want HEAD → main", got[0])
+		}
+		if got[1].Kind != refBadgeRemote || got[2].Kind != refBadgeRemote {
+			t.Errorf("want both remotes to be refBadgeRemote: %+v", got)
+		}
+	})
+}
+
+// 测试提交列表 UI 渲染中能够同时看到 HEAD 分支和 origin 分支徽章
+func TestCommitRowShowsRemoteBadge(t *testing.T) {
+	a := histApp(t)
+	a.remotes = []string{"origin"}
+	a.setTab(1)
+	settle(t, a)
+
+	// 模拟最新提交已同步到 origin/main
+	if len(a.commits) > 0 {
+		a.commits[0].Refs = "HEAD -> main, origin/main"
+	}
+
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+
+	if !tt.HasText("HEAD → main") {
+		t.Errorf("没有在历史列表中找到 HEAD → main 徽章：%q", tt.Texts())
+	}
+	if !tt.HasText("origin/main") {
+		t.Errorf("没有在历史列表中找到 origin/main 徽章：%q", tt.Texts())
+	}
+}
+
 // 连着进两次历史 tab 也要正常。setTab 里 loadCommits 和 loadCommit 会
 // 前后脚发起，两者曾经抢同一个 loadSeq —— 后发的把先发的撞掉，提交列表
 // 永远停在「正在读提交…」。第一次进来 commitSel 还是 -1，所以只有第二次

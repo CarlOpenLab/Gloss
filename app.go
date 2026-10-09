@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -232,9 +233,24 @@ type app struct {
 	ex        explainState
 	// settingsOn 是「模型设置」对话框是否打开；editCfg 是编辑中的副本，
 	// 点确定之前不动真配置。
-	settingsOn bool
-	editCfg    store.Config
-	editIdx    int
+	settingsOn    bool
+	settingsTab   settingsTab
+	editCfg       store.Config
+	editIdx       int
+	showAPIKey    bool
+	magpieOnline  bool
+	magpieModels  []string
+	magpieProbing bool
+	themeMode     string // "system", "light", "dark"
+	locale        string // "zh", "en"
+	appIcon       string // "black", "white"
+	editThemeMode string
+	editLocale    string
+	editAppIcon   string
+
+	// —— 顶部弹窗（HeroUI 下拉）——
+	repoDropdownOpen   bool
+	branchDropdownOpen bool
 
 	// —— 命令栏（⌘K）——
 	palette paletteState
@@ -306,9 +322,12 @@ type app struct {
 }
 
 func newApp() *app {
+	SetLocale("zh")
 	a := &app{
 		split:             true,
 		sidebarOn:         true,
+		themeMode:         "system",
+		locale:            "zh",
 		viewed:            map[string]string{},
 		folded:            map[string]bool{},
 		commitSel:         -1,
@@ -371,6 +390,20 @@ func (a *app) attachStore(s *store.Store) {
 	a.sidebarOn = !cfg.SidebarOff
 	a.sidebarWidthVal = cfg.SidebarWidth
 	a.filePaneWidthVal = cfg.FilePaneWidth
+	a.themeMode = cfg.ThemeMode
+	if a.themeMode == "" {
+		a.themeMode = "system"
+	}
+	a.locale = cfg.Locale
+	if a.locale == "" {
+		a.locale = "zh"
+	}
+	SetLocale(a.locale)
+	a.appIcon = cfg.AppIcon
+	if a.appIcon == "" {
+		a.appIcon = "black"
+	}
+	a.syncAppIcon()
 	a.viewed = s.State().Viewed
 	if a.viewed == nil {
 		a.viewed = map[string]string{}
@@ -385,10 +418,7 @@ func (a *app) persist() {
 	a.run(func() { _ = s.Save() })
 }
 
-// saveViewSettings 记下跟界面有关的几项设置（视图模式、侧栏、字号、面板宽度）。
-//
-// 只覆盖这几项，别的字段原样留着 —— 模型设置的保存走 applySettings，
-// 两边各管各的，不会互相冲掉。
+// saveViewSettings 记下跟界面有关的几项设置（视图模式、侧栏、字号、面板宽度、外观与语言）。
 func (a *app) saveViewSettings() {
 	cfg := a.store.Config()
 	cfg.Split = a.split
@@ -401,15 +431,98 @@ func (a *app) saveViewSettings() {
 	if a.filePaneWidthVal > 0 {
 		cfg.FilePaneWidth = a.filePaneWidthVal
 	}
+	cfg.ThemeMode = a.themeMode
+	cfg.Locale = a.locale
+	cfg.AppIcon = a.appIcon
 	a.store.SetConfig(cfg)
 	a.persist()
+}
+
+// syncAppIcon 同步当前选中的图标至 macOS Dock。
+func (a *app) syncAppIcon() {
+	if a.win == nil {
+		return
+	}
+	if a.appIcon == "white" {
+		_ = mygo.App.Dock.SetIcon(iconPureWhitePNG)
+	} else {
+		_ = mygo.App.Dock.SetIcon(iconPureBlackPNG)
+	}
+}
+
+// setAppIcon 切换应用图标风格（"black" / "white"）。
+func (a *app) setAppIcon(mode string) {
+	if mode != "white" {
+		mode = "black"
+	}
+	if a.appIcon == mode {
+		return
+	}
+	a.appIcon = mode
+	a.syncAppIcon()
+
+	// 将对应图标写回 resources/icon.png，保证未来打包与构建时生效
+	src := iconPureBlackPNG
+	if mode == "white" {
+		src = iconPureWhitePNG
+	}
+	if len(src) > 0 {
+		_ = os.WriteFile("resources/icon.png", src, 0o644)
+	}
+
+	a.saveViewSettings()
+}
+
+// setThemeMode 切换外观色彩模式（"system" / "light" / "dark"）。
+func (a *app) setThemeMode(mode string) {
+	if mode != "light" && mode != "dark" {
+		mode = "system"
+	}
+	if a.themeMode == mode {
+		return
+	}
+	a.themeMode = mode
+	a.saveViewSettings()
+	a.syncMenu()
+}
+
+// setLocale 切换全局语言设定（"zh" / "en"）。
+func (a *app) setLocale(loc string) {
+	if loc != "en" {
+		loc = "zh"
+	}
+	if a.locale == loc {
+		return
+	}
+	a.locale = loc
+	SetLocale(loc)
+	a.saveViewSettings()
+	a.rebuildRefTree()
+	a.rebuildTree()
+	a.rowsDirty = true
+	if a.menu != nil {
+		mygo.App.SetMenu(buildAppMenu(a))
+	}
+	a.syncMenu()
+}
+
+// isDark 根据用户外观偏好和当前环境计算生效的暗黑状态。
+func (a *app) isDark(c *ui.Context) bool {
+	switch a.themeMode {
+	case "light":
+		return false
+	case "dark":
+		return true
+	default:
+		return c.Theme().Dark
+	}
 }
 
 func (a *app) view(c *ui.Context) {
 	// 换成 Gloss 自己的主题。必须在建任何控件之前：SetTheme 只作用于
 	// 调用之后创建的控件，放在后面的话这一帧前半截还是框架默认配色。
-	// 明暗从框架那份读 —— 它是跟着系统外观走的，我们只替换配色。
-	dark := c.Theme().Dark
+	// 明暗由 isDark 综合系统外观与用户偏好计算。
+	dark := a.isDark(c)
 	c.SetTheme(themeFor(dark, c.Preferences()))
 	pal := paletteFor(c.Theme())
 
@@ -417,7 +530,7 @@ func (a *app) view(c *ui.Context) {
 	// 放在最前面：这一帧的 Toast 就能把它报出来。
 	if a.copyText != "" {
 		c.WriteClipboard(a.copyText)
-		a.opNote = "已复制 " + a.copyText
+		a.opNote = Tf("已复制 %s", "Copied %s", a.copyText)
 		a.copyText = ""
 	}
 
@@ -593,35 +706,31 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 		// 标题块给个宽度上限：仓库路径可以很长，不封顶的话它会把右边
 		// 那几颗工具按钮顶到「»」菜单里去 —— 路径是「我在看哪儿」的
 		// 补充信息，按钮才是要点的东西，谁让位不该反过来。
-		// 名和路径都是 SingleLine，各自的截法见 shortPath。
-		a.repoHeader(c, t, pal)
+		// 侧栏未开启时在工具栏左侧展示仓库名下拉与分支；侧栏开启时仓库名已位于侧栏顶部，工具栏直接展示当前分支
+		if !a.sidebarOn {
+			a.repoHeader(c, t, pal)
+		} else if a.branch != "" {
+			a.branchChip(c, t, pal)
+		}
 
 		// 耗时写操作（抓取/拉取/推送/变基/合并/检出等）在标题和 Spacer 之间展示，
 		// 宽度由 Spacer 弹性吸收，避免右侧核心工具栏发生任何水平抖动与重排。
 		// 暂存/取消暂存为瞬时操作，提交在底部提交栏展示，均不在此喧宾夺主。
 		if a.toolbarOpVisible() {
-			ui.Row(c).Gap(6).AlignItems(ui.Center).Shrink(0).Children(func() {
-				ui.Spinner(c).Size(toolIconSize, toolIconSize)
-				ui.Text(c, a.opName).FontSize(11).TextColor(t.TextMuted).SingleLine()
-			})
+			ui.Box(c).Radius(12).Padding(3, 9).
+				Background(t.SurfaceHover).
+				Border(1, t.Border.Alpha(0.6)).
+				Children(func() {
+					ui.Row(c).Gap(6).AlignItems(ui.Center).Shrink(0).Children(func() {
+						ui.Spinner(c).Size(12, 12)
+						ui.Text(c, a.opName).FontSize(11).TextColor(t.TextMuted).SingleLine()
+					})
+				})
 		}
 
 		ui.Spacer(c)
 
-		// 没打开仓库时这两个开关没有作用对象，画成灰的（框架会压到半透明），
-		// 点也不响应 —— 一个点了没反应的按钮比一个灰掉的按钮更让人困惑。
-		//
-		// 「没打开」是 state 说的，不是 repoPath：打开失败时它也记着东西
-		//（试的是哪个文件夹）。失败态下两个 tab 画的是同一张错误卡，切换
-		// 只会让人以为换了边会有别的，实际没有。
 		noRepo := !a.repoReady()
-
-		// 改动 / 历史。⌘1 ⌘2 也能切。
-		tab := a.tab
-		toolbarSegmentedText(c, &tab, noRepo, "改动", "历史")
-		if tab != a.tab {
-			a.setTab(tab)
-		}
 
 		// unified / split 切换（Lucide rows-3 / columns-2 矢量图标）。
 		split := a.split
@@ -630,8 +739,8 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 			mode = 1
 		}
 		toolbarSegmentedIcons(c, &mode, noRepo,
-			segmentedIconItem{label: "Unified", tip: "统一视图（单栏） ⌘U", icon: iconUnified},
-			segmentedIconItem{label: "Split", tip: "左右对照（分栏）", icon: iconSplit},
+			segmentedIconItem{label: "Unified", tip: T("统一视图（单栏） ⌘U", "Unified View ⌘U"), icon: iconUnified},
+			segmentedIconItem{label: "Split", tip: T("左右对照（分栏）", "Split View"), icon: iconSplit},
 		)
 		if (mode == 1) != split {
 			a.setSplit(mode == 1)
@@ -644,22 +753,20 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 
 		toolbarDivider(c)
 
-		// 没有仓库时「刷新」什么都不做（reload 会直接返回），画成灰的。
-		// 当正在刷新时，按钮内部 15x15 图标平滑切换为 Spinner 原地旋转，
-		// 彻底杜绝在刷新按钮外部横向弹出额外 icon 造成的剧烈布局偏移。
+		// 刷新、设置、打开仓库（纯图标按钮，对齐 Fork 与 macOS 原生设计规范）
 		refreshing := a.state == loadLoading
-		refreshTip := "重新读取仓库 ⌘R"
+		refreshTip := T("刷新仓库状态 ⌘R", "Refresh Repository ⌘R")
 		if refreshing {
-			refreshTip = "正在重新读取仓库…"
+			refreshTip = T("正在刷新仓库状态…", "Refreshing repository…")
 		}
-		if toolButton(c, "刷新", refreshTip, noRepo, refreshing, drawRefreshIcon) {
+		if toolIconButton(c, T("刷新", "Refresh"), refreshTip, noRepo, refreshing, drawRefreshIcon) {
 			a.reload()
 		}
-		if toolButton(c, "模型设置…", "配置模型和 API Key", false, false, drawSlidersIcon) {
-			a.openSettings()
-		}
-		if toolButton(c, "打开仓库…", "选一个本地 git 仓库", false, false, drawFolderIcon) {
+		if toolIconButton(c, T("打开仓库…", "Open…"), T("打开本地 Git 仓库 ⌘O", "Open Local Git Repository ⌘O"), false, false, drawFolderIcon) {
 			a.chooseFolder()
+		}
+		if toolIconButton(c, T("模型设置…", "Settings…"), T("偏好与设置 ⌘,", "Preferences & Settings ⌘,"), false, false, drawSettingsIcon) {
+			a.openSettings()
 		}
 	}).Height(a.toolbarHeight(c)).Shrink(0).
 		Padding(0, bar.Right+12, 0, padLeft).
@@ -667,18 +774,18 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 		DragWindow().
 		Background(pal.appBg).
 		Border(0, pal.border).
-		Label("工具栏")
+		Label(T("工具栏", "Toolbar"))
 }
 
-// repoHeader 是工具栏左侧的仓库选择器与分支状态徽章：
-// 第一行是仓库名（带下拉箭头，点击展开最近项目）与分支徽章（同行基线对齐），第二行是精简路径。
+// repoHeader 是工具栏左侧的仓库选择器与路径说明：
+// 第一行是仓库名（带下拉箭头，点击展开最近项目），第二行是精简路径。
 func (a *app) repoHeader(c *ui.Context, t *ui.Theme, pal palette) {
 	tw := a.titleWidth(c)
 	name := a.repoName
 	if name == "" {
 		name = "Gloss"
 	}
-	sub := "未打开仓库"
+	sub := T("未打开仓库", "No repository open")
 	if a.repoPath != "" {
 		sub = shortPath(c, a.repoPath, tw)
 	}
@@ -686,17 +793,28 @@ func (a *app) repoHeader(c *ui.Context, t *ui.Theme, pal palette) {
 	ui.Column(c).Gap(2).MinWidth(0).MaxWidth(tw).Children(func() {
 		// 第一行：[仓库名 ▾] 与 [分支徽章]，处于同一水平线上
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			repoBtn := ui.ButtonBase(c).Radius(4).Padding(1, 4, 1, 0).
-				Tooltip("点击切换最近项目（或 ⌘O 打开本地仓库）")
+			repoBtn := ui.ButtonBase(c).Radius(5).Padding(2, 6, 2, 0).
+				Cursor(ui.CursorPointer).Label(name).
+				Tooltip(T("点击切换最近项目（或 ⌘O 打开本地仓库）", "Switch recent project (or ⌘O to open repository)"))
+			if repoBtn.Hovered() || a.repoDropdownOpen {
+				repoBtn.Background(t.SurfaceHover)
+			}
+			fadeColors(repoBtn)
 			repoBtn.Children(func() {
 				ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, name).Bold().FontSize(13).SingleLine()
+					ui.Text(c, name).Bold().FontSize(13).SingleLine().MaxWidth(180)
 					drawIcon(c, iconChevronDown, 10, t.TextMuted)
 				})
 			})
-			repoBtn.Menu(func(m *ui.Menu) {
-				a.recentReposMenu(m)
-			})
+			if repoBtn.Clicked() {
+				a.branchDropdownOpen = false
+				a.repoDropdownOpen = !a.repoDropdownOpen
+			}
+			if a.repoDropdownOpen {
+				ui.PopoverBase(c, repoBtn, &a.repoDropdownOpen, func(panel *ui.Element) {
+					a.repoDropdownPanel(c, panel, pal)
+				})
+			}
 
 			a.branchChip(c, t, pal)
 		})
@@ -709,6 +827,139 @@ func (a *app) repoHeader(c *ui.Context, t *ui.Theme, pal palette) {
 	})
 }
 
+// repoDropdownPanel 呈现 HeroUI 规范的最近项目下拉卡片。
+func (a *app) repoDropdownPanel(c *ui.Context, panel *ui.Element, pal palette) {
+	t := c.Theme()
+	panel.Radius(12).Background(t.Surface).Border(1, pal.border).
+		Shadow(0, 10, 30, 0, ui.RGBA(0, 0, 0, 0.18)).
+		Margin(4, 0, 0, 0).Padding(6).MinWidth(340).MaxWidth(440).Gap(2)
+
+	recent := a.store.State().RecentRepos
+	hasRecent := false
+	for _, p := range recent {
+		if p != "" {
+			hasRecent = true
+			break
+		}
+	}
+
+	// 标题区域
+	ui.Row(c).Padding(6, 8, 4, 8).Gap(6).AlignItems(ui.Center).Children(func() {
+		drawIcon(c, iconClock, 12, t.TextMuted)
+		ui.Text(c, T("最近打开的项目", "Recent Repositories")).FontSize(11).Bold().TextColor(t.TextMuted)
+	})
+
+	if !hasRecent {
+		ui.Box(c).Padding(8, 10).Children(func() {
+			ui.Text(c, T("暂无最近打开的项目", "No recent repositories")).FontSize(12).TextColor(t.TextMuted)
+		})
+	} else {
+		ui.Scroll(c).MaxHeight(320).FillWidth().Children(func() {
+			for _, p := range recent {
+				if p == "" {
+					continue
+				}
+				pathCopy := p
+				base := filepath.Base(p)
+				isCurrent := (p == a.repoPath)
+
+				item := ui.ButtonBase(c).Height(40).Radius(7).Padding(4, 8).Gap(8).
+					AlignItems(ui.Center).Cursor(ui.CursorPointer)
+
+				bg := ui.Transparent
+				border := ui.Transparent
+				switch {
+				case isCurrent && item.Hovered():
+					bg = t.Accent.Alpha(0.12)
+					border = t.Accent.Alpha(0.3)
+				case isCurrent:
+					bg = t.Accent.Alpha(0.06)
+					border = t.Accent.Alpha(0.2)
+				case item.Hovered():
+					bg = t.SurfaceHover
+				}
+				item.Background(bg).Border(1, border)
+				fadeColors(item)
+
+				item.Children(func() {
+					iconCol := t.TextMuted
+					if isCurrent {
+						iconCol = t.Accent
+					}
+					drawIcon(c, iconFolder, 14, iconCol)
+
+					ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
+						nameCol := t.Text
+						if isCurrent {
+							nameCol = t.Accent
+						}
+						tElem := ui.Text(c, base).FontSize(12.5).SingleLine().TextColor(nameCol)
+						if isCurrent {
+							tElem.Bold()
+						}
+						ui.Text(c, pathCopy).FontSize(10.5).SingleLine().TextColor(t.TextMuted.Alpha(0.85))
+					})
+
+					if isCurrent {
+						ui.Box(c).Radius(4).Padding(1, 5).Background(t.Accent.Alpha(0.14)).Children(func() {
+							ui.Text(c, T("当前", "Current")).FontSize(10).Bold().TextColor(t.Accent)
+						})
+					}
+				})
+
+				if item.Clicked() {
+					a.repoDropdownOpen = false
+					if !isCurrent {
+						a.openRepo(pathCopy)
+					}
+				}
+			}
+		})
+	}
+
+	// 分隔线
+	ui.Box(c).Height(1).FillWidth().Margin(4, 2).Background(t.Border.Alpha(0.4))
+
+	// 打开其他本地仓库… ⌘O
+	openBtn := ui.ButtonBase(c).Height(30).Radius(6).Padding(0, 8).Gap(7).
+		AlignItems(ui.Center).Cursor(ui.CursorPointer)
+	if openBtn.Hovered() {
+		openBtn.Background(t.SurfaceHover)
+	}
+	fadeColors(openBtn)
+	openBtn.Children(func() {
+		drawIcon(c, iconFolderPlus, 13, t.Text)
+		ui.Text(c, T("打开其他本地仓库…", "Open Other Local Repository…")).FontSize(12).TextColor(t.Text)
+		ui.Spacer(c)
+		ui.Box(c).Radius(3).Padding(1, 5).Background(t.SurfaceHover).Border(1, t.Border.Alpha(0.5)).Children(func() {
+			ui.Text(c, "⌘O").FontSize(10).Font("monospace").TextColor(t.TextMuted)
+		})
+	})
+	if openBtn.Clicked() {
+		a.repoDropdownOpen = false
+		a.chooseFolder()
+	}
+
+	// 清除最近打开记录
+	if hasRecent {
+		clearBtn := ui.ButtonBase(c).Height(26).Radius(5).Padding(0, 8).Gap(6).
+			AlignItems(ui.Center).Cursor(ui.CursorPointer)
+		if clearBtn.Hovered() {
+			clearBtn.Background(t.SurfaceHover)
+		}
+		fadeColors(clearBtn)
+		clearBtn.Children(func() {
+			drawIcon(c, iconTrash, 11, t.TextMuted)
+			ui.Text(c, T("清除最近打开记录", "Clear Recent Repositories")).FontSize(11).TextColor(t.TextMuted)
+		})
+		if clearBtn.Clicked() {
+			a.repoDropdownOpen = false
+			a.store.ClearRecentRepos()
+			a.persist()
+		}
+	}
+}
+
 // branchChip 是工具栏上那枚「现在在哪条分支上」的小牌子。
 // 采用 Lucide 矢量分支图标与微交互设计，点击可弹出本地分支快捷切换列表。
 func (a *app) branchChip(c *ui.Context, t *ui.Theme, pal palette) {
@@ -717,37 +968,132 @@ func (a *app) branchChip(c *ui.Context, t *ui.Theme, pal palette) {
 	}
 	name, fg, bg := a.branch, pal.ref, pal.ref.Alpha(0.12)
 	border := pal.ref.Alpha(0.30)
-	tip := "当前分支 " + a.branch + "（点击切换分支）"
+	tip := Tf("当前分支 %s（点击切换分支）", "Current branch %s (click to switch)", a.branch)
 	switch {
 	case a.pending.Kind == gitrepo.PendingRebase:
 		name = a.rebaseLabel()
 		fg = t.Warning
 		bg = t.Warning.Alpha(0.12)
 		border = t.Warning.Alpha(0.45)
-		tip = "变基还没做完。顶上的状态条里有「继续」「跳过」「中止」。"
+		tip = T("变基操作进行中。可在状态栏选择「继续」、「跳过」或「中止」。", "Rebase in progress. Use Continue, Skip, or Abort in the status bar.")
 	case a.detached:
-		name = "分离 HEAD：" + a.branch
+		name = T("分离 HEAD：", "Detached HEAD: ") + a.branch
 		fg = t.Warning
 		bg = t.Warning.Alpha(0.12)
 		border = t.Warning.Alpha(0.45)
-		tip = "HEAD 没有附在任何分支上（检出标签或某个提交之后就是这样）。" +
-			"在这里提交会成为游离提交 —— 要留下它，先新建一条分支。"
+		tip = T("HEAD 处于游离状态（分离 HEAD）。如需保留后续提交，请先创建新分支。", "HEAD is detached from any branch. Create a new branch if you wish to retain subsequent commits.")
 	}
 
-	chip := ui.ButtonBase(c).Radius(5).Padding(2, 7).
-		Background(bg).Border(1, border).Tooltip(tip)
-	if chip.Hovered() {
-		chip.Background(bg.Alpha(0.20))
+	chip := ui.ButtonBase(c).Height(28).Shrink(0).Radius(6).Padding(0, 9).
+		Background(bg).Border(1, border).Cursor(ui.CursorPointer).Tooltip(tip).
+		Label(name)
+	if chip.Hovered() || a.branchDropdownOpen {
+		chip.Background(bg.Alpha(0.22))
+		chip.Border(1, border.Alpha(0.6))
 	}
+	fadeColors(chip)
 	chip.Children(func() {
-		ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
-			drawIcon(c, iconGitBranch, 11, fg)
-			ui.Text(c, name).FontSize(11).Bold().SingleLine().TextColor(fg)
+		ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
+			drawIcon(c, iconGitBranch, 12, fg)
+			ui.Text(c, name).FontSize(12).Bold().SingleLine().MaxWidth(220).TextColor(fg)
+			drawIcon(c, iconChevronDown, 10, fg.Alpha(0.7))
 		})
 	})
-	chip.Menu(func(m *ui.Menu) {
-		a.branchQuickMenu(m)
+	if chip.Clicked() {
+		a.repoDropdownOpen = false
+		a.branchDropdownOpen = !a.branchDropdownOpen
+	}
+	if a.branchDropdownOpen {
+		ui.PopoverBase(c, chip, &a.branchDropdownOpen, func(panel *ui.Element) {
+			a.branchDropdownPanel(c, panel, pal)
+		})
+	}
+}
+
+// branchDropdownPanel 呈现 HeroUI 规范的本地分支快速切换卡片。
+func (a *app) branchDropdownPanel(c *ui.Context, panel *ui.Element, pal palette) {
+	t := c.Theme()
+	panel.Radius(12).Background(t.Surface).Border(1, pal.border).
+		Shadow(0, 10, 30, 0, ui.RGBA(0, 0, 0, 0.18)).
+		Margin(4, 0, 0, 0).Padding(6).MinWidth(220).MaxWidth(340).Gap(2)
+
+	local, _, _, _ := splitRefs(a.refs)
+
+	ui.Row(c).Padding(6, 8, 4, 8).Gap(6).AlignItems(ui.Center).Children(func() {
+		drawIcon(c, iconGitBranch, 12, pal.ref)
+		ui.Text(c, T("切换本地分支", "Switch Local Branch")).FontSize(11).Bold().TextColor(t.TextMuted)
 	})
+
+	if len(local) == 0 {
+		ui.Box(c).Padding(8, 10).Children(func() {
+			ui.Text(c, T("没有其他本地分支", "No other local branches")).FontSize(12).TextColor(t.TextMuted)
+		})
+		return
+	}
+
+	busy := a.op != gitrepo.OpNone
+	ui.Scroll(c).MaxHeight(320).FillWidth().Children(func() {
+		for _, b := range local {
+			bName := b.Name
+			isCurrent := (bName == a.branch)
+			bRef := b
+
+			btn := ui.ButtonBase(c).Height(30).Radius(6).Padding(0, 8).Gap(7).
+				AlignItems(ui.Center).Cursor(ui.CursorPointer).Disabled(busy)
+
+			bg := ui.Transparent
+			if isCurrent {
+				bg = pal.ref.Alpha(0.08)
+			} else if btn.Hovered() {
+				bg = t.SurfaceHover
+			}
+			btn.Background(bg)
+			fadeColors(btn)
+
+			btn.Children(func() {
+				fg := t.TextMuted
+				nameCol := t.Text
+				if isCurrent {
+					fg = pal.ref
+					nameCol = pal.ref
+				}
+				drawIcon(c, iconGitBranch, 12, fg)
+				bText := ui.Text(c, bName).FontSize(12).SingleLine().MaxWidth(220).TextColor(nameCol)
+				if isCurrent {
+					bText.Bold()
+				}
+				ui.Spacer(c)
+				if isCurrent {
+					ui.Box(c).Radius(3).Padding(1, 4).Background(pal.ref.Alpha(0.15)).Children(func() {
+						ui.Text(c, T("当前", "Current")).FontSize(10).Bold().TextColor(pal.ref)
+					})
+				}
+			})
+			if btn.Clicked() {
+				a.branchDropdownOpen = false
+				if !isCurrent && !busy {
+					a.checkoutRef(bRef)
+				}
+			}
+		}
+	})
+
+	// 分隔线与新建分支操作
+	ui.Box(c).Height(1).FillWidth().Margin(4, 2).Background(t.Border.Alpha(0.4))
+	newBranchBtn := ui.ButtonBase(c).Height(28).Radius(6).Padding(0, 8).Gap(7).
+		AlignItems(ui.Center).Cursor(ui.CursorPointer).Disabled(busy)
+	if newBranchBtn.Hovered() {
+		newBranchBtn.Background(t.SurfaceHover)
+	}
+	fadeColors(newBranchBtn)
+	newBranchBtn.Children(func() {
+		drawIcon(c, iconGitBranch, 12, t.Text)
+		ui.Text(c, T("新建分支…", "New Branch…")).FontSize(11.5).TextColor(t.Text)
+	})
+	if newBranchBtn.Clicked() {
+		a.branchDropdownOpen = false
+		a.openNewBranchDialog(a.branch, Tf("从当前分支 %s 创建", "Create from branch %s", a.branch))
+	}
 }
 
 // recentReposMenu 弹出最近打开的项目菜单。
@@ -771,11 +1117,11 @@ func (a *app) recentReposMenu(m *ui.Menu) {
 	if hasRecent {
 		m.Separator()
 	}
-	if m.Item("打开其他本地仓库… ⌘O").Chosen() {
+	if m.Item(T("打开其他本地仓库… ⌘O", "Open Other Local Repository… ⌘O")).Chosen() {
 		a.chooseFolder()
 	}
 	if hasRecent {
-		if m.Item("清除最近打开记录").Chosen() {
+		if m.Item(T("清除最近打开记录", "Clear Recent Repositories")).Chosen() {
 			a.store.ClearRecentRepos()
 			a.persist()
 		}
@@ -786,7 +1132,7 @@ func (a *app) recentReposMenu(m *ui.Menu) {
 func (a *app) branchQuickMenu(m *ui.Menu) {
 	local, _, _, _ := splitRefs(a.refs)
 	if len(local) == 0 {
-		m.Item("没有其他本地分支").Disabled(true)
+		m.Item(T("没有其他本地分支", "No other local branches")).Disabled(true)
 		return
 	}
 	busy := a.op != gitrepo.OpNone
@@ -837,23 +1183,23 @@ func (a *app) historyEmpty(c *ui.Context, t *ui.Theme) {
 	switch {
 	case a.hist == loadLoading && len(a.commits) == 0:
 		ui.Spinner(c)
-		ui.Text(c, "正在读提交…").TextColor(t.TextMuted)
+		ui.Text(c, T("正在读取提交记录…", "Loading commit history…")).TextColor(t.TextMuted)
 	case a.hist == loadFailed && len(a.commits) == 0:
-		ui.Text(c, "读不到历史").FontSize(18).Bold()
+		ui.Text(c, T("无法读取提交记录", "Failed to Load History")).FontSize(18).Bold()
 		ui.Text(c, a.histErr).TextColor(t.Danger)
-		if ui.Button(c, "重试").Clicked() {
+		if ui.Button(c, T("重试", "Retry")).Clicked() {
 			a.loadCommits()
 		}
 	case len(a.commits) == 0:
-		ui.Text(c, "还没有提交").FontSize(18).Bold()
-		ui.Text(c, "这个仓库还没有任何历史。").TextColor(t.TextMuted)
+		ui.Text(c, T("暂无提交记录", "No Commits Found")).FontSize(18).Bold()
+		ui.Text(c, T("当前仓库尚无任何提交记录。", "This repository has no commit history yet.")).TextColor(t.TextMuted)
 	case a.histDiff == loadLoading && len(a.files) == 0:
 		ui.Spinner(c)
-		ui.Text(c, "正在读这个提交…").TextColor(t.TextMuted)
+		ui.Text(c, T("正在读取提交详情…", "Loading commit details…")).TextColor(t.TextMuted)
 	case a.histDiff == loadFailed && len(a.files) == 0:
-		ui.Text(c, "读不到这个提交").FontSize(18).Bold()
+		ui.Text(c, T("无法读取提交详情", "Failed to Load Commit")).FontSize(18).Bold()
 		ui.Text(c, a.histDiffErr).TextColor(t.Danger)
-		if ui.Button(c, "重试").Clicked() {
+		if ui.Button(c, T("重试", "Retry")).Clicked() {
 			a.loadCommit(a.commitSel)
 		}
 	case a.commitSel >= 0 && a.commitSel < len(a.commits):
@@ -861,10 +1207,10 @@ func (a *app) historyEmpty(c *ui.Context, t *ui.Theme) {
 		ui.Text(c, cm.Subject).FontSize(18).Bold()
 		ui.Textf(c, "%s · %s · %s", cm.Short, cm.Author, cm.When.Format("2006-01-02 15:04")).
 			TextColor(t.TextMuted)
-		ui.Text(c, "这个提交没有改动内容。").TextColor(t.TextMuted)
+		ui.Text(c, T("此提交无文件变更内容。", "This commit contains no file changes.")).TextColor(t.TextMuted)
 	default:
-		ui.Text(c, "选一个提交").FontSize(18).Bold()
-		ui.Text(c, "左边挑一个提交，看看它改了什么。").TextColor(t.TextMuted)
+		ui.Text(c, T("选择提交记录", "Select a Commit")).FontSize(18).Bold()
+		ui.Text(c, T("请从列表中选择提交以查看变更详情。", "Select a commit from the list to view its changes.")).TextColor(t.TextMuted)
 	}
 }
 
@@ -884,6 +1230,17 @@ func (a *app) totalDel() int {
 	return n
 }
 
+// dirtyCount 计算工作区未提交的文件数量（staged + unstaged），用于侧栏「改动」项上的数字角标。
+func (a *app) dirtyCount() int {
+	if a.workFiles != nil {
+		return len(a.workFiles)
+	}
+	if a.tab == 0 {
+		return len(a.allFiles)
+	}
+	return 0
+}
+
 // run 起一个后台任务，并登记到 bg 上。所有后台 goroutine 都从这里出发，
 // 免得漏登记 —— 测试里漏一个就是随机失败。
 func (a *app) run(f func()) {
@@ -900,7 +1257,7 @@ func (a *app) chooseFolder() {
 	a.run(func() {
 		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
 			Parent:    a.win,
-			Title:     "选择 git 仓库",
+			Title:     T("选择 Git 仓库", "Select Git Repository"),
 			Directory: true,
 			// 允许直接选 .app 这类包，否则用户没法选中仓库根目录
 			TreatPackagesAsDirectories: true,
@@ -1383,9 +1740,9 @@ func (a *app) rebuildTree() {
 		roots = filetree.BuildAt(a.files, 0, "")
 	default:
 		roots = []*filetree.Node{
-			{Key: "g:s", Label: "已暂存", Path: "已暂存", Dir: true, FileIdx: -1,
+			{Key: "g:s", Label: T("已暂存", "Staged"), Path: "已暂存", Dir: true, FileIdx: -1,
 				Children: filetree.BuildAt(a.files[:stagedN], 0, "s|")},
-			{Key: "g:u", Label: "未暂存", Path: "未暂存", Dir: true, FileIdx: -1,
+			{Key: "g:u", Label: T("未暂存", "Unstaged"), Path: "未暂存", Dir: true, FileIdx: -1,
 				Children: filetree.BuildAt(a.files[stagedN:], stagedN, "u|")},
 		}
 	}

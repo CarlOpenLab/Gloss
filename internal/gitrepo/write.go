@@ -82,6 +82,16 @@ func (r *Repo) StageAll(ctx context.Context) error {
 	return err
 }
 
+// UnstageAll 把 index 里的全部改动撤出（重置暂存区到 HEAD，不影响工作区）。
+func (r *Repo) UnstageAll(ctx context.Context) error {
+	if r.baseRev(ctx) == emptyTree {
+		_, err := run(ctx, r.Root, "rm", "--cached", "-r", "-q", ".")
+		return err
+	}
+	_, err := run(ctx, r.Root, "reset", "-q")
+	return err
+}
+
 // applyHunk 是 hunk 级暂存/取消暂存的共同实现：重新跑一条和界面展示
 // 「同基线」的 diff，找出 hunkID 对应的那一段，原样切出来喂给
 // `git apply --cached [--reverse]`。

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -377,11 +379,11 @@ func (a *app) commitHeaderRow(c *ui.Context, t *ui.Theme, pal palette) {
 		Background(pal.fileBg).Children(func() {
 		ui.Box(c).Width(graphWidth(a.maxLanes)).Shrink(0)
 		ui.Row(c).Grow(1).MinWidth(0).Padding(0, 8).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "描述").FontSize(11).Grow(1).MinWidth(0).TextColor(t.TextMuted)
-			ui.Text(c, "作者").FontSize(11).Width(commitAuthorW).Shrink(0).TextColor(t.TextMuted)
-			ui.Text(c, "时间").FontSize(11).Width(commitWhenW).Shrink(0).
+			ui.Text(c, T("描述", "Description")).FontSize(11).Grow(1).MinWidth(0).TextColor(t.TextMuted)
+			ui.Text(c, T("作者", "Author")).FontSize(11).Width(commitAuthorW).Shrink(0).TextColor(t.TextMuted)
+			ui.Text(c, T("时间", "Date")).FontSize(11).Width(commitWhenW).Shrink(0).
 				TextAlign(ui.End).TextColor(t.TextMuted)
-			ui.Text(c, "哈希").FontSize(11).Width(commitHashW).Shrink(0).TextColor(t.TextMuted)
+			ui.Text(c, T("哈希", "Commit")).FontSize(11).Width(commitHashW).Shrink(0).TextColor(t.TextMuted)
 		})
 	})
 }
@@ -418,10 +420,23 @@ func (a *app) commitRow(c *ui.Context, pal palette, i int) {
 			// 中文主题没有空格可断，不给它就会被自己撑住、把徽章挤出去），
 			// 徽章不压，宁可截主题也不能让「这是哪条分支」看不全。
 			ui.Text(c, cm.Subject).FontSize(12).SingleLine().Shrink(1).MinWidth(0)
-			if ref := refLabel(cm.Refs); ref != "" {
-				ui.Text(c, ref).FontSize(10).Bold().SingleLine().Shrink(0).
+			badges := parseRefBadges(cm.Refs, a.remotes)
+			visible := badges
+			overflow := 0
+			if len(badges) > maxVisibleBadges {
+				visible = badges[:maxVisibleBadges-1]
+				overflow = len(badges) - (maxVisibleBadges - 1)
+			}
+			for _, b := range visible {
+				fg, bg, border := badgeColors(t, pal, b.Kind)
+				ui.Text(c, b.Label).FontSize(10).Bold().SingleLine().Shrink(0).
 					Padding(1, 6).Radius(4).
-					TextColor(pal.ref).Background(t.Surface)
+					TextColor(fg).Background(bg).Border(1, border)
+			}
+			if overflow > 0 {
+				ui.Text(c, fmt.Sprintf("+%d", overflow)).FontSize(10).Bold().SingleLine().Shrink(0).
+					Padding(1, 5).Radius(4).
+					TextColor(t.TextMuted).Background(t.Surface).Border(1, t.Border.Alpha(0.5))
 			}
 			ui.Spacer(c)
 
@@ -443,6 +458,109 @@ func (a *app) commitRow(c *ui.Context, pal palette, i int) {
 }
 
 // commitMenu 在 commitops.go（提交行右键点开之后的那些事）。
+
+// maxVisibleBadges 是一行提交最多渲染的徽章数，超过的折叠成「+N」。
+const maxVisibleBadges = 4
+
+// refBadgeKind 是提交行徽章的类型：本地分支、远程跟踪分支、标签。
+type refBadgeKind int
+
+const (
+	refBadgeLocal  refBadgeKind = iota // 本地分支或 HEAD，如 "HEAD → beta"、"main"
+	refBadgeRemote                     // 远程跟踪分支，如 "origin/beta"
+	refBadgeTag                        // 标签，如 "tag: v1.0"
+)
+
+type refBadge struct {
+	Label string
+	Kind  refBadgeKind
+}
+
+func badgeColors(t *ui.Theme, pal palette, kind refBadgeKind) (fg, bg, border ui.Color) {
+	switch kind {
+	case refBadgeRemote:
+		// 远程跟踪分支（如 origin/beta）：使用链接/强调蓝标识
+		fg = t.Accent
+		bg = t.Accent.Alpha(0.10)
+		border = t.Accent.Alpha(0.28)
+	case refBadgeTag:
+		// 标签（如 tag: v1.0）：使用成功绿
+		fg = t.Success
+		bg = t.Success.Alpha(0.10)
+		border = t.Success.Alpha(0.28)
+	default: // refBadgeLocal
+		// 本地分支与 HEAD（如 HEAD → beta、main）：使用 Gloss 统一的分支琥珀色
+		fg = pal.ref
+		bg = pal.ref.Alpha(0.10)
+		border = pal.ref.Alpha(0.28)
+	}
+	return
+}
+
+func refPriority(b refBadge) int {
+	if strings.HasPrefix(b.Label, "HEAD") {
+		return 0 // HEAD 优先级最高
+	}
+	switch b.Kind {
+	case refBadgeLocal:
+		return 1 // 其他本地分支
+	case refBadgeRemote:
+		return 2 // 远程跟踪分支
+	case refBadgeTag:
+		return 3 // 标签
+	default:
+		return 4
+	}
+}
+
+func isRemoteRef(name string, remotes []string) bool {
+	for _, r := range remotes {
+		if r != "" && strings.HasPrefix(name, r+"/") {
+			return true
+		}
+	}
+	return strings.HasPrefix(name, "origin/") || strings.HasPrefix(name, "upstream/")
+}
+
+// parseRefBadges 把 git log 的 %D 输出拆分成结构化的徽章列表，
+// 过滤掉无用的符号引用（如 origin/HEAD），并按本地分支、远程分支、标签排序。
+func parseRefBadges(refs string, remotes []string) []refBadge {
+	if strings.TrimSpace(refs) == "" {
+		return nil
+	}
+	var badges []refBadge
+	for _, part := range strings.Split(refs, ",") {
+		p := strings.TrimSpace(part)
+		if p == "" {
+			continue
+		}
+		// 过滤远程符号引用：origin/HEAD 或 origin/HEAD -> origin/main 只代表远程默认分支别名
+		if strings.HasSuffix(p, "/HEAD") || strings.Contains(p, "/HEAD ->") {
+			continue
+		}
+
+		var b refBadge
+		switch {
+		case strings.HasPrefix(p, "HEAD -> "):
+			branch := strings.TrimPrefix(p, "HEAD -> ")
+			b = refBadge{Label: "HEAD → " + branch, Kind: refBadgeLocal}
+		case p == "HEAD":
+			b = refBadge{Label: "HEAD", Kind: refBadgeLocal}
+		case strings.HasPrefix(p, "tag: "):
+			b = refBadge{Label: p, Kind: refBadgeTag}
+		case isRemoteRef(p, remotes):
+			b = refBadge{Label: p, Kind: refBadgeRemote}
+		default:
+			b = refBadge{Label: p, Kind: refBadgeLocal}
+		}
+		badges = append(badges, b)
+	}
+
+	sort.SliceStable(badges, func(i, j int) bool {
+		return refPriority(badges[i]) < refPriority(badges[j])
+	})
+	return badges
+}
 
 // refLabel 把 git 的 ref 列表缩短一点。「HEAD -> main, origin/main, tag: v1」
 // 全画出来会把一行的宽度吃光，只留最关键的那个。
@@ -467,15 +585,15 @@ func shortWhen(t, now time.Time) string {
 	d := now.Sub(t)
 	switch {
 	case d < time.Minute:
-		return "刚刚"
+		return T("刚刚", "just now")
 	case d < time.Hour:
-		return strconv.Itoa(int(d.Minutes())) + " 分钟前"
+		return Tf("%d 分钟前", "%d mins ago", int(d.Minutes()))
 	case d < 24*time.Hour:
-		return strconv.Itoa(int(d.Hours())) + " 小时前"
+		return Tf("%d 小时前", "%d hours ago", int(d.Hours()))
 	case d < 30*24*time.Hour:
-		return strconv.Itoa(int(d.Hours()/24)) + " 天前"
+		return Tf("%d 天前", "%d days ago", int(d.Hours()/24))
 	case d < 365*24*time.Hour:
-		return strconv.Itoa(int(d.Hours()/(24*30))) + " 个月前"
+		return Tf("%d 个月前", "%d months ago", int(d.Hours()/(24*30)))
 	}
-	return strconv.Itoa(int(d.Hours()/(24*365))) + " 年前"
+	return Tf("%d 年前", "%d years ago", int(d.Hours()/(24*365)))
 }

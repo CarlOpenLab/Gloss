@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,19 +18,10 @@ const (
 	sidebarMaxW     = float32(600)
 )
 
-// sidebar 是左侧栏：筛选框 + 分支/远程/标签/储藏树。
+// sidebar 是左侧栏：项目名称 + 工作区导航（改动/历史）+ 分支/远程/标签/储藏树。
 //
-// 这里原来挂的是文件树，布局改成 Fork 那样之后文件树搬去了主区下半
-// （filepane.go）—— 侧栏腾出来放引用，点一条分支就看它的历史。
-//
-// 底色是半透明的：开着 vibrancy 时它只是给系统材质叠一层淡淡的色调，
-// 和 Finder 侧栏一个观感；系统关掉透明效果时它又能兜住底，不至于让
-// 深色主题的文字落在白底上。
+// 参照 Fork 布局规范，侧栏顶部承载最高层级项目卡片与工作区导航。
 func (a *app) sidebar(c *ui.Context, pal palette) {
-	// 侧栏是顶到窗口最上边的，所以红绿灯（macOS 的三个窗口按钮）浮在它上面。
-	// 顶上空出 TitleBar.Height 那条带子，筛选框和树才不会被关闭按钮压住；
-	// 这条空带子顺手当成标题栏用，拖着能移窗口。工具栏是自己画的，那边用
-	// bar.Left 在水平方向让位，这里是垂直方向。
 	bar := c.TitleBar()
 	t := c.Theme()
 	sw := a.sidebarWidth(c)
@@ -41,13 +33,11 @@ func (a *app) sidebar(c *ui.Context, pal palette) {
 				ui.Box(c).Height(bar.Height).Shrink(0).DragWindow()
 			}
 
-			// 没打开仓库时不摆筛选框：没有东西可筛，一个空框立在顶上
-			// 只会让「还没有打开仓库」这句话显得是漏了什么。
-			//
-			// 判 state 不判 repoPath：打开失败时 repoPath 也记着东西
-			//（试的是哪个文件夹，标题栏要摆），那时候框子照样没得筛。
+			// 侧栏顶部项目名称与工作区导航（Fork 风格：改动与历史）
+			a.sidebarHeader(c, t, pal)
+
 			if a.repoReady() {
-				ui.Box(c).Key("ref-filter-wrap").Padding(8).Shrink(0).Children(func() {
+				ui.Box(c).Key("ref-filter-wrap").Padding(0, 8, 6, 8).Shrink(0).Children(func() {
 					a.refFilterInput(c)
 				})
 			}
@@ -77,12 +67,144 @@ func (a *app) sidebar(c *ui.Context, pal palette) {
 		})
 }
 
+// sidebarHeader 呈现侧边栏顶部：仓库名称下拉卡片 + 工作区核心导航（改动 / 历史）。
+// 严格参照 Fork 交互设计，将仓库名与「改动 (带待提交计数角标)」/「历史」置于最高主导航层级。
+func (a *app) sidebarHeader(c *ui.Context, t *ui.Theme, pal palette) {
+	ui.Column(c).Padding(2, 8, 4, 8).Gap(3).Shrink(0).FillWidth().Children(func() {
+		// 1. 仓库名称卡片（点击展开最近项目与打开仓库）
+		a.sidebarRepoCard(c, t, pal)
+
+		// 2. 工作区主导航（改动与历史）
+		a.sidebarWorkspaceNav(c, t, pal)
+
+		// 分割线
+		ui.Box(c).Height(1).FillWidth().Margin(4, 2).Background(pal.border.Alpha(0.4))
+	})
+}
+
+// sidebarRepoCard 呈现仓库名称与最近项目下拉卡片入口。
+func (a *app) sidebarRepoCard(c *ui.Context, t *ui.Theme, pal palette) {
+	name := a.repoName
+	if name == "" {
+		name = "Gloss"
+	}
+	hasRepo := a.repoReady()
+	sw := a.sidebarWidth(c)
+	sub := ""
+	if a.repoPath != "" {
+		sub = shortPath(c, a.repoPath, sw-40)
+	}
+
+	card := ui.ButtonBase(c).FillWidth().Radius(6).
+		Padding(5, 8).
+		Cursor(ui.CursorPointer).Label(name).
+		Tooltip(T("点击切换最近项目（或 ⌘O 打开本地仓库）", "Switch recent repository (⌘O)"))
+
+	bg := ui.Transparent
+	if card.Hovered() || a.repoDropdownOpen {
+		bg = t.SurfaceHover
+	}
+	card.Background(bg)
+	fadeColors(card)
+
+	card.Children(func() {
+		ui.Column(c).Gap(2).FillWidth().Children(func() {
+			ui.Row(c).Gap(7).AlignItems(ui.Center).Children(func() {
+				folderCol := t.TextMuted
+				if hasRepo {
+					folderCol = pal.ref
+				}
+				drawIcon(c, iconFolder, 14, folderCol)
+
+				ui.Text(c, name).FontSize(13).Bold().SingleLine().Grow(1).MinWidth(0).TextColor(t.Text)
+
+				drawIcon(c, iconChevronDown, 10, t.TextMuted)
+			})
+			if sub != "" {
+				ui.Text(c, sub).FontSize(10.5).SingleLine().TextColor(t.TextMuted.Alpha(0.85)).
+					Tooltip(a.repoPath)
+			}
+		})
+	})
+
+	if card.Clicked() {
+		a.branchDropdownOpen = false
+		a.repoDropdownOpen = !a.repoDropdownOpen
+	}
+	if a.repoDropdownOpen {
+		ui.PopoverBase(c, card, &a.repoDropdownOpen, func(panel *ui.Element) {
+			a.repoDropdownPanel(c, panel, pal)
+		})
+	}
+}
+
+// sidebarWorkspaceNav 呈现 Fork 规范的工作区核心导航项：改动（带改动文件计数）与 历史。
+func (a *app) sidebarWorkspaceNav(c *ui.Context, t *ui.Theme, pal palette) {
+	noRepo := !a.repoReady()
+
+	// 1. 改动（Local Changes）
+	a.sidebarNavItem(c, t, pal, 0, T("改动", "Changes"), T("工作区改动 ⌘1", "Working tree changes ⌘1"), iconFileDiff, noRepo, a.dirtyCount())
+
+	// 2. 历史（All Commits）
+	a.sidebarNavItem(c, t, pal, 1, T("历史", "History"), T("提交历史与拓扑图 ⌘2", "Commit history & graph ⌘2"), iconGitCommit, noRepo, 0)
+}
+
+// sidebarNavItem 画侧栏主导航的一行（如「改动」或「历史」）。
+func (a *app) sidebarNavItem(c *ui.Context, t *ui.Theme, pal palette, tabIdx int, label, tip string, svg *ui.SVG, disabled bool, badgeCount int) {
+	selected := a.tab == tabIdx && !disabled
+	btn := ui.ButtonBase(c).Height(28).FillWidth().Radius(6).
+		Padding(0, 8).Gap(7).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer).Label(label).Tooltip(tip).Disabled(disabled)
+
+	bg := ui.Transparent
+	fg := t.TextMuted
+	iconCol := t.TextMuted
+	switch {
+	case disabled:
+		fg = t.TextMuted.Alpha(0.38)
+		iconCol = t.TextMuted.Alpha(0.38)
+		btn.Cursor(ui.CursorDefault)
+	case selected:
+		bg = t.Accent.Alpha(0.12)
+		fg = t.Accent
+		iconCol = t.Accent
+	case btn.Hovered():
+		bg = t.SurfaceHover
+		fg = t.Text
+		iconCol = t.Text
+	}
+	btn.Background(bg)
+	fadeColors(btn)
+
+	btn.Children(func() {
+		drawIcon(c, svg, 14, iconCol)
+
+		txt := ui.Text(c, label).FontSize(12.5).Grow(1).SingleLine().TextColor(fg)
+		if selected {
+			txt.Bold()
+		}
+
+		if badgeCount > 0 && !disabled {
+			ui.Box(c).Radius(10).Padding(1, 6).
+				Background(t.SurfaceHover).Children(func() {
+				ui.Text(c, strconv.Itoa(badgeCount)).FontSize(11).Bold().
+					Font("monospace").FontFeatures("tnum").
+					TextColor(t.TextMuted)
+			})
+		}
+	})
+
+	if btn.Clicked() {
+		a.setTab(tabIdx)
+	}
+}
+
 // refFilterInput 是侧栏的筛选框。
 //
 // 名字写成「筛选分支」而不是「筛选」：主区下半还有一个筛选框（筛文件），
 // 两个框名字一样的话，测试和无障碍工具都分不出找的是哪一个。
 func (a *app) refFilterInput(c *ui.Context) {
-	searchField(c, &a.refFilter, "筛选分支")
+	searchField(c, &a.refFilter, T("筛选分支", "Filter branches"))
 }
 
 func (a *app) refsView(c *ui.Context, pal palette) {
@@ -92,16 +214,16 @@ func (a *app) refsView(c *ui.Context, pal palette) {
 	case loadIdle:
 		// 空白不等于「没事发生」：说明这个位置以后会有什么，比留一片
 		// 灰底好 —— 用户第一次打开时看到的就是这一屏。
-		emptyNote(c, t, "打开一个仓库后，这里会列出它的分支、远程和标签。")
+		emptyNote(c, t, T("打开仓库后，此处将展示分支、远程与标签。", "Branches, remotes, and tags will appear here once a repository is opened."))
 		return
 	case loadLoading:
 		if len(a.refs) == 0 {
-			emptyNote(c, t, "正在读分支…")
+			emptyNote(c, t, T("正在读取分支列表…", "Loading branches…"))
 			return
 		}
 	case loadFailed:
 		if len(a.refs) == 0 {
-			emptyNote(c, t, "读不到分支")
+			emptyNote(c, t, T("无法读取分支列表", "Failed to load branches"))
 			return
 		}
 	}
@@ -110,7 +232,7 @@ func (a *app) refsView(c *ui.Context, pal palette) {
 		a.rebuildRefTree()
 	}
 	if len(a.refTree) == 0 {
-		emptyNote(c, t, "没有匹配的分支")
+		emptyNote(c, t, T("无匹配分支", "No matching branches"))
 		return
 	}
 
@@ -159,6 +281,9 @@ func (a *app) refRow(c *ui.Context, pal palette, r filetree.Row) {
 		txt := ui.Text(c, n.Label).FontSize(12).SingleLine().Grow(1).MinWidth(0)
 		if ref.Head {
 			txt.Bold().TextColor(t.Text)
+			ui.Box(c).Radius(3).Padding(1, 4).Background(pal.ref.Alpha(0.12)).Children(func() {
+				ui.Text(c, "HEAD").FontSize(9.5).Bold().TextColor(pal.ref)
+			})
 		}
 	})
 

@@ -119,11 +119,15 @@ func (a *app) remoteBar(c *ui.Context) {
 			branchOff = "HEAD 是分离的 —— 先新建一条分支，或者检出一条已有的"
 		}
 
+		fetchBusy := a.op == gitrepo.OpFetch
+		pullBusy := a.op == gitrepo.OpPull
+		pushBusy := a.op == gitrepo.OpPush
+
 		fetchTip := "把远程的分支和标签抓到本地（不动工作区）"
 		if common != "" {
 			fetchTip = common
 		}
-		if iconToolButton(c, "抓取", fetchTip, off, drawFetchIcon, 0) {
+		if iconToolButton(c, "抓取", fetchTip, off, drawFetchIcon, 0, fetchBusy) {
 			a.doFetch()
 		}
 
@@ -136,7 +140,7 @@ func (a *app) remoteBar(c *ui.Context) {
 		} else if branchOff != "" {
 			pullTip = branchOff
 		}
-		if iconToolButton(c, "拉取", pullTip, off || a.detached, drawPullIcon, a.behind) {
+		if iconToolButton(c, "拉取", pullTip, off || a.detached, drawPullIcon, a.behind, pullBusy) {
 			a.doPull()
 		}
 
@@ -149,7 +153,7 @@ func (a *app) remoteBar(c *ui.Context) {
 		} else if branchOff != "" {
 			pushTip = branchOff
 		}
-		if iconToolButton(c, "推送", pushTip, off || a.detached, drawPushIcon, a.ahead) {
+		if iconToolButton(c, "推送", pushTip, off || a.detached, drawPushIcon, a.ahead, pushBusy) {
 			a.doPush()
 		}
 	})
@@ -174,91 +178,94 @@ func drawPushIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
 }
 
 // iconToolButton 是工具栏上一颗带有徽标（badge）展示能力的图标按钮。
-// 精确尺寸 28x28 方形，图标 16x16 居中（留白 6px），圆角 6px。
-// 当 badge > 0 时，在按钮右上角呈现高对比、带切口环（cutout ring）的精致微胶囊徽标。
-func iconToolButton(c *ui.Context, label, tip string, off bool, icon iconDraw, badge int) bool {
+// 当 badge == 0 时，为精确 28x28 方形无干扰微按钮，图标居中呈现；
+// 当 badge > 0 时，遵循 HeroUI 设计规范平滑扩展为带状态胶囊的 Action Pill：
+// 1. 图标 14x14 居左，100% 完整可视，绝不采用遮挡图标切口。
+// 2. 徽标计数以等宽半粗体数字并列居右，搭配高精 HeroUI 平板微染色（soft accent tint），
+//    在保证操作视觉识别度的同时与顶栏融为一体。
+// 3. 当 inFlight 为真时，按钮内平滑旋转 Spinner，提供即时本地触觉反馈。
+func iconToolButton(c *ui.Context, label, tip string, off bool, icon iconDraw, badge int, inFlight bool) bool {
 	t := c.Theme()
-	btn := ui.ButtonBase(c).Size(28, 28).Shrink(0).Radius(t.Radius).
-		Center().Cursor(ui.CursorPointer).Label(label).Tooltip(tip).Disabled(off)
+	btn := ui.ButtonBase(c).Height(28).Shrink(0).Radius(t.Radius).
+		Cursor(ui.CursorPointer).Label(label).Tooltip(tip).Disabled(off)
+
+	if badge > 0 {
+		btn.Padding(0, 8).Gap(5).AlignItems(ui.Center)
+	} else {
+		btn.Width(28).Center()
+	}
 
 	bg := ui.Transparent
+	border := ui.Transparent
+	borderW := float32(0)
 	fg := t.TextMuted
-	switch {
-	case off:
-		fg = t.TextMuted.Alpha(0.38)
-		btn.Cursor(ui.CursorDefault)
-	case btn.Pressed():
-		bg = t.SurfacePressed
-		fg = t.Text
-	case btn.Hovered():
-		bg = t.SurfaceHover
-		fg = t.Text
+
+	if badge > 0 {
+		// HeroUI Flat / Soft Accent Pill 样式
+		borderW = 1
+		switch {
+		case off:
+			bg = t.Accent.Alpha(0.04)
+			border = t.Accent.Alpha(0.14)
+			fg = t.Accent.Alpha(0.38)
+			btn.Cursor(ui.CursorDefault)
+		case btn.Pressed():
+			bg = t.Accent.Alpha(0.24)
+			border = t.Accent.Alpha(0.55)
+			fg = t.Accent
+		case btn.Hovered():
+			bg = t.Accent.Alpha(0.18)
+			border = t.Accent.Alpha(0.48)
+			fg = t.Accent
+			btn.Shadow(0, 2, 6, 0, t.Accent.Alpha(0.20))
+		default:
+			bg = t.Accent.Alpha(0.09)
+			border = t.Accent.Alpha(0.24)
+			fg = t.Accent
+		}
+	} else {
+		switch {
+		case off:
+			fg = t.TextMuted.Alpha(0.38)
+			btn.Cursor(ui.CursorDefault)
+		case btn.Pressed():
+			bg = t.SurfacePressed
+			fg = t.Text
+		case btn.Hovered():
+			bg = t.SurfaceHover
+			fg = t.Text
+		}
 	}
+
 	btn.Background(bg)
+	if borderW > 0 {
+		btn.Border(borderW, border)
+	}
 	fadeColors(btn)
 
 	btn.Children(func() {
-		ui.Box(c).Size(16, 16).Shrink(0).
-			Draw(func(p *ui.Painter, r ui.Rect) { icon(p, r, fg) })
+		if badge > 0 {
+			if inFlight {
+				ui.Spinner(c).Size(14, 14)
+			} else {
+				ui.Box(c).Size(14, 14).Shrink(0).
+					Draw(func(p *ui.Painter, r ui.Rect) { icon(p, r, fg) })
+			}
+			countStr := strconv.Itoa(badge)
+			if badge > 99 {
+				countStr = "99+"
+			}
+			ui.Text(c, countStr).FontSize(11).Bold().
+				FontFeatures("tnum").TextColor(fg)
+		} else {
+			if inFlight {
+				ui.Spinner(c).Size(16, 16)
+			} else {
+				ui.Box(c).Size(16, 16).Shrink(0).
+					Draw(func(p *ui.Painter, r ui.Rect) { icon(p, r, fg) })
+			}
+		}
 	})
 
-	if badge > 0 {
-		btn.DrawOver(func(p *ui.Painter, r ui.Rect) {
-			drawButtonBadge(p, r, badge, bg, off, t)
-		})
-	}
-
 	return btn.Clicked()
-}
-
-// drawButtonBadge 在按钮右上角绘制工艺级微徽标。
-// 遵循 Apple HIG / Awwwards 级别视觉精度：
-// 1. 采用纯净切口环（cutout ring），在图标与微徽标交界处营造清晰空间层级。
-// 2. 动态自适应形态：个位数呈现完美的 13x13 几何正圆；多位数平滑过渡为精炼胶囊。
-// 3. 数字采用半粗体高对比度排版，包含针对无衬线数字的 -0.5px 光学垂直基准微调。
-func drawButtonBadge(p *ui.Painter, r ui.Rect, count int, btnBg ui.Color, off bool, t *ui.Theme) {
-	text := strconv.Itoa(count)
-	if count > 99 {
-		text = "99+"
-	}
-
-	fontSize := float32(9)
-	span := ui.Span{Text: text, Size: fontSize, Weight: 600}
-	tw, th := p.MeasureText(0, span)
-
-	// 高度 13px，圆角 6.5px。单数正圆 13x13，双数及以上自适应胶囊
-	badgeH := float32(13)
-	badgeW := badgeH
-	if tw+7 > badgeW {
-		badgeW = tw + 7
-	}
-
-	// 坐标吸附在 28x28 方块右上角
-	bx := r.X + r.W - badgeW - 1
-	by := r.Y + 1
-
-	// 切口外环（Knockout Cutout）：1.5px 纯净背景层
-	cutout := btnBg
-	if cutout.A == 0 {
-		cutout = t.Background
-	}
-	cutoutR := ui.Rect{X: bx - 1.5, Y: by - 1.5, W: badgeW + 3, H: badgeH + 3}
-	p.Fill(cutoutR, cutout, (badgeH+3)/2)
-
-	// 徽标胶囊
-	badgeBg := t.Accent
-	badgeFg := t.AccentText
-	if off {
-		badgeBg = t.Accent.Alpha(0.4)
-		badgeFg = t.AccentText.Alpha(0.7)
-	}
-
-	badgeR := ui.Rect{X: bx, Y: by, W: badgeW, H: badgeH}
-	p.Fill(badgeR, badgeBg, badgeH/2)
-
-	// 光学对齐绘制文字
-	tx := bx + (badgeW-tw)/2
-	ty := by + (badgeH-th)/2 - 0.5
-	span.Color = badgeFg
-	p.RichText(tx, ty, 0, span)
 }

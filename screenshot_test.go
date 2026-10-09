@@ -41,6 +41,11 @@ func TestDumpScreenshot(t *testing.T) {
 		t.Skip("设置 SHOT=1 才跑")
 	}
 	a := richApp(t)
+	// 展示远程分支落后与超前的 HeroUI Action Pill 状态
+	a.remotes = []string{"origin"}
+	a.ahead = 2
+	a.behind = 1
+
 	tt := ui.NewTester(a.view, 1280, 860)
 	still(tt)
 	// 先空跑一帧让列表把行高量出来，否则首帧的字号/行高还没稳定
@@ -52,6 +57,30 @@ func TestDumpScreenshot(t *testing.T) {
 	tt.SetDark(true)
 	tt.Frame()
 	writePNG(t, "/tmp/de-shot-dark.png", tt.Image())
+
+	// 全部暂存后的状态截图（展示 masterStageBox 勾选、全部取消按钮、已暂存状态胶囊）
+	a.stageAll()
+	settle(t, a)
+	tt.SetDark(false)
+	tt.Frame()
+	writePNG(t, "/tmp/de-shot-staged-light.png", tt.Image())
+	tt.SetDark(true)
+	tt.Frame()
+	writePNG(t, "/tmp/de-shot-staged-dark.png", tt.Image())
+	a.unstageAll()
+	settle(t, a)
+	tt.SetDark(false)
+	tt.Frame()
+
+	// 最近项目下拉弹窗（HeroUI 风格）
+	a.repoDropdownOpen = true
+	tt.SetDark(false)
+	tt.Frame()
+	writePNG(t, "/tmp/de-shot-dropdown-light.png", tt.Image())
+	tt.SetDark(true)
+	tt.Frame()
+	writePNG(t, "/tmp/de-shot-dropdown-dark.png", tt.Image())
+	a.repoDropdownOpen = false
 
 	// 再单独看一眼带语法高亮的那个文件（它在列表靠下的位置，默认看不到）
 	a.fileFilter = "router"
@@ -153,6 +182,17 @@ func TestDumpScreenshot(t *testing.T) {
 	a.editCfg.Providers[0].APIKey = "sk-ant-xxxxxxxxxxxxxxxx"
 	tt.Frame()
 	writePNG(t, "/tmp/de-shot-settings.png", tt.Image())
+	tt.SetDark(true)
+	tt.Frame()
+	writePNG(t, "/tmp/de-shot-settings-dark.png", tt.Image())
+	tt.SetDark(false)
+
+	// 展示 Magpie 本地网关接入状态
+	a.magpieOnline = true
+	a.magpieModels = []string{"opencode-go/deepseek-v4.1-flash", "opencode-go/claude-haiku-5-5", "codex-2/gpt-6-sol"}
+	a.connectMagpie()
+	tt.Frame()
+	writePNG(t, "/tmp/de-shot-settings-magpie.png", tt.Image())
 	a.settingsOn = false
 
 	// 折叠：第一个文件标成已 review，它就在 diff 里折起来了。
@@ -579,6 +619,38 @@ func TestDumpScreenshot(t *testing.T) {
 	mt.SetSize(1280, 860)
 	mt.Frame()
 }
+
+func TestDumpToolbarOpCollision(t *testing.T) {
+	if os.Getenv("SHOT") == "" {
+		t.Skip("设置 SHOT=1 才跑")
+	}
+	a := richApp(t)
+	a.repoName = "yunlue-web-ts7"
+	a.repoPath = "/Users/carl/Desktop/guoji/yunlue-web-ts7"
+	a.branch = "refactor/shared-components"
+	a.sidebarOn = true
+	a.tab = 1
+	a.op = gitrepo.OpPush
+	a.opName = "正在推送…"
+	a.remotes = []string{"origin"}
+	a.ahead = 0
+	a.behind = 0
+
+	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+	tt.Frame()
+	tt.SetTitleBar(realTitleBar)
+	tt.Frame()
+
+	repoRect, _ := tt.Find("yunlue-web-ts7")
+	branchRect, ok1 := tt.Find("refactor/shared-components")
+	opRect, ok2 := tt.Find("正在推送…")
+	t.Logf("repoRect: %+v", repoRect)
+	t.Logf("branchRect: %+v (found=%v)", branchRect, ok1)
+	t.Logf("opRect: %+v (found=%v)", opRect, ok2)
+	writePNG(t, "/tmp/de-shot-collision.png", tt.Image())
+}
+
 
 // sampleExplanation 是一段有代表性的模型输出：一句话总结、要点、行内代码、
 // 代码块、加粗 —— 卡片上会出现的排版都在这。（用双引号写，省得反引号

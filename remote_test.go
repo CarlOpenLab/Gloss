@@ -519,6 +519,24 @@ func TestAheadBehindBadges(t *testing.T) {
 	if a.behind != 1 {
 		t.Errorf("抓取后 a.behind = %d, want 1", a.behind)
 	}
+
+	// 验证 HeroUI Action Pill 形态：
+	// 无徽标时抓取按钮保持 28x28 方形；有徽标时推送和拉取按钮平滑扩展为带内边距与计数数字的药丸胶囊
+	fetchBtn, okFetch := tt.Find("抓取")
+	pullBtn, okPull := tt.Find("拉取")
+	pushBtn, okPush := tt.Find("推送")
+	if !okFetch || !okPull || !okPush {
+		t.Fatalf("三颗远程按钮都应存在: %v %v %v", okFetch, okPull, okPush)
+	}
+	if fetchBtn.W != 28 {
+		t.Errorf("无徽标的抓取按钮应为 28px 方形，实际: %.1f", fetchBtn.W)
+	}
+	if pullBtn.W <= 28 {
+		t.Errorf("带 behind=1 徽标的拉取按钮应扩展为 Action Pill (W > 28)，实际: %.1f", pullBtn.W)
+	}
+	if pushBtn.W <= 28 {
+		t.Errorf("带 ahead=1 徽标的推送按钮应扩展为 Action Pill (W > 28)，实际: %.1f", pushBtn.W)
+	}
 }
 
 // hasAnnouncement 说播报里有没有这句话（包含匹配）。

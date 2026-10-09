@@ -76,3 +76,56 @@ func TestHeaderRepoMenuAndBranchQuickMenu(t *testing.T) {
 		t.Errorf("仓库名与分支徽章应水平对齐在同一行：repoY=%.1f, branchY=%.1f", repoBox.Y, branchBox.Y)
 	}
 }
+
+func TestHeaderRepoDropdownPopover(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+	settle(t, a)
+	tt.Frame()
+
+	// 初始状态下弹窗未开启
+	if a.repoDropdownOpen {
+		t.Fatal("初始状态 repoDropdownOpen 应该为 false")
+	}
+
+	// 点击仓库名称按钮
+	if err := tt.Click(a.repoName); err != nil {
+		t.Fatalf("点击仓库按钮失败: %v", err)
+	}
+	tt.Frame()
+
+	// 验证弹窗已开启
+	if !a.repoDropdownOpen {
+		t.Fatal("点击后 repoDropdownOpen 应该为 true")
+	}
+
+	// 验证 HeroUI 弹窗内渲染的标题和操作项
+	if !tt.HasText("最近打开的项目") {
+		t.Error("弹窗内应显示标题「最近打开的项目」")
+	}
+	if !tt.HasText("打开其他本地仓库…") {
+		t.Error("弹窗内应显示「打开其他本地仓库…」")
+	}
+	if !tt.HasText("当前") {
+		t.Error("弹窗内当前仓库应显示「当前」徽章")
+	}
+
+	// 验证弹窗位置在仓库按钮下方，没有向上覆盖或重叠偏移
+	repoBox, _ := tt.Find(a.repoName)
+	titleBox, okTitle := tt.Find("最近打开的项目")
+	if !okTitle {
+		t.Fatal("未找到弹窗标题「最近打开的项目」")
+	}
+	if titleBox.Y <= repoBox.Y {
+		t.Errorf("弹窗应该出现在仓库按钮下方，但 titleBox.Y=%.1f <= repoBox.Y=%.1f", titleBox.Y, repoBox.Y)
+	}
+
+	// 按 Escape 键关闭弹窗
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+
+	if a.repoDropdownOpen {
+		t.Error("按 Escape 后 repoDropdownOpen 应该为 false")
+	}
+}

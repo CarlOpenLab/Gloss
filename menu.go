@@ -37,46 +37,80 @@ const appName = "Gloss"
 // 要记着的有两种：单选/复选的勾（菜单展开时看得见，勾错了很扎眼），和
 // 有没有东西可作用的可用性（没开仓库时，刷新和两个 tab 都没有意义）。
 type appMenu struct {
-	tabDiff   *mygo.MenuItem
-	tabHist   *mygo.MenuItem
-	sidebar   *mygo.MenuItem
-	unified   *mygo.MenuItem
-	split     *mygo.MenuItem
-	refresh   *mygo.MenuItem
-	commit    *mygo.MenuItem
-	newBranch *mygo.MenuItem
-	newTag    *mygo.MenuItem
-	stash     *mygo.MenuItem
-	fetch     *mygo.MenuItem
-	pull      *mygo.MenuItem
-	push      *mygo.MenuItem
-	forcePush *mygo.MenuItem
-	prList    *mygo.MenuItem
+	tabDiff     *mygo.MenuItem
+	tabHist     *mygo.MenuItem
+	sidebar     *mygo.MenuItem
+	unified     *mygo.MenuItem
+	split       *mygo.MenuItem
+	refresh     *mygo.MenuItem
+	commit      *mygo.MenuItem
+	newBranch   *mygo.MenuItem
+	newTag      *mygo.MenuItem
+	stash       *mygo.MenuItem
+	stageAll    *mygo.MenuItem
+	unstageAll  *mygo.MenuItem
+	fetch       *mygo.MenuItem
+	pull        *mygo.MenuItem
+	push        *mygo.MenuItem
+	forcePush   *mygo.MenuItem
+	prList      *mygo.MenuItem
+	themeSystem *mygo.MenuItem
+	themeLight  *mygo.MenuItem
+	themeDark   *mygo.MenuItem
+	langZh      *mygo.MenuItem
+	langEn      *mygo.MenuItem
 }
 
 // buildAppMenu 搭出应用的菜单栏，并把需要跟着状态走的几项记在 a.menu 上。
 func buildAppMenu(a *app) *mygo.Menu {
 	m := &appMenu{}
 
-	m.tabDiff = a.menuToggle("查看改动", "CmdOrCtrl+1", mygo.MenuItemRadio, true, func() { a.setTab(0) })
-	m.tabHist = a.menuToggle("查看历史", "CmdOrCtrl+2", mygo.MenuItemRadio, false, func() { a.setTab(1) })
-	m.unified = a.menuToggle("统一视图", "CmdOrCtrl+U", mygo.MenuItemRadio, !a.split, func() { a.setSplit(false) })
-	m.split = a.menuToggle("左右对照", "", mygo.MenuItemRadio, a.split, func() { a.setSplit(true) })
-	m.sidebar = a.menuToggle("显示侧栏", "CmdOrCtrl+Shift+B", mygo.MenuItemCheckbox, true, a.toggleSidebar)
-	m.refresh = a.menuCmd("刷新", "CmdOrCtrl+R", a.reload)
-	m.commit = a.menuCmd("提交", "CmdOrCtrl+Return", a.doCommit)
-	m.newBranch = a.menuCmd("新建分支…", "CmdOrCtrl+Shift+N", a.newBranchAtHead)
-	m.newTag = a.menuCmd("新建标签…", "", a.newTagAtHead)
-	m.stash = a.menuCmd("储藏工作区改动…", "", a.openStashDialog)
-	m.prList = a.menuCmd("查看 GitHub Pull Requests…", "", a.openPRDialog)
+	m.tabDiff = a.menuToggle(T("查看改动", "Show Changes"), "CmdOrCtrl+1", mygo.MenuItemRadio, true, func() { a.setTab(0) })
+	m.tabHist = a.menuToggle(T("查看历史", "Show History"), "CmdOrCtrl+2", mygo.MenuItemRadio, false, func() { a.setTab(1) })
+	m.unified = a.menuToggle(T("统一视图", "Unified View"), "CmdOrCtrl+U", mygo.MenuItemRadio, !a.split, func() { a.setSplit(false) })
+	m.split = a.menuToggle(T("左右对照", "Split View"), "", mygo.MenuItemRadio, a.split, func() { a.setSplit(true) })
+	m.sidebar = a.menuToggle(T("显示侧栏", "Show Sidebar"), "CmdOrCtrl+Shift+B", mygo.MenuItemCheckbox, true, a.toggleSidebar)
+	m.refresh = a.menuCmd(T("刷新", "Refresh"), "CmdOrCtrl+R", a.reload)
+	m.commit = a.menuCmd(T("提交", "Commit"), "CmdOrCtrl+Return", a.doCommit)
+	m.stageAll = a.menuCmd(T("暂存全部改动", "Stage All Changes"), "CmdOrCtrl+Shift+A", func() {
+		if a.tab == 0 && a.repoReady() && a.op == gitrepo.OpNone {
+			a.stageAll()
+		}
+	})
+	m.unstageAll = a.menuCmd(T("取消暂存全部改动", "Unstage All Changes"), "", func() {
+		if a.tab == 0 && a.repoReady() && a.op == gitrepo.OpNone {
+			a.unstageAll()
+		}
+	})
+	m.newBranch = a.menuCmd(T("新建分支…", "New Branch…"), "CmdOrCtrl+Shift+N", a.newBranchAtHead)
+	m.newTag = a.menuCmd(T("新建标签…", "New Tag…"), "", a.newTagAtHead)
+	m.stash = a.menuCmd(T("储藏工作区改动…", "Stash Changes…"), "", a.openStashDialog)
+	m.prList = a.menuCmd(T("查看 GitHub Pull Requests…", "GitHub Pull Requests…"), "", a.openPRDialog)
 
 	// 抓取 / 拉取 / 推送的键是挑出来的：F 和 P 是 Fetch 和 Pull，U 是「上传」
 	// 那个 up（Push 的 P 被拉取占了）。三个都带 ⇧ —— ⌘F 已经是「筛选文件」，
 	// 而 ⌘P 在 Mac 上历来是打印，不抢。
-	m.fetch = a.menuCmd("抓取", "CmdOrCtrl+Shift+F", a.doFetch)
-	m.pull = a.menuCmd("拉取", "CmdOrCtrl+Shift+P", a.doPull)
-	m.push = a.menuCmd("推送", "CmdOrCtrl+Shift+U", a.doPush)
-	m.forcePush = a.menuCmd("强制推送（--force-with-lease）…", "", a.promptForcePush)
+	m.fetch = a.menuCmd(T("抓取", "Fetch"), "CmdOrCtrl+Shift+F", a.doFetch)
+	m.pull = a.menuCmd(T("拉取", "Pull"), "CmdOrCtrl+Shift+P", a.doPull)
+	m.push = a.menuCmd(T("推送", "Push"), "CmdOrCtrl+Shift+U", a.doPush)
+	m.forcePush = a.menuCmd(T("强制推送（--force-with-lease）…", "Force Push (--force-with-lease)…"), "", a.promptForcePush)
+
+	m.themeSystem = a.menuToggle(T("跟随系统", "Follow System"), "", mygo.MenuItemRadio, a.themeMode == "system" || a.themeMode == "", func() { a.setThemeMode("system") })
+	m.themeLight = a.menuToggle(T("浅色模式", "Light Mode"), "", mygo.MenuItemRadio, a.themeMode == "light", func() { a.setThemeMode("light") })
+	m.themeDark = a.menuToggle(T("深色模式", "Dark Mode"), "", mygo.MenuItemRadio, a.themeMode == "dark", func() { a.setThemeMode("dark") })
+
+	m.langZh = a.menuToggle("简体中文", "", mygo.MenuItemRadio, a.locale != "en", func() { a.setLocale("zh") })
+	m.langEn = a.menuToggle("English", "", mygo.MenuItemRadio, a.locale == "en", func() { a.setLocale("en") })
+
+	themeSub := []*mygo.MenuItem{
+		m.themeSystem,
+		m.themeLight,
+		m.themeDark,
+	}
+	langSub := []*mygo.MenuItem{
+		m.langZh,
+		m.langEn,
+	}
 
 	view := []*mygo.MenuItem{
 		m.tabDiff, m.tabHist,
@@ -85,55 +119,60 @@ func buildAppMenu(a *app) *mygo.Menu {
 		mygo.Separator(),
 		m.sidebar,
 		mygo.Separator(),
-		a.menuCmd("放大代码字号", "CmdOrCtrl+Plus", func() {
+		{Label: T("外观主题", "Appearance"), Submenu: themeSub},
+		{Label: T("界面语言", "Language"), Submenu: langSub},
+		mygo.Separator(),
+		a.menuCmd(T("放大代码字号", "Increase Font Size"), "CmdOrCtrl+Plus", func() {
 			a.setCodeSize(a.codeSizeValue() + codeSizeStep)
 		}),
-		a.menuCmd("缩小代码字号", "CmdOrCtrl+-", func() {
+		a.menuCmd(T("缩小代码字号", "Decrease Font Size"), "CmdOrCtrl+-", func() {
 			a.setCodeSize(a.codeSizeValue() - codeSizeStep)
 		}),
-		a.menuCmd("恢复默认字号", "CmdOrCtrl+0", func() { a.setCodeSize(0) }),
+		a.menuCmd(T("恢复默认字号", "Reset Font Size"), "CmdOrCtrl+0", func() { a.setCodeSize(0) }),
 		mygo.Separator(),
 		m.refresh,
-		a.menuCmd("命令栏…", "CmdOrCtrl+K", a.openPalette),
-		a.menuCmd("筛选文件", "CmdOrCtrl+F", func() { a.focusFilter = true }),
+		a.menuCmd(T("命令栏…", "Command Palette…"), "CmdOrCtrl+K", a.openPalette),
+		a.menuCmd(T("筛选文件", "Filter Files"), "CmdOrCtrl+F", func() { a.focusFilter = true }),
 		mygo.Separator(),
-		{Role: mygo.RoleToggleFullScreen, Label: "进入全屏"},
+		{Role: mygo.RoleToggleFullScreen, Label: T("进入全屏", "Toggle Full Screen")},
 	}
 
 	menu := mygo.NewMenu([]*mygo.MenuItem{
 		{Label: appName, Submenu: a.appSubmenu()},
-		{Label: "文件", Submenu: []*mygo.MenuItem{
-			a.menuCmd("打开仓库…", "CmdOrCtrl+O", a.chooseFolder),
+		{Label: T("文件", "File"), Submenu: []*mygo.MenuItem{
+			a.menuCmd(T("打开仓库…", "Open Repository…"), "CmdOrCtrl+O", a.chooseFolder),
 			a.recentReposMenuItem(),
 			mygo.Separator(),
 			m.commit,
+			m.stageAll,
+			m.unstageAll,
 			m.stash,
 			m.newBranch,
 			m.newTag,
-			a.menuCmd("对比分支代码差异…", "CmdOrCtrl+Shift+D", func() { a.openCompareDialog("") }),
+			a.menuCmd(T("对比分支代码差异…", "Compare Branches…"), "CmdOrCtrl+Shift+D", func() { a.openCompareDialog("") }),
 			m.prList,
 			mygo.Separator(),
-			{Role: mygo.RoleClose, Label: "关闭窗口"},
+			{Role: mygo.RoleClose, Label: T("关闭窗口", "Close Window")},
 		}},
-		{Label: "编辑", Submenu: editSubmenu()},
+		{Label: T("编辑", "Edit"), Submenu: editSubmenu()},
 		// 远程单开一层：这三条命令和「文件」里那些（打开、提交、打标签）不
 		// 是一回事 —— 它们要和网络、和凭证打交道，会等、会失败，出事的地方
 		// 也不一样。摆在一层自己的菜单里，用户找「拉取」的时候知道往哪儿看。
-		{Label: "远程", Submenu: []*mygo.MenuItem{
+		{Label: T("远程", "Remote"), Submenu: []*mygo.MenuItem{
 			m.fetch,
 			m.pull,
 			m.push,
 			mygo.Separator(),
 			m.forcePush,
 		}},
-		{Label: "视图", Submenu: view},
+		{Label: T("视图", "View"), Submenu: view},
 		// 「窗口」这一层用的是 RoleWindow：菜单名和内容都归我们写，但框架
 		// 会把它注册成系统的窗口菜单（最小化、缩放那些系统项才认得它）。
-		{Label: "窗口", Role: mygo.RoleWindow, Submenu: []*mygo.MenuItem{
-			{Role: mygo.RoleMinimize, Label: "最小化"},
-			{Role: mygo.RoleZoom, Label: "缩放"},
+		{Label: T("窗口", "Window"), Role: mygo.RoleWindow, Submenu: []*mygo.MenuItem{
+			{Role: mygo.RoleMinimize, Label: T("最小化", "Minimize")},
+			{Role: mygo.RoleZoom, Label: T("缩放", "Zoom")},
 			mygo.Separator(),
-			{Role: mygo.RoleFront, Label: "前置全部窗口"},
+			{Role: mygo.RoleFront, Label: T("前置全部窗口", "Bring All to Front")},
 		}},
 	})
 
@@ -153,17 +192,17 @@ func buildAppMenu(a *app) *mygo.Menu {
 // 键的话，Mac 用户会找不到它 —— 他在任何别的应用里都是这么找的。
 func (a *app) appSubmenu() []*mygo.MenuItem {
 	return []*mygo.MenuItem{
-		{Role: mygo.RoleAbout, Label: "关于 " + appName},
+		{Role: mygo.RoleAbout, Label: T("关于 ", "About ") + appName},
 		mygo.Separator(),
-		a.menuCmd("模型设置…", "CmdOrCtrl+,", a.openSettings),
+		a.menuCmd(T("模型设置…", "Settings…"), "CmdOrCtrl+,", a.openSettings),
 		mygo.Separator(),
-		{Role: mygo.RoleServices, Label: "服务", Submenu: []*mygo.MenuItem{}},
+		{Role: mygo.RoleServices, Label: T("服务", "Services"), Submenu: []*mygo.MenuItem{}},
 		mygo.Separator(),
-		{Role: mygo.RoleHide, Label: "隐藏 " + appName},
-		{Role: mygo.RoleHideOthers, Label: "隐藏其他"},
-		{Role: mygo.RoleUnhide, Label: "全部显示"},
+		{Role: mygo.RoleHide, Label: T("隐藏 ", "Hide ") + appName},
+		{Role: mygo.RoleHideOthers, Label: T("隐藏其他", "Hide Others")},
+		{Role: mygo.RoleUnhide, Label: T("全部显示", "Show All")},
 		mygo.Separator(),
-		{Role: mygo.RoleQuit, Label: "退出 " + appName},
+		{Role: mygo.RoleQuit, Label: T("退出 ", "Quit ") + appName},
 	}
 }
 
@@ -174,15 +213,15 @@ func (a *app) appSubmenu() []*mygo.MenuItem {
 // 没人响应，摆在那里只是让菜单更长。
 func editSubmenu() []*mygo.MenuItem {
 	return []*mygo.MenuItem{
-		{Role: mygo.RoleUndo, Label: "撤销"},
-		{Role: mygo.RoleRedo, Label: "重做"},
+		{Role: mygo.RoleUndo, Label: T("撤销", "Undo")},
+		{Role: mygo.RoleRedo, Label: T("重做", "Redo")},
 		mygo.Separator(),
-		{Role: mygo.RoleCut, Label: "剪切"},
-		{Role: mygo.RoleCopy, Label: "拷贝"},
-		{Role: mygo.RolePaste, Label: "粘贴"},
-		{Role: mygo.RoleDelete, Label: "删除"},
+		{Role: mygo.RoleCut, Label: T("剪切", "Cut")},
+		{Role: mygo.RoleCopy, Label: T("拷贝", "Copy")},
+		{Role: mygo.RolePaste, Label: T("粘贴", "Paste")},
+		{Role: mygo.RoleDelete, Label: T("删除", "Delete")},
 		mygo.Separator(),
-		{Role: mygo.RoleSelectAll, Label: "全选"},
+		{Role: mygo.RoleSelectAll, Label: T("全选", "Select All")},
 	}
 }
 
@@ -244,6 +283,11 @@ func (a *app) syncMenu() {
 	checkItem(m.sidebar, a.sidebarOn)
 	checkItem(m.unified, !a.split)
 	checkItem(m.split, a.split)
+	checkItem(m.themeSystem, a.themeMode == "system" || a.themeMode == "")
+	checkItem(m.themeLight, a.themeMode == "light")
+	checkItem(m.themeDark, a.themeMode == "dark")
+	checkItem(m.langZh, a.locale != "en")
+	checkItem(m.langEn, a.locale == "en")
 
 	enableItem(m.refresh, !noRepo)
 	enableItem(m.tabDiff, !noRepo)
@@ -251,6 +295,8 @@ func (a *app) syncMenu() {
 	enableItem(m.unified, !noRepo)
 	enableItem(m.split, !noRepo)
 	enableItem(m.commit, a.canCommit())
+	enableItem(m.stageAll, !noRepo && a.tab == 0 && a.op == gitrepo.OpNone && a.unstagedCount() > 0)
+	enableItem(m.unstageAll, !noRepo && a.tab == 0 && a.op == gitrepo.OpNone && a.stagedCount() > 0)
 	enableItem(m.stash, !noRepo && a.op == gitrepo.OpNone)
 	enableItem(m.newBranch, !noRepo && a.op == gitrepo.OpNone)
 	enableItem(m.newTag, !noRepo && a.op == gitrepo.OpNone)
@@ -269,14 +315,14 @@ func (a *app) syncMenu() {
 
 // checkItem 只在勾真的会变的时候才去动它。
 func checkItem(it *mygo.MenuItem, on bool) {
-	if it.IsChecked() != on {
+	if it != nil && it.IsChecked() != on {
 		it.SetChecked(on)
 	}
 }
 
 // enableItem 同上，管可用性。
 func enableItem(it *mygo.MenuItem, on bool) {
-	if it.IsEnabled() != on {
+	if it != nil && it.IsEnabled() != on {
 		it.SetEnabled(on)
 	}
 }
@@ -297,18 +343,18 @@ func (a *app) recentReposMenuItem() *mygo.MenuItem {
 	}
 	if len(items) > 0 {
 		items = append(items, mygo.Separator())
-		items = append(items, a.menuCmd("清除最近打开记录", "", func() {
+		items = append(items, a.menuCmd(T("清除最近打开记录", "Clear Recent Repositories"), "", func() {
 			a.store.ClearRecentRepos()
 			a.persist()
 		}))
 	} else {
 		items = append(items, &mygo.MenuItem{
-			Label:    "无最近项目",
+			Label:    T("无最近项目", "No Recent Repositories"),
 			Disabled: true,
 		})
 	}
 	return &mygo.MenuItem{
-		Label:   "最近打开的项目",
+		Label:   T("最近打开的项目", "Recent Repositories"),
 		Submenu: items,
 	}
 }

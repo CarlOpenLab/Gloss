@@ -30,50 +30,56 @@ type command struct {
 // 所以它每次都要重新算。
 func (a *app) commands() []command {
 	cmds := []command{
-		{"打开仓库…", "⌘O", func(a *app) { a.chooseFolder() }},
-		{"刷新", "⌘R", func(a *app) { a.reload() }},
-		{"提交", "⌘⏎", func(a *app) { a.doCommit() }},
-		{"暂存全部改动", "", func(a *app) { a.stageAll() }},
-		{"预检暂存区代码风险…", "", func(a *app) { a.startRiskScan() }},
-		{"储藏工作区改动…", "", func(a *app) { a.openStashDialog() }},
-		{"新建标签…", "", func(a *app) { a.newTagAtHead() }},
-		{"新建分支…", "⌘⇧N", func(a *app) { a.newBranchAtHead() }},
-		{"抓取", "⌘⇧F", func(a *app) { a.doFetch() }},
-		{"拉取", "⌘⇧P", func(a *app) { a.doPull() }},
-		{"推送", "⌘⇧U", func(a *app) { a.doPush() }},
-		{"查看改动", "⌘1", func(a *app) { a.setTab(0) }},
-		{"查看历史", "⌘2", func(a *app) { a.setTab(1) }},
-		{"筛选文件", "⌘F", func(a *app) { a.focusFilter = true }},
-		{"统一视图（Unified）", "⌘U", func(a *app) { a.setSplit(false) }},
-		{"左右对照（Split）", "", func(a *app) { a.setSplit(true) }},
-		{"模型设置…", "⌘,", func(a *app) { a.openSettings() }},
-		{"放大代码字号", "⌘+", func(a *app) { a.setCodeSize(a.codeSizeValue() + codeSizeStep) }},
-		{"缩小代码字号", "⌘−", func(a *app) { a.setCodeSize(a.codeSizeValue() - codeSizeStep) }},
-		{"恢复默认字号", "⌘0", func(a *app) { a.setCodeSize(0) }},
+		{T("打开仓库…", "Open Repository…"), "⌘O", func(a *app) { a.chooseFolder() }},
+		{T("刷新", "Refresh"), "⌘R", func(a *app) { a.reload() }},
+		{T("提交", "Commit"), "⌘⏎", func(a *app) { a.doCommit() }},
+		{T("暂存全部改动", "Stage All Changes"), "⌘⇧A", func(a *app) { a.stageAll() }},
+		{T("取消暂存全部改动", "Unstage All Changes"), "", func(a *app) { a.unstageAll() }},
+		{T("预检暂存区代码风险…", "Scan Staged Changes for Risks…"), "", func(a *app) { a.startRiskScan() }},
+		{T("储藏工作区改动…", "Stash Changes…"), "", func(a *app) { a.openStashDialog() }},
+		{T("新建标签…", "New Tag…"), "", func(a *app) { a.newTagAtHead() }},
+		{T("新建分支…", "New Branch…"), "⌘⇧N", func(a *app) { a.newBranchAtHead() }},
+		{T("抓取", "Fetch"), "⌘⇧F", func(a *app) { a.doFetch() }},
+		{T("拉取", "Pull"), "⌘⇧P", func(a *app) { a.doPull() }},
+		{T("推送", "Push"), "⌘⇧U", func(a *app) { a.doPush() }},
+		{T("查看改动", "Show Changes"), "⌘1", func(a *app) { a.setTab(0) }},
+		{T("查看历史", "Show History"), "⌘2", func(a *app) { a.setTab(1) }},
+		{T("筛选文件", "Filter Files"), "⌘F", func(a *app) { a.focusFilter = true }},
+		{T("统一视图（Unified）", "Unified View"), "⌘U", func(a *app) { a.setSplit(false) }},
+		{T("左右对照（Split）", "Split View"), "", func(a *app) { a.setSplit(true) }},
+		{T("模型设置…", "Settings…"), "⌘,", func(a *app) { a.openSettings() }},
+		{T("外观: 跟随系统", "Theme: Follow System"), "", func(a *app) { a.setThemeMode("system") }},
+		{T("外观: 浅色模式", "Theme: Light Mode"), "", func(a *app) { a.setThemeMode("light") }},
+		{T("外观: 深色模式", "Theme: Dark Mode"), "", func(a *app) { a.setThemeMode("dark") }},
+		{T("语言: 简体中文", "Language: 简体中文"), "", func(a *app) { a.setLocale("zh") }},
+		{T("语言: English", "Language: English"), "", func(a *app) { a.setLocale("en") }},
+		{T("放大代码字号", "Increase Font Size"), "⌘+", func(a *app) { a.setCodeSize(a.codeSizeValue() + codeSizeStep) }},
+		{T("缩小代码字号", "Decrease Font Size"), "⌘−", func(a *app) { a.setCodeSize(a.codeSizeValue() - codeSizeStep) }},
+		{T("恢复默认字号", "Reset Font Size"), "⌘0", func(a *app) { a.setCodeSize(0) }},
 	}
 
 	if a.sidebarOn {
-		cmds = append(cmds, command{"隐藏侧栏", "⌘⇧B", func(a *app) { a.setSidebar(false) }})
+		cmds = append(cmds, command{T("隐藏侧栏", "Hide Sidebar"), "⌘⇧B", func(a *app) { a.setSidebar(false) }})
 	} else {
-		cmds = append(cmds, command{"显示侧栏", "⌘⇧B", func(a *app) { a.setSidebar(true) }})
+		cmds = append(cmds, command{T("显示侧栏", "Show Sidebar"), "⌘⇧B", func(a *app) { a.setSidebar(true) }})
 	}
 	if a.canReachRemote() && !a.detached && a.hasUpstream(a.branch) {
-		cmds = append(cmds, command{"强制推送（--force-with-lease）…", "", func(a *app) { a.promptForcePush() }})
+		cmds = append(cmds, command{T("强制推送（--force-with-lease）…", "Force Push (--force-with-lease)…"), "", func(a *app) { a.promptForcePush() }})
 	}
 	if a.explainOpen() {
-		cmds = append(cmds, command{"收起 AI 解释", "Esc", func(a *app) { a.closeExplain() }})
+		cmds = append(cmds, command{T("收起 AI 解释", "Close AI Explanation"), "Esc", func(a *app) { a.closeExplain() }})
 	}
 	if a.repoReady() {
-		cmds = append(cmds, command{"对比分支代码差异…", "⌘⇧D", func(a *app) { a.openCompareDialog("") }})
-		cmds = append(cmds, command{"查看 GitHub Pull Requests…", "", func(a *app) { a.openPRDialog() }})
+		cmds = append(cmds, command{T("对比分支代码差异…", "Compare Branches…"), "⌘⇧D", func(a *app) { a.openCompareDialog("") }})
+		cmds = append(cmds, command{T("查看 GitHub Pull Requests…", "GitHub Pull Requests…"), "", func(a *app) { a.openPRDialog() }})
 	}
 	if a.compare.on {
-		cmds = append(cmds, command{"退出分支对比", "Esc", func(a *app) { a.exitCompare() }})
-		cmds = append(cmds, command{"交换基准与对比分支方向", "", func(a *app) { a.swapCompare() }})
+		cmds = append(cmds, command{T("退出分支对比", "Exit Compare"), "Esc", func(a *app) { a.exitCompare() }})
+		cmds = append(cmds, command{T("交换基准与对比分支方向", "Swap Compare Branches"), "", func(a *app) { a.swapCompare() }})
 	}
 	if a.prReview.on {
-		cmds = append(cmds, command{"退出 PR 检视", "Esc", func(a *app) { a.exitPRReview() }})
-		cmds = append(cmds, command{"✨ 生成并发布 AI Review 评论…", "", func(a *app) { a.openPRReviewModal() }})
+		cmds = append(cmds, command{T("退出 PR 检视", "Exit PR Review"), "Esc", func(a *app) { a.exitPRReview() }})
+		cmds = append(cmds, command{T("✨ 生成并发布 AI Review 评论…", "✨ Generate and Post AI Review Comment…"), "", func(a *app) { a.openPRReviewModal() }})
 	}
 	for _, p := range a.store.State().RecentRepos {
 		if p == "" {
@@ -82,7 +88,7 @@ func (a *app) commands() []command {
 		pathCopy := p
 		base := filepath.Base(p)
 		cmds = append(cmds, command{
-			label: "打开最近项目: " + base,
+			label: T("打开最近项目: ", "Open Recent: ") + base,
 			hint:  p,
 			run:   func(a *app) { a.openRepo(pathCopy) },
 		})
@@ -169,7 +175,7 @@ func (a *app) paletteDialog(c *ui.Context, pal palette) {
 			var in *ui.Element
 			ui.Box(c).Padding(10, 12).Shrink(0).
 				BorderWidth(0, 0, 1, 0).BorderColor(pal.border).Children(func() {
-				in = ui.TextInput(c, &a.palette.query).Placeholder("输入命令…").Focus()
+				in = ui.TextInput(c, &a.palette.query).Placeholder(T("输入命令…", "Type a command…")).Focus()
 			})
 
 			// 方向键和回车得问输入框本身。
@@ -195,7 +201,7 @@ func (a *app) paletteDialog(c *ui.Context, pal palette) {
 			ui.Column(c).Padding(palettePad).Gap(paletteGap).
 				Height(paletteListH(len(cmds))).Children(func() {
 				if len(cmds) == 0 {
-					ui.Text(c, "没有匹配的命令").FontSize(12).TextColor(t.TextMuted).Padding(8)
+					ui.Text(c, T("没有匹配的命令", "No matching commands")).FontSize(12).TextColor(t.TextMuted).Padding(8)
 					return
 				}
 				for i := range cmds {

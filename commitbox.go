@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"strconv"
 	"strings"
 	"time"
 
@@ -51,11 +50,11 @@ func stageBox(c *ui.Context, s stageState, lock bool) *ui.Element {
 
 	switch s {
 	case stageOn:
-		btn.Label("取消暂存").Tooltip("把这个文件移出暂存区")
+		btn.Label(T("取消暂存", "Unstage")).Tooltip(T("将该文件移出暂存区", "Remove this file from staging area"))
 	case stageConflict:
-		btn.Label("标记为已解决").Tooltip("冲突已经解决好了？把文件标记为已解决")
+		btn.Label(T("标记为已解决", "Mark as Resolved")).Tooltip(T("将文件冲突标记为已解决", "Mark conflict as resolved"))
 	default:
-		btn.Label("暂存").Tooltip("把这个文件放进暂存区")
+		btn.Label(T("暂存", "Stage")).Tooltip(T("将该文件加入暂存区", "Add this file to staging area"))
 	}
 
 	hovered := btn.Hovered() && !lock
@@ -226,6 +225,13 @@ func (a *app) stageAll() {
 	}, func(bool) { a.reloadAfterOp() })
 }
 
+// unstageAll 把所有已暂存改动移出 index。
+func (a *app) unstageAll() {
+	a.startOp(gitrepo.OpUnstage, "正在取消暂存全部改动", func(ctx context.Context, repo *gitrepo.Repo) (string, error) {
+		return "", repo.UnstageAll(ctx)
+	}, func(bool) { a.reloadAfterOp() })
+}
+
 // —— 提交栏 ——
 
 // commitInputH 是提交信息输入框的高度；再多一段就内部滚动。
@@ -313,19 +319,49 @@ func (a *app) commitBox(c *ui.Context, pal palette) {
 		inMin, inMax = commitInputCompactH, commitInputCompactH
 	}
 
-	ui.Column(c).Key("commit-box-wrap").Shrink(0).FillWidth().Padding(10, 12).Gap(8).
+	ui.Column(c).Key("commit-box-wrap").Shrink(0).FillWidth().
+		Padding(8, 12, 10, 12).
 		Background(t.Surface).
 		BorderWidth(1, 0, 0, 0).BorderColor(pal.border).Children(func() {
+
 		var in *ui.Element
-		ui.Row(c).Gap(10).AlignItems(ui.End).Children(func() {
-			in = ui.TextArea(c, &a.commitMsg).Grow(1).MinWidth(0).
+
+		// HeroUI 风格的一体化 Composer 卡片容器
+		cardBorder := pal.border
+		if a.commitFocused {
+			cardBorder = t.Accent.Alpha(0.65)
+		}
+		ui.Column(c).FillWidth().Radius(10).
+			Background(t.Background).
+			Border(1.2, cardBorder).
+			Shadow(0, 2, 8, 0, ui.RGBA(0, 0, 0, 0.04)).Children(func() {
+
+			// 顶部：全宽输入框，充足视野
+			in = ui.TextArea(c, &a.commitMsg).Grow(1).FillWidth().MinWidth(0).
 				MinHeight(inMin).MaxHeight(inMax).
-				Placeholder("提交信息…").Label("提交信息")
-			a.riskScanButton(c)
-			a.aiCommitButton(c)
-			a.commitButton(c)
+				Border(0, ui.Transparent).Background(ui.Transparent).
+				Padding(8, 10).
+				Placeholder(T("提交说明（首行简要概述，空行后输入详细背景…）", "Commit summary (first line summary, blank line for details…)")).Label(T("提交信息", "Commit Message"))
+
+			// 底部：操作与状态一体化工具栏
+			ui.Row(c).FillWidth().Height(34).Shrink(0).
+				Padding(0, 10).AlignItems(ui.Center).Gap(8).
+				Background(t.Surface.Alpha(0.5)).
+				BorderWidth(1, 0, 0, 0).BorderColor(pal.border.Alpha(0.45)).Children(func() {
+
+				// 左侧：状态指示徽章与 Amend 开关
+				a.commitStatus(c, t, pal)
+
+				ui.Spacer(c)
+
+				// 右侧：功能按钮组（预检 -> AI -> 提交 CTA）
+				ui.Row(c).Shrink(0).Gap(7).AlignItems(ui.Center).Children(func() {
+					a.riskScanButton(c)
+					a.aiCommitButton(c)
+					a.commitButton(c)
+				})
+			})
 		})
-		a.commitStatus(c, t)
 
 		// 草稿在「焦点刚离开」的那一帧落盘：每敲一个键存一次的话，store.Save
 		// 会把三个文件整体重写一遍，打字都在做无用功；而离开输入框是「这一
@@ -338,41 +374,45 @@ func (a *app) commitBox(c *ui.Context, pal palette) {
 	})
 }
 
-// aiCommitButton 是 AI 生成提交信息按钮（Sparkles ✨）。
+// aiCommitButton 是 AI 生成提交信息按钮（HeroUI Sparkles ✨ 样式）。
 func (a *app) aiCommitButton(c *ui.Context) {
 	t := c.Theme()
-	tip := "✨ AI 生成提交信息 (⌘I)"
+	tip := T("✨ AI 生成提交信息 (⌘I)", "✨ AI Generate Commit Message (⌘I)")
 	if a.aiCommitLoading {
-		tip = "正在生成提交信息… 点击取消"
+		tip = T("正在生成提交信息… 点击取消", "Generating commit message… Click to cancel")
 	}
 	disabled := !a.aiCommitLoading && a.stagedCount() == 0 && !a.amend
-	btn := ui.ButtonBase(c).Shrink(0).Height(28).Radius(t.Radius).
-		Padding(0, 10).Gap(6).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).Label("✨ AI 生成提交信息").Tooltip(tip).
+	btn := ui.ButtonBase(c).Shrink(0).Height(26).Radius(6).
+		Padding(0, 9).Gap(5).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer).Label(T("✨ AI 生成提交信息", "✨ AI Commit Message")).Tooltip(tip).
 		Disabled(disabled)
 
 	hovered := btn.Hovered() && !disabled
 	var bg, border, fg ui.Color
 	switch {
 	case a.aiCommitLoading:
-		bg, border, fg = t.Accent.Alpha(0.12), t.Accent, t.Accent
+		bg, border, fg = t.Accent.Alpha(0.16), t.Accent, t.Accent
 	case disabled:
-		bg, border, fg = t.Surface, t.Border.Alpha(0.4), t.TextMuted.Alpha(0.4)
+		bg, border, fg = ui.Transparent, t.Border.Alpha(0.3), t.TextMuted.Alpha(0.35)
 	case hovered:
-		bg, border, fg = t.SurfaceHover, t.Border, t.Text
+		bg, border, fg = t.Accent.Alpha(0.16), t.Accent.Alpha(0.55), t.Accent
 	default:
-		bg, border, fg = t.Surface, t.Border, t.TextMuted
+		bg, border, fg = t.Accent.Alpha(0.08), t.Accent.Alpha(0.25), t.Accent
 	}
 	btn.Background(bg).Border(1, border)
 	fadeColors(btn)
 
 	btn.Children(func() {
 		if a.aiCommitLoading {
-			ui.Spinner(c)
-			ui.Text(c, "生成中…").FontSize(12).TextColor(fg)
+			ui.Spinner(c).Size(11, 11)
+			ui.Text(c, T("生成中…", "Generating…")).FontSize(11.5).TextColor(fg)
 		} else {
-			sparkleIcon(c, sparkleSize, t.Accent)
-			ui.Text(c, "AI 生成").FontSize(12).TextColor(fg)
+			sparkleIcon(c, 11, fg)
+			ui.Text(c, T("AI 生成", "AI Commit")).FontSize(11.5).TextColor(fg)
+			// HeroUI Kbd 快捷键微型标签
+			ui.Box(c).Radius(3).Padding(1, 4).Background(fg.Alpha(0.12)).Children(func() {
+				ui.Text(c, "⌘I").FontSize(9.5).TextColor(fg)
+			})
 		}
 	})
 
@@ -388,38 +428,38 @@ func (a *app) aiCommitButton(c *ui.Context) {
 // riskScanButton 是代码变更安全与风险预检按钮（🛡️ 变更预检）。
 func (a *app) riskScanButton(c *ui.Context) {
 	t := c.Theme()
-	tip := "预检暂存区代码中的潜在漏洞与凭证泄露"
+	tip := T("扫描暂存区代码中的潜在漏洞与敏感凭据", "Audit staged changes for security vulnerabilities and leaks")
 	if a.riskScan.loading {
-		tip = "正在进行代码安全预检… 点击取消"
+		tip = T("正在进行代码安全审计… 点击取消", "Auditing changes for security risks… Click to cancel")
 	}
 	disabled := !a.riskScan.loading && (a.stagedCount() == 0 || !a.store.Provider().Ready())
-	btn := ui.ButtonBase(c).Shrink(0).Height(28).Radius(t.Radius).
-		Padding(0, 10).Gap(6).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).Label("🛡️ 变更预检").Tooltip(tip).
+	btn := ui.ButtonBase(c).Shrink(0).Height(26).Radius(6).
+		Padding(0, 9).Gap(5).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer).Label(T("🛡️ 变更预检", "🛡️ Audit Changes")).Tooltip(tip).
 		Disabled(disabled)
 
 	hovered := btn.Hovered() && !disabled
 	var bg, border, fg ui.Color
 	switch {
 	case a.riskScan.loading:
-		bg, border, fg = t.Accent.Alpha(0.12), t.Accent, t.Accent
+		bg, border, fg = t.Accent.Alpha(0.16), t.Accent, t.Accent
 	case disabled:
-		bg, border, fg = t.Surface, t.Border.Alpha(0.4), t.TextMuted.Alpha(0.4)
+		bg, border, fg = ui.Transparent, t.Border.Alpha(0.3), t.TextMuted.Alpha(0.35)
 	case hovered:
 		bg, border, fg = t.SurfaceHover, t.Border, t.Text
 	default:
-		bg, border, fg = t.Surface, t.Border, t.TextMuted
+		bg, border, fg = t.Surface, t.Border.Alpha(0.6), t.TextMuted
 	}
 	btn.Background(bg).Border(1, border)
 	fadeColors(btn)
 
 	btn.Children(func() {
 		if a.riskScan.loading {
-			ui.Spinner(c)
-			ui.Text(c, "预检中…").FontSize(12).TextColor(fg)
+			ui.Spinner(c).Size(11, 11)
+			ui.Text(c, T("预检中…", "Auditing…")).FontSize(11.5).TextColor(fg)
 		} else {
-			shieldIcon(c, 12, fg)
-			ui.Text(c, "变更预检").FontSize(12).TextColor(fg)
+			shieldIcon(c, 11, fg)
+			ui.Text(c, T("变更预检", "Audit Changes")).FontSize(11.5).TextColor(fg)
 		}
 	})
 
@@ -537,48 +577,72 @@ func cleanCommitMessage(msg string) string {
 	return strings.TrimSpace(msg)
 }
 
-// commitButton 是那颗提交按钮。
-//
-// Disabled 而不是「点了没反应」：为什么不能提交写在旁边的状态行里，按钮
-// 自己灰着就是那句说明的颜色。
+// commitButton 是那颗提交按钮（HeroUI Solid Primary 按钮设计）。
 func (a *app) commitButton(c *ui.Context) {
-	label := "提交"
-	tip := "提交已暂存的改动 ⌘⏎"
+	t := c.Theme()
+	label := T("提交", "Commit")
+	tip := T("提交已暂存的更改 ⌘⏎", "Commit staged changes ⌘⏎")
 	if a.amend {
-		label = "修改上次提交"
-		tip = "修改上一次提交（--amend）⌘⏎"
+		label = T("修改上次提交", "Amend Last Commit")
+		tip = T("追加修改至最近一次提交 (--amend) ⌘⏎", "Amend previous commit (--amend) ⌘⏎")
 		if n := a.stagedCount(); n > 0 {
-			label = "修改上次提交 (" + strconv.Itoa(n) + " 个文件)"
+			label = Tf("修改上次提交 (%d 个文件)", "Amend (%d files)", n)
 		}
 	} else if n := a.stagedCount(); n > 0 {
-		label = "提交 " + strconv.Itoa(n) + " 个文件"
+		label = Tf("提交 %d 个文件", "Commit %d files", n)
 	}
-	btn := ui.PrimaryButton(c, label).Shrink(0).Tooltip(tip).
-		Disabled(!a.canCommit())
+
+	can := a.canCommit()
+	btn := ui.ButtonBase(c).Shrink(0).Height(26).Radius(6).
+		Padding(0, 10).Gap(5).AlignItems(ui.Center).
+		Label(label).Tooltip(tip).Disabled(!can)
+
+	var bg, border, fg ui.Color
+	if can {
+		btn.Cursor(ui.CursorPointer)
+		if btn.Hovered() {
+			bg, border, fg = t.AccentHover, t.AccentHover, t.AccentText
+		} else {
+			bg, border, fg = t.Accent, t.Accent, t.AccentText
+		}
+		btn.Shadow(0, 2, 8, 0, t.Accent.Alpha(0.32))
+	} else {
+		bg, border, fg = t.Surface, t.Border.Alpha(0.35), t.TextMuted.Alpha(0.4)
+	}
+	btn.Background(bg).Border(1, border)
+	fadeColors(btn)
+
+	btn.Children(func() {
+		drawIcon(c, iconGitCommit, 12, fg)
+		ui.Text(c, label).FontSize(11.5).Bold().TextColor(fg)
+		if can {
+			ui.Box(c).Radius(3).Padding(1, 4).Background(t.AccentText.Alpha(0.2)).Children(func() {
+				ui.Text(c, "⌘⏎").FontSize(9.5).TextColor(fg)
+			})
+		}
+	})
+
 	if btn.Clicked() {
 		a.doCommit()
 	}
 }
 
-// commitStatus 是提交栏底下那行：暂存了什么、还差什么、正在忙什么。
-func (a *app) commitStatus(c *ui.Context, t *ui.Theme) {
-	ui.Row(c).Shrink(0).Gap(6).AlignItems(ui.Center).Children(func() {
+// commitStatus 是提交卡片左下侧的状态指示徽章与 Amend 选项。
+func (a *app) commitStatus(c *ui.Context, t *ui.Theme, pal palette) {
+	ui.Row(c).Shrink(0).Gap(8).AlignItems(ui.Center).Children(func() {
 		if a.op == gitrepo.OpCommit || a.op == gitrepo.OpAmend {
-			ui.Spinner(c)
-			ui.Text(c, a.opName).FontSize(11).TextColor(t.TextMuted)
-			ui.Spacer(c)
+			ui.Spinner(c).Size(12, 12)
+			ui.Text(c, a.opName).FontSize(11.5).TextColor(t.TextMuted)
 			return
 		}
 		if a.aiCommitLoading {
-			ui.Spinner(c)
-			ui.Text(c, "正在 AI 生成提交信息…").FontSize(11).TextColor(t.TextMuted)
-			ui.Spacer(c)
+			ui.Spinner(c).Size(12, 12)
+			ui.Text(c, T("正在通过 AI 生成提交信息…", "Generating commit message with AI…")).FontSize(11.5).TextColor(t.Accent)
 			return
 		}
 		if a.riskScan.loading {
-			ui.Spinner(c)
-			ui.Text(c, "正在进行代码安全预检…").FontSize(11).TextColor(t.TextMuted)
-			ui.Spacer(c)
+			ui.Spinner(c).Size(12, 12)
+			ui.Text(c, T("正在进行代码安全审计…", "Auditing changes for security risks…")).FontSize(11.5).TextColor(t.Accent)
 			return
 		}
 
@@ -586,39 +650,61 @@ func (a *app) commitStatus(c *ui.Context, t *ui.Theme) {
 		switch {
 		case a.amend:
 			if n == 0 {
-				ui.Text(c, "未暂存新改动，仅修改上次提交的信息。").
+				ui.Text(c, T("未暂存新改动，仅修改上次提交的信息。", "No staged changes, amending message only.")).
 					FontSize(11).TextColor(t.TextMuted)
 			} else {
-				ui.Textf(c, "已暂存 %d 个文件，将合并入上次提交", n).FontSize(11).Font("monospace").
-					FontFeatures("tnum").TextColor(t.TextMuted)
+				ui.Box(c).Radius(5).Padding(2, 7).Background(pal.ref.Alpha(0.12)).Border(1, pal.ref.Alpha(0.3)).Children(func() {
+					ui.Textf(c, T("已暂存 %d 个文件，将合并入最近提交", "%d files staged, will merge into last commit"), n).FontSize(11).
+						Font("monospace").FontFeatures("tnum").TextColor(pal.ref)
+				})
 			}
 		case n == 0:
-			ui.Text(c, "还没有暂存的文件 —— 勾上文件左边的方框，把要提交的改动放进来。").
-				FontSize(11).TextColor(t.TextMuted)
+			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+				ui.Box(c).Size(6, 6).Radius(3).Background(t.TextMuted.Alpha(0.4))
+				ui.Text(c, T("还没有暂存的文件", "No staged changes — select files above to commit")).
+					FontSize(11).TextColor(t.TextMuted)
+				if m > 0 && a.op == gitrepo.OpNone {
+					if quickStageAllChip(c, t) {
+						a.stageAll()
+					}
+				}
+			})
 		default:
-			ui.Textf(c, "已暂存 %d 个文件", n).FontSize(11).Font("monospace").
-				FontFeatures("tnum").TextColor(t.TextMuted)
-			if m > 0 {
-				ui.Text(c, "·").FontSize(11).TextColor(t.TextMuted)
-				ui.Textf(c, "还有 %d 个未暂存，不会进这次提交", m).FontSize(11).
-					TextColor(t.TextMuted)
-			}
+			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+				// HeroUI 风格的已暂存状态胶囊 Chip
+				ui.Box(c).Radius(5).Padding(2, 7).
+					Background(t.Accent.Alpha(0.10)).
+					Border(1, t.Accent.Alpha(0.28)).Children(func() {
+					ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
+						ui.Box(c).Size(6, 6).Radius(3).Background(t.Accent)
+						ui.Textf(c, T("已暂存 %d 个文件", "%d files staged"), n).FontSize(11).Bold().
+							Font("monospace").FontFeatures("tnum").TextColor(t.Accent)
+					})
+				})
+				if a.op == gitrepo.OpNone {
+					if quickUnstageAllChip(c, t) {
+						a.unstageAll()
+					}
+				}
+				if m > 0 {
+					ui.Textf(c, T("(%d 个未暂存)", "(%d unstaged)"), m).FontSize(10.5).
+						Font("monospace").FontFeatures("tnum").TextColor(t.TextMuted)
+					if a.op == gitrepo.OpNone {
+						if quickStageRemainingChip(c, t) {
+							a.stageAll()
+						}
+					}
+				}
+			})
 		}
 
 		if a.hasHead {
-			ui.Text(c, "·").FontSize(11).TextColor(t.TextMuted)
+			ui.Box(c).Size(1, 12).Background(pal.border.Alpha(0.6))
 			amendVal := a.amend
-			ui.Checkbox(c, &amendVal, "修改上次提交").Label("修改上次提交")
+			ui.Checkbox(c, &amendVal, T("修改上次提交 (Amend)", "Amend Last Commit")).Label(T("修改上次提交 (Amend)", "Amend Last Commit"))
 			if amendVal != a.amend {
 				a.toggleAmend(amendVal)
 			}
-		}
-
-		ui.Spacer(c)
-		if a.canCommit() {
-			// 不用等宽字体：⌘ 在等宽字体里多半落到后备字体上，垂直度量
-			// 和旁边的中文对不齐，看着像掉出了这一行。
-			ui.Text(c, "⌘⏎").FontSize(11).TextColor(t.TextMuted).Tooltip("提交")
 		}
 	})
 }
@@ -662,4 +748,70 @@ func (a *app) doCommit() {
 		}
 		a.reloadAfterOp()
 	})
+}
+
+// quickStageAllChip 是提交栏空暂存时的「全部暂存」快捷微按钮。
+func quickStageAllChip(c *ui.Context, t *ui.Theme) bool {
+	btn := ui.ButtonBase(c).Shrink(0).Height(20).Radius(4).
+		Padding(0, 7).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer).Label(T("全部暂存", "Stage All")).Tooltip(T("一键全部暂存工作区所有改动", "Stage all changes in working tree"))
+
+	hovered := btn.Hovered()
+	var bg, border, fg ui.Color
+	if hovered {
+		bg, border, fg = t.Accent.Alpha(0.18), t.Accent.Alpha(0.55), t.Accent
+	} else {
+		bg, border, fg = t.Accent.Alpha(0.09), t.Accent.Alpha(0.25), t.Accent
+	}
+	btn.Background(bg).Border(1, border)
+	fadeColors(btn)
+
+	btn.Children(func() {
+		ui.Text(c, T("+ 全部暂存", "+ Stage All")).FontSize(10.5).Bold().TextColor(fg)
+	})
+	return btn.Clicked()
+}
+
+// quickUnstageAllChip 是提交栏中的「全部取消」快捷微按钮。
+func quickUnstageAllChip(c *ui.Context, t *ui.Theme) bool {
+	btn := ui.ButtonBase(c).Shrink(0).Height(20).Radius(4).
+		Padding(0, 6).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer).Label(T("全部取消", "Unstage All")).Tooltip(T("一键取消暂存所有已暂存改动", "Unstage all staged changes"))
+
+	hovered := btn.Hovered()
+	var bg, border, fg ui.Color
+	if hovered {
+		bg, border, fg = t.SurfaceHover, t.Border, t.Text
+	} else {
+		bg, border, fg = ui.Transparent, t.Border.Alpha(0.4), t.TextMuted
+	}
+	btn.Background(bg).Border(1, border)
+	fadeColors(btn)
+
+	btn.Children(func() {
+		ui.Text(c, T("全部取消", "Unstage All")).FontSize(10.5).TextColor(fg)
+	})
+	return btn.Clicked()
+}
+
+// quickStageRemainingChip 是提交栏中的「暂存剩余」快捷微按钮。
+func quickStageRemainingChip(c *ui.Context, t *ui.Theme) bool {
+	btn := ui.ButtonBase(c).Shrink(0).Height(20).Radius(4).
+		Padding(0, 6).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer).Label(T("暂存剩余", "Stage Remaining")).Tooltip(T("将剩余未暂存改动全部加入暂存区", "Stage remaining changes"))
+
+	hovered := btn.Hovered()
+	var bg, border, fg ui.Color
+	if hovered {
+		bg, border, fg = t.Accent.Alpha(0.16), t.Accent.Alpha(0.45), t.Accent
+	} else {
+		bg, border, fg = t.Surface, t.Border.Alpha(0.45), t.TextMuted
+	}
+	btn.Background(bg).Border(1, border)
+	fadeColors(btn)
+
+	btn.Children(func() {
+		ui.Text(c, T("+ 暂存剩余", "+ Stage Remaining")).FontSize(10.5).TextColor(fg)
+	})
+	return btn.Clicked()
 }

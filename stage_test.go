@@ -643,3 +643,67 @@ func TestContentPreservedAcrossReloads(t *testing.T) {
 	}
 }
 
+// 全部暂存与全部取消暂存：验证顶部药丸、全选勾选框、提交栏快捷药丸及 ⌘⇧A 快捷键。
+func TestStageAllAndUnstageAll(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	settle(t, a)
+	tt.Frame()
+
+	totalFiles := len(a.files)
+	if totalFiles < 2 {
+		t.Fatalf("测试需要至少 2 个改动文件，实际 %d", totalFiles)
+	}
+
+	// 初始状态：index 为空，全部为未暂存
+	if a.stagedCount() != 0 {
+		t.Fatalf("初始已暂存数量该为 0，实际 %d", a.stagedCount())
+	}
+
+	// 1. 点击提交栏或栏头的「全部暂存」
+	if err := tt.Click("全部暂存"); err != nil {
+		t.Fatalf("界面上应该有「全部暂存」按钮: %v", err)
+	}
+	settle(t, a)
+	tt.Frame()
+
+	if got := gitOut(t, a.repoPath, "diff", "--name-only"); got != "" {
+		t.Errorf("全部暂存后工作区未暂存该为空，实际: %q", got)
+	}
+	if a.stagedCount() != totalFiles {
+		t.Errorf("全部暂存后 stagedCount = %d, want %d", a.stagedCount(), totalFiles)
+	}
+
+	// 2. 点击「全部取消」
+	if err := tt.Click("全部取消"); err != nil {
+		t.Fatalf("全部暂存后界面上应该有「全部取消」: %v", err)
+	}
+	settle(t, a)
+	tt.Frame()
+
+	if got := gitOut(t, a.repoPath, "diff", "--cached", "--name-only"); got != "" {
+		t.Errorf("全部取消后 index 该为空，实际: %q", got)
+	}
+	if a.stagedCount() != 0 {
+		t.Errorf("全部取消后 stagedCount = %d, want 0", a.stagedCount())
+	}
+
+	// 3. 快捷键 ⌘⇧A 暂存全部
+	tt.Key(ui.Cmd|ui.Shift, ui.KeyA)
+	settle(t, a)
+	tt.Frame()
+
+	if a.stagedCount() != totalFiles {
+		t.Errorf("快捷键 ⌘⇧A 暂存后 stagedCount = %d, want %d", a.stagedCount(), totalFiles)
+	}
+
+	// 4. 再次按 ⌘⇧A 全部取消暂存
+	tt.Key(ui.Cmd|ui.Shift, ui.KeyA)
+	settle(t, a)
+	tt.Frame()
+
+	if a.stagedCount() != 0 {
+		t.Errorf("快捷键 ⌘⇧A 取消暂存后 stagedCount = %d, want 0", a.stagedCount())
+	}
+}
+

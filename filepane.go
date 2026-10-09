@@ -1,8 +1,6 @@
 package main
 
 import (
-	"strconv"
-
 	"github.com/egoist/mygo/ui"
 
 	"github.com/CarlOpenLab/Gloss/internal/filetree"
@@ -156,13 +154,28 @@ func (a *app) hasDiff() bool {
 func (a *app) fileListPane(c *ui.Context, pal palette, t *ui.Theme) {
 	ui.Column(c).Width(a.filePaneWidth(c)).Shrink(0).FillHeight().
 		Background(pal.sideBg.Alpha(0.35)).Children(func() {
-		ui.Row(c).Shrink(0).Padding(8, 12).Gap(8).AlignItems(ui.Center).Children(func() {
-			n := "文件"
+		ui.Row(c).Shrink(0).Padding(7, 12).Gap(6).AlignItems(ui.Center).Children(func() {
+			if a.tab == 0 && a.repoReady() && len(a.files) > 0 {
+				a.masterStageBox(c, t)
+			}
+			n := T("文件", "Files")
 			if a.hasDiff() || a.state == loadReady {
-				n = strconv.Itoa(len(a.files)) + " 个文件"
+				n = Tf("%d 个文件", "%d files", len(a.files))
 			}
 			ui.Text(c, n).FontSize(11).Font("monospace").FontFeatures("tnum").
 				TextColor(t.TextMuted)
+			if a.tab == 0 && a.repoReady() && len(a.files) > 0 {
+				if a.unstagedCount() > 0 {
+					if stageAllPill(c, t, a.op != gitrepo.OpNone) {
+						a.stageAll()
+					}
+				}
+				if a.stagedCount() > 0 {
+					if unstageAllPill(c, t, a.op != gitrepo.OpNone) {
+						a.unstageAll()
+					}
+				}
+			}
 			ui.Spacer(c)
 			// 增删分开上色，和文件行、栏脚是同一套：同一份数据在哪儿都长
 			// 一个样。原来整串用一个橙色，那是「引用名 / hash」这类元信息
@@ -184,12 +197,124 @@ func (a *app) fileListPane(c *ui.Context, pal palette, t *ui.Theme) {
 	})
 }
 
+// masterStageBox 画全选/全不选的主勾选框（三态：全暂存、全未暂存、部分暂存）。
+func (a *app) masterStageBox(c *ui.Context, t *ui.Theme) {
+	staged := a.stagedCount()
+	unstaged := a.unstagedCount()
+	if staged == 0 && unstaged == 0 {
+		return
+	}
+	lock := a.op != gitrepo.OpNone
+	btn := ui.ButtonBase(c).Size(stageBoxSize, stageBoxSize).Shrink(0).Radius(4).
+		Cursor(ui.CursorPointer).Disabled(lock)
+
+	allStaged := unstaged == 0 && staged > 0
+	indeterminate := staged > 0 && unstaged > 0
+
+	switch {
+	case allStaged:
+		btn.Label(T("全部取消暂存", "Unstage All")).Tooltip(T("全部取消暂存 (将所有已暂存文件移出暂存区)", "Unstage all files (remove from index)"))
+	case indeterminate:
+		btn.Label(T("全部暂存", "Stage All")).Tooltip(T("全部暂存剩余改动 (将剩余未暂存改动加入暂存区)", "Stage remaining changes (add to index)"))
+	default:
+		btn.Label(T("全部暂存", "Stage All")).Tooltip(T("全部暂存 (将所有改动加入暂存区)", "Stage all changes (add to index)"))
+	}
+
+	hovered := btn.Hovered() && !lock
+	var border, fill ui.Color
+	switch {
+	case allStaged, indeterminate:
+		fill, border = t.Accent, t.Accent
+		if hovered {
+			fill, border = t.AccentHover, t.AccentHover
+		}
+	default:
+		border = t.TextMuted.Alpha(0.4)
+		if hovered {
+			border = t.TextMuted
+			fill = t.Surface
+		}
+	}
+	btn.Background(fill).Border(1.5, border)
+	fadeColors(btn)
+
+	if allStaged {
+		btn.Children(func() {
+			ui.Box(c).Size(stageBoxSize-6, stageBoxSize-6).Shrink(0).
+				Draw(func(p *ui.Painter, r ui.Rect) { drawCheckMark(p, r, t.AccentText) })
+		})
+	} else if indeterminate {
+		btn.Children(func() {
+			ui.Box(c).Size(stageBoxSize-6, stageBoxSize-6).Shrink(0).
+				Draw(func(p *ui.Painter, r ui.Rect) { drawMinusMark(p, r, t.AccentText) })
+		})
+	}
+
+	if btn.Clicked() {
+		if allStaged {
+			a.unstageAll()
+		} else {
+			a.stageAll()
+		}
+	}
+}
+
+// stageAllPill 画文件栏顶部的「全部暂存」微型药丸按钮。
+func stageAllPill(c *ui.Context, t *ui.Theme, disabled bool) bool {
+	btn := ui.ButtonBase(c).Shrink(0).Height(20).Radius(4).
+		Padding(0, 6).Gap(3).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer).Label(T("全部暂存", "Stage All")).Tooltip(T("全部暂存所有未暂存改动", "Stage all unstaged changes")).
+		Disabled(disabled)
+
+	hovered := btn.Hovered() && !disabled
+	var bg, border, fg ui.Color
+	if disabled {
+		bg, border, fg = ui.Transparent, t.Border.Alpha(0.2), t.TextMuted.Alpha(0.3)
+	} else if hovered {
+		bg, border, fg = t.Accent.Alpha(0.14), t.Accent.Alpha(0.4), t.Accent
+	} else {
+		bg, border, fg = t.Surface, t.Border.Alpha(0.5), t.TextMuted
+	}
+	btn.Background(bg).Border(1, border)
+	fadeColors(btn)
+
+	btn.Children(func() {
+		ui.Text(c, T("全部暂存", "Stage All")).FontSize(10.5).TextColor(fg)
+	})
+	return btn.Clicked()
+}
+
+// unstageAllPill 画文件栏顶部的「全部取消」微型药丸按钮。
+func unstageAllPill(c *ui.Context, t *ui.Theme, disabled bool) bool {
+	btn := ui.ButtonBase(c).Shrink(0).Height(20).Radius(4).
+		Padding(0, 6).Gap(3).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer).Label(T("全部取消", "Unstage All")).Tooltip(T("全部取消暂存所有已暂存改动", "Unstage all staged changes")).
+		Disabled(disabled)
+
+	hovered := btn.Hovered() && !disabled
+	var bg, border, fg ui.Color
+	if disabled {
+		bg, border, fg = ui.Transparent, t.Border.Alpha(0.2), t.TextMuted.Alpha(0.3)
+	} else if hovered {
+		bg, border, fg = t.SurfaceHover, t.Border, t.Text
+	} else {
+		bg, border, fg = t.Surface, t.Border.Alpha(0.5), t.TextMuted
+	}
+	btn.Background(bg).Border(1, border)
+	fadeColors(btn)
+
+	btn.Children(func() {
+		ui.Text(c, T("全部取消", "Unstage All")).FontSize(10.5).TextColor(fg)
+	})
+	return btn.Clicked()
+}
+
 // fileFilterInput 是文件栏的筛选框。
 //
 // Label 和侧栏那个（「筛选分支」）必须分得开：两个框筛的是完全不同的东西，
 // 名字一样的话测试和无障碍工具都认不出找的是哪一个。
 func (a *app) fileFilterInput(c *ui.Context) {
-	in := searchField(c, &a.fileFilter, "筛选文件")
+	in := searchField(c, &a.fileFilter, T("筛选文件", "Filter files"))
 	// ⌘F（以及命令栏里的「筛选文件」）之后把焦点放进来。
 	//
 	// 置位的那一帧文件栏可能已经画过（命令栏在覆盖层里，晚于它），所以要
@@ -226,29 +351,29 @@ func (a *app) treeView(c *ui.Context, pal palette, t *ui.Theme) {
 func (a *app) emptyTreeMsg() string {
 	switch {
 	case a.state == loadIdle:
-		return "还没打开仓库"
+		return T("未打开仓库", "No repository opened")
 	case a.state != loadReady && !a.repoReady():
 		return "" // 仓库在读，diff 那边有转圈了，这里先空着
 	case a.compare.on && a.compare.state == loadLoading:
-		return "正在计算分支差异…"
+		return T("正在计算分支差异…", "Calculating branch diff…")
 	case a.compare.on && a.compare.state == loadFailed:
-		return "读不到分支差异"
+		return T("无法获取分支差异", "Failed to load branch diff")
 	case a.compare.on && len(a.allFiles) == 0:
-		return "两分支之间没有改动"
+		return T("分支间无变更", "No changes between branches")
 	case a.tab == 1 && a.hist == loadLoading && len(a.commits) == 0:
-		return "正在读提交…"
+		return T("正在读取提交记录…", "Loading commit history…")
 	case a.tab == 1 && a.hist == loadFailed && len(a.commits) == 0:
-		return "读不到历史"
+		return T("无法读取提交记录", "Failed to load history")
 	case a.tab == 1 && len(a.commits) == 0:
-		return "还没有提交"
+		return T("暂无提交记录", "No commits found")
 	case a.tab == 1 && a.histDiff == loadLoading && len(a.files) == 0:
-		return "正在读这个提交…"
+		return T("正在读取提交详情…", "Loading commit details…")
 	case a.tab == 1 && a.histDiff == loadFailed && len(a.files) == 0:
-		return "读不到这个提交"
+		return T("无法读取提交详情", "Failed to load commit")
 	case a.fileFilter != "":
-		return "没有匹配的文件"
+		return T("没有匹配的文件", "No matching files")
 	}
-	return "没有改动"
+	return T("工作区无改动", "Working tree clean")
 }
 
 // treeRow 画文件树的一行。目录只画名字；文件画名字 + 增删行数 + 状态字母。
@@ -363,7 +488,7 @@ func (a *app) filePaneFooter(c *ui.Context, pal palette, t *ui.Theme) {
 	ui.Row(c).Shrink(0).Padding(7, 12).Gap(6).AlignItems(ui.Center).
 		Background(t.Surface).
 		BorderWidth(1, 0, 0, 0).BorderColor(pal.border).Children(func() {
-		ui.Text(c, "总计").FontSize(11).TextColor(t.TextMuted)
+		ui.Text(c, T("总计", "Total")).FontSize(11).TextColor(t.TextMuted)
 		ui.Textf(c, "+%d", a.totalAdd()).FontSize(11).Bold().
 			Font("monospace").FontFeatures("tnum").TextColor(pal.addBar)
 		ui.Textf(c, "−%d", a.totalDel()).FontSize(11).Bold().
@@ -372,7 +497,7 @@ func (a *app) filePaneFooter(c *ui.Context, pal palette, t *ui.Theme) {
 		// 不解决完，提交上去的会是带着 <<<<<<< 的文件。
 		if n := a.conflictCount(); n > 0 {
 			warnIcon(c, 11, t.Warning)
-			ui.Textf(c, "%d 个冲突待解决", n).FontSize(11).
+			ui.Textf(c, T("%d 个冲突待解决", "%d conflicts to resolve"), n).FontSize(11).
 				FontFeatures("tnum").TextColor(t.Warning)
 		}
 		ui.Spacer(c)
@@ -408,52 +533,44 @@ func statusColor(s gitrepo.Status, pal palette) ui.Color {
 }
 
 // detailEmpty 是下半区没有 diff 可画时的几种情况。
-//
-// 先问列表的状态、再问这个提交的 diff 的状态 —— 两者是两路独立的加载，
-// 列表没读出来时根本谈不上「选中了哪个提交」。
 func (a *app) detailEmpty(c *ui.Context, t *ui.Theme) {
 	switch {
 	case a.state == loadIdle:
-		ui.Text(c, "还没有打开仓库").FontSize(18).Bold()
-		ui.Text(c, "选一个本地 git 仓库，看看有哪些改动。").
+		ui.Text(c, T("还没有打开仓库", "No Repository Opened")).FontSize(18).Bold()
+		ui.Text(c, T("请选择本地 Git 仓库以浏览与审查代码变更。", "Select a local Git repository to inspect changes.")).
 			TextColor(t.TextMuted)
-		if ui.PrimaryButton(c, "打开仓库…").Clicked() {
+		if ui.PrimaryButton(c, T("打开仓库…", "Open Repository…")).Clicked() {
 			a.chooseFolder()
 		}
 		// 第一眼的地方，顺手把菜单里的那个键说一遍：下次就不用找按钮了。
-		ui.Text(c, "也可以按 ⌘O 打开").FontSize(11).TextColor(t.TextMuted)
+		ui.Text(c, T("快捷键 ⌘O", "Press ⌘O to open")).FontSize(11).TextColor(t.TextMuted)
 	case a.state == loadLoading && !a.repoReady():
 		ui.Spinner(c)
-		ui.Text(c, "正在读取仓库…").TextColor(t.TextMuted)
+		ui.Text(c, T("正在读取仓库…", "Loading repository…")).TextColor(t.TextMuted)
 	case a.state == loadFailed && a.errNotRepo:
-		// 文件夹选错了。这里给的出路是「换一个」而不是「重试」：git 会沿着
-		// 父目录往上找仓库，它说不是，就是它和它所有父目录都不是 —— 再读
-		// 一遍还是这句话。git 自己那句英文也不用摆了，它没有多出任何信息。
-		ui.Text(c, "打不开这个仓库").FontSize(18).Bold()
-		ui.Text(c, "这个文件夹不是 git 仓库。").TextColor(t.TextMuted)
-		if ui.PrimaryButton(c, "换一个文件夹…").Clicked() {
+		ui.Text(c, T("打不开这个仓库", "Unable to Open Repository")).FontSize(18).Bold()
+		ui.Text(c, T("这个文件夹不是 git 仓库。", "The selected folder is not a valid Git repository.")).TextColor(t.TextMuted)
+		if ui.PrimaryButton(c, T("换一个文件夹…", "Choose Another Folder…")).Clicked() {
 			a.chooseFolder()
 		}
 	case a.state == loadFailed:
-		ui.Text(c, "打不开这个仓库").FontSize(18).Bold()
-		// git 自己的话留着 —— 这一档里它是唯一的具体信息（哪个文件没权限、
-		// 哪条命令错了）。但它是证据，不是结论：等宽、小一号、压过色。
+		ui.Text(c, T("无法打开仓库", "Unable to Open Repository")).FontSize(18).Bold()
 		ui.Text(c, a.errMsg).Font("monospace").FontSize(12).TextColor(t.TextMuted)
-		if ui.Button(c, "重试").Clicked() {
+		if ui.Button(c, T("重试", "Retry")).Clicked() {
 			a.reload()
 		}
 	case a.compare.on:
-		ui.Text(c, "两分支之间没有代码差异").FontSize(18).Bold()
-		ui.Textf(c, "分支 %s 与 %s 完全一致。", a.compare.base, a.compare.target).
+		ui.Text(c, T("两分支之间无代码差异", "No Code Differences")).FontSize(18).Bold()
+		ui.Textf(c, T("分支 %s 与 %s 内容完全一致。", "Branches %s and %s are identical."), a.compare.base, a.compare.target).
 			TextColor(t.TextMuted)
 	case a.tab == 1:
 		a.historyEmpty(c, t)
 	case a.fileFilter != "":
-		ui.Text(c, "没有匹配的文件").FontSize(18).Bold()
-		ui.Textf(c, "筛选词「%s」没有匹配到任何改动。", a.fileFilter).
+		ui.Text(c, T("没有匹配的文件", "No Matching Files")).FontSize(18).Bold()
+		ui.Textf(c, T("未检索到包含「%s」的改动文件。", "No changed files matching \"%s\"."), a.fileFilter).
 			TextColor(t.TextMuted)
 	default:
-		ui.Text(c, "没有未提交的改动").FontSize(18).Bold()
-		ui.Text(c, "工作区是干净的。").TextColor(t.TextMuted)
+		ui.Text(c, T("没有未提交的改动", "No Uncommitted Changes")).FontSize(18).Bold()
+		ui.Text(c, T("工作区状态良好，暂无代码变更。", "Working tree is clean, no uncommitted changes.")).TextColor(t.TextMuted)
 	}
 }

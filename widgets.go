@@ -178,6 +178,11 @@ func drawCheckMark(p *ui.Painter, r ui.Rect, c ui.Color) {
 	p.Icon(iconCheck, r, c)
 }
 
+// drawMinusMark 画一个减号/横线（Lucide minus，用于半选态）。
+func drawMinusMark(p *ui.Painter, r ui.Rect, c ui.Color) {
+	p.Icon(iconMinus, r, c)
+}
+
 // searchH 是筛选框的高度。比框架默认的输入框（边距 1.5+1.5 个间距单位）
 // 略矮一点：它是个「随手筛一下」的框，不该和表单里那些正经输入框一样重。
 const searchH = 28
@@ -203,6 +208,20 @@ func searchField(c *ui.Context, value *string, placeholder string) *ui.Element {
 		searchIcon(c, 12, t.TextMuted)
 		in = ui.TextInputBase(c, value).Grow(1).MinWidth(0).
 			Placeholder(placeholder).Label(placeholder)
+		if value != nil && *value != "" {
+			clearBtn := ui.ButtonBase(c).Size(16, 16).Radius(8).Center().
+				Cursor(ui.CursorPointer).Label("清空").Tooltip("清空筛选")
+			if clearBtn.Hovered() {
+				clearBtn.Background(t.SurfaceHover)
+			}
+			fadeColors(clearBtn)
+			clearBtn.Children(func() {
+				drawIcon(c, iconX, 10, t.TextMuted)
+			})
+			if clearBtn.Clicked() {
+				*value = ""
+			}
+		}
 	})
 
 	// 描边一直占着 1px，只换颜色 —— 焦点来的那一帧才加边框的话，
@@ -367,6 +386,41 @@ func toolButton(c *ui.Context, label, tip string, off, loading bool, icon func(p
 	return btn.Clicked() && !loading
 }
 
+// toolIconButton 是工具栏上的纯图标动作按钮（如刷新、设置、打开仓库）。
+// 严格对齐 28x28 方形尺寸与圆角，悬停/按下提供平滑微交互，通过 Tooltip 呈现操作提示。
+func toolIconButton(c *ui.Context, label, tip string, off, loading bool, icon func(p *ui.Painter, r ui.Rect, col ui.Color)) bool {
+	t := c.Theme()
+	disabled := off || loading
+	btn := ui.ButtonBase(c).Size(28, 28).Shrink(0).Radius(t.Radius).Center().
+		Cursor(ui.CursorPointer).Label(label).Tooltip(tip).Disabled(disabled)
+
+	bg := ui.Transparent
+	fg := t.TextMuted
+	switch {
+	case disabled:
+		fg = t.TextMuted.Alpha(0.38)
+		btn.Cursor(ui.CursorDefault)
+	case btn.Pressed():
+		bg = t.SurfacePressed
+		fg = t.Text
+	case btn.Hovered():
+		bg = t.SurfaceHover
+		fg = t.Text
+	}
+	btn.Background(bg)
+	fadeColors(btn)
+
+	btn.Children(func() {
+		if loading {
+			ui.Spinner(c).Size(toolIconSize, toolIconSize)
+		} else {
+			ui.Box(c).Size(toolIconSize, toolIconSize).Shrink(0).
+				Draw(func(p *ui.Painter, r ui.Rect) { icon(p, r, fg) })
+		}
+	})
+	return btn.Clicked() && !loading
+}
+
 // iconPt 把 0..1 的归一化坐标落进矩形里。
 //
 // 图标按比例画，不写死像素：同一段代码既能画 15px 的工具栏图标，也不会
@@ -383,6 +437,11 @@ func drawRefreshIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
 // drawSlidersIcon 画「设置」（Lucide sliders-horizontal）。
 func drawSlidersIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
 	p.Icon(iconSliders, r, col)
+}
+
+// drawSettingsIcon 画「设置齿轮」（Lucide settings）。
+func drawSettingsIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
+	p.Icon(iconSettings, r, col)
 }
 
 // drawFolderIcon 画「打开仓库」（Lucide folder）。
