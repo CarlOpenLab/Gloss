@@ -3,12 +3,12 @@ module github.com/CarlOpenLab/Gloss
 go 1.27.1
 
 require (
+	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/anthropics/anthropic-sdk-go v1.78.0
-	github.com/egoist/mygo v0.2.12
+	github.com/egoist/mygo v0.2.13
 )
 
 require (
-	github.com/alecthomas/chroma/v2 v2.27.0 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/dlclark/regexp2/v2 v2.2.1 // indirect
