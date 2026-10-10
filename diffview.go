@@ -1,7 +1,6 @@
 package main
 
 import (
-	"math"
 	"strconv"
 	"strings"
 
@@ -423,10 +422,6 @@ func (a *app) unifiedRow(c *ui.Context, pal palette, r row) {
 	text = expandTabs(text)
 	targetLineNo := lineNoOf(r, oldNo, newNo)
 
-	if a.diffLineSelected(r.file, targetLineNo) {
-		lineBg = pal.selection
-	}
-
 	rowEl := ui.Row(c).Height(lineH).Shrink(0).FillWidth().Background(lineBg).Cursor(ui.CursorText)
 	rowEl.Children(func() {
 		ui.Box(c).Width(barW).AlignSelf(ui.Stretch).Background(bar)
@@ -434,7 +429,6 @@ func (a *app) unifiedRow(c *ui.Context, pal palette, r row) {
 		a.gutter(c, pal, newNo, gutBg)
 		a.code(c, pal, hlFile, targetLineNo, text, size)
 	})
-	a.diffLineInput(rowEl, r.file, targetLineNo)
 }
 
 // sideLine 是 split 模式下某一侧的半行。empty 表示这一侧空着 ——
@@ -491,7 +485,6 @@ func (a *app) splitHalf(c *ui.Context, pal palette, s sideLine, size float32, fi
 		}
 		a.code(c, pal, s.hl, s.no, s.text, size)
 	})
-	a.diffLineInput(half, fi, s.no)
 }
 
 // splitSides 返回一行在左右两侧的内容。
@@ -535,109 +528,8 @@ func (a *app) code(c *ui.Context, pal palette, hl *highlight.File, lineNo int, t
 	}
 	b.Children(func() {
 		ui.RichText(c, lineSpans(pal, hl, lineNo, text)...).
-			Font("monospace").FontSize(size).SingleLine().TextColor(pal.code)
+			Font("monospace").FontSize(size).SingleLine().TextColor(pal.code).Selectable()
 	})
-}
-
-// diffRangeSel 描述 diff 代码区里拖选出来的一段行区间。
-//
-// 每行是一个独立的元素，mygo 的可选文本又是按元素工作的，选不了跨行，
-// 所以这里自己记一段行区间：按住左键从某行拖到另一行，高亮整段，⌘C 复制。
-type diffRangeSel struct {
-	active    bool
-	file      int
-	startLine int
-	endLine   int
-	code      string
-}
-
-// diffLineSelected 报告某一行是否在当前选中的区间里。
-func (a *app) diffLineSelected(fi, lineNo int) bool {
-	if !a.diffSel.active || a.diffSel.file != fi || lineNo <= 0 {
-		return false
-	}
-	return lineNo >= a.diffSel.startLine && lineNo <= a.diffSel.endLine
-}
-
-// diffLineInput 给一行代码挂上「按住左键拖选一段」的输入处理。
-//
-// 拖动时指针可能已经离开了这一行，但按下时的元素会一直收到移动事件，
-// 所以用指针相对本行的纵向偏移换算成要延伸到的行号。
-func (a *app) diffLineInput(el *ui.Element, fi, lineNo int) {
-	if lineNo <= 0 {
-		return
-	}
-	// 一次真正的点击（没拖出元素）清掉选区；拖选结束时 mygo 不会报 click，
-	// 所以不会把刚拖出来的选区误清。
-	if el.Clicked() {
-		if el.ClickModifiers()&ui.Shift != 0 && a.diffSel.active && a.diffSel.file == fi {
-			a.updateDiffRangeSel(fi, a.diffSel.startLine, lineNo)
-			return
-		}
-		a.diffSel.active = false
-		return
-	}
-	if _, _, held := el.Dragged(); held {
-		_, py, _ := el.PointerPosition()
-		offset := int(math.Floor(float64(py) / float64(lineH)))
-		end := lineNo + offset
-		if end < 1 {
-			end = 1
-		}
-		a.updateDiffRangeSel(fi, lineNo, end)
-	}
-}
-
-// updateDiffRangeSel 记下选中的行区间，并把它的完整文本拼出来供 ⌘C 复制。
-func (a *app) updateDiffRangeSel(fi, startLine, endLine int) {
-	if fi < 0 || fi >= len(a.files) {
-		return
-	}
-	f := a.files[fi]
-	minL, maxL := min(startLine, endLine), max(startLine, endLine)
-
-	// 拖动时每帧都会调到这里：区间没变就不要重新扫一遍行模型。
-	if a.diffSel.active && a.diffSel.file == fi && a.diffSel.startLine == minL && a.diffSel.endLine == maxL {
-		return
-	}
-
-	// 从行模型里取这段区间实际展示的代码（含增、删、改与展开的未改动行）。
-	var lines []string
-	for _, r := range a.rows {
-		if r.file != fi || r.kind != rowLine {
-			continue
-		}
-		var lno int
-		var txt string
-		if a.split {
-			left, right := a.splitSides(f, r)
-			if !left.empty && left.no >= minL && left.no <= maxL {
-				lno, txt = left.no, left.text
-			} else if !right.empty && right.no >= minL && right.no <= maxL {
-				lno, txt = right.no, right.text
-			}
-		} else {
-			oldNo, newNo := r.oldNo, r.newNo
-			if !r.fromGap && r.hunk >= 0 && r.hunk < len(f.Hunks) && r.lineIdx < len(f.Hunks[r.hunk].Lines) {
-				l := f.Hunks[r.hunk].Lines[r.lineIdx]
-				oldNo, newNo, txt = l.OldNum, l.NewNum, l.Content
-			} else if r.fromGap {
-				txt = a.contentLine(f, r.newNo)
-			}
-			lno = lineNoOf(r, oldNo, newNo)
-		}
-		if lno >= minL && lno <= maxL && txt != "" {
-			lines = append(lines, txt)
-		}
-	}
-
-	a.diffSel = diffRangeSel{
-		active:    true,
-		file:      fi,
-		startLine: minL,
-		endLine:   maxL,
-		code:      strings.Join(lines, "\n"),
-	}
 }
 
 // lineNoOf 是这一行在对应那一侧的行号：高亮就是按这个行号取片段的。

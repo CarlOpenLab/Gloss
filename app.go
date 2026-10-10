@@ -262,9 +262,6 @@ type app struct {
 	providerSearch string
 	modelSearch    string
 
-	// diff 代码区的多行拖选状态（左键按住拖一段行，⌘C 自己复制）。
-	diffSel diffRangeSel
-
 	// —— 顶部弹窗（HeroUI 下拉）——
 	repoDropdownOpen   bool
 	branchDropdownOpen bool
