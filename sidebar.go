@@ -152,9 +152,9 @@ func (a *app) sidebarWorkspaceNav(c *ui.Context, t *ui.Theme, pal palette) {
 
 // sidebarNavItem 画侧栏主导航的一行（如「改动」或「历史」）。
 //
-// 激活态照 §4.3 来：Surface 2 底色 + 左侧 2px 薰衣草蓝指示条 + 提亮到 Ink 的文字，
+// 激活态照 §4.3 来：Surface 2 底色 + 左侧 2px 强调白指示条 + 提亮到 Ink 的文字，
 // 不再是原来那块满宽的蓝底。三条线索里只有指示条带颜色 —— 位置、明度、色相
-// 各说一遍「就是这一项」，而全屏同时出现的 #5e6ad2 要压在一两处以内。
+// 各说一遍「就是这一项」。指示条是全屏少数几处实心强调之一，其余留给主按钮。
 func (a *app) sidebarNavItem(c *ui.Context, t *ui.Theme, pal palette, tabIdx int, label, tip string, svg *ui.SVG, disabled bool, badgeCount int) {
 	selected := a.tab == tabIdx && !disabled
 	btn := ui.ButtonBase(c).Height(28).FillWidth().Radius(radiusSM).

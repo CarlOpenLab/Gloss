@@ -223,7 +223,7 @@ func (a *app) paletteRow(c *ui.Context, t *ui.Theme, pal palette, i int, cmds []
 	sel := i == a.palette.sel
 
 	// 选中那一行原来是**整块实心强调色**。命令栏一屏十几行，一片蓝底上
-	// 白字反而更不好读；§5 也把全屏的薰衣草蓝压在 1~2 处。选中用中性底带
+	// 白字反而更不好读；§5 也把全屏的实心强调压在 1~2 处。选中用中性底带
 	// （和树、列表同一档），选中的那一行靠底带 + 文字提亮到 Ink 说话。
 	bg := ui.Transparent
 	if sel {

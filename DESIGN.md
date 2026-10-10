@@ -1,14 +1,18 @@
 ---
-version: 1.0.0
+version: 2.0.0
 name: Gloss-Linear-Design-System
-description: "A precision, software-craft Git GUI design system adapted from Linear (linear.app). Built on a near-black #010102 canvas with a strict four-step surface ladder, hairline borders, and the signature Linear lavender-blue (#5e6ad2) as the single chromatic accent. Calibrates Git-specific domain semantics (diffs, commit topology, ref badges) into a quiet, noise-free, high-density professional desktop experience."
+description: "A precision, software-craft Git GUI design system adapted from Linear (linear.app). Built on a near-black #010102 canvas with a strict four-step surface ladder and hairline borders. The accent is achromatic — an ink-white key on dark, a near-black key on light — so every hue on screen belongs to a semantic. Calibrates Git-specific domain semantics (diffs, commit topology, ref badges) into a quiet, noise-free, high-density professional desktop experience."
 
 colors:
-  # Brand & Accent
-  primary: "#5e6ad2"
-  primary-hover: "#828fff"
-  primary-focus: "#5e69d1"
-  on-primary: "#ffffff"
+  # Accent —— 黑白两极，深色白键黑字 / 浅色黑键白字
+  primary-dark: "#f7f8f8"
+  primary-dark-hover: "#ffffff"
+  primary-dark-pressed: "#d0d6e0"
+  on-primary-dark: "#08090a"
+  primary-light: "#0f1115"
+  primary-light-hover: "#2b2f36"
+  primary-light-pressed: "#000000"
+  on-primary-light: "#ffffff"
 
   # Dark Canvas & Surface Ladder
   canvas: "#010102"
@@ -27,6 +31,12 @@ colors:
   ink-muted: "#d0d6e0"
   ink-subtle: "#8a8f98"
   ink-tertiary: "#62666d"
+
+  # Focus Ring & Text Selection —— 中性，不引入色相
+  focus-dark: "rgba(247, 248, 248, 0.60)"
+  focus-light: "rgba(15, 17, 21, 0.40)"
+  selection-dark: "rgba(255, 255, 255, 0.20)"
+  selection-light: "rgba(15, 17, 21, 0.12)"
 
   # Light Mode Equivalents (macOS Native Support)
   inverse-canvas: "#ffffff"
@@ -51,10 +61,10 @@ colors:
   semantic-danger: "#e5484d"
 
   # Commit Graph Lanes (Craft / Harmonized Palette)
-  graph-lane-0: "#5e6ad2" # Lavender (Primary / Main)
+  graph-lane-0: "#e6e6e6" # Ink (Main) —— 深色；浅色下取 #0f1115
   graph-lane-1: "#3eb489" # Sage Green
   graph-lane-2: "#e09f3e" # Warm Amber
-  graph-lane-3: "#9d8df1" # Soft Iris
+  graph-lane-3: "#4c86e8" # Steel Blue
   graph-lane-4: "#e5484d" # Coral
   graph-lane-5: "#45b6fe" # Sky
   graph-lane-6: "#d977a8" # Dusty Rose
@@ -115,8 +125,8 @@ Gloss 是一个面向工程师的现代 Git GUI 客户端。本项目的设计�
 
 1. **安静的奢华与软件工艺感 (Quiet Luxury & Software Craft)**
    界面永远是代码和提交历史的舞台，而非喧宾夺主的调色盘。消除不必要的高饱和度色块，追求像素级的对齐与微对比度。
-2. **单主色原则 (Single Chromatic Accent)**
-   **Linear 薰衣草蓝 (`#5e6ad2`) 是全局唯一的品牌与主交互色**。它仅用于核心 CTA 按钮、键盘焦点环、主品牌标识与关键选定态，绝不用作大面积装饰性背景。
+2. **黑白强调原则 (Achromatic Accent)**
+   **界面本身不含色相**：强调色是黑白两极的 Ink —— 深色下是白键黑字（`#f7f8f8` / `#08090a`），浅色下是黑键白字（`#0f1115` / `#ffffff`）。它仅用于核心 CTA 按钮、键盘焦点环、当前分支圆点与关键选定态，绝不用作大面积装饰性背景。
 3. **明度阶梯代替阴影 (Surface Ladder over Drop Shadows)**
    采用严格的四级表面提升系统（Canvas → Surface 1 → Surface 2 → Surface 3 → Surface 4），依靠明度微调和 1px 发丝边框表达层级深度，暗色模式下不使用粗重投影。
 4. **领域降噪 (Domain Noise Reduction for Git)**
@@ -144,10 +154,14 @@ Gloss 是一个面向工程师的现代 Git GUI 客户端。本项目的设计�
 - **Ink Subtle (`#8a8f98`)**：代码行号、辅助元信息、提交作者与相对时间、未激活图标。
 - **Ink Tertiary (`#62666d`)**：快捷键提示文本、占位符（Placeholder）、禁用状态。
 
-### 2.4 唯一主色与交互态 (Primary Accent)
-- **Primary (`#5e6ad2`)**：Linear 经典薰衣草蓝。用于主提交按钮、当前工作区激活项、主分支节点。
-- **Primary Hover (`#828fff`)**：主按钮悬停色，明度微提。
-- **Primary Focus (`#5e69d1`)**：聚焦状态描边（`rgba(94, 106, 209, 0.55)`），2px 发丝外圈。
+### 2.4 强调色与交互态 (Accent & Interaction)
+强调是**明度**的两极，不是色相。深浅两套互为反相，同一颗按钮在两边都保持最高对比：
+
+- **深色模式**：Primary `#f7f8f8`（Ink）/ Hover `#ffffff` / Pressed `#d0d6e0`（Ink Muted），文字 `#08090a`。
+- **浅色模式**：Primary `#0f1115`（Ink）/ Hover `#2b2f36` / Pressed `#000000`，文字 `#ffffff`。
+- 用于主提交按钮、当前工作区激活项、主分支节点（拓扑图 Lane 0）、侧栏导航指示条。
+- **焦点环**：中性 —— 深色 `rgba(247, 248, 248, 0.60)`，浅色 `rgba(15, 17, 21, 0.40)`，2px 发丝外圈。
+- **文本选中**：中性 —— 深色 `rgba(255, 255, 255, 0.20)`，浅色 `rgba(15, 17, 21, 0.12)`。
 
 ### 2.5 Git 领域语义色（降噪校准）
 针对此前“花花绿绿”的核心改造：
@@ -168,11 +182,12 @@ Gloss 是一个面向工程师的现代 Git GUI 客户端。本项目的设计�
   - 区别通过微型矢量图标（`iconGitBranch`, `iconGitCommit`, `iconTag`）或 6px 小圆点体现，不再整块涂成琥珀黄或亮蓝。
 
 ### 2.6 拓扑图色彩 (Commit Graph Lanes)
-摒弃 8 种高饱和荧光彩虹色，采用经过亮度均衡的“莫兰迪 / 精密仪器”8 色谱系：
-1. **Lane 0 (主干 / 主分支)**: `#5e6ad2` (Linear 薰衣草蓝)
+摒弃 8 种高饱和荧光彩虹色，采用经过亮度均衡的“莫兰迪 / 精密仪器”8 色谱系。**0 号留给主干**，取中性 Ink（深色 `#e6e6e6`、浅色 `#0f1115`）—— 主线是整张图上最亮/最重的一条，侧栏「当前分支」圆点与提交徽章上的本地分支点也读它；彩色只落在其余 7 条支线上，且**整份色板不含紫**：
+
+1. **Lane 0 (主干 / 主分支)**: `#e6e6e6` (Ink，浅色下 `#0f1115`)
 2. **Lane 1**: `#3eb489` (鼠尾草绿)
 3. **Lane 2**: `#e09f3e` (暖琥珀沙)
-4. **Lane 3**: `#9d8df1` (柔鸢尾紫)
+4. **Lane 3**: `#4c86e8` (钢青蓝)
 5. **Lane 4**: `#e5484d` (暗珊瑚红)
 6. **Lane 5**: `#45b6fe` (静谧天青)
 7. **Lane 6**: `#d977a8` (暮灰粉)
@@ -197,8 +212,9 @@ Gloss 是一个面向工程师的现代 Git GUI 客户端。本项目的设计�
 
 ### 4.1 按钮 (Buttons)
 - **Primary Button (主操作键)**:
-  - 底色：`#5e6ad2`，悬停：`#828fff`，按下：`#5e69d1`
-  - 文字：`#ffffff`，字号：12.5px，粗细：Medium (500)
+  - 深色：底色 `#f7f8f8`，悬停 `#ffffff`，按下 `#d0d6e0`；文字 `#08090a`
+  - 浅色：底色 `#0f1115`，悬停 `#2b2f36`，按下 `#000000`；文字 `#ffffff`
+  - 字号：12.5px，粗细：Medium (500)
   - 边框：无，圆角：`8px`，内边距：`6px 14px`
 - **Secondary Button (次级操作键)**:
   - 底色：`#0f1011` (Surface 1)，悬停：`#141516` (Surface 2)
@@ -221,12 +237,12 @@ Gloss 是一个面向工程师的现代 Git GUI 客户端。本项目的设计�
 - 底色：`#08090a`（介于 Canvas 与 Surface 1 之间）或半透明 Vibrant 材质。
 - 分割线：1px `#23252a`。
 - 导航激活态（如“改动”/“历史”）：
-  - 摒弃大面积刺眼蓝色块，采用 `Surface 2` 底色搭配 `#5e6ad2` 的微弱强调（或左侧 2px 指示条 / 薰衣草蓝文字）。
+  - 摒弃大面积刺眼蓝色块，采用 `Surface 2` 底色搭配左侧 2px 强调白指示条（深色 `#f7f8f8` / 浅色 `#0f1115`），文字提亮到 `Ink` 并加粗。
 
 ### 4.4 提交栏 (Commit Box)
 - 放置于主区底部，底色：`#0f1011` (Surface 1)，顶边框：1px `#23252a`。
-- 输入框：底色 `#141516` (Surface 2)，边框 1px `#23252a`，聚焦时呈现 2px `#5e69d1` (50% alpha) 光晕。
-- 提交按钮：Primary Button 规格，使用 `#5e6ad2`。
+- 输入框：底色 `#141516` (Surface 2)，边框 1px `#23252a`，聚焦时换成 2px 中性焦点环（§2.4）。
+- 提交按钮：Primary Button 规格（深色白键黑字 / 浅色黑键白字）。
 
 ---
 
@@ -234,7 +250,8 @@ Gloss 是一个面向工程师的现代 Git GUI 客户端。本项目的设计�
 
 ### Do:
 - ✅ **拥抱深度黑与微阶梯**：以 `#010102` 画布为基底，让层次自然浮现在 `Surface 1~4` 上。
-- ✅ **克制使用薰衣草蓝**：全屏幕范围内，同时出现的 `#5e6ad2` 元素尽量不超过 1~2 处（核心动作焦点）。
+- ✅ **克制使用强调白**：全屏幕范围内，同时出现的实心强调（白键 / 指示条 / 当前分支圆点）尽量不超过 1~2 处（核心动作焦点）。
+- ✅ **彩度让给语义**：界面自身只用灰阶，色相留给 diff 红绿、告警琥珀、拓扑支线 —— 彩色出现时，它一定在说一件事。
 - ✅ **用发丝线组织空间**：通过 1px `#23252a` 细线划定边界，而不是用厚重阴影或粗边框。
 - ✅ **用文本明度传达信息权重**：主要信息用 `#f7f8f8`，次要信息坚决降至 `#8a8f98`，避免到处都是亮白或彩色。
 - ✅ **保持 Diff 视图平静**：增删代码底色半透明度保持在 8~10% 以内，Hunk 栏坚决保持中性灰。
@@ -244,4 +261,5 @@ Gloss 是一个面向工程师的现代 Git GUI 客户端。本项目的设计�
 - ❌ **禁止使用亮蓝 @@ Hunk 栏**：不再使用 `#121d2f` 底色或 `#79c0ff` 荧光文字。
 - ❌ **禁止使用霓虹彩虹拓扑线**：提交图颜色必须保持灰度与明度均衡。
 - ❌ **禁止给常规按钮使用大圆角胶囊 (Pill)**：按钮统一为 `8px` 圆角，仅计数角标使用 Pill。
+- ❌ **禁止品牌紫 / 薰衣草蓝**：`#5e6ad2` 那一系（以及任何紫、鸢尾、靛）不再出现在界面与拓扑图里 —— 强调靠明度，不靠色相。
 - ❌ **禁止非语义彩色修饰**：不要给卡片、侧栏条目增加花哨的环境渐变或外发光。

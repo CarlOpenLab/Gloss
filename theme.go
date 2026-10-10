@@ -62,11 +62,11 @@ type palette struct {
 
 	// selection 是列表与树的选中底带。
 	//
-	// 取中性灰阶而不是拿 Accent 淡染：§1 把 #5e6ad2 限定给「核心 CTA、焦点环、
-	// 主品牌标识与关键选定态」，而 §5 又要求「全屏同时出现的薰衣草蓝不超过
-	// 1~2 处」。侧栏三个列表（refs 树、文件树、提交记录）各有一条选中带，
-	// 再把主按钮和导航指示条算上，accent 立刻超预算。选中位置改由中性底带
-	// 表达之后，蓝就只能出现在真正要引导视线的那几处。
+	// 取中性灰阶而不是拿 Accent 淡染：Accent 是「白」（见 glossTheme），
+	// 拿它淡染出来的底带是一层雾，把行糊住不说，§5 的强调预算也立刻超支 ——
+	// 侧栏三个列表（refs 树、文件树、提交记录）各有一条选中带，再把主按钮
+	// 和导航指示条算上，全屏同时亮着的实心强调就有五六处。选中位置改由
+	// 中性底带表达之后，两极的 Ink 只落在真正要引导视线的那几处。
 	selection ui.Color
 
 	// lanes 是提交拓扑图里每条线的颜色。
@@ -115,7 +115,8 @@ func hlPalette(dark bool) *highlight.Palette {
 // glossTheme 把 mygo 的通用控件配色换成 Gloss 对齐 Linear 设计体系的那一套。
 //
 // 参见 DESIGN.md：以 #010102 深邃画布为基准，采用四级表面明度阶梯（Surface 1~4）、
-// 1px Hairline 发丝边框（#23252a），以及 Linear 标志性的薰衣草蓝（#5e6ad2）作为唯一主色。
+// 1px Hairline 发丝边框（#23252a），强调色是黑白两极的 Ink —— 深色下白键黑字，
+// 浅色下黑键白字。整套界面不含色相，彩色只留给语义。
 func glossTheme(dark bool) *ui.Theme {
 	t := ui.LightTheme()
 	if dark {
@@ -131,7 +132,11 @@ func glossTheme(dark bool) *ui.Theme {
 		// Surface 阶梯：Surface 1 (#0f1011)，SurfaceHover (#141516)，SurfacePressed (#18191a)。
 		// 边框采用 Linear 1px Hairline (#23252a)。
 		// 文本采用 Ink 灰阶：#f7f8f8 (正文), #8a8f98 (次要)。
-		// 单一主色 Accent：Linear 薰衣草蓝 #5e6ad2。
+		//
+		// 强调色是 **白**（Ink #f7f8f8），不是某个品牌彩 —— 主按钮就是一颗
+		// 白键、上面写黑字，和 Linear 现版一致。深浅两侧互为反相：深色下白键
+		// 黑字，浅色下黑键白字。彩度全部让给语义（diff 红绿、告警琥珀），
+		// 界面本身不含色相。
 		//
 		// t.Radius 是框架**全部**自绘控件的圆角（按钮、输入框、TextArea、
 		// 下拉框、列表），§3 把它们统一归到 md(8)。规范另外点名要给 6 的
@@ -143,15 +148,15 @@ func glossTheme(dark bool) *ui.Theme {
 		t.Border = ui.Hex("#23252a")
 		t.Text = ui.Hex("#f7f8f8")
 		t.TextMuted = ui.Hex("#8a8f98")
-		t.Accent = ui.Hex("#5e6ad2")
-		t.AccentHover = ui.Hex("#828fff")
-		t.AccentPressed = ui.Hex("#5e69d1")
-		t.AccentText = ui.Hex("#ffffff")
+		t.Accent = ui.Hex("#f7f8f8")
+		t.AccentHover = ui.Hex("#ffffff")
+		t.AccentPressed = ui.Hex("#d0d6e0")
+		t.AccentText = ui.Hex("#08090a")
 		t.Danger = ui.Hex("#e5484d")
 		t.Warning = ui.Hex("#e09f3e")
 		t.Success = ui.Hex("#27a644")
-		t.Selection = ui.RGBA(94, 106, 210, 0.22)
-		t.Focus = ui.RGBA(94, 106, 210, 0.50)
+		t.Selection = ui.RGBA(255, 255, 255, 0.20)
+		t.Focus = ui.RGBA(247, 248, 248, 0.60)
 		t.Scrollbar = ui.RGBA(255, 255, 255, 0.16)
 		t.Radius = radiusMD
 		return t
@@ -163,6 +168,8 @@ func glossTheme(dark bool) *ui.Theme {
 	// 都暗，拿它铺浮层会让菜单和模态看着是**凹**下去的。浅色下的「浮起来」靠的是
 	// 往白走（对比深色下的往亮走），所以浮层与模态用 inverse-canvas 的白，
 	// 卡片与容器才用那三级灰。
+	//
+	// 强调色同理取反相：近黑的 Ink 实心键 + 白字。
 	t.Background = ui.Hex("#ffffff")
 	t.Surface = ui.Hex("#f7f8f9")
 	t.SurfaceHover = ui.Hex("#f0f2f5")
@@ -170,15 +177,15 @@ func glossTheme(dark bool) *ui.Theme {
 	t.Border = ui.Hex("#e1e4e8")
 	t.Text = ui.Hex("#0f1115")
 	t.TextMuted = ui.Hex("#6e7781")
-	t.Accent = ui.Hex("#5e6ad2")
-	t.AccentHover = ui.Hex("#4f5bc4")
-	t.AccentPressed = ui.Hex("#414ca8")
+	t.Accent = ui.Hex("#0f1115")
+	t.AccentHover = ui.Hex("#2b2f36")
+	t.AccentPressed = ui.Hex("#000000")
 	t.AccentText = ui.Hex("#ffffff")
 	t.Danger = ui.Hex("#e5484d")
 	t.Warning = ui.Hex("#d97706")
 	t.Success = ui.Hex("#27a644")
-	t.Selection = ui.RGBA(94, 106, 210, 0.18)
-	t.Focus = ui.RGBA(94, 106, 210, 0.45)
+	t.Selection = ui.RGBA(15, 17, 21, 0.12)
+	t.Focus = ui.RGBA(15, 17, 21, 0.40)
 	t.Scrollbar = ui.RGBA(0, 0, 0, 0.18)
 	t.Radius = radiusMD
 	return t
@@ -267,11 +274,14 @@ func paletteFor(t *ui.Theme) palette {
 			ref:          ui.Hex("#d0d6e0"), // 中性 Ink Muted
 			viewed:       ui.Hex("#27a644"),
 			// 拓扑图莫兰迪/精密仪器 8 色谱系（明度与彩度均衡）：
+			// 0 号留给主干，取中性 Ink —— 主线是黑白主调里最亮的一条，
+			// 侧栏「当前分支」那颗点、提交徽章上的本地分支点也都读它。
+			// 彩色只落在其余 7 条支线上，且不含紫。
 			lanes: [8]ui.Color{
-				ui.Hex("#5e6ad2"), // 主干/HEAD: Linear 薰衣草蓝
+				ui.Hex("#e6e6e6"), // 主干/HEAD: 中性 Ink
 				ui.Hex("#3eb489"), // 鼠尾草绿
 				ui.Hex("#e09f3e"), // 暖琥珀
-				ui.Hex("#9d8df1"), // 柔鸢尾紫
+				ui.Hex("#4c86e8"), // 钢青蓝
 				ui.Hex("#e5484d"), // 珊瑚红
 				ui.Hex("#45b6fe"), // 天青蓝
 				ui.Hex("#d977a8"), // 暮灰粉
@@ -316,10 +326,10 @@ func paletteFor(t *ui.Theme) palette {
 		ref:              ui.Hex("#4b535d"),
 		viewed:           ui.Hex("#27a644"),
 		lanes: [8]ui.Color{
-			ui.Hex("#5e6ad2"),
+			ui.Hex("#0f1115"), // 主干/HEAD: 中性 Ink（浅色下是近黑）
 			ui.Hex("#2d9d74"),
 			ui.Hex("#c9822b"),
-			ui.Hex("#7e6cd8"),
+			ui.Hex("#2f6fd0"),
 			ui.Hex("#cf3b40"),
 			ui.Hex("#2693db"),
 			ui.Hex("#b85487"),

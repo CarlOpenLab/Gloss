@@ -481,7 +481,7 @@ type refBadge struct {
 // badgeDot 是芯片上那颗圆点的颜色。
 //
 // 三种引用各给一个语义，但都只落在 6px 的点上：本地分支跟顶部那颗「当前分支」
-// 圆点同一个薰衣草蓝（读的人能把「这条分支」和「我在哪」对上），远程是安静的
+// 圆点同一色（读的人能把「这条分支」和「我在哪」对上），远程是安静的
 // 灰（跟踪分支是背景信息），标签用琥珀（发布标记是唯一带时间重量的一种）。
 func badgeDot(t *ui.Theme, pal palette, kind refBadgeKind) ui.Color {
 	switch kind {

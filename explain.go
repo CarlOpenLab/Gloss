@@ -791,9 +791,10 @@ func mdStyleFor(t *ui.Theme, pal palette) mdStyle {
 		code:   pal.code,
 		codeBg: pal.gapBg,
 		head:   t.Text,
-		// 列表符号用卡片自己的强调色，不用 pal.ref：那个橙色是「分支」
-		// 的意思（提交列表的徽章、侧栏的引用），一颗橙点落在 AI 卡片里
-		// 会让人以为和某条分支有关。蓝是这张卡的头和火花在用的一色。
+		// 列表符号用卡片自己的强调色，不用 pal.ref：后者是「分支引用」的
+		// 意思（提交列表的徽章、侧栏的引用、文件行的状态），一颗提亮的点
+		// 落在 AI 卡片里会让人以为和某条分支有关。强调色是这张卡的头和
+		// 火花在用的一色 —— 深色下是白、浅色下是黑，和卡片底色永远拉得开。
 		bullet: t.Accent,
 		mono:   "monospace",
 	}
