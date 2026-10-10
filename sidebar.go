@@ -22,17 +22,12 @@ const (
 //
 // 参照 Fork 布局规范，侧栏顶部承载最高层级项目卡片与工作区导航。
 func (a *app) sidebar(c *ui.Context, pal palette) {
-	bar := c.TitleBar()
 	t := c.Theme()
 	sw := a.sidebarWidth(c)
 
 	ui.Column(c).Width(sw).Shrink(0).
 		Background(pal.sideBg.Alpha(0.55)).
 		Children(func() {
-			if bar.Height > 0 {
-				ui.Box(c).Height(bar.Height).Shrink(0).DragWindow()
-			}
-
 			// 侧栏顶部项目名称与工作区导航（Fork 风格：改动与历史）
 			a.sidebarHeader(c, t, pal)
 

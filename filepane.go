@@ -154,6 +154,16 @@ func (a *app) hasDiff() bool {
 func (a *app) fileListPane(c *ui.Context, pal palette, t *ui.Theme) {
 	ui.Column(c).Width(a.filePaneWidth(c)).Shrink(0).FillHeight().
 		Background(pal.surface1).Children(func() {
+		// 栏头只留「几个文件」一件必读的信息，以及左边的三态勾选框。
+		//
+		// 这一栏的宽度是定死的 300（split 下 220）。原来还并排塞着
+		// 「全部暂存 / 全部取消」两颗文字药丸和一组 +add −del：半暂存
+		// （既有已暂存又有未暂存）时四样东西一起出现，一行摆不下，文字
+		// 各自折成两行，勾选框也被挤得离开基线，整条栏头看着像坏了。
+		//
+		// 那三样都是冗余的：勾选框在三种状态下本来就是暂存 / 取消暂存的
+		// 开关；增删总数在栏脚「总计」里已经报过一次；带文字的批量操作
+		// 在提交栏底部（「+ 全部暂存 / 全部取消」）也都有。
 		ui.Row(c).Shrink(0).Padding(7, 12).Gap(6).AlignItems(ui.Center).Children(func() {
 			if a.tab == 0 && a.repoReady() && len(a.files) > 0 {
 				a.masterStageBox(c, t, pal)
@@ -163,29 +173,7 @@ func (a *app) fileListPane(c *ui.Context, pal palette, t *ui.Theme) {
 				n = Tf("%d 个文件", "%d files", len(a.files))
 			}
 			ui.Text(c, n).FontSize(11).Font("monospace").FontFeatures("tnum").
-				TextColor(t.TextMuted)
-			if a.tab == 0 && a.repoReady() && len(a.files) > 0 {
-				if a.unstagedCount() > 0 {
-					if stageAllPill(c, pal, a.op != gitrepo.OpNone) {
-						a.stageAll()
-					}
-				}
-				if a.stagedCount() > 0 {
-					if unstageAllPill(c, pal, a.op != gitrepo.OpNone) {
-						a.unstageAll()
-					}
-				}
-			}
-			ui.Spacer(c)
-			// 增删分开上色，和文件行、栏脚是同一套：同一份数据在哪儿都长
-			// 一个样。原来整串用一个橙色，那是「引用名 / hash」这类元信息
-			// 的颜色，用在这里和行里的绿红对不上。
-			if (a.hasDiff() || a.state == loadReady) && len(a.files) > 0 {
-				ui.Textf(c, "+%d", a.totalAdd()).FontSize(11).
-					Font("monospace").FontFeatures("tnum").TextColor(pal.addBar)
-				ui.Textf(c, "−%d", a.totalDel()).FontSize(11).
-					Font("monospace").FontFeatures("tnum").TextColor(pal.delBar)
-			}
+				SingleLine().TextColor(t.TextMuted)
 		})
 		ui.Box(c).Key("file-filter-wrap").Shrink(0).Padding(0, 12, 8, 12).Children(func() {
 			a.fileFilterInput(c, pal)
@@ -259,65 +247,6 @@ func (a *app) masterStageBox(c *ui.Context, t *ui.Theme, pal palette) {
 			a.stageAll()
 		}
 	}
-}
-
-// stageAllPill 画文件栏顶部的「全部暂存」微型药丸按钮。
-//
-// 静息态是一枚中性芯片（Surface 1 底 + hairline 边），悬停升到 Surface 2 ——
-// 和工具栏那些工具按钮同一条规则。原来静息态就染着强调色：文件栏顶上两个
-// 并排的小药丸，一个蓝色一个灰色，读起来像是「这个按钮比那个重要」，
-// 而它们只是同一件事的两个方向。
-func stageAllPill(c *ui.Context, pal palette, disabled bool) bool {
-	btn := ui.ButtonBase(c).Shrink(0).Height(20).Radius(radiusXS).
-		Padding(0, 6).Gap(3).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).Label(T("全部暂存", "Stage All")).Tooltip(T("全部暂存所有未暂存改动", "Stage all unstaged changes")).
-		Disabled(disabled)
-
-	hovered := btn.Hovered() && !disabled
-	var bg, border, fg ui.Color
-	switch {
-	case disabled:
-		bg, border, fg = ui.Transparent, pal.hairline, pal.inkTertiary
-	case hovered:
-		bg, border, fg = pal.surface2, pal.hairlineStrong, pal.ink
-	default:
-		bg, border, fg = pal.surface1, pal.hairlineStrong, pal.inkMuted
-	}
-	btn.Background(bg).Border(1, border)
-	fadeColors(btn)
-
-	btn.Children(func() {
-		ui.Text(c, T("全部暂存", "Stage All")).FontSize(textCaption).
-			FontWeight(weightMedium).TextColor(fg)
-	})
-	return btn.Clicked()
-}
-
-// unstageAllPill 画文件栏顶部的「全部取消」微型药丸按钮。
-func unstageAllPill(c *ui.Context, pal palette, disabled bool) bool {
-	btn := ui.ButtonBase(c).Shrink(0).Height(20).Radius(radiusXS).
-		Padding(0, 6).Gap(3).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).Label(T("全部取消", "Unstage All")).Tooltip(T("全部取消暂存所有已暂存改动", "Unstage all staged changes")).
-		Disabled(disabled)
-
-	hovered := btn.Hovered() && !disabled
-	var bg, border, fg ui.Color
-	switch {
-	case disabled:
-		bg, border, fg = ui.Transparent, pal.hairline, pal.inkTertiary
-	case hovered:
-		bg, border, fg = pal.surface2, pal.hairlineStrong, pal.ink
-	default:
-		bg, border, fg = pal.surface1, pal.hairlineStrong, pal.inkMuted
-	}
-	btn.Background(bg).Border(1, border)
-	fadeColors(btn)
-
-	btn.Children(func() {
-		ui.Text(c, T("全部取消", "Unstage All")).FontSize(textCaption).
-			FontWeight(weightMedium).TextColor(fg)
-	})
-	return btn.Clicked()
 }
 
 // fileFilterInput 是文件栏的筛选框。

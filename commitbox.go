@@ -249,6 +249,14 @@ const commitInputCompactH = 32
 // diff 的最低限度 —— 窗口比这还矮时，两行的输入框吃掉的就是 diff 的地盘。
 const commitCompactH = 640
 
+// commitBarStackW 是提交栏底部那条状态栏能横向摆下的最小主区宽度。
+//
+// 低于它就把「状态 + 三颗按钮」竖着摆成两行。1280 窗口减去侧栏还剩
+// ~990，摆得下；窗口收到最小宽度（720）再减侧栏只剩 ~430，横着摆会把
+// 三颗按钮整个顶出窗口右边 —— 用户根本看不见提交按钮。竖着排只是多占
+// 一行高度，不丢任何控件。
+const commitBarStackW = 620
+
 // stagedCount / unstagedCount 数的是 allFiles 而不是 files：筛选只是换个
 // 视角看同一批改动，不该改变「点提交会提交多少东西」。
 func (a *app) stagedCount() int { return a.countSection(gitrepo.SectionStaged) }
@@ -306,7 +314,12 @@ func (a *app) commitBox(c *ui.Context, pal palette) {
 		return
 	}
 	t := c.Theme()
-	_, winH := c.Size()
+	winW, winH := c.Size()
+	mainW := winW
+	if a.sidebarOn {
+		mainW -= a.sidebarWidth(c)
+	}
+	stackedBar := mainW < commitBarStackW
 	// 两档都是同一个 TextArea，只把高度夹紧 —— 不换成单行输入框。
 	//
 	// 框架的编辑器状态跟着元素身份走，而元素身份由位置决定：同一个位置上
@@ -351,23 +364,45 @@ func (a *app) commitBox(c *ui.Context, pal palette) {
 
 			// 底部：操作与状态一体化工具栏。它比卡片本身沉一档（Surface 1），
 			// 像是卡片里挖出来的一条槽 —— 上面是「写什么」，下面是「拿它怎么办」。
-			ui.Row(c).FillWidth().Height(34).Shrink(0).
-				Padding(0, 10).AlignItems(ui.Center).Gap(8).
-				Background(pal.surface1).
-				BorderWidth(1, 0, 0, 0).BorderColor(pal.hairline).Children(func() {
-
-				// 左侧：状态指示徽章与 Amend 开关
-				a.commitStatus(c, t, pal)
-
-				ui.Spacer(c)
-
-				// 右侧：功能按钮组（预检 -> AI -> 提交 CTA）
-				ui.Row(c).Shrink(0).Gap(7).AlignItems(ui.Center).Children(func() {
-					a.riskScanButton(c, t, pal)
-					a.aiCommitButton(c, t, pal)
-					a.commitButton(c, t, pal)
+			//
+			// 主区放得下就摆成一行：状态靠左、动作靠右。放不下（窄窗口）就
+			// 竖着折成两行，而不是把按钮顶出窗口。
+			barBg := pal.surface1
+			barBorder := pal.hairline
+			if stackedBar {
+				ui.Column(c).FillWidth().Shrink(0).
+					Padding(6, 10, 8, 10).Gap(6).
+					Background(barBg).
+					BorderWidth(1, 0, 0, 0).BorderColor(barBorder).Children(func() {
+					ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
+						a.commitStatus(c, t, pal)
+					})
+					ui.Row(c).FillWidth().Shrink(0).Gap(7).AlignItems(ui.Center).
+						Justify(ui.End).Children(func() {
+						a.riskScanButton(c, t, pal)
+						a.aiCommitButton(c, t, pal)
+						a.commitButton(c, t, pal)
+					})
 				})
-			})
+			} else {
+				ui.Row(c).FillWidth().Height(34).Shrink(0).
+					Padding(0, 10).AlignItems(ui.Center).Gap(8).
+					Background(barBg).
+					BorderWidth(1, 0, 0, 0).BorderColor(barBorder).Children(func() {
+
+					// 左侧：状态指示徽章与 Amend 开关
+					a.commitStatus(c, t, pal)
+
+					ui.Spacer(c)
+
+					// 右侧：功能按钮组（预检 -> AI -> 提交 CTA）
+					ui.Row(c).Shrink(0).Gap(7).AlignItems(ui.Center).Children(func() {
+						a.riskScanButton(c, t, pal)
+						a.aiCommitButton(c, t, pal)
+						a.commitButton(c, t, pal)
+					})
+				})
+			}
 		})
 
 		// 草稿在「焦点刚离开」的那一帧落盘：每敲一个键存一次的话，store.Save
@@ -518,6 +553,7 @@ func (a *app) startAICommit() {
 	a.commitMsg = ""
 
 	system, user := explain.BuildCommitPrompt(staged, existingMsg)
+	system = a.store.Config().EffectiveCommitPrompt(system)
 	prov := a.store.Provider()
 
 	onDelta := func(chunk string) {

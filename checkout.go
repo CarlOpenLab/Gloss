@@ -218,11 +218,11 @@ func (a *app) localBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
 	if m.Item("重命名 " + ref.Name + "…").Disabled(busy).Chosen() {
 		a.openRenameBranchDialog(ref.Name)
 	}
-	if m.Item("删除分支 " + ref.Name + "…").Disabled(busy || isHead).Chosen() {
+	if m.Item(T("删除分支 "+ref.Name+"…", "Delete Branch "+ref.Name+"…")).Disabled(busy || isHead).Chosen() {
 		a.promptDeleteBranch(ref.Name)
 	}
 	m.Separator()
-	if m.Item("复制分支名").Disabled(busy).Chosen() {
+	if m.Item(T("复制分支名", "Copy Branch Name")).Disabled(busy).Chosen() {
 		a.copyText = ref.Name
 	}
 }
@@ -239,11 +239,11 @@ func (a *app) remoteBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
 	}
 	m.Separator()
 	if a.branch != "" {
-		if m.Item("与当前分支 (" + a.branch + ") 对比代码差异").Disabled(busy).Chosen() {
+		if m.Item(T("与当前分支 ("+a.branch+") 对比代码差异", "Compare with current branch ("+a.branch+")")).Disabled(busy).Chosen() {
 			a.startCompare(a.branch, ref.Name, true)
 		}
 	}
-	if m.Item("与其他分支对比代码差异…").Disabled(busy).Chosen() {
+	if m.Item(T("与其他分支对比代码差异…", "Compare with other branch…")).Disabled(busy).Chosen() {
 		a.openCompareDialog(ref.Name)
 	}
 	m.Separator()
@@ -253,11 +253,11 @@ func (a *app) remoteBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
 	}
 	localName := remoteLocalName(ref)
 	canRemote := a.canReachRemote()
-	if m.Item("删除远程分支 " + ref.Name + "…").Disabled(!canRemote).Chosen() {
+	if m.Item(T("删除远程分支 "+ref.Name+"…", "Delete Remote Branch "+ref.Name+"…")).Disabled(!canRemote).Chosen() {
 		a.promptDeleteRemoteBranch(remote, localName)
 	}
 	m.Separator()
-	if m.Item("复制分支名").Disabled(busy).Chosen() {
+	if m.Item(T("复制分支名", "Copy Branch Name")).Disabled(busy).Chosen() {
 		a.copyText = ref.Name
 	}
 }
@@ -265,25 +265,25 @@ func (a *app) remoteBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
 // tagMenu 是标签的右键菜单：检出、对比差异、推送到远程、复制标签名。
 func (a *app) tagMenu(m *ui.Menu, ref gitrepo.Ref) {
 	busy := a.op != gitrepo.OpNone
-	if m.Item("检出标签 " + ref.Name + "（分离 HEAD）").Disabled(busy).Chosen() {
+	if m.Item(T("检出标签 "+ref.Name+"（分离 HEAD）", "Checkout Tag "+ref.Name+" (Detached HEAD)")).Disabled(busy).Chosen() {
 		a.checkoutRef(ref)
 	}
 	m.Separator()
 	if a.branch != "" {
-		if m.Item("与当前分支 (" + a.branch + ") 对比代码差异").Disabled(busy).Chosen() {
+		if m.Item(T("与当前分支 ("+a.branch+") 对比代码差异", "Compare with current branch ("+a.branch+")")).Disabled(busy).Chosen() {
 			a.startCompare(a.branch, ref.Name, true)
 		}
 	}
-	if m.Item("与其他分支/标签对比代码差异…").Disabled(busy).Chosen() {
+	if m.Item(T("与其他分支/标签对比代码差异…", "Compare with other branch/tag…")).Disabled(busy).Chosen() {
 		a.openCompareDialog(ref.Name)
 	}
 	m.Separator()
 	canRemote := a.canReachRemote()
-	if m.Item("推送标签 " + ref.Name + " 到 origin").Disabled(!canRemote).Chosen() {
+	if m.Item(T("推送标签 "+ref.Name+" 到 origin", "Push Tag "+ref.Name+" to origin")).Disabled(!canRemote).Chosen() {
 		a.pushTag("origin", ref.Name)
 	}
 	m.Separator()
-	if m.Item("复制标签名").Disabled(busy).Chosen() {
+	if m.Item(T("复制标签名", "Copy Tag Name")).Disabled(busy).Chosen() {
 		a.copyText = ref.Name
 	}
 }
@@ -293,18 +293,18 @@ func (a *app) stashMenu(m *ui.Menu, ref gitrepo.Ref) {
 	busy := a.op != gitrepo.OpNone
 	held := busy || a.pending.Active()
 
-	if m.Item("应用储藏（Apply）").Disabled(held).Chosen() {
+	if m.Item(T("应用储藏（Apply）", "Apply Stash")).Disabled(held).Chosen() {
 		a.stashApply(ref)
 	}
-	if m.Item("应用并丢弃（Pop）").Disabled(held).Chosen() {
+	if m.Item(T("应用并丢弃（Pop）", "Pop Stash")).Disabled(held).Chosen() {
 		a.stashPop(ref)
 	}
 	m.Separator()
-	if m.Item("丢弃储藏（Drop）…").Disabled(busy).Chosen() {
+	if m.Item(T("丢弃储藏（Drop）…", "Drop Stash…")).Disabled(busy).Chosen() {
 		a.promptStashDrop(ref)
 	}
 	m.Separator()
-	if m.Item("复制储藏名").Disabled(busy).Chosen() {
+	if m.Item(T("复制储藏名", "Copy Stash Name")).Disabled(busy).Chosen() {
 		a.copyText = ref.Name
 	}
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -18,8 +17,8 @@ import (
 // 列表占满主区全宽、diff 压到下面 —— 这是 Fork 的样子。之前列表挤在主区左
 // 半边时只有 420px，拓扑图被压在最左边一条 78px 的窄栏里，铺不开。
 
-// logLimit 一次读多少个提交。够翻很久了，真要看更早的再往下拉。
-const logLimit = 200
+// logBatchSize 一次读多少个提交。默认首批读 500 个，向下滚动或键盘导航到底部时自动增量加载。
+const logBatchSize = 500
 
 // defaultCommitH 是提交列表那一栏的高度，占主区高度的四成半。
 //
@@ -99,11 +98,14 @@ func (a *app) loadCommits() {
 	seq := a.logSeq
 	dir := a.repoPath
 	rev := a.histRev
+	a.histHasMore = true
+	a.histLoadingMore = false
+
 	a.run(func() {
 		repo, err := gitrepo.Open(context.Background(), dir)
 		var commits []gitrepo.Commit
 		if err == nil {
-			commits, err = repo.Log(context.Background(), rev, logLimit, 0)
+			commits, err = repo.Log(context.Background(), rev, logBatchSize, 0)
 		}
 		a.dispatch(func() {
 			if a.logSeq != seq {
@@ -120,6 +122,7 @@ func (a *app) loadCommits() {
 			if len(a.commits) > 0 {
 				oldHead = a.commits[0].Hash
 			}
+			a.histHasMore = len(commits) == logBatchSize
 			a.setCommits(commits)
 			a.hist = loadReady
 			// 进来先选中最近那个提交，省得用户还要再点一下。
@@ -131,6 +134,40 @@ func (a *app) loadCommits() {
 			} else if a.commitSel == 0 && a.stashRev == "" && len(commits) > 0 && commits[0].Hash != oldHead {
 				a.loadCommit(0)
 			}
+		})
+	})
+}
+
+// loadMoreCommits 在后台加载下一批更早的提交。
+func (a *app) loadMoreCommits() {
+	if !a.histHasMore || a.histLoadingMore || a.repoPath == "" {
+		return
+	}
+	a.histLoadingMore = true
+	seq := a.logSeq
+	dir := a.repoPath
+	rev := a.histRev
+	offset := len(a.commits)
+
+	a.run(func() {
+		repo, err := gitrepo.Open(context.Background(), dir)
+		var more []gitrepo.Commit
+		if err == nil {
+			more, err = repo.Log(context.Background(), rev, logBatchSize, offset)
+		}
+		a.dispatch(func() {
+			if a.logSeq != seq {
+				return
+			}
+			a.histLoadingMore = false
+			if err != nil || len(more) == 0 {
+				a.histHasMore = false
+				return
+			}
+			if len(more) < logBatchSize {
+				a.histHasMore = false
+			}
+			a.setCommits(append(a.commits, more...))
 		})
 	})
 }
@@ -210,6 +247,9 @@ func (a *app) navCommit(dir int) {
 		a.loadCommit(newIdx)
 	}
 	a.commitList.ScrollIntoView(newIdx)
+	if newIdx >= len(a.commits)-15 && a.histHasMore && !a.histLoadingMore {
+		a.loadMoreCommits()
+	}
 }
 
 // selectStash 是点了一条储藏。
@@ -307,9 +347,13 @@ func (a *app) commitListPane(c *ui.Context, pal palette) {
 		// 栏头。提交条数原来挂在侧栏底部，侧栏让给分支树之后搬到这里
 		// —— 它说的就是这份列表，放在列表头上比放在屏幕另一头合适。
 		ui.Row(c).Shrink(0).Padding(8, 12).Gap(8).AlignItems(ui.Center).Children(func() {
-			n := "提交"
+			n := T("提交", "Commits")
 			if a.hist == loadReady {
-				n = strconv.Itoa(len(a.commits)) + " 个提交"
+				if a.histHasMore {
+					n = Tf("已加载 %d 个提交…", "Loaded %d commits…", len(a.commits))
+				} else {
+					n = Tf("%d 个提交", "%d commits", len(a.commits))
+				}
 			}
 			ui.Text(c, n).FontSize(11).Font("monospace").FontFeatures("tnum").
 				TextColor(t.TextMuted)
@@ -331,27 +375,72 @@ func (a *app) commitListPane(c *ui.Context, pal palette) {
 		switch a.hist {
 		case loadLoading:
 			if len(a.commits) == 0 {
-				emptyNote(c, t, "正在读提交…")
+				emptyNote(c, t, T("正在读提交…", "Loading commits…"))
 				return
 			}
 		case loadFailed:
 			if len(a.commits) == 0 {
-				emptyNote(c, t, "读不到历史")
+				emptyNote(c, t, T("读不到历史", "Unable to load history"))
 				return
 			}
 		}
 		if len(a.commits) == 0 {
-			emptyNote(c, t, "还没有提交")
+			emptyNote(c, t, T("还没有提交", "No commits yet"))
 			return
 		}
 
 		a.commitHeaderRow(c, t, pal)
 
-		a.commitList.Key = func(i int) any { return "c:" + a.commits[i].Hash }
-		ui.List(c, &a.commitList, len(a.commits), func(i int) {
-			a.commitRow(c, pal, i)
+		totalRows := len(a.commits)
+		if a.histHasMore || a.histLoadingMore {
+			totalRows++
+		}
+		a.commitList.Key = func(i int) any {
+			if i < len(a.commits) {
+				return "c:" + a.commits[i].Hash
+			}
+			return "load_more_commits"
+		}
+		ui.List(c, &a.commitList, totalRows, func(i int) {
+			if i < len(a.commits) {
+				a.commitRow(c, pal, i)
+				// 预加载：当滚动接近列表末尾（倒数 20 行以内）时，自动触发加载更早提交
+				if i >= len(a.commits)-20 && a.histHasMore && !a.histLoadingMore {
+					a.loadMoreCommits()
+				}
+			} else {
+				a.loadMoreRow(c, t, pal)
+			}
 		}).Grow(1)
 	})
+}
+
+// loadMoreRow 是提交列表底部的加载行，支持点击或自动滚动加载更早的提交。
+func (a *app) loadMoreRow(c *ui.Context, t *ui.Theme, pal palette) {
+	row := ui.Row(c).Height(commitH).Shrink(0).AlignItems(ui.Center).Justify(ui.Center).
+		Cursor(ui.CursorPointer).Background(pal.fileBg)
+	if row.Hovered() {
+		row.Background(pal.surface2)
+	}
+	fadeColors(row)
+	row.Children(func() {
+		if a.histLoadingMore {
+			ui.Text(c, T("正在加载更早的提交…", "Loading earlier commits…")).
+				FontSize(11).TextColor(t.TextMuted)
+		} else {
+			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+				drawIcon(c, iconChevronDown, 12, pal.inkSubtle)
+				ui.Text(c, Tf("加载更早的提交 (已显示 %d 个)", "Load earlier commits (%d shown)", len(a.commits))).
+					FontSize(11).TextColor(pal.inkSubtle)
+			})
+		}
+	})
+	if row.Clicked() && !a.histLoadingMore && a.histHasMore {
+		a.loadMoreCommits()
+	}
+	if a.histHasMore && !a.histLoadingMore {
+		a.loadMoreCommits()
+	}
 }
 
 // commitH 是提交列表一行的高度。

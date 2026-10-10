@@ -189,6 +189,7 @@ func (a *app) startAIBranch() {
 	}
 
 	system, user := explain.BuildBranchPrompt(hint, diffs)
+	system = a.store.Config().EffectiveBranchPrompt(system)
 	prov := a.store.Provider()
 
 	a.run(func() {

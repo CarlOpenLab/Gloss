@@ -44,11 +44,11 @@ func (a *app) commitMenu(m *ui.Menu, cm gitrepo.Commit) {
 	if m.Item("从 " + cm.Short + " 建分支…").Disabled(busy).Chosen() {
 		a.openNewBranchDialog(cm.Hash, cm.Short+" · "+cm.Subject)
 	}
-	if m.Item("检出这个提交（分离 HEAD）").Disabled(busy).Chosen() {
+	if m.Item(T("检出这个提交（分离 HEAD）", "Checkout This Commit (Detached HEAD)")).Disabled(busy).Chosen() {
 		a.detachAt(cm)
 	}
 	m.Separator()
-	if m.Item("复制哈希").Disabled(busy).Chosen() {
+	if m.Item(T("复制哈希", "Copy Commit Hash")).Disabled(busy).Chosen() {
 		// 菜单回调里拿不到 *ui.Context（WriteClipboard 是它的方法），
 		// 记一笔，下一帧开头再写进剪贴板（见 view）。
 		a.copyText = cm.Hash

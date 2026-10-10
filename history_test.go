@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -941,5 +942,61 @@ func TestStashSurvivesTabSwitch(t *testing.T) {
 	}
 	if a.commitSel != 0 {
 		t.Errorf("点了分支该自动选中最近那个提交，实际 commitSel = %d", a.commitSel)
+	}
+}
+
+// 验证提交列表突破 200 条限制，首屏读取 500 条且支持增量加载更多历史提交。
+func TestHistoryLoadMoreCommits(t *testing.T) {
+	dir := t.TempDir()
+	runGit(t, dir, "init", "-b", "main")
+	runGit(t, dir, "config", "user.name", "Test")
+	runGit(t, dir, "config", "user.email", "test@example.com")
+	runGit(t, dir, "config", "commit.gpgsign", "false")
+
+	// 通过 fast-import 极速生成 550 个提交（耗时 < 0.1s）
+	var fi strings.Builder
+	for i := 1; i <= 550; i++ {
+		fmt.Fprintf(&fi, "commit refs/heads/main\ncommitter Test <test@example.com> %d +0000\ndata %d\ncommit %d\nM 644 inline file.txt\ndata 5\nhello\n\n", 1700000000+i, len(fmt.Sprintf("commit %d", i)), i)
+	}
+	cmd := exec.Command("git", "fast-import")
+	cmd.Dir = dir
+	cmd.Stdin = strings.NewReader(fi.String())
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("fast-import failed: %v: %s", err, string(out))
+	}
+	runGit(t, dir, "reset", "--hard", "main")
+
+	a := loadApp(t, dir)
+	a.setTab(1)
+	settle(t, a)
+
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+
+	// 首批读取 500 个提交（突破原本 200 个的限制）
+	if len(a.commits) != 500 {
+		t.Fatalf("首批应读取 500 个提交，实际为 %d", len(a.commits))
+	}
+	if !a.histHasMore {
+		t.Fatal("应该还有未加载的提交 (histHasMore 应为 true)")
+	}
+	if !tt.HasText("已加载 500 个提交…") {
+		t.Errorf("应该显示已加载 500 个提交提示，实际文本: %q", tt.Texts())
+	}
+
+	// 触发加载更多
+	a.loadMoreCommits()
+	settle(t, a)
+	tt.Frame()
+
+	// 全部 550 个提交加载完毕
+	if len(a.commits) != 550 {
+		t.Fatalf("加载更多后应为 550 个提交，实际为 %d", len(a.commits))
+	}
+	if a.histHasMore {
+		t.Fatal("全部加载完毕后 histHasMore 应为 false")
+	}
+	if !tt.HasText("550 个提交") {
+		t.Errorf("应该显示 550 个提交提示，实际文本: %q", tt.Texts())
 	}
 }

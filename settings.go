@@ -3,12 +3,14 @@ package main
 import (
 	_ "embed"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
 
+	"github.com/CarlOpenLab/Gloss/internal/explain"
 	"github.com/CarlOpenLab/Gloss/internal/llm"
 )
 
@@ -39,28 +41,137 @@ const (
 	settingsTabModels  settingsTab = 0
 	settingsTabGeneral settingsTab = 1
 	settingsTabAbout   settingsTab = 2
+	settingsTabPrompts settingsTab = 3
 )
 
-// preset 是一个常见供应商的预设：接口类型、Base URL、模型都填好，
-// 用户只需要补一个 API key（本地网关甚至不需要 key）。
+// modelTagInfo 表示模型及其特性标签（如：视觉、推理、代码）。
+type modelTagInfo struct {
+	ID   string
+	Tags []string
+}
+
+// preset 是一个常见供应商的预设：接口类型、Base URL、模型及推荐模型列表。
 type preset struct {
-	Label string
-	Type  string
-	Base  string
-	Model string
+	Label  string
+	Type   string
+	Base   string
+	Model  string
+	Models []modelTagInfo
 }
 
 // providerPresets 覆盖常用服务商及本地网关，按开箱即用性排序。
 var providerPresets = []preset{
-	{"Magpie（本地网关）", "openai", "http://127.0.0.1:3425/v1", "opencode-go/deepseek-v4.1-flash"},
-	{"Anthropic", "anthropic", "", llm.DefaultModel},
-	{"DeepSeek", "openai", "https://api.deepseek.com", "deepseek-chat"},
-	{"Kimi（Moonshot）", "openai", "https://api.moonshot.cn/v1", "kimi-k2-0905-preview"},
-	{"通义千问（DashScope）", "openai", "https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus"},
-	{"智谱 GLM", "openai", "https://open.bigmodel.cn/api/paas/v4", "glm-4.5"},
-	{"OpenRouter", "openai", "https://openrouter.ai/api/v1", "anthropic/claude-sonnet-4.5"},
-	{"Ollama（本地）", "openai", "http://localhost:11434/v1", "qwen2.5-coder"},
-	{"自定义 OpenAI 兼容", "openai", "", ""},
+	{
+		Label: "Magpie（本地网关）",
+		Type:  "openai",
+		Base:  "http://127.0.0.1:3425/v1",
+		Model: "opencode-go/deepseek-v4.1-flash",
+		Models: []modelTagInfo{
+			{"opencode-go/deepseek-v4.1-flash", []string{"视觉", "推理"}},
+		},
+	},
+	{
+		Label: "Anthropic",
+		Type:  "anthropic",
+		Base:  "",
+		Model: llm.DefaultModel,
+		Models: []modelTagInfo{
+			{"claude-sonnet-4.5", []string{"视觉", "推理"}},
+			{"claude-3-7-sonnet", []string{"视觉", "推理"}},
+			{"claude-3-5-haiku", []string{"快速", "代码"}},
+			{"claude-opus-4", []string{"推理"}},
+		},
+	},
+	{
+		Label: "DeepSeek",
+		Type:  "openai",
+		Base:  "https://api.deepseek.com",
+		Model: "deepseek-chat",
+		Models: []modelTagInfo{
+			{"deepseek-chat", []string{"通用", "代码"}},
+			{"deepseek-reasoner", []string{"深度推理", "代码"}},
+		},
+	},
+	{
+		Label: "Kimi（Moonshot）",
+		Type:  "openai",
+		Base:  "https://api.moonshot.cn/v1",
+		Model: "kimi-k2-0905-preview",
+		Models: []modelTagInfo{
+			{"kimi-k2-0905-preview", []string{"长文本", "推理"}},
+			{"moonshot-v1-32k", []string{"长文本"}},
+		},
+	},
+	{
+		Label: "通义千问（DashScope）",
+		Type:  "openai",
+		Base:  "https://dashscope.aliyuncs.com/compatible-mode/v1",
+		Model: "qwen-plus",
+		Models: []modelTagInfo{
+			{"qwen-plus", []string{"推理", "代码"}},
+			{"qwen-max", []string{"高智商", "推理"}},
+			{"qwen2.5-coder-32b", []string{"代码", "推理"}},
+		},
+	},
+	{
+		Label: "智谱 GLM",
+		Type:  "openai",
+		Base:  "https://open.bigmodel.cn/api/paas/v4",
+		Model: "glm-4.5",
+		Models: []modelTagInfo{
+			{"glm-4.5", []string{"视觉", "推理"}},
+			{"glm-4-flash", []string{"快速", "免费"}},
+			{"glm-4-plus", []string{"高智商", "推理"}},
+		},
+	},
+	{
+		Label: "ByteDance / 火山引擎",
+		Type:  "openai",
+		Base:  "https://ark.cn-beijing.volces.com/api/v3",
+		Model: "doubao-pro-32k",
+		Models: []modelTagInfo{
+			{"doubao-pro-32k", []string{"视觉", "推理"}},
+			{"doubao-lite-32k", []string{"快速", "轻量"}},
+		},
+	},
+	{
+		Label: "OpenRouter",
+		Type:  "openai",
+		Base:  "https://openrouter.ai/api/v1",
+		Model: "anthropic/claude-sonnet-4.5",
+		Models: []modelTagInfo{
+			{"anthropic/claude-sonnet-4.5", []string{"视觉", "推理"}},
+			{"deepseek/deepseek-r1", []string{"深度推理"}},
+			{"meta-llama/llama-3.3-70b-instruct", []string{"开源", "通用"}},
+		},
+	},
+	{
+		Label: "Ollama（本地）",
+		Type:  "openai",
+		Base:  "http://localhost:11434/v1",
+		Model: "qwen2.5-coder",
+		Models: []modelTagInfo{
+			{"qwen2.5-coder", []string{"代码", "本地"}},
+			{"deepseek-r1:8b", []string{"推理", "本地"}},
+			{"llama3.2", []string{"通用", "轻量"}},
+		},
+	},
+	{
+		Label: "302.AI",
+		Type:  "openai",
+		Base:  "https://api.302.ai/v1",
+		Model: "deepseek-chat",
+		Models: []modelTagInfo{
+			{"deepseek-chat", []string{"推理", "代码"}},
+			{"claude-3-5-sonnet", []string{"视觉", "代码"}},
+		},
+	},
+	{
+		Label: "自定义 OpenAI 兼容",
+		Type:  "openai",
+		Base:  "",
+		Model: "",
+	},
 }
 
 // openSettings 打开设置对话框，在配置的副本上编辑 ——
@@ -77,6 +188,15 @@ func (a *app) openSettings() {
 	a.editThemeMode = a.themeMode
 	a.editLocale = a.locale
 	a.showAPIKey = false
+
+	// 初始化提示词编辑状态
+	a.editCommitPrompt = a.editCfg.EffectiveCommitPrompt(explain.CommitSystemPrompt)
+	a.editBranchPrompt = a.editCfg.EffectiveBranchPrompt(explain.BranchSystemPrompt)
+	a.editExplainPrompt = a.editCfg.EffectiveExplainPrompt(explain.SystemPrompt)
+	a.providerSearch = ""
+	a.modelSearch = ""
+	a.settingsTab = settingsTabModels
+
 	a.settingsOn = true
 	a.probeMagpie()
 }
@@ -185,6 +305,13 @@ func (a *app) settingsDialog(c *ui.Context, pal palette) {
 	if !a.settingsOn {
 		return
 	}
+	// 面板尺寸跟着窗口收。固定 960×680 在最小窗口（720×620）下四边都会
+	// 冲出屏幕：底部的「保存 / 取消」被推到窗口外面，用户根本点不到。
+	// 四周各留 16px 呼吸，上限仍是设计稿的 960×680。
+	winW, winH := c.Size()
+	panelW := clamp(winW-32, 420, 960)
+	panelH := clamp(winH-32, 320, 680)
+
 	open := true
 	ui.DialogBase(c, &open, func(back, panel *ui.Element) {
 		back.Background(ui.RGBA(0, 0, 0, 0.25))
@@ -194,7 +321,7 @@ func (a *app) settingsDialog(c *ui.Context, pal palette) {
 		// 圆角 10、四周 20px 内边距），再让内容画上去。设置面板自己就是一块
 		// 920×660 的卡片，套进去等于两层圆角不一致的框叠在一起 —— 截图里
 		// 看得很清楚，外圈的角比内圈的角更方。
-		panel.Width(920).Height(660).Radius(radiusXL).
+		panel.Width(panelW).Height(panelH).Radius(radiusXL).
 			Background(pal.surface4).Border(1, pal.hairline).
 			Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.24))
 		a.settingsBody(c, pal)
@@ -245,7 +372,7 @@ func (a *app) settingsBody(c *ui.Context, pal palette) {
 	t := c.Theme()
 	ui.Row(c).FillWidth().FillHeight().Children(func() {
 		// 1. 左侧极简分组导航栏 (Sidebar)
-		ui.Column(c).Width(200).FillHeight().Background(pal.surface1).
+		ui.Column(c).Width(180).FillHeight().Background(pal.surface1).
 			BorderWidth(0, 1, 0, 0).BorderColor(pal.hairline).
 			Padding(16, 12).Gap(4).Children(func() {
 			// 标题区
@@ -264,12 +391,16 @@ func (a *app) settingsBody(c *ui.Context, pal palette) {
 			ui.Text(c, T("设置", "Settings")).FontSize(textCaption).FontWeight(weightSemibold).TextColor(pal.inkSubtle).
 				Padding(6, 8, 2, 8)
 
+			settingsSidebarItem(c, t, T("模型设置", "Model Settings"), iconSparkles, a.settingsTab == settingsTabModels, func() {
+				a.settingsTab = settingsTabModels
+			})
+
 			settingsSidebarItem(c, t, T("通用偏好", "Preferences"), iconPalette, a.settingsTab == settingsTabGeneral, func() {
 				a.settingsTab = settingsTabGeneral
 			})
 
-			settingsSidebarItem(c, t, T("模型设置", "Model Settings"), iconSparkles, a.settingsTab == settingsTabModels, func() {
-				a.settingsTab = settingsTabModels
+			settingsSidebarItem(c, t, T("提示词设置", "AI Prompts"), iconSliders, a.settingsTab == settingsTabPrompts, func() {
+				a.settingsTab = settingsTabPrompts
 			})
 
 			// 分组 2: 系统
@@ -290,44 +421,22 @@ func (a *app) settingsBody(c *ui.Context, pal palette) {
 
 		// 2. 右侧主内容区 (Main Content Pane)
 		ui.Column(c).Grow(1).MinWidth(0).FillHeight().Background(pal.surface3).Children(func() {
-			// 顶部标题栏
-			ui.Row(c).Height(50).AlignItems(ui.Center).Padding(0, 20, 0, 28).FillWidth().Children(func() {
-				ui.Column(c).Gap(1).Children(func() {
-					title := T("通用偏好", "Preferences")
-					desc := T("定制外观主题、macOS 应用图标及界面语言", "Customize appearance theme, app icon, and display language")
-					switch a.settingsTab {
-					case settingsTabModels:
-						title = T("模型设置", "Model Settings")
-						desc = T("配置逐 Hunk AI 解释与智能提交模型服务商及 API Key", "Configure AI models and API keys for explanations & commits")
-					case settingsTabAbout:
-						title = T("关于 Gloss", "About Gloss")
-						desc = T("原生 macOS 智能 Git 客户端", "Native macOS Git GUI with AI-powered diff review")
+			// 非模型选项卡提供极简微顶栏放关闭按钮；模型选项卡直接顶格，布局保持极简纯净
+			if a.settingsTab != settingsTabModels {
+				ui.Row(c).Height(38).Padding(0, 20, 0, 24).AlignItems(ui.Center).FillWidth().Children(func() {
+					ui.Spacer(c)
+					if closeButton(c, pal) {
+						a.settingsOn = false
 					}
-					ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
-						ui.Text(c, title).FontSize(textHeadline).FontWeight(weightSemibold).TextColor(pal.ink)
-						if a.settingsTab == settingsTabModels && a.magpieOnline {
-							ui.Box(c).Padding(2, 7).Radius(radiusPill).Background(pal.surface2).Border(1, pal.hairline).Children(func() {
-								ui.Text(c, T("Magpie 在线", "Magpie Online")).FontSize(textCaption).FontWeight(weightMedium).TextColor(t.Success)
-							})
-						}
-					})
-					ui.Text(c, desc).FontSize(11).TextColor(t.TextMuted).SingleLine()
 				})
-
-				ui.Spacer(c)
-
-				if closeButton(c, pal) {
-					a.settingsOn = false
-				}
-			})
-
-			// 顶部分界线
-			ui.Box(c).Height(1).FillWidth().Background(pal.hairline)
+			}
 
 			// 主体内容区（独立的填满空间，由各 Pane 内部全幅滚动）
 			ui.Box(c).Grow(1).FillWidth().MinHeight(0).Children(func() {
 				if a.settingsTab == settingsTabGeneral {
 					a.generalSettingsPane(c, pal)
+				} else if a.settingsTab == settingsTabPrompts {
+					a.promptsSettingsPane(c, pal)
 				} else if a.settingsTab == settingsTabAbout {
 					a.aboutSettingsPane(c, pal)
 				} else {
@@ -677,7 +786,7 @@ func (a *app) aboutSettingsPane(c *ui.Context, pal palette) {
 					{
 						iconSparkles,
 						T("逐 Hunk AI 智能审查", "Per-Hunk AI Review"),
-						T("代码行级智能解释、变更风险提示与一键智能提交信息生成", "Smart hunk explanation, risk analysis, and Conventional Commits generation"),
+						T("变更块级智能解释、变更风险提示与一键智能提交信息生成", "Smart hunk explanation, risk analysis, and Conventional Commits generation"),
 					},
 					{
 						iconPalette,
@@ -749,7 +858,76 @@ func settingDivider(c *ui.Context, pal palette) {
 	ui.Box(c).Height(1).FillWidth().Background(pal.hairline)
 }
 
-// modelsSettingsPane 呈现对标 Linear/Cursor 的清爽分组卡片式模型设置页面。
+// modelsForProvider 汇总当前供应商的所有推荐及可用模型，包含特征标签（视觉、推理、代码等）。
+func (a *app) modelsForProvider(p *llm.Provider) []modelTagInfo {
+	var list []modelTagInfo
+
+	// 1. 若为本地 Magpie 网关且探测到了实时模型
+	if isMagpie(p.BaseURL) && len(a.magpieModels) > 0 {
+		for _, m := range a.magpieModels {
+			tags := []string{"本地"}
+			low := strings.ToLower(m)
+			if strings.Contains(low, "deepseek") || strings.Contains(low, "coder") || strings.Contains(low, "code") {
+				tags = append(tags, "代码")
+			}
+			if strings.Contains(low, "r1") || strings.Contains(low, "reason") || strings.Contains(low, "thinking") {
+				tags = append(tags, "推理")
+			}
+			if strings.Contains(low, "vision") || strings.Contains(low, "vl") {
+				tags = append(tags, "视觉")
+			}
+			list = append(list, modelTagInfo{ID: m, Tags: tags})
+		}
+	}
+
+	// 2. 从预设列表中匹配对应供应商的推荐模型
+	for _, ps := range providerPresets {
+		if findExistingPreset([]llm.Provider{*p}, ps) == 0 && len(ps.Models) > 0 {
+			if len(list) == 0 {
+				list = append(list, ps.Models...)
+			}
+			break
+		}
+	}
+
+	// 3. 若仍为空且为 Anthropic 协议
+	if len(list) == 0 && p.Type == "anthropic" {
+		list = []modelTagInfo{
+			{"claude-sonnet-4.5", []string{"视觉", "推理"}},
+			{"claude-3-7-sonnet", []string{"视觉", "推理"}},
+			{"claude-3-5-haiku", []string{"代码", "快速"}},
+			{"claude-opus-4", []string{"深度推理"}},
+		}
+	}
+
+	// 4. 若为通用 OpenAI 兼容协议且未匹配到预设
+	if len(list) == 0 && p.Type == "openai" {
+		list = []modelTagInfo{
+			{"deepseek-chat", []string{"通用", "代码"}},
+			{"deepseek-reasoner", []string{"推理"}},
+			{"gpt-4o", []string{"视觉", "代码"}},
+			{"gpt-4o-mini", []string{"轻量", "快速"}},
+		}
+	}
+
+	// 5. 确保当前选中的 p.Model 始终在模型列表中展示
+	if p.Model != "" {
+		found := false
+		for _, m := range list {
+			if m.ID == p.Model {
+				found = true
+				break
+			}
+		}
+		if !found {
+			list = append([]modelTagInfo{{ID: p.Model, Tags: []string{"当前"}}}, list...)
+		}
+	}
+
+	return list
+}
+
+// modelsSettingsPane 呈现参考用户界面的 Master-Detail 双栏模型供应管理面板。
 func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 	t := c.Theme()
 	if len(a.editCfg.Providers) == 0 {
@@ -767,280 +945,258 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 	}
 
 	p := &a.editCfg.Providers[a.editIdx]
-	activeP := a.editCfg.Providers[a.editCfg.Active]
 
-	ui.Scroll(c).FillWidth().FillHeight().Padding(16, 24).Children(func() {
-		ui.Column(c).Gap(12).FillWidth().Children(func() {
+	ui.Row(c).FillWidth().FillHeight().Children(func() {
+		// ==========================================
+		// 1. 左侧子栏：供应商列表 (宽度 240)
+		// ==========================================
+		ui.Column(c).Width(240).FillHeight().Background(pal.surface1).
+			BorderWidth(0, 1, 0, 0).BorderColor(pal.hairline).Children(func() {
 
-			// 1. 生效模型与服务商选择
-			settingSection(c, pal, T("生效服务商与快捷预设", "Active Provider & Presets"),
-				T("当前全局生效的 AI 解释与提交模型，可一键切换或追加常用预设", "Active LLM for AI explanations & conventional commits with quick-add presets"),
-				func() {
-					// 行 1: 已配置服务商切换、设为生效与删除
-					ui.Row(c).Padding(7, 14).AlignItems(ui.Center).FillWidth().Children(func() {
-						ui.Column(c).Gap(1).Shrink(0).Children(func() {
-							ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
-								ui.Text(c, T("已配置服务商", "Configured Providers")).FontSize(textBodySM).FontWeight(weightMedium).TextColor(pal.ink)
-								ui.Text(c, "("+providerLabel(activeP)+")").FontSize(textCaption).TextColor(pal.inkSubtle)
-							})
-							ui.Text(c, T("点击切换编辑项，支持一键生效或删除", "Select provider to edit, activate, or delete")).FontSize(textCaption).TextColor(pal.inkSubtle)
-						})
+			// 搜索框
+			ui.Row(c).Padding(10, 10, 6, 10).FillWidth().Children(func() {
+				ui.TextInput(c, &a.providerSearch).Placeholder(T("搜索供应商", "Search providers")).FillWidth()
+			})
+
+			// 可滚动供应商列表
+			ui.Scroll(c).Grow(1).FillWidth().Padding(4, 6).Children(func() {
+				ui.Column(c).Gap(2).FillWidth().Children(func() {
+
+					// 分组 1: 已启用
+					ui.Row(c).Padding(6, 6, 4, 6).AlignItems(ui.Center).FillWidth().Children(func() {
+						drawIcon(c, iconChevronDown, 12, pal.inkSubtle)
+						ui.Text(c, T("已启用", "Enabled")).FontSize(textCaption).FontWeight(weightSemibold).TextColor(pal.inkSubtle)
 						ui.Spacer(c)
-						ui.Row(c).Gap(6).AlignItems(ui.Center).Wrap().Children(func() {
-							for i := range a.editCfg.Providers {
-								i := i
-								curr := &a.editCfg.Providers[i]
-								selected := i == a.editIdx
-								isActive := i == a.editCfg.Active
+						ui.Text(c, fmt.Sprintf("%d", len(a.editCfg.Providers))).FontSize(textCaption).TextColor(pal.inkTertiary)
+					})
 
-								chip := ui.ButtonBase(c).Height(26).Padding(0, 10).Radius(radiusSM).
-									AlignItems(ui.Center).Gap(5).Cursor(ui.CursorPointer).Label(providerLabel(*curr))
-								// 两件事要在一枚芯片上说清楚：哪一枚正在编辑（选中）、
-								// 哪一枚在生效（圆点）。原来两者都用强调色，并排时
-								// 分不出谁是谁 —— 现在只有「生效」那枚带圆点。
-								bg := pal.surface2
-								border := pal.hairlineStrong
+					for i := range a.editCfg.Providers {
+						i := i
+						curr := &a.editCfg.Providers[i]
+						label := providerLabel(*curr)
+						if a.providerSearch != "" && !strings.Contains(strings.ToLower(label), strings.ToLower(a.providerSearch)) {
+							continue
+						}
+						selected := i == a.editIdx
+						isActive := i == a.editCfg.Active
+
+						rowBtn := ui.ButtonBase(c).Height(34).FillWidth().Radius(radiusSM).Padding(0, 8).
+							Cursor(ui.CursorPointer).Label(label)
+						bg := ui.Transparent
+						border := ui.Transparent
+						if selected {
+							bg = pal.surface2
+							border = pal.hairlineStrong
+						} else if rowBtn.Hovered() {
+							bg = pal.surface2.Alpha(0.5)
+						}
+						rowBtn.Background(bg).Border(1, border)
+						fadeColors(rowBtn)
+
+						rowBtn.Children(func() {
+							ui.Row(c).AlignItems(ui.Center).Gap(8).Fill().Children(func() {
+								// 供应商图标
+								ui.Box(c).Size(20, 20).Radius(radiusXS).Background(pal.surface3).
+									Border(1, pal.hairline).AlignItems(ui.Center).Justify(ui.Center).Children(func() {
+									drawIcon(c, iconSparkles, 11, pal.inkMuted)
+								})
+								txtCol := pal.inkMuted
 								if selected {
-									bg = pal.selection
-									border = pal.hairlineTertiary
-								} else if chip.Hovered() {
-									bg = pal.surface3
+									txtCol = pal.ink
 								}
-								chip.Background(bg).Border(1, border)
-								fadeColors(chip)
-
-								chip.Children(func() {
-									if isActive {
-										ui.Box(c).Size(chipDot, chipDot).Shrink(0).Radius(chipDot / 2).
-											Background(pal.laneColor(0))
-									}
-									txtCol := pal.inkMuted
-									if selected {
-										txtCol = pal.ink
-									}
-									ui.Text(c, providerLabel(*curr)).FontSize(textButton).
-										FontWeight(weightMedium).TextColor(txtCol)
-								})
-								if chip.Clicked() {
-									a.editIdx = i
-								}
-							}
-
-							if a.editIdx != a.editCfg.Active {
-								useBtn := ui.ButtonBase(c).Height(26).Padding(0, 10).Radius(radiusSM).
-									Background(pal.surface2).Border(1, pal.hairlineStrong).Cursor(ui.CursorPointer).
-									Label(T("设为当前生效", "Set Active"))
-								if useBtn.Hovered() {
-									useBtn.Background(pal.surface3)
-								}
-								fadeColors(useBtn)
-								useBtn.Children(func() {
-									ui.Text(c, T("设为当前生效", "Set Active")).FontSize(textButton).
-										FontWeight(weightMedium).TextColor(pal.ink)
-								})
-								if useBtn.Clicked() {
-									a.editCfg.Active = a.editIdx
-								}
-							}
-
-							if len(a.editCfg.Providers) > 1 {
-								delBtn := ui.ButtonBase(c).Height(26).Padding(0, 8).Radius(radiusSM).
-									AlignItems(ui.Center).Gap(4).Background(ui.Transparent).
-									Border(1, pal.hairlineStrong).Cursor(ui.CursorPointer).
-									Label(T("删除", "Delete")).Tooltip(T("删除当前选中的服务商", "Delete provider"))
-								if delBtn.Hovered() {
-									delBtn.Background(t.Danger.Alpha(0.12)).Border(1, t.Danger.Alpha(0.3))
-								}
-								fadeColors(delBtn)
-								delBtn.Children(func() {
-									drawIcon(c, iconTrash, 12, t.Danger)
-									ui.Text(c, T("删除", "Delete")).FontSize(textButton).
-										FontWeight(weightMedium).TextColor(t.Danger)
-								})
-								if delBtn.Clicked() {
-									a.removeProvider(a.editIdx)
-								}
-							}
-						})
-					})
-
-					settingDivider(c, pal)
-
-					// 行 2: 快捷添加常用预设
-					ui.Column(c).Padding(7, 14).Gap(6).FillWidth().Children(func() {
-						ui.Row(c).AlignItems(ui.Center).Children(func() {
-							ui.Text(c, T("快捷添加预设", "Quick-Add Presets")).FontSize(textBodySM).FontWeight(weightMedium).TextColor(pal.ink)
-							ui.Spacer(c)
-							ui.Text(c, T("点击一键填入常用服务商模板", "Click to quickly add provider template")).FontSize(textCaption).TextColor(pal.inkSubtle)
-						})
-
-						ui.Row(c).Gap(6).Wrap().FillWidth().Children(func() {
-							for _, ps := range providerPresets {
-								ps := ps
-								existingIdx := findExistingPreset(a.editCfg.Providers, ps)
-								isAdded := existingIdx >= 0
-
-								btn := ui.ButtonBase(c).Height(26).Padding(0, 8).Radius(radiusSM).
-									AlignItems(ui.Center).Gap(4).Cursor(ui.CursorPointer).Label(ps.Label)
-								bg := pal.surface2
-								border := pal.hairlineStrong
-								if isAdded {
-									bg = pal.surface1
-								} else if btn.Hovered() {
-									bg = pal.surface3
-									border = pal.hairlineTertiary
-								}
-								btn.Background(bg).Border(1, border)
-								fadeColors(btn)
-
-								btn.Children(func() {
-									if isAdded {
-										drawIcon(c, iconCheck, 11, t.Success)
-									} else {
-										ui.Text(c, "+").FontSize(textCaption).TextColor(pal.inkMuted)
-									}
-									ui.Text(c, ps.Label).FontSize(textCaption).TextColor(pal.ink).SingleLine()
-									if isAdded {
-										ui.Box(c).Padding(1, 4).Radius(radiusXS).Background(pal.surface1).
-											Border(1, pal.hairline).Children(func() {
-											ui.Text(c, T("已添加", "Added")).FontSize(9).TextColor(pal.inkTertiary)
-										})
-									} else if strings.HasPrefix(ps.Label, "Magpie") && a.magpieOnline {
-										ui.Box(c).Padding(1, 4).Radius(radiusXS).Background(pal.surface1).
-											Border(1, pal.hairline).Children(func() {
-											ui.Text(c, T("在线", "Online")).FontSize(9).
-												FontWeight(weightMedium).TextColor(t.Success)
-										})
-									}
-								})
-
-								if btn.Clicked() {
-									if isAdded {
-										a.editIdx = existingIdx
-										a.editCfg.Active = existingIdx
-									} else {
-										a.addProvider(ps)
-									}
-								}
-							}
-						})
-					})
-
-					settingDivider(c, pal)
-
-					// 行 3: 本地网关状态探测
-					settingRow(c, pal, T("本地网关 (127.0.0.1:3425)", "Local Gateway (127.0.0.1:3425)"),
-						T("免鉴权直连本机运行的 Magpie 或兼容网关", "Direct local connection for Magpie or compatible gateway"),
-						func() {
-							ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-								// 网关在不在线是一句状态，不是一个严重程度：底色
-								// 保持中性，只有那颗圆点和文字跟着语义走。
-								statusCol := pal.inkTertiary
-								statusText := T("未检测到本地网关", "Gateway Offline")
-								statusDot := pal.inkTertiary
-								if a.magpieOnline {
-									statusCol = t.Success
-									statusDot = t.Success
-									statusText = T("本地网关在线", "Gateway Online")
-								}
-								ui.Row(c).Shrink(0).Height(statusChipH).AlignItems(ui.Center).Gap(5).
-									Padding(0, 8).Radius(radiusPill).Background(pal.surface2).
+								ui.Text(c, label).FontSize(textCaption).FontWeight(weightMedium).
+									TextColor(txtCol).SingleLine()
+								ui.Box(c).Padding(1, 4).Radius(radiusXS).Background(pal.surface3).
 									Border(1, pal.hairline).Children(func() {
-									ui.Box(c).Size(chipDot, chipDot).Shrink(0).Radius(chipDot / 2).
-										Background(statusDot)
-									ui.Text(c, statusText).FontSize(textCaption).
-										FontWeight(weightMedium).TextColor(statusCol)
+									ui.Text(c, T("已添加", "Added")).FontSize(9).TextColor(pal.inkTertiary)
 								})
-
-								refreshBtn := ui.ButtonBase(c).Size(24, 24).Radius(radiusSM).
-									Background(ui.Transparent).Border(1, pal.hairlineStrong).
-									AlignItems(ui.Center).Justify(ui.Center).
-									Cursor(ui.CursorPointer).Label(T("检测网关", "Check Gateway")).Tooltip(T("重新探测本地网关", "Re-probe gateway"))
-								if refreshBtn.Hovered() {
-									refreshBtn.Background(pal.surface2)
+								ui.Spacer(c)
+								// 状态小圆点（已启用的均带绿色小圆点）
+								dotCol := t.Success
+								if !isActive {
+									dotCol = t.Success.Alpha(0.65)
 								}
-								fadeColors(refreshBtn)
-								refreshBtn.Children(func() {
-									drawIcon(c, iconRefresh, 12, pal.inkSubtle)
-								})
-								if refreshBtn.Clicked() {
-									a.probeMagpie()
-								}
+								ui.Box(c).Size(7, 7).Radius(radiusPill).Background(dotCol)
 							})
 						})
-				})
-
-			// 2. 服务商详细配置参数 (Provider Configuration)
-			settingSection(c, pal, T("服务商参数配置", "Provider Parameters"),
-				T("配置当前选定服务商的连接协议、密钥与模型标识", "Configure connection protocol, credentials, and model identifiers for selected provider"),
-				func() {
-					// 字段 1: 服务商名称
-					settingRow(c, pal, T("服务商名称", "Provider Name"),
-						T("在列表中显示的自定义标识名称", "Display label for this provider"),
-						func() {
-							ui.TextInput(c, &p.Name).Placeholder(T("例如：Magpie、公司自建", "e.g. Magpie, Custom")).
-								Label(T("服务商名称", "Provider Name")).Width(260)
-						})
-
-					settingDivider(c, pal)
-
-					// 字段 2: 接口协议
-					settingRow(c, pal, T("接口协议", "API Protocol"),
-						T("选择 API 通信协议规范", "Protocol specification format"),
-						func() {
-							mode := 0
-							if p.Type == "openai" {
-								mode = 1
-							}
-							ui.Segmented(c, &mode, "Anthropic", T("OpenAI 兼容", "OpenAI Compatible"))
-							if mode == 1 {
-								p.Type = "openai"
-							} else {
-								p.Type = "anthropic"
-							}
-						})
-
-					settingDivider(c, pal)
-
-					// 字段 3: Base URL
-					hint := T("官方服务留空，亦可填入中转或代理地址", "Leave empty for official, or enter gateway URL")
-					if isMagpie(p.BaseURL) {
-						hint = T("已连接本地网关 (127.0.0.1:3425)", "Connected to local gateway (127.0.0.1:3425)")
-					}
-					settingRow(c, pal, "Base URL", hint, func() {
-						ph := "https://api.example.com/v1"
-						if p.Type == "anthropic" {
-							ph = T("留空使用官方接口", "Leave empty for official API")
+						if rowBtn.Clicked() {
+							a.editIdx = i
 						}
-						ui.TextInput(c, &p.BaseURL).Placeholder(ph).Label("Base URL").Width(280)
+					}
+
+					// 统计未添加的预设数量
+					var unaddedPresets []preset
+					for _, ps := range providerPresets {
+						if findExistingPreset(a.editCfg.Providers, ps) < 0 {
+							if a.providerSearch == "" || strings.Contains(strings.ToLower(ps.Label), strings.ToLower(a.providerSearch)) {
+								unaddedPresets = append(unaddedPresets, ps)
+							}
+						}
+					}
+
+					if len(unaddedPresets) > 0 {
+						// 分组 2: 未启用预设
+						ui.Row(c).Padding(10, 6, 4, 6).AlignItems(ui.Center).FillWidth().Children(func() {
+							drawIcon(c, iconChevronDown, 12, pal.inkSubtle)
+							ui.Text(c, T("未启用", "Available Presets")).FontSize(textCaption).FontWeight(weightSemibold).TextColor(pal.inkSubtle)
+							ui.Spacer(c)
+							ui.Text(c, fmt.Sprintf("%d", len(unaddedPresets))).FontSize(textCaption).TextColor(pal.inkTertiary)
+						})
+
+						for _, ps := range unaddedPresets {
+							ps := ps
+							pBtn := ui.ButtonBase(c).Height(32).FillWidth().Radius(radiusSM).Padding(0, 8).
+								Cursor(ui.CursorPointer).Label(ps.Label)
+							bg := ui.Transparent
+							if pBtn.Hovered() {
+								bg = pal.surface2.Alpha(0.5)
+							}
+							pBtn.Background(bg)
+							fadeColors(pBtn)
+
+							pBtn.Children(func() {
+								ui.Row(c).AlignItems(ui.Center).Gap(8).Fill().Children(func() {
+									ui.Box(c).Size(18, 18).Radius(radiusXS).Background(pal.surface3).
+										AlignItems(ui.Center).Justify(ui.Center).Children(func() {
+										drawIcon(c, iconSparkle, 10, pal.inkTertiary)
+									})
+									ui.Text(c, ps.Label).FontSize(textCaption).TextColor(pal.inkSubtle).SingleLine()
+									ui.Spacer(c)
+									// 截图中的未启用空心圆圈 ○
+									ui.Box(c).Size(8, 8).Radius(radiusPill).Border(1, pal.hairlineStrong).Background(ui.Transparent)
+								})
+							})
+							if pBtn.Clicked() {
+								a.addProvider(ps)
+							}
+						}
+					}
+				})
+			})
+
+			// 底部 + 添加 按钮
+			ui.Box(c).Height(1).FillWidth().Background(pal.hairline)
+			addBtn := ui.ButtonBase(c).Height(36).FillWidth().Padding(0, 12).
+				AlignItems(ui.Center).Gap(6).Cursor(ui.CursorPointer).Label(T("添加", "Add Provider"))
+			if addBtn.Hovered() {
+				addBtn.Background(pal.surface2)
+			}
+			fadeColors(addBtn)
+			addBtn.Children(func() {
+				ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
+					ui.Text(c, "+").FontSize(14).TextColor(pal.inkMuted)
+					ui.Text(c, T("添加", "Add Provider")).FontSize(textCaption).FontWeight(weightMedium).TextColor(pal.ink)
+				})
+			})
+			if addBtn.Clicked() {
+				a.addProvider(preset{
+					Label: "自定义服务商",
+					Type:  "openai",
+					Base:  "",
+					Model: "",
+				})
+			}
+		})
+
+		// ==========================================
+		// 2. 右侧子栏：服务商详情及模型配置 (对齐截图)
+		// ==========================================
+		ui.Column(c).Grow(1).MinWidth(0).FillHeight().Children(func() {
+
+			// 详情顶部 Header（图标、名称、状态与主开关）
+			ui.Row(c).Height(54).Padding(0, 20).AlignItems(ui.Center).FillWidth().
+				BorderWidth(0, 0, 1, 0).BorderColor(pal.hairline).Children(func() {
+				ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
+					ui.Box(c).Size(28, 28).Radius(radiusSM).Background(pal.surface2).
+						Border(1, pal.hairline).AlignItems(ui.Center).Justify(ui.Center).Children(func() {
+						drawIcon(c, iconSparkles, 14, pal.ink)
+					})
+					ui.Column(c).Gap(1).Children(func() {
+						ui.Text(c, providerLabel(*p)).FontSize(textBody).FontWeight(weightSemibold).TextColor(pal.ink)
+						statusDesc := T("未生效", "Inactive")
+						statusCol := pal.inkSubtle
+						if a.editIdx == a.editCfg.Active {
+							statusDesc = T("已启用", "Enabled")
+							statusCol = t.Success
+						}
+						ui.Text(c, statusDesc).FontSize(textCaption).TextColor(statusCol)
+					})
+				})
+				ui.Spacer(c)
+				// 主开关
+				isActive := a.editIdx == a.editCfg.Active
+				sw := ui.Switch(c, &isActive)
+				if sw.Clicked() {
+					a.editCfg.Active = a.editIdx
+				}
+				ui.Box(c).Width(12)
+				if closeButton(c, pal) {
+					a.settingsOn = false
+				}
+			})
+
+			// 详情滚动区域
+			ui.Scroll(c).Grow(1).FillWidth().Padding(16, 20).Children(func() {
+				ui.Column(c).Gap(14).FillWidth().Children(func() {
+
+					// 绿色提示横幅（由 Gloss 本地管理）
+					ui.Row(c).FillWidth().Padding(10, 14).Radius(radiusMD).
+						Background(t.Success.Alpha(0.06)).Border(1, t.Success.Alpha(0.2)).
+						AlignItems(ui.Center).Gap(10).Children(func() {
+						ui.Box(c).Size(24, 24).Radius(radiusSM).Background(t.Success.Alpha(0.12)).
+							AlignItems(ui.Center).Justify(ui.Center).Children(func() {
+							drawIcon(c, iconShield, 13, t.Success)
+						})
+						ui.Column(c).Gap(2).Grow(1).Children(func() {
+							ui.Text(c, T("由 Gloss 本地管理", "Managed Locally by Gloss")).
+								FontSize(textBodySM).FontWeight(weightSemibold).TextColor(t.Success)
+							ui.Text(c, T("此供应商由你的本地客户端管理，密钥与配置仅存储在本地设备中，直连服务端，保证数据安全。",
+								"Credentials and endpoints are saved only on your local machine and connect directly.")).
+								FontSize(textCaption).TextColor(pal.inkSubtle)
+						})
 					})
 
-					settingDivider(c, pal)
+					// 基础 URL
+					ui.Column(c).Gap(4).FillWidth().Children(func() {
+						ui.Text(c, T("基础 URL", "Base URL")).FontSize(textBodySM).FontWeight(weightMedium).TextColor(pal.ink)
+						ph := "https://api.anthropic.com"
+						if p.Type == "openai" {
+							ph = "https://api.openai.com/v1"
+						}
+						if isMagpie(p.BaseURL) {
+							ph = "http://127.0.0.1:3425/v1"
+						}
+						ui.TextInput(c, &p.BaseURL).Placeholder(ph).FillWidth()
+					})
 
-					// 字段 4: API Key
-					keyTip := T("未配置（默认读取系统环境变量）", "Not configured (reads env)")
-					if isMagpie(p.BaseURL) {
-						keyTip = T("✓ 本地网关免鉴权直连", "✓ Local gateway connected (no key required)")
-					} else if p.APIKey != "" {
-						keyTip = T("✓ 密钥已配置", "✓ API key configured")
-					}
-					settingRow(c, pal, T("API 密钥 (API Key)", "API Key"), keyTip, func() {
-						ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
+					// API 密钥
+					ui.Column(c).Gap(4).FillWidth().Children(func() {
+						ui.Row(c).AlignItems(ui.Center).Children(func() {
+							ui.Text(c, T("API 密钥 (API Key)", "API Key")).FontSize(textBodySM).FontWeight(weightMedium).TextColor(pal.ink)
+							ui.Spacer(c)
+							keyTip := T("未配置", "Not set")
+							if isMagpie(p.BaseURL) {
+								keyTip = T("本地网关免密钥直连", "No key required")
+							} else if p.APIKey != "" {
+								keyTip = T("✓ 密钥已配置", "✓ Configured")
+							}
+							ui.Text(c, keyTip).FontSize(textCaption).TextColor(pal.inkSubtle)
+						})
+						ui.Row(c).AlignItems(ui.Center).Gap(6).FillWidth().Children(func() {
 							keyPh := "sk-…"
 							if isMagpie(p.BaseURL) {
 								keyPh = T("免密钥（可留空）", "Optional")
 							}
-							in := ui.TextInput(c, &p.APIKey).Placeholder(keyPh).Label("API Key").Width(220)
+							in := ui.TextInput(c, &p.APIKey).Placeholder(keyPh).Grow(1)
 							if !a.showAPIKey {
 								in.Password()
 							}
-
-							eyeBtn := ui.ButtonBase(c).Size(26, 26).Radius(radiusSM).
-								Background(ui.Transparent).Border(1, pal.hairlineStrong).
+							eyeBtn := ui.ButtonBase(c).Size(28, 28).Radius(radiusSM).
+								Background(pal.surface2).Border(1, pal.hairlineStrong).
 								AlignItems(ui.Center).Justify(ui.Center).
-								Cursor(ui.CursorPointer).Label(T("切换密钥显示", "Toggle Key Visibility")).Tooltip(T("切换明文/密文显示", "Toggle visibility"))
+								Cursor(ui.CursorPointer).Label(T("切换密钥显示", "Toggle Key Visibility"))
 							if eyeBtn.Hovered() {
-								eyeBtn.Background(pal.surface2)
+								eyeBtn.Background(pal.surface3)
 							}
 							fadeColors(eyeBtn)
 							eyeSvg := iconEye
@@ -1056,77 +1212,292 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 						})
 					})
 
-					settingDivider(c, pal)
-
-					// 字段 5: 模型标识
-					modelTip := T("指定模型名称或标识符（支持服务商前缀）", "Model identifier with optional provider prefix")
-					if p.Type == "anthropic" {
-						modelTip = T("留空默认使用 ", "Default: ") + llm.DefaultModel
-					}
-					settingRow(c, pal, T("模型标识 (Model)", "Model Identifier"), modelTip, func() {
-						phModel := llm.DefaultModel
-						if p.Type == "openai" {
-							phModel = "例如 opencode-go/deepseek-v4.1-flash"
-						}
-						ui.TextInput(c, &p.Model).Placeholder(phModel).Label(T("模型名称", "Model Name")).Width(260)
+					// 供应商名称与协议
+					ui.Row(c).Gap(12).FillWidth().Children(func() {
+						ui.Column(c).Gap(4).Grow(1).Children(func() {
+							ui.Text(c, T("供应商名称", "Provider Name")).FontSize(textBodySM).FontWeight(weightMedium).TextColor(pal.ink)
+							ui.TextInput(c, &p.Name).Placeholder(providerLabel(*p)).FillWidth()
+						})
+						ui.Column(c).Gap(4).Shrink(0).Children(func() {
+							ui.Text(c, T("接口协议", "Protocol")).FontSize(textBodySM).FontWeight(weightMedium).TextColor(pal.ink)
+							mode := 0
+							if p.Type == "openai" {
+								mode = 1
+							}
+							ui.Segmented(c, &mode, "Anthropic", T("OpenAI 兼容", "OpenAI Compatible"))
+							if mode == 1 {
+								p.Type = "openai"
+							} else {
+								p.Type = "anthropic"
+							}
+						})
 					})
 
-					// 字段 6: 网关检测到的可用模型
-					if isMagpie(p.BaseURL) && len(a.magpieModels) > 0 {
-						settingDivider(c, pal)
-						ui.Column(c).Padding(7, 14).Gap(6).FillWidth().Children(func() {
-							ui.Row(c).AlignItems(ui.Center).Children(func() {
-								ui.Text(c, T("网关检测可用模型", "Gateway Detected Models")).FontSize(textBodySM).FontWeight(weightMedium).TextColor(pal.ink)
-								ui.Spacer(c)
-								ui.Text(c, T("点击快速填入模型标识", "Click to select model")).FontSize(textCaption).TextColor(pal.inkSubtle)
-							})
+					// 模型列表区域
+					modelsList := a.modelsForProvider(p)
+					var filteredModels []modelTagInfo
+					for _, m := range modelsList {
+						if a.modelSearch == "" || strings.Contains(strings.ToLower(m.ID), strings.ToLower(a.modelSearch)) {
+							filteredModels = append(filteredModels, m)
+						}
+					}
 
-							ui.Row(c).Gap(6).Wrap().Children(func() {
-								for _, m := range a.magpieModels {
-									m := m
-									selected := p.Model == m
-									chip := ui.ButtonBase(c).Height(24).Padding(0, 8).Radius(radiusXS).
-										Cursor(ui.CursorPointer).Label(m)
-									if selected {
-										chip.Background(pal.selection).Border(1, pal.hairlineTertiary)
-									} else {
-										chip.Background(pal.surface2).Border(1, pal.hairlineStrong)
-										if chip.Hovered() {
-											chip.Background(pal.surface3)
-										}
-									}
-									fadeColors(chip)
+					ui.Column(c).Gap(8).FillWidth().Children(func() {
+						// 标题与模型数量
+						ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
+							drawIcon(c, iconCheck, 14, t.Success)
+							ui.Text(c, Tf("模型 · %d / %d", "Models · %d / %d", len(filteredModels), len(modelsList))).
+								FontSize(textBodySM).FontWeight(weightSemibold).TextColor(pal.ink)
+						})
 
-									parts := strings.SplitN(m, "/", 2)
-									provTag, modelTag := "", m
-									if len(parts) == 2 {
-										provTag, modelTag = parts[0], parts[1]
-									}
+						// 搜索模型
+						ui.TextInput(c, &a.modelSearch).Placeholder(T("搜索模型名称或 ID", "Search model name or ID")).FillWidth()
 
-									chip.Children(func() {
-										ui.Row(c).AlignItems(ui.Center).Gap(3).Children(func() {
-											if provTag != "" {
-												// 服务商前缀压到最暗一档：它只是
-												// 「这个名字属于谁」的索引。
-												ui.Text(c, provTag+"/").FontSize(9.5).
-													TextColor(pal.inkTertiary)
-											}
-											col := pal.inkMuted
-											if selected {
-												col = pal.ink
-											}
-											ui.Text(c, modelTag).FontSize(textCaption).
-												FontWeight(weightMedium).TextColor(col)
-										})
-									})
-									if chip.Clicked() {
-										p.Model = m
-									}
+						// 模型列表框
+						ui.Column(c).Radius(radiusMD).Background(pal.surface2).Border(1, pal.hairline).FillWidth().Children(func() {
+							for _, m := range filteredModels {
+								m := m
+								isCurrent := p.Model == m.ID
+								row := ui.ButtonBase(c).Height(38).Padding(0, 12).Radius(radiusSM).FillWidth().
+									Cursor(ui.CursorPointer).Label(m.ID)
+								bg := ui.Transparent
+								if row.Hovered() {
+									bg = pal.surface3.Alpha(0.6)
 								}
+								row.Background(bg)
+								fadeColors(row)
+
+								row.Children(func() {
+									ui.Row(c).AlignItems(ui.Center).Gap(8).Fill().Children(func() {
+										txtCol := pal.ink
+										if isCurrent {
+											txtCol = pal.ink
+										}
+										ui.Text(c, m.ID).FontSize(textBodySM).FontWeight(weightMedium).TextColor(txtCol)
+
+										// 标签 (视觉、推理、代码等)
+										for _, tag := range m.Tags {
+											ui.Box(c).Padding(1, 6).Radius(radiusXS).
+												Background(t.Success.Alpha(0.12)).Children(func() {
+												ui.Text(c, tag).FontSize(10).FontWeight(weightMedium).TextColor(t.Success)
+											})
+										}
+
+										ui.Spacer(c)
+
+										// 模型选择开关
+										swVal := isCurrent
+										sw := ui.Switch(c, &swVal)
+										if sw.Clicked() {
+											p.Model = m.ID
+										}
+									})
+								})
+								if row.Clicked() {
+									p.Model = m.ID
+								}
+							}
+
+							// 底部自定义模型 ID 输入
+							ui.Box(c).Height(1).FillWidth().Background(pal.hairline)
+							ui.Row(c).Padding(6, 12).AlignItems(ui.Center).Gap(8).FillWidth().Children(func() {
+								ui.Text(c, T("自定义模型 ID:", "Custom Model ID:")).FontSize(textCaption).TextColor(pal.inkSubtle)
+								ui.TextInput(c, &p.Model).Placeholder(T("如 deepseek-chat, gpt-4o, claude-3-5-sonnet...", "e.g. gpt-4o")).Grow(1)
 							})
 						})
+					})
+				})
+			})
+
+			// 底部操作栏
+			ui.Row(c).Height(48).Padding(0, 20).AlignItems(ui.Center).FillWidth().
+				BorderWidth(1, 0, 0, 0).BorderColor(pal.hairline).Children(func() {
+				if isMagpie(p.BaseURL) {
+					statusCol := pal.inkTertiary
+					statusText := T("网关离线", "Gateway Offline")
+					if a.magpieOnline {
+						statusCol = t.Success
+						statusText = T("本地网关在线", "Gateway Online")
+					}
+					ui.Row(c).AlignItems(ui.Center).Gap(5).Padding(0, 8).Height(24).Radius(radiusPill).
+						Background(pal.surface2).Border(1, pal.hairline).Children(func() {
+						ui.Box(c).Size(6, 6).Radius(radiusPill).Background(statusCol)
+						ui.Text(c, statusText).FontSize(textCaption).TextColor(statusCol)
+					})
+				}
+
+				ui.Spacer(c)
+
+				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+					// 刷新按钮
+					refreshBtn := ui.ButtonBase(c).Height(28).Padding(0, 10).Radius(radiusSM).
+						Background(pal.surface2).Border(1, pal.hairlineStrong).Cursor(ui.CursorPointer).
+						Label(T("刷新", "Refresh"))
+					if refreshBtn.Hovered() {
+						refreshBtn.Background(pal.surface3)
+					}
+					fadeColors(refreshBtn)
+					refreshBtn.Children(func() {
+						ui.Row(c).AlignItems(ui.Center).Gap(4).Children(func() {
+							drawIcon(c, iconRefresh, 12, pal.inkSubtle)
+							ui.Text(c, T("刷新", "Refresh")).FontSize(textCaption).FontWeight(weightMedium).TextColor(pal.ink)
+						})
+					})
+					if refreshBtn.Clicked() {
+						a.probeMagpie()
+					}
+
+					// 设为生效按钮
+					if a.editIdx != a.editCfg.Active {
+						useBtn := ui.ButtonBase(c).Height(28).Padding(0, 10).Radius(radiusSM).
+							Background(pal.surface2).Border(1, pal.hairlineStrong).Cursor(ui.CursorPointer).
+							Label(T("设为当前生效", "Set Active"))
+						if useBtn.Hovered() {
+							useBtn.Background(pal.surface3)
+						}
+						fadeColors(useBtn)
+						useBtn.Children(func() {
+							ui.Row(c).AlignItems(ui.Center).Gap(4).Children(func() {
+								drawIcon(c, iconCheck, 12, pal.ink)
+								ui.Text(c, T("设为当前生效", "Set Active")).FontSize(textCaption).FontWeight(weightMedium).TextColor(pal.ink)
+							})
+						})
+						if useBtn.Clicked() {
+							a.editCfg.Active = a.editIdx
+						}
+					}
+
+					// 删除按钮
+					if len(a.editCfg.Providers) > 1 {
+						delBtn := ui.ButtonBase(c).Height(28).Padding(0, 10).Radius(radiusSM).
+							Background(ui.Transparent).Border(1, pal.hairlineStrong).Cursor(ui.CursorPointer).
+							Label(T("删除供应商", "Delete Provider"))
+						if delBtn.Hovered() {
+							delBtn.Background(t.Danger.Alpha(0.12)).Border(1, t.Danger.Alpha(0.3))
+						}
+						fadeColors(delBtn)
+						delBtn.Children(func() {
+							ui.Row(c).AlignItems(ui.Center).Gap(4).Children(func() {
+								drawIcon(c, iconTrash, 12, t.Danger)
+								ui.Text(c, T("删除", "Delete")).FontSize(textCaption).FontWeight(weightMedium).TextColor(t.Danger)
+							})
+						})
+						if delBtn.Clicked() {
+							a.removeProvider(a.editIdx)
+						}
 					}
 				})
+			})
+		})
+	})
+}
+
+// promptsSettingsPane 呈现 AI 角色与 Prompt 提示词定制面板。
+func (a *app) promptsSettingsPane(c *ui.Context, pal palette) {
+	t := c.Theme()
+	ui.Scroll(c).FillWidth().FillHeight().Padding(20, 24).Children(func() {
+		ui.Column(c).Gap(18).FillWidth().Children(func() {
+			// 顶部提示与重置全部
+			ui.Row(c).FillWidth().Padding(10, 14).Radius(radiusMD).
+				Background(pal.surface2).Border(1, pal.hairline).
+				AlignItems(ui.Center).Gap(10).Children(func() {
+				ui.Box(c).Size(24, 24).Radius(radiusSM).Background(pal.surface3).
+					AlignItems(ui.Center).Justify(ui.Center).Children(func() {
+					drawIcon(c, iconSliders, 13, pal.inkSubtle)
+				})
+				ui.Column(c).Gap(2).Grow(1).Children(func() {
+					ui.Text(c, T("自定义 AI Prompt 提示词", "Custom AI Prompt Templates")).
+						FontSize(textBodySM).FontWeight(weightSemibold).TextColor(pal.ink)
+					ui.Text(c, T("定制智能提交、新建分支与 AI 代码解析的 Prompt 提示词。支持一键恢复官方预设。",
+						"Customize prompt templates for smart commit, branch naming, and diff explanation. Supports restoring default presets.")).
+						FontSize(textCaption).TextColor(pal.inkSubtle)
+				})
+				resetAllBtn := ui.ButtonBase(c).Height(28).Padding(0, 10).Radius(radiusSM).
+					Background(pal.surface2).Border(1, pal.hairlineStrong).Cursor(ui.CursorPointer).
+					Label(T("恢复全部预设", "Reset All to Defaults"))
+				if resetAllBtn.Hovered() {
+					resetAllBtn.Background(pal.surface3)
+				}
+				fadeColors(resetAllBtn)
+				resetAllBtn.Children(func() {
+					ui.Text(c, T("恢复全部预设", "Reset All Defaults")).FontSize(textCaption).FontWeight(weightMedium).TextColor(pal.inkMuted)
+				})
+				if resetAllBtn.Clicked() {
+					a.editCommitPrompt = explain.CommitSystemPrompt
+					a.editBranchPrompt = explain.BranchSystemPrompt
+					a.editExplainPrompt = explain.SystemPrompt
+				}
+			})
+
+			// 1. Git Commit 提示词
+			promptSection(c, pal, t,
+				T("Git Commit 智能提交提示词", "Git Commit Message Prompt"),
+				T("在改动面板中点击「✨ AI 智能提交」时使用的系统提示词与 Conventional Commits 规范",
+					"System prompt used when generating Conventional Commit messages from staged/unstaged changes"),
+				&a.editCommitPrompt,
+				explain.CommitSystemPrompt,
+			)
+
+			// 2. Git Branch 提示词
+			promptSection(c, pal, t,
+				T("Git 分支名称生成提示词", "Git Branch Naming Prompt"),
+				T("在新建分支对话框中点击「✨ AI 建议分支名」时使用的命名风格与命名规则",
+					"System prompt used when generating branch name recommendations (feat/..., fix/...)"),
+				&a.editBranchPrompt,
+				explain.BranchSystemPrompt,
+			)
+
+			// 3. AI Diff 解析提示词
+			promptSection(c, pal, t,
+				T("AI 代码变更解析提示词", "AI Diff Explanation Prompt"),
+				T("在 Diff 视图中对代码块或选中区域进行「✨ AI 解析」时的审查角色、风险评估与解释规范",
+					"System prompt used when explaining hunk diffs or selected code ranges"),
+				&a.editExplainPrompt,
+				explain.SystemPrompt,
+			)
+		})
+	})
+}
+
+func promptSection(c *ui.Context, pal palette, t *ui.Theme, title, desc string, value *string, preset string) {
+	ui.Column(c).Gap(6).FillWidth().Children(func() {
+		ui.Row(c).AlignItems(ui.Center).Children(func() {
+			ui.Column(c).Gap(1).Grow(1).Children(func() {
+				ui.Text(c, title).FontSize(textBodySM).FontWeight(weightSemibold).TextColor(pal.ink)
+				ui.Text(c, desc).FontSize(textCaption).TextColor(pal.inkSubtle)
+			})
+			ui.Spacer(c)
+			resetBtn := ui.ButtonBase(c).Height(24).Padding(0, 8).Radius(radiusSM).
+				Background(pal.surface2).Border(1, pal.hairlineStrong).Cursor(ui.CursorPointer).
+				Label(T("恢复预设", "Restore Preset"))
+			if resetBtn.Hovered() {
+				resetBtn.Background(pal.surface3)
+			}
+			fadeColors(resetBtn)
+			resetBtn.Children(func() {
+				ui.Text(c, T("恢复预设", "Restore Default")).FontSize(11).FontWeight(weightMedium).TextColor(pal.inkSubtle)
+			})
+			if resetBtn.Clicked() {
+				*value = preset
+			}
+		})
+
+		ui.Column(c).Radius(radiusMD).Background(pal.surface2).Border(1, pal.hairline).FillWidth().Children(func() {
+			ui.TextArea(c, value).FillWidth().MinHeight(100).MaxHeight(160).
+				Radius(radiusSM).Placeholder(preset)
+			ui.Box(c).Height(1).FillWidth().Background(pal.hairline)
+			ui.Row(c).Padding(4, 10).AlignItems(ui.Center).FillWidth().Children(func() {
+				ui.Text(c, Tf("%d 字符", "%d chars", len(*value))).FontSize(10).TextColor(pal.inkTertiary)
+				ui.Spacer(c)
+				isPreset := *value == preset || strings.TrimSpace(*value) == ""
+				tag := T("自定义", "Custom")
+				tagCol := pal.inkMuted
+				if isPreset {
+					tag = T("预设", "Default")
+					tagCol = t.Success
+				}
+				ui.Text(c, tag).FontSize(10).TextColor(tagCol)
+			})
 		})
 	})
 }
@@ -1175,6 +1546,12 @@ func (a *app) applySettings() {
 	cfg.Active = a.editCfg.Active
 	cfg.ThemeMode = a.themeMode
 	cfg.Locale = a.locale
+
+	// 持久化保存提示词配置
+	cfg.CommitPrompt = strings.TrimSpace(a.editCommitPrompt)
+	cfg.BranchPrompt = strings.TrimSpace(a.editBranchPrompt)
+	cfg.ExplainPrompt = strings.TrimSpace(a.editExplainPrompt)
+
 	a.store.SetConfig(cfg)
 	a.persist()
 	a.modelName = a.store.Provider().EffectiveModel()

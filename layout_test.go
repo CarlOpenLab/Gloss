@@ -662,3 +662,48 @@ func TestCommitBarKeepsActionsWhenNarrow(t *testing.T) {
 		t.Errorf("提交按钮下边缘 y=%.0f 出了 620 的窗口", btn.Y+btn.H)
 	}
 }
+
+// 窄窗口下分支对比栏折成两行：上一行「基准 ⇄ 对比 + 退出」，下一行模式与
+// 统计。原来是一整条不可换行的 Row，720 下「退出对比」被顶到窗口外，
+// 标题也被 Shrink(0) 的邻居挤成竖排。
+func TestCompareBarKeepsExitWhenNarrow(t *testing.T) {
+	a := richApp(t)
+	a.startCompare("main", "feature", true)
+	a.compare.state = loadReady
+
+	tt := ui.NewTester(a.view, 720, 620)
+	still(tt)
+	tt.Frame()
+	tt.SetTitleBar(realTitleBar)
+	tt.Frame()
+
+	exit, ok := tt.Find("退出对比")
+	if !ok {
+		t.Fatalf("窄窗口下找不到退出对比按钮：%q", tt.Texts())
+	}
+	if exit.X+exit.W > 720+1 {
+		t.Errorf("退出对比右边缘 x=%.0f 出了 720 的窗口", exit.X+exit.W)
+	}
+}
+
+// 设置面板在最小窗口下要收进屏幕：固定 960×680 会让底部的保存 / 取消
+// 四边出屏、点不到。
+func TestSettingsFitsWhenNarrow(t *testing.T) {
+	a := richApp(t)
+	a.openSettings()
+
+	tt := ui.NewTester(a.view, 720, 620)
+	still(tt)
+	tt.Frame()
+	tt.SetTitleBar(realTitleBar)
+	tt.Frame()
+
+	save, ok := tt.Find("保存")
+	if !ok {
+		t.Fatalf("设置面板里找不到保存按钮：%q", tt.Texts())
+	}
+	if save.X+save.W > 720+1 || save.Y+save.H > 620+1 {
+		t.Errorf("保存按钮出屏：x=%.0f..%.0f y=%.0f..%.0f",
+			save.X, save.X+save.W, save.Y, save.Y+save.H)
+	}
+}
