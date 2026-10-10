@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -59,7 +58,6 @@ func (a *app) diffView(c *ui.Context, pal palette) {
 		a.built++
 		a.diffRow(c, pal, a.rows[i])
 	}).Grow(1)
-	a.notionSelectionToolbar(c, pal)
 }
 
 // rebuildRows 重建扁平行模型。只在主线程、且不在列表构建过程中调用。
@@ -74,9 +72,9 @@ func (a *app) rebuildRows() {
 		}
 	}
 	a.rows = buildRows(a.files, a.contents, a.expanded, a.split, collapsed)
-	// if a.explainOpen() {
-	// 	a.rows = a.injectExplainRow(a.rows)
-	// }
+	if a.explainOpen() {
+		a.rows = a.injectExplainRow(a.rows)
+	}
 	a.rowsDirty = false
 }
 
@@ -93,23 +91,11 @@ func (a *app) injectExplainRow(rows []row) []row {
 	}
 
 	targetIdx := -1
-	if a.ex.isSelection {
-		// 选区或单行解释：插入在目标行的紧下方
-		for i, r := range rows {
-			if r.file == a.ex.fi && r.kind == rowLine {
-				if r.newNo == a.ex.lineNum || r.oldNo == a.ex.lineNum {
-					targetIdx = i
-					break
-				}
-			}
-		}
-	} else {
-		// Hunk 解释：插入在对应 hunk header 的紧下方
-		for i, r := range rows {
-			if r.file == a.ex.fi && r.kind == rowHunkHeader && r.hunk == a.ex.hi {
-				targetIdx = i
-				break
-			}
+	// Hunk 解释：插入在对应 hunk header 的紧下方
+	for i, r := range rows {
+		if r.file == a.ex.fi && r.kind == rowHunkHeader && r.hunk == a.ex.hi {
+			targetIdx = i
+			break
 		}
 	}
 
@@ -437,16 +423,7 @@ func (a *app) unifiedRow(c *ui.Context, pal palette, r row) {
 	text = expandTabs(text)
 	targetLineNo := lineNoOf(r, oldNo, newNo)
 
-	// 选区判定与高亮
-	isSelected := false
-	if a.diffSel.active && a.diffSel.file == r.file && targetLineNo > 0 {
-		minL := min(a.diffSel.startLine, a.diffSel.endLine)
-		maxL := max(a.diffSel.startLine, a.diffSel.endLine)
-		if targetLineNo >= minL && targetLineNo <= maxL {
-			isSelected = true
-		}
-	}
-	if isSelected {
+	if a.diffLineSelected(r.file, targetLineNo) {
 		lineBg = pal.selection
 	}
 
@@ -456,63 +433,8 @@ func (a *app) unifiedRow(c *ui.Context, pal palette, r row) {
 		a.gutter(c, pal, oldNo, gutBg)
 		a.gutter(c, pal, newNo, gutBg)
 		a.code(c, pal, hlFile, targetLineNo, text, size)
-		if targetLineNo > 0 {
-			isExp := a.isExplainingSelection(r.file, targetLineNo)
-			if isExp {
-				btn := lineExplainButton(c, pal, isExp)
-				if btn.Clicked() {
-					a.toggleSelectionExplain(r.file, text, targetLineNo, btn.Bounds())
-				}
-				a.ex.anchor = btn.Bounds()
-			}
-		}
 	})
-	if targetLineNo > 0 {
-		if rowEl.Clicked() {
-			if a.diffSel.draggedRange {
-				a.diffSel.draggedRange = false
-			} else {
-				shift := (rowEl.ClickModifiers() & ui.Shift) != 0
-				if shift && a.diffSel.active && a.diffSel.file == r.file {
-					a.updateDiffRangeSel(r.file, a.diffSel.startLine, targetLineNo, rowEl.Bounds())
-				} else {
-					a.diffSel.active = false
-				}
-			}
-		}
-		if _, _, held := rowEl.Dragged(); held {
-			_, py, _ := rowEl.PointerPosition()
-			offsetLines := int(math.Floor(float64(py) / float64(lineH)))
-			if offsetLines != 0 {
-				a.diffSel.draggedRange = true
-			}
-			targetEnd := targetLineNo + offsetLines
-			if targetEnd < 1 {
-				targetEnd = 1
-			}
-			a.updateDiffRangeSel(r.file, targetLineNo, targetEnd, rowEl.Bounds())
-		}
-		rowEl.ContextMenu(func(m *ui.Menu) {
-			codeToExplain := text
-			line := targetLineNo
-			if a.diffSel.active && a.diffSel.file == r.file && a.diffSel.code != "" {
-				codeToExplain = a.diffSel.code
-				line = a.diffSel.startLine
-			}
-			if m.Item(T("✨ AI 解释这一行 / 所选代码", "✨ AI Explain This Line / Selection")).Chosen() {
-				a.openSelectionExplain(r.file, codeToExplain, line, "", rowEl.Bounds())
-			}
-			if m.Item(T("复制所选代码", "Copy Selected Code")).Chosen() {
-				a.copyText = codeToExplain
-				lines := strings.Count(codeToExplain, "\n") + 1
-				if lines > 1 {
-					a.copyNote = Tf("已复制 %d 行代码到剪贴板", "Copied %d lines of code to clipboard", lines)
-				} else {
-					a.copyNote = T("已复制代码到剪贴板", "Copied code to clipboard")
-				}
-			}
-		})
-	}
+	a.diffLineInput(rowEl, r.file, targetLineNo)
 }
 
 // sideLine 是 split 模式下某一侧的半行。empty 表示这一侧空着 ——
@@ -559,18 +481,6 @@ func (a *app) splitHalf(c *ui.Context, pal palette, s sideLine, size float32, fi
 		bg, gutBg = pal.sideBg, pal.sideBg
 	}
 
-	isSelected := false
-	if a.diffSel.active && a.diffSel.file == fi && s.no > 0 {
-		minL := min(a.diffSel.startLine, a.diffSel.endLine)
-		maxL := max(a.diffSel.startLine, a.diffSel.endLine)
-		if s.no >= minL && s.no <= maxL {
-			isSelected = true
-		}
-	}
-	if isSelected {
-		bg = pal.selection
-	}
-
 	half := ui.Row(c).Grow(1).MinWidth(0).AlignSelf(ui.Stretch).Background(bg).Cursor(ui.CursorText)
 	half.Children(func() {
 		ui.Box(c).Width(barW).AlignSelf(ui.Stretch).Background(bar)
@@ -580,63 +490,8 @@ func (a *app) splitHalf(c *ui.Context, pal palette, s sideLine, size float32, fi
 			return
 		}
 		a.code(c, pal, s.hl, s.no, s.text, size)
-		if s.no > 0 {
-			isExp := a.isExplainingSelection(fi, s.no)
-			if isExp {
-				btn := lineExplainButton(c, pal, isExp)
-				if btn.Clicked() {
-					a.toggleSelectionExplain(fi, s.text, s.no, btn.Bounds())
-				}
-				a.ex.anchor = btn.Bounds()
-			}
-		}
 	})
-	if !s.empty && s.no > 0 {
-		if half.Clicked() {
-			if a.diffSel.draggedRange {
-				a.diffSel.draggedRange = false
-			} else {
-				shift := (half.ClickModifiers() & ui.Shift) != 0
-				if shift && a.diffSel.active && a.diffSel.file == fi {
-					a.updateDiffRangeSel(fi, a.diffSel.startLine, s.no, half.Bounds())
-				} else {
-					a.diffSel.active = false
-				}
-			}
-		}
-		if _, _, held := half.Dragged(); held {
-			_, py, _ := half.PointerPosition()
-			offsetLines := int(math.Floor(float64(py) / float64(lineH)))
-			if offsetLines != 0 {
-				a.diffSel.draggedRange = true
-			}
-			targetEnd := s.no + offsetLines
-			if targetEnd < 1 {
-				targetEnd = 1
-			}
-			a.updateDiffRangeSel(fi, s.no, targetEnd, half.Bounds())
-		}
-		half.ContextMenu(func(m *ui.Menu) {
-			codeToExplain := s.text
-			line := s.no
-			if a.diffSel.active && a.diffSel.file == fi && a.diffSel.code != "" {
-				codeToExplain = a.diffSel.code
-				line = a.diffSel.startLine
-			}
-			if m.Item(T("✨ AI 解释这一行 / 所选代码", "✨ AI Explain This Line / Selection")).Chosen() {
-				a.openSelectionExplain(fi, codeToExplain, line, "", half.Bounds())
-			}
-			if m.Item(T("复制所选代码", "Copy Selected Code")).Chosen() {
-				a.copyText = codeToExplain
-				lines := strings.Count(codeToExplain, "\n") + 1
-				if lines > 1 {
-					a.copyNote = Tf("已复制 %d 行代码到剪贴板", "Copied %d lines of code to clipboard", lines)
-				} else {
-					a.copyNote = T("已复制代码到剪贴板", "Copied code to clipboard")
-				}
-			}
-		})
-	}
+	a.diffLineInput(half, fi, s.no)
 }
 
 // splitSides 返回一行在左右两侧的内容。
@@ -682,6 +537,107 @@ func (a *app) code(c *ui.Context, pal palette, hl *highlight.File, lineNo int, t
 		ui.RichText(c, lineSpans(pal, hl, lineNo, text)...).
 			Font("monospace").FontSize(size).SingleLine().TextColor(pal.code)
 	})
+}
+
+// diffRangeSel 描述 diff 代码区里拖选出来的一段行区间。
+//
+// 每行是一个独立的元素，mygo 的可选文本又是按元素工作的，选不了跨行，
+// 所以这里自己记一段行区间：按住左键从某行拖到另一行，高亮整段，⌘C 复制。
+type diffRangeSel struct {
+	active    bool
+	file      int
+	startLine int
+	endLine   int
+	code      string
+}
+
+// diffLineSelected 报告某一行是否在当前选中的区间里。
+func (a *app) diffLineSelected(fi, lineNo int) bool {
+	if !a.diffSel.active || a.diffSel.file != fi || lineNo <= 0 {
+		return false
+	}
+	return lineNo >= a.diffSel.startLine && lineNo <= a.diffSel.endLine
+}
+
+// diffLineInput 给一行代码挂上「按住左键拖选一段」的输入处理。
+//
+// 拖动时指针可能已经离开了这一行，但按下时的元素会一直收到移动事件，
+// 所以用指针相对本行的纵向偏移换算成要延伸到的行号。
+func (a *app) diffLineInput(el *ui.Element, fi, lineNo int) {
+	if lineNo <= 0 {
+		return
+	}
+	// 一次真正的点击（没拖出元素）清掉选区；拖选结束时 mygo 不会报 click，
+	// 所以不会把刚拖出来的选区误清。
+	if el.Clicked() {
+		if el.ClickModifiers()&ui.Shift != 0 && a.diffSel.active && a.diffSel.file == fi {
+			a.updateDiffRangeSel(fi, a.diffSel.startLine, lineNo)
+			return
+		}
+		a.diffSel.active = false
+		return
+	}
+	if _, _, held := el.Dragged(); held {
+		_, py, _ := el.PointerPosition()
+		offset := int(math.Floor(float64(py) / float64(lineH)))
+		end := lineNo + offset
+		if end < 1 {
+			end = 1
+		}
+		a.updateDiffRangeSel(fi, lineNo, end)
+	}
+}
+
+// updateDiffRangeSel 记下选中的行区间，并把它的完整文本拼出来供 ⌘C 复制。
+func (a *app) updateDiffRangeSel(fi, startLine, endLine int) {
+	if fi < 0 || fi >= len(a.files) {
+		return
+	}
+	f := a.files[fi]
+	minL, maxL := min(startLine, endLine), max(startLine, endLine)
+
+	// 拖动时每帧都会调到这里：区间没变就不要重新扫一遍行模型。
+	if a.diffSel.active && a.diffSel.file == fi && a.diffSel.startLine == minL && a.diffSel.endLine == maxL {
+		return
+	}
+
+	// 从行模型里取这段区间实际展示的代码（含增、删、改与展开的未改动行）。
+	var lines []string
+	for _, r := range a.rows {
+		if r.file != fi || r.kind != rowLine {
+			continue
+		}
+		var lno int
+		var txt string
+		if a.split {
+			left, right := a.splitSides(f, r)
+			if !left.empty && left.no >= minL && left.no <= maxL {
+				lno, txt = left.no, left.text
+			} else if !right.empty && right.no >= minL && right.no <= maxL {
+				lno, txt = right.no, right.text
+			}
+		} else {
+			oldNo, newNo := r.oldNo, r.newNo
+			if !r.fromGap && r.hunk >= 0 && r.hunk < len(f.Hunks) && r.lineIdx < len(f.Hunks[r.hunk].Lines) {
+				l := f.Hunks[r.hunk].Lines[r.lineIdx]
+				oldNo, newNo, txt = l.OldNum, l.NewNum, l.Content
+			} else if r.fromGap {
+				txt = a.contentLine(f, r.newNo)
+			}
+			lno = lineNoOf(r, oldNo, newNo)
+		}
+		if lno >= minL && lno <= maxL && txt != "" {
+			lines = append(lines, txt)
+		}
+	}
+
+	a.diffSel = diffRangeSel{
+		active:    true,
+		file:      fi,
+		startLine: minL,
+		endLine:   maxL,
+		code:      strings.Join(lines, "\n"),
+	}
 }
 
 // lineNoOf 是这一行在对应那一侧的行号：高亮就是按这个行号取片段的。
@@ -847,207 +803,4 @@ func runeCols(r rune) int {
 		return 2
 	}
 	return 1
-}
-
-// diffRangeSel 描述 diff 代码视图中的行选区状态。
-type diffRangeSel struct {
-	active       bool
-	file         int
-	startLine    int
-	endLine      int
-	code         string
-	bounds       ui.Rect
-	draggedRange bool
-}
-
-// updateDiffRangeSel 更新当前选中的行区间及对应的完整代码文本。
-func (a *app) updateDiffRangeSel(fi, startLine, endLine int, b ui.Rect) {
-	if fi < 0 || fi >= len(a.files) {
-		return
-	}
-	f := a.files[fi]
-	minL := min(startLine, endLine)
-	maxL := max(startLine, endLine)
-
-	// 优先从 a.rows 中提取选区内实际展示的代码行（包含增、删、改等所有行）
-	var lines []string
-	for _, r := range a.rows {
-		if r.file != fi || r.kind != rowLine {
-			continue
-		}
-		var lno int
-		var txt string
-		if a.split {
-			left, right := a.splitSides(f, r)
-			if !left.empty && left.no >= minL && left.no <= maxL {
-				lno = left.no
-				txt = left.text
-			} else if !right.empty && right.no >= minL && right.no <= maxL {
-				lno = right.no
-				txt = right.text
-			}
-		} else {
-			oldNo, newNo := r.oldNo, r.newNo
-			if !r.fromGap && r.hunk < len(f.Hunks) && r.lineIdx < len(f.Hunks[r.hunk].Lines) {
-				l := f.Hunks[r.hunk].Lines[r.lineIdx]
-				oldNo, newNo, txt = l.OldNum, l.NewNum, l.Content
-			} else if r.fromGap {
-				txt = a.contentLine(f, r.newNo)
-			}
-			lno = lineNoOf(r, oldNo, newNo)
-		}
-		if lno >= minL && lno <= maxL && txt != "" {
-			lines = append(lines, txt)
-		}
-	}
-
-	selectedText := strings.Join(lines, "\n")
-	if selectedText == "" {
-		cc := a.contents[fileKey(f)]
-		if cc != nil && len(cc.lines) > 0 {
-			sIdx := max(0, minL-1)
-			eIdx := min(len(cc.lines), maxL)
-			if sIdx < eIdx {
-				selectedText = strings.Join(cc.lines[sIdx:eIdx], "\n")
-			}
-		}
-	}
-	if selectedText == "" {
-		selectedText = a.contentLine(f, minL)
-	}
-	if selectedText == "" {
-		for l := minL; l <= maxL; l++ {
-			txt := a.contentLine(f, l)
-			if txt != "" {
-				lines = append(lines, txt)
-			}
-		}
-		selectedText = strings.Join(lines, "\n")
-	}
-	if selectedText == "" {
-		selectedText = fmt.Sprintf("// Code range L%d-L%d", minL, maxL)
-	}
-
-	// 计算能够覆盖选区完整高度的 bounding box
-	topY := b.Y
-	if minL < startLine {
-		topY -= float32(startLine-minL) * lineH
-	}
-	totalH := float32(maxL-minL+1) * lineH
-	bounds := ui.Rect{
-		X: b.X,
-		Y: topY,
-		W: b.W,
-		H: totalH,
-	}
-
-	a.diffSel = diffRangeSel{
-		active:       true,
-		file:         fi,
-		startLine:    minL,
-		endLine:      maxL,
-		code:         selectedText,
-		bounds:       bounds,
-		draggedRange: a.diffSel.draggedRange,
-	}
-}
-
-// notionSelectionToolbar 呈现类似 Notion 的代码选区悬浮快捷操作窗口（复制与 AI 解析）。
-func (a *app) notionSelectionToolbar(c *ui.Context, pal palette) {
-	if !a.diffSel.active || a.diffSel.code == "" {
-		return
-	}
-	// 选区浮层仅在多行选区（startLine != endLine 或 draggedRange）时才触发，避免单行普通点击误弹
-	if a.diffSel.startLine == a.diffSel.endLine && !a.diffSel.draggedRange {
-		return
-	}
-	winW, winH := c.Size()
-	tbW := float32(230)
-	tbH := float32(32)
-
-	// 计算水平居中位置，垂直方向置于选区上方，若上方放不下则翻转到下方
-	tbX := a.diffSel.bounds.X + (a.diffSel.bounds.W-tbW)/2
-	tbX = clamp(tbX, 12, max(12, winW-tbW-12))
-
-	tbY := a.diffSel.bounds.Y - tbH - 8
-	if tbY < 12 {
-		tbY = a.diffSel.bounds.Y + a.diffSel.bounds.H + 8
-	}
-	tbY = clamp(tbY, 12, max(12, winH-tbH-12))
-
-	ui.Overlay(c, func() {
-		bar := ui.Row(c).Absolute().Left(tbX).Top(tbY).Width(tbW).Height(tbH).
-			Radius(radiusMD).Background(pal.surface3).Border(1, pal.hairline).
-			Shadow(0, 6, 20, 0, ui.RGBA(0, 0, 0, 0.28)).
-			Padding(0, 8).Gap(6).AlignItems(ui.Center)
-
-		bar.Children(func() {
-			// 行数信息
-			lineCount := max(1, a.diffSel.endLine-a.diffSel.startLine+1)
-			var infoText string
-			if lineCount == 1 {
-				infoText = Tf("第 %d 行", "Line %d", a.diffSel.startLine)
-			} else {
-				infoText = Tf("%d 行 (L%d-L%d)", "%d lines (L%d-L%d)", lineCount, a.diffSel.startLine, a.diffSel.endLine)
-			}
-			ui.Text(c, infoText).FontSize(11).TextColor(pal.inkSubtle).SingleLine()
-
-			// 分割线
-			ui.Box(c).Width(1).Height(14).Background(pal.hairline)
-
-			// 复制按钮
-			copyBtn := ui.ButtonBase(c).Height(24).Padding(0, 6).Radius(radiusXS).
-				AlignItems(ui.Center).Gap(4).Cursor(ui.CursorPointer).Label(T("复制所选代码", "Copy selected code"))
-			if copyBtn.Hovered() {
-				copyBtn.Background(pal.surface2)
-			}
-			fadeColors(copyBtn)
-			copyBtn.Children(func() {
-				drawIcon(c, iconCopy, 12, pal.ink)
-				ui.Text(c, T("复制", "Copy")).FontSize(11).FontWeight(weightMedium).TextColor(pal.ink)
-			})
-			if copyBtn.Clicked() {
-				a.copyText = a.diffSel.code
-				if lineCount > 1 {
-					a.copyNote = Tf("已复制 %d 行代码到剪贴板", "Copied %d lines of code to clipboard", lineCount)
-				} else {
-					a.copyNote = T("已复制代码到剪贴板", "Copied code to clipboard")
-				}
-				a.diffSel.active = false
-			}
-
-			// AI 解析按钮
-			aiBtn := ui.ButtonBase(c).Height(24).Padding(0, 6).Radius(radiusXS).
-				AlignItems(ui.Center).Gap(4).Cursor(ui.CursorPointer).Label(T("AI 解析所选代码", "Explain selected code with AI"))
-			if aiBtn.Hovered() {
-				aiBtn.Background(pal.surface2)
-			}
-			fadeColors(aiBtn)
-			aiBtn.Children(func() {
-				sparkleCluster(c, 12, pal.ink)
-				ui.Text(c, T("AI 解析", "Explain")).FontSize(11).FontWeight(weightSemibold).TextColor(pal.ink)
-			})
-			if aiBtn.Clicked() {
-				targetLine := a.diffSel.startLine
-				a.openSelectionExplain(a.diffSel.file, a.diffSel.code, targetLine, "", bar.Bounds())
-				a.diffSel.active = false
-			}
-
-			ui.Spacer(c)
-
-			// 关闭按钮
-			closeBtn := ui.ButtonBase(c).Size(18, 18).Radius(radiusXS).
-				AlignItems(ui.Center).Justify(ui.Center).Cursor(ui.CursorPointer).Label(T("取消选区", "Clear selection"))
-			if closeBtn.Hovered() {
-				closeBtn.Background(pal.surface2)
-			}
-			fadeColors(closeBtn)
-			closeBtn.Children(func() {
-				ui.Text(c, "×").FontSize(11).TextColor(pal.inkSubtle)
-			})
-			if closeBtn.Clicked() {
-				a.diffSel.active = false
-			}
-		})
-	})
 }

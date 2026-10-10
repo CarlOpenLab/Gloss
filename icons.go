@@ -52,9 +52,6 @@ var (
 	iconChevronDown  = lucide(`<path d="m6 9 6 6 6-6"/>`)
 	iconChevronUp    = lucide(`<path d="m18 15-6-6-6 6"/>`)
 
-	// 复制（copy）
-	iconCopy = lucide(`<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>`)
-
 	// 视图切换（columns-2 / rows-3）
 	iconSplit   = lucide(`<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M12 3v18"/>`)
 	iconUnified = lucide(`<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M21 9H3"/><path d="M21 15H3"/>`)

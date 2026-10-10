@@ -262,7 +262,7 @@ type app struct {
 	providerSearch string
 	modelSearch    string
 
-	// 代码 diff 选区与 Notion 风格悬浮窗口状态
+	// diff 代码区的多行拖选状态（左键按住拖一段行，⌘C 自己复制）。
 	diffSel diffRangeSel
 
 	// —— 顶部弹窗（HeroUI 下拉）——
@@ -623,10 +623,6 @@ func (a *app) view(c *ui.Context) {
 	a.prDialog(c, pal)
 	a.prReviewModal(c, pal)
 	a.riskScanDialog(c, pal)
-
-	// 卡片画在最后：这一帧的 ✨ 按钮位置刚写好，卡片当帧就能摆对地方。
-	// 它在 Overlay 层，不受上面的布局影响。
-	a.explainCard(c, pal)
 
 	// Esc 退出分支对比/PR 检视或关掉卡片。放在最后，让对话框里正在编辑的输入框先有机会处理它。
 	if a.compare.on && !a.modalOn() && c.Shortcut(0, ui.KeyEscape) {

@@ -82,6 +82,7 @@ func TestCloseButtonIsClickable(t *testing.T) {
 		head: a.files[fi].Hunks[hi].Header,
 		text: "这段改动做了什么。",
 	}
+	a.rowsDirty = true // 内嵌解释行要随行模型重建才出现
 
 	tt := ui.NewTester(a.view, 1280, 860)
 	tt.Frame()

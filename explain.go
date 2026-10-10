@@ -18,11 +18,6 @@ import (
 
 // ✨ 解释卡片的尺寸与节奏。
 const (
-	cardMaxW = 460 // 卡片最大宽度
-	cardMaxH = 460 // 卡片最大高度
-	cardGap  = 10  // 卡片和 ✨ 按钮之间的间距
-	cardMinH = 180 // 上方/下方空间再小也要给这么高
-
 	// cardRadius 是卡片的圆角。§3 把「悬浮卡片、AI 解释卡片」归到 lg(12)。
 	cardRadius = radiusLG
 
@@ -83,19 +78,6 @@ type explainState struct {
 
 	scroll ui.ScrollState
 
-	// 单行与选区解释
-	isSelection bool   // 是否为单行/选区解释
-	lineNum     int    // 行号
-	lineCode    string // 代码内容
-	question    string // 用户提问/追问
-	promptInput string // 追问输入框的文本
-	focusPrompt bool   // 是否聚焦追问输入框
-
-	// 拖拽与移动
-	dragX   float32
-	dragY   float32
-	dragged bool
-
 	// 折叠/收缩状态（GitHub 风格折叠）
 	collapsed bool
 
@@ -109,7 +91,6 @@ type explainEntry struct {
 	ID        string
 	Head      string
 	Text      string
-	Question  string
 	Cached    bool
 	CreatedAt time.Time
 }
@@ -146,132 +127,10 @@ func (a *app) explainOpen() bool { return a.ex.key != "" }
 
 // isExplaining 判断某个变更块是不是当前打开的那个。
 func (a *app) isExplaining(fi, hi int) bool {
-	if !a.explainOpen() || a.ex.isSelection || fi < 0 || fi >= len(a.files) || hi < 0 || hi >= len(a.files[fi].Hunks) {
+	if !a.explainOpen() || fi < 0 || fi >= len(a.files) || hi < 0 || hi >= len(a.files[fi].Hunks) {
 		return false
 	}
 	return a.ex.key == a.explainKey(a.files[fi], hi)
-}
-
-// isExplainingSelection 判断某个文件某一行是不是当前正在解释的选区。
-func (a *app) isExplainingSelection(fi, lineNum int) bool {
-	if !a.explainOpen() || !a.ex.isSelection || fi < 0 || fi >= len(a.files) {
-		return false
-	}
-	return a.ex.fi == fi && a.ex.lineNum == lineNum
-}
-
-// toggleSelectionExplain 点代码行上的 ✨ 按钮时调用：开着就关掉，关着就打开。
-func (a *app) toggleSelectionExplain(fi int, lineStr string, lineNum int, anchor ui.Rect) {
-	if a.isExplainingSelection(fi, lineNum) {
-		a.closeExplain()
-		return
-	}
-	a.openSelectionExplain(fi, lineStr, lineNum, "", anchor)
-}
-
-// openSelectionExplain 打开针对单行或选区代码的解释卡片：有缓存就直接显示，没有就发起流式请求。
-func (a *app) openSelectionExplain(fi int, lineStr string, lineNum int, question string, anchor ui.Rect) {
-	if fi < 0 || fi >= len(a.files) {
-		return
-	}
-	a.cancelExplain()
-
-	f := a.files[fi]
-	key := explain.SelectionCacheKey(f.Path(), lineStr, question, a.modelName)
-	head := fmt.Sprintf("%s : 第 %d 行", displayPath(f), lineNum)
-	trimmed := strings.TrimSpace(lineStr)
-	if trimmed != "" {
-		if len(trimmed) > 36 {
-			trimmed = trimmed[:36] + "…"
-		}
-		if a.diffSel.active && a.diffSel.file == fi && a.diffSel.startLine != a.diffSel.endLine {
-			head = fmt.Sprintf("L%d-L%d: %s", a.diffSel.startLine, a.diffSel.endLine, trimmed)
-		} else {
-			head = fmt.Sprintf("第 %d 行: %s", lineNum, trimmed)
-		}
-	}
-
-	a.ex = explainState{
-		fi:          fi,
-		hi:          -1,
-		key:         key,
-		head:        head,
-		anchor:      anchor,
-		isSelection: true,
-		lineNum:     lineNum,
-		lineCode:    lineStr,
-		question:    question,
-		promptInput: question,
-	}
-
-	if text, ok := a.store.Lookup(a.ex.key); ok {
-		a.ex.text = text
-		a.ex.cached = true
-		a.recordExplainEntry(text, true)
-		a.rowsDirty = true
-		return
-	}
-	a.rowsDirty = true
-	a.startSelectionExplain(f.FileDiff, lineStr, lineNum, question, fileKey(f))
-}
-
-// startSelectionExplain 起一个后台请求解释特定代码行/选区。
-func (a *app) startSelectionExplain(f diff.FileDiff, lineStr string, lineNum int, question string, contentKey string) {
-	if !a.store.Provider().Ready() {
-		a.ex.loading = false
-		a.ex.needKey = true
-		return
-	}
-	a.ex.needKey = false
-
-	var lines []string
-	if cc := a.contents[contentKey]; cc != nil {
-		lines = cc.lines
-	}
-	system, user := explain.BuildSelectionPrompt(explain.SelectionRequest{
-		File:     f,
-		Code:     lineStr,
-		LineNum:  lineNum,
-		Question: question,
-		Context:  explain.LineWindow(lines, lineNum, explainAround, explainMaxCtx),
-	})
-	system = a.store.Config().EffectiveExplainPrompt(system)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	a.ex.cancel = cancel
-	a.ex.loading = true
-	mail := &explainMail{last: time.Now()}
-	a.ex.mail = mail
-
-	key := a.ex.key
-	prov := a.store.Provider()
-
-	onDelta := func(chunk string) {
-		if mail.fill(chunk) {
-			a.dispatch(func() { a.flushExplain(mail) })
-		}
-	}
-
-	a.run(func() {
-		text, err := llm.StreamExplanation(ctx, prov, system, user, onDelta)
-		a.dispatch(func() {
-			if a.ex.key != key {
-				return
-			}
-			a.flushExplain(mail)
-			a.ex.loading = false
-			if err != nil {
-				if ctx.Err() == nil {
-					a.ex.fail = llm.Describe(err)
-				}
-				return
-			}
-			a.ex.text = strings.TrimSpace(text)
-			a.store.Put(key, a.ex.text)
-			a.persist()
-			a.recordExplainEntry(a.ex.text, false)
-		})
-	})
 }
 
 func (a *app) explainKey(f gitrepo.File, hi int) string {
@@ -416,19 +275,13 @@ func (a *app) cancelExplain() {
 	}
 }
 
-// explainCard 画解释卡片（支持鼠标拖拽位移、折叠收缩为胶囊、多记录翻页与单项删除）。
 // explainInlineRow 以 GitHub 风格在代码行间内嵌呈现 AI 解释卡片或折叠条。
 func (a *app) explainInlineRow(c *ui.Context, pal palette, r row) {
 	if !a.explainOpen() {
 		return
 	}
 	// 刷新仓库或改筛选之后，fi/hi 可能已经指向别的文件了 —— 收起解释
-	if a.ex.isSelection {
-		if a.ex.fi < 0 || a.ex.fi >= len(a.files) {
-			a.closeExplain()
-			return
-		}
-	} else if !a.isExplaining(a.ex.fi, a.ex.hi) {
+	if !a.isExplaining(a.ex.fi, a.ex.hi) {
 		a.closeExplain()
 		return
 	}
@@ -439,115 +292,53 @@ func (a *app) explainInlineRow(c *ui.Context, pal palette, r row) {
 		if len(a.ex.entries) > 1 {
 			countStr = fmt.Sprintf(" (%d/%d)", a.ex.curIdx+1, len(a.ex.entries))
 		}
-		pill := ui.Row(c).Height(30).Shrink(0).FillWidth().
-			Margin(3, 16).Padding(0, 12).Gap(8).AlignItems(ui.Center).
-			Radius(radiusSM).Background(pal.surface2).Border(1, pal.hairline).
-			Cursor(ui.CursorPointer)
-		if pill.Hovered() {
-			pill.Background(pal.surface3)
-		}
-		fadeColors(pill)
-		pill.Children(func() {
-			sparkleCluster(c, 13, pal.inkMuted)
-			ui.Text(c, Tf("✨ AI 解释%s · 点击展开", "✨ AI Explanation%s · Click to expand", countStr)).
-				FontSize(11).FontWeight(weightMedium).TextColor(pal.ink)
-			drawIcon(c, iconChevronDown, 11, pal.inkSubtle)
-			ui.Spacer(c)
-			closeBtn := ui.ButtonBase(c).Size(18, 18).Radius(radiusXS).
-				AlignItems(ui.Center).Justify(ui.Center).Cursor(ui.CursorPointer)
-			closeBtn.Children(func() {
-				ui.Text(c, "×").FontSize(11).TextColor(pal.inkSubtle)
+		// 外层 Box 负责左右内边距：卡片铺满列表宽度再加外侧 margin 会顶到
+		// 右侧滚动条上，关闭按钮就点不到了。
+		ui.Box(c).FillWidth().Shrink(0).Padding(3, 16).Children(func() {
+			pill := ui.Row(c).Height(30).Shrink(0).FillWidth().
+				Padding(0, 12).Gap(8).AlignItems(ui.Center).
+				Radius(radiusSM).Background(pal.surface2).Border(1, pal.hairline).
+				Cursor(ui.CursorPointer)
+			if pill.Hovered() {
+				pill.Background(pal.surface3)
+			}
+			fadeColors(pill)
+			pill.Children(func() {
+				sparkleCluster(c, 13, pal.inkMuted)
+				ui.Text(c, Tf("✨ AI 解释%s · 点击展开", "✨ AI Explanation%s · Click to expand", countStr)).
+					FontSize(11).FontWeight(weightMedium).TextColor(pal.ink)
+				drawIcon(c, iconChevronDown, 11, pal.inkSubtle)
+				ui.Spacer(c)
+				closeBtn := ui.ButtonBase(c).Size(18, 18).Radius(radiusXS).
+					AlignItems(ui.Center).Justify(ui.Center).Cursor(ui.CursorPointer)
+				closeBtn.Children(func() {
+					ui.Text(c, "×").FontSize(11).TextColor(pal.inkSubtle)
+				})
+				if closeBtn.Clicked() {
+					a.closeExplain()
+				}
 			})
-			if closeBtn.Clicked() {
-				a.closeExplain()
+			if pill.Clicked() {
+				a.ex.collapsed = false
+				a.rowsDirty = true
 			}
 		})
-		if pill.Clicked() {
-			a.ex.collapsed = false
-			a.rowsDirty = true
-		}
 		return
 	}
 
-	// 展开态：GitHub 风格内嵌卡片，与上下代码流融为一体，彻底消除浮层遮挡代码
-	card := ui.Column(c).Shrink(0).FillWidth().
-		Margin(6, 16).Radius(cardRadius).
-		Background(pal.surface1).Border(1, pal.hairline).
-		Shadow(0, 2, 8, 0, ui.RGBA(0, 0, 0, 0.06))
+	// 展开态：GitHub 风格内嵌卡片，与上下代码流融为一体，彻底消除浮层遮挡代码。
+	// 同样用外层 Box 的内边距代替 margin，右侧给滚动条留出空间。
+	ui.Box(c).FillWidth().Shrink(0).Padding(6, 16).Children(func() {
+		card := ui.Column(c).Shrink(0).FillWidth().Radius(cardRadius).
+			Background(pal.surface1).Border(1, pal.hairline).
+			Shadow(0, 2, 8, 0, ui.RGBA(0, 0, 0, 0.06))
 
-	card.Children(func() {
-		a.explainHead(c, pal)
-		a.explainBody(c, pal, 520)
-		if a.ex.isSelection {
-			a.explainPromptBar(c, pal)
-		}
-		a.explainFoot(c, pal)
-	})
-}
-
-// explainCard 呈现 AI 解释卡片浮层。
-func (a *app) explainCard(c *ui.Context, pal palette) {
-	if !a.explainOpen() {
-		return
-	}
-	if a.ex.isSelection {
-		if a.ex.fi < 0 || a.ex.fi >= len(a.files) {
-			a.closeExplain()
-			return
-		}
-	} else if !a.isExplaining(a.ex.fi, a.ex.hi) {
-		a.closeExplain()
-		return
-	}
-	winW, winH := c.Size()
-
-	w := min(cardMaxW, winW-24)
-	at := placeCard(a.ex.anchor, winW, winH, w)
-
-	panel := ui.Box(c)
-	ui.Overlay(c, func() {
-		panel = ui.Box(c).Absolute().Left(at.x).Width(w).MaxHeight(at.maxH).
-			Radius(cardRadius).Background(pal.surface3).
-			Border(1, pal.hairline).
-			Shadow(0, 4, 12, 0, ui.RGBA(0, 0, 0, 0.16))
-		if at.up {
-			panel.Bottom(winH - at.y)
-		} else {
-			panel.Top(at.y)
-		}
-		panel.Children(func() {
+		card.Children(func() {
 			a.explainHead(c, pal)
-			a.explainBody(c, pal, at.maxH)
-			if a.ex.isSelection {
-				a.explainPromptBar(c, pal)
-			}
+			a.explainBody(c, pal, 520)
 			a.explainFoot(c, pal)
 		})
 	})
-}
-
-// cardPlacement 是卡片该摆哪儿。
-type cardPlacement struct {
-	x, y, maxH float32
-	up         bool
-}
-
-// placeCard 算卡片的位置和最大高度：默认排在 ✨ 按钮下方、右边缘和按钮
-// 对齐；下方放不下而上方更宽敞时翻到上方。两边都夹在窗口内。
-func placeCard(anchor ui.Rect, winW, winH, w float32) cardPlacement {
-	at := cardPlacement{x: clamp(anchor.X+anchor.W-w, 12, max(12, winW-w-12))}
-
-	below := winH - (anchor.Y + anchor.H) - cardGap - 12
-	above := anchor.Y - cardGap - 12
-	if below < 240 && above > below {
-		at.up = true
-		at.maxH = min(cardMaxH, max(cardMinH, above))
-		at.y = anchor.Y - cardGap
-		return at
-	}
-	at.maxH = min(cardMaxH, max(cardMinH, below))
-	at.y = anchor.Y + anchor.H + cardGap
-	return at
 }
 
 func clamp(v, lo, hi float32) float32 { return min(max(v, lo), hi) }
@@ -558,7 +349,7 @@ func (a *app) recordExplainEntry(text string, cached bool) {
 		return
 	}
 	for i, e := range a.ex.entries {
-		if e.Text == text && e.Question == a.ex.question {
+		if e.Text == text {
 			a.ex.curIdx = i
 			return
 		}
@@ -567,7 +358,6 @@ func (a *app) recordExplainEntry(text string, cached bool) {
 		ID:        fmt.Sprintf("%d", time.Now().UnixNano()),
 		Head:      a.ex.head,
 		Text:      text,
-		Question:  a.ex.question,
 		Cached:    cached,
 		CreatedAt: time.Now(),
 	}
@@ -582,7 +372,6 @@ func (a *app) syncCurrentExplainEntry() {
 	}
 	e := a.ex.entries[a.ex.curIdx]
 	a.ex.text = e.Text
-	a.ex.question = e.Question
 	a.ex.cached = e.Cached
 	a.ex.scroll = ui.ScrollState{}
 }
@@ -614,11 +403,7 @@ func (a *app) explainHead(c *ui.Context, pal palette) {
 		BorderWidth(0, 0, 1, 0).BorderColor(pal.hairline).Children(func() {
 		ui.Row(c).Gap(7).AlignItems(ui.Center).Children(func() {
 			sparkleCluster(c, 15, pal.inkMuted)
-			title := T("AI 解释", "AI Explanation")
-			if a.ex.isSelection {
-				title = T("AI 单行解释", "AI Code Explanation")
-			}
-			ui.Text(c, title).FontSize(textBody).FontWeight(weightSemibold).TextColor(pal.ink)
+			ui.Text(c, T("AI 解释", "AI Explanation")).FontSize(textBody).FontWeight(weightSemibold).TextColor(pal.ink)
 			if a.ex.cached {
 				specChip(c, pal, T("缓存", "Cached"), ui.Transparent, statusChipH, statusChipText)
 			}
@@ -706,10 +491,6 @@ func (a *app) explainHead(c *ui.Context, pal palette) {
 		})
 		ui.Text(c, a.ex.head).Font("monospace").FontSize(textCaption).
 			SingleLine().TextColor(pal.inkSubtle)
-		if a.ex.question != "" {
-			ui.Text(c, Tf("追问: %s", "Follow-up: %s", a.ex.question)).FontSize(textCaption).
-				SingleLine().TextColor(pal.inkMuted)
-		}
 	})
 }
 
@@ -719,9 +500,6 @@ func (a *app) explainBody(c *ui.Context, pal palette, maxH float32) {
 	// 头尾各占一块，剩下的给正文。这里给个保守的估算就够了 ——
 	// 真算出精确值要等布局，而这是绝对定位的元素，量不到。
 	bodyH := maxH - 96
-	if a.ex.isSelection {
-		bodyH -= 38
-	}
 	if bodyH < 60 {
 		bodyH = 60
 	}
@@ -778,11 +556,7 @@ func (a *app) explainText(c *ui.Context, t *ui.Theme, pal palette) {
 		if a.ex.loading {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Spinner(c)
-				msg := T("正在读这段改动…", "Reading code changes…")
-				if a.ex.isSelection {
-					msg = T("正在分析代码…", "Analyzing code…")
-				}
-				ui.Text(c, msg).FontSize(12).TextColor(t.TextMuted)
+				ui.Text(c, T("正在读这段改动…", "Reading code changes…")).FontSize(12).TextColor(t.TextMuted)
 			})
 			return
 		}
@@ -812,18 +586,6 @@ func cardActions(c *ui.Context, body func()) {
 // 直接 startExplain 而不是 openExplain：失败的结果不落缓存，重新问本来就
 // 走的是这条路，这里只是把它收成一个名字，好让几个按钮都指过来。
 func (a *app) retryExplain() {
-	if a.ex.isSelection {
-		if a.ex.fi < 0 || a.ex.fi >= len(a.files) {
-			return
-		}
-		f := a.files[a.ex.fi]
-		a.ex.text = ""
-		a.ex.scroll = ui.ScrollState{}
-		a.ex.fail = llm.Failure{}
-		a.ex.needKey = false
-		a.startSelectionExplain(f.FileDiff, a.ex.lineCode, a.ex.lineNum, a.ex.question, fileKey(f))
-		return
-	}
 	if a.ex.fi < 0 || a.ex.fi >= len(a.files) || a.ex.hi < 0 || a.ex.hi >= len(a.files[a.ex.fi].Hunks) {
 		return
 	}
@@ -836,29 +598,6 @@ func (a *app) retryExplain() {
 	a.ex.fail = llm.Failure{}
 	a.ex.needKey = false
 	a.startExplain(f.FileDiff, f.Hunks[a.ex.hi], a.ex.hi, fileKey(f))
-}
-
-// explainPromptBar 是选区解释卡片底部的追问输入框。
-func (a *app) explainPromptBar(c *ui.Context, pal palette) {
-	if !a.ex.isSelection {
-		return
-	}
-	ui.Row(c).Shrink(0).Padding(6, 12).Gap(6).AlignItems(ui.Center).
-		Background(pal.surface2).
-		BorderWidth(1, 0, 0, 0).BorderColor(pal.hairline).Children(func() {
-		in := ui.TextInput(c, &a.ex.promptInput).Placeholder(T("输入追问或关注重点…", "Ask follow-up or specify focus…")).Grow(1)
-		if a.ex.focusPrompt {
-			in.Focus()
-			a.ex.focusPrompt = false
-		}
-		btn := secondaryAction(c, pal, T("提问", "Ask"), "", false)
-		if (in.Submitted() || btn.Clicked()) && !a.ex.loading {
-			q := strings.TrimSpace(a.ex.promptInput)
-			if q != "" {
-				a.openSelectionExplain(a.ex.fi, a.ex.lineCode, a.ex.lineNum, q, a.ex.anchor)
-			}
-		}
-	})
 }
 
 // mdMarkerW 是列表符号那一栏的宽度。

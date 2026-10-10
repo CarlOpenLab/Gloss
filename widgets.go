@@ -179,36 +179,6 @@ func explainButton(c *ui.Context, pal palette, on bool) *ui.Element {
 	})
 }
 
-// lineExplainButton 是代码行右侧悬停或激活时出现的「✨ 解释」小按钮。
-//
-// 比 hunk 行那颗还小一号（18 高、字号 10）：它挂在**每一行**代码的右边，
-// 一条 diff 上可能出现几十次，做大了就是一片浮在代码上的色块。
-func lineExplainButton(c *ui.Context, pal palette, on bool) *ui.Element {
-	t := c.Theme()
-	btn := ui.ButtonBase(c).Height(18).Shrink(0).Radius(radiusXS).
-		Padding(0, 5).Gap(3).AlignItems(ui.Center).Margin(0, 6, 0, 0).
-		Cursor(ui.CursorPointer).Label(T("AI 解释这一行", "Explain this line with AI")).Tooltip(T("让 AI 解释这一行代码", "Ask AI to explain this line of code"))
-
-	hovered := btn.Hovered()
-	var bg, border, fg ui.Color
-	switch {
-	case on:
-		bg, border, fg = t.Accent, ui.Transparent, t.AccentText
-	case hovered:
-		bg, border, fg = pal.explainHover, pal.hunkText.Alpha(0.7), pal.hunkText
-	default:
-		bg, border, fg = ui.Transparent, pal.hunkText.Alpha(0.38), pal.hunkText
-	}
-	btn.Background(bg).Border(1, border)
-	fadeColors(btn)
-
-	btn.Children(func() {
-		sparkleIcon(c, 11, fg)
-		ui.Text(c, T("解释", "Explain")).FontSize(10).SingleLine().TextColor(fg)
-	})
-	return btn
-}
-
 // stageHunkButton 是「暂存 / 取消暂存这一段」。
 //
 // 按下的方向和文件行那颗勾选框一致：填色 = 已经在暂存区里，点它拿出来。

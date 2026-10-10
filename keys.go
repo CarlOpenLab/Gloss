@@ -46,6 +46,13 @@ func (a *app) handleKeys(c *ui.Context) {
 	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyBracketRight) || c.Shortcut(ui.Cmd|ui.Alt, ui.KeyRight) {
 		a.nextTab()
 	}
+	if a.diffSel.active && c.Shortcut(ui.Cmd, ui.KeyC) {
+		if a.diffSel.code != "" {
+			a.copyText = a.diffSel.code
+			a.copyNote = T("已复制所选代码", "Copied selected code")
+		}
+		a.diffSel.active = false
+	}
 	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyA) {
 		if a.tab == 0 && a.repoReady() && a.op == gitrepo.OpNone {
 			if a.unstagedCount() > 0 {

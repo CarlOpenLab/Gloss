@@ -377,60 +377,7 @@ func TestExplainCloseCancelsRequest(t *testing.T) {
 	}
 }
 
-// 卡片位置：默认贴按钮下方，下方放不下就翻到上方，两边都夹在窗口内。
-func TestCardPlacement(t *testing.T) {
-	const winW, winH = 1280.0, 860.0
-	const w = 460.0
-
-	// 按钮在窗口右上角、下面还有大把空间：排在下方，右边缘和按钮对齐
-	anchor := ui.Rect{X: 1100, Y: 100, W: 80, H: 24}
-	at := placeCard(anchor, winW, winH, w)
-	if at.up {
-		t.Error("下方有空间时不该往上排")
-	}
-	if at.x != 1100+80-w {
-		t.Errorf("x = %v, 应该右对齐到按钮", at.x)
-	}
-	if at.y != anchor.Y+anchor.H+cardGap {
-		t.Errorf("y = %v, 应该排在按钮下方", at.y)
-	}
-	if at.maxH != cardMaxH {
-		t.Errorf("maxH = %v, 空间够时应该取最大高度", at.maxH)
-	}
-
-	// 按钮贴着窗口底部：上方更宽敞，翻上去
-	anchor = ui.Rect{X: 600, Y: winH - 30, W: 80, H: 24}
-	at = placeCard(anchor, winW, winH, w)
-	if !at.up {
-		t.Fatal("贴着窗口底部时应该往上排")
-	}
-	if at.y != anchor.Y-cardGap {
-		t.Errorf("往上排时 y = %v, 应该是卡片下沿贴住按钮上沿", at.y)
-	}
-	if at.y-at.maxH < 12 {
-		t.Errorf("往上排时上沿 %v 超出窗口", at.y-at.maxH)
-	}
-	if at.x+w > winW-12 {
-		t.Errorf("右边缘 %v 超出窗口", at.x+w)
-	}
-
-	// 按钮在最左边：卡片不能顶出左边界
-	anchor = ui.Rect{X: 0, Y: 100, W: 30, H: 24}
-	at = placeCard(anchor, winW, winH, w)
-	if at.x < 12 {
-		t.Errorf("x = %v, 应该夹在窗口内", at.x)
-	}
-
-	// 窗口比卡片还窄：宽度要收缩，位置仍然夹住
-	const narrowW = 300.0
-	nw := float32(min(cardMaxW, narrowW-24))
-	at = placeCard(ui.Rect{X: 250, Y: 100, W: 40, H: 20}, narrowW, winH, nw)
-	if at.x < 12 || at.x+nw > narrowW-12+0.01 {
-		t.Errorf("窄窗口下 x = %v, 宽 %v 放不下", at.x, nw)
-	}
-}
-
-// 打开卡片期间 diff 列表照常滚动：卡片是浮层，不该挡住底下的内容。
+// 打开卡片期间 diff 列表照常滚动：内嵌卡片跟着行模型走，不该挡住底下的内容。
 func TestExplainCardDoesNotBlockScrolling(t *testing.T) {
 	srv, _ := fakeLLM(t, "解释")
 	a := richApp(t)
