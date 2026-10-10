@@ -41,9 +41,8 @@ func main() {
 			TitleBarStyle: mygo.TitleBarHidden,
 			// 把红绿灯从系统默认的位置（贴着窗口顶边那条 32 高的带子）挪到
 			// 工具栏的正中间。系统默认位置是给「32 高的标题栏」留的，而工具栏
-			// 有 52 高，照默认放会偏高，和右边的按钮不在一条水平线上。
-			// Y 是关闭按钮顶边到窗口顶边的距离，工具栏高度会跟着它算出来。
-			TrafficLightPosition: &mygo.Point{X: 20, Y: 19},
+			// 把红绿灯对齐到 38 高的顶栏正中间（关闭按钮高 14，12 + 14 + 12 = 38）。
+			TrafficLightPosition: &mygo.Point{X: 18, Y: 12},
 			Vibrancy:             mygo.VibrancySidebar,
 			Content:              ui.View(a.view),
 		})
@@ -55,12 +54,20 @@ func main() {
 		// 冲突卡片上的「在编辑器打开」：交给系统默认应用。
 		a.openPath = func(p string) { _ = mygo.Shell.OpenPath(p) }
 
-		// 关窗前把提交框里还没提交的消息存成草稿：下一次打开这个仓库，
-		// 那段写了一半的话还在。
-		win.OnClose(func(*mygo.CloseEvent) { a.saveCommitDraft() })
+		// 关窗前把提交框里还没提交的消息存成草稿，并优雅关闭所有终端会话。
+		win.OnClose(func(*mygo.CloseEvent) {
+			a.saveCommitDraft()
+			a.closeAllTerminals()
+		})
 
-		// 接着上次的仓库打开，省得每次启动都要重新选一遍
-		if p := s.State().LastRepo; p != "" {
+		// 接着上次打开的标签页（或最后打开的仓库），省得每次启动都要重新选一遍
+		if len(a.tabs) > 0 {
+			a.dispatch(func() {
+				a.activeTab = 0
+				a.restoreActiveTab()
+				a.openRepo(a.tabs[0].path)
+			})
+		} else if p := s.State().LastRepo; p != "" {
 			a.dispatch(func() { a.openRepo(p) })
 		}
 	})

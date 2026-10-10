@@ -90,6 +90,28 @@ type explainState struct {
 	question    string // 用户提问/追问
 	promptInput string // 追问输入框的文本
 	focusPrompt bool   // 是否聚焦追问输入框
+
+	// 拖拽与移动
+	dragX   float32
+	dragY   float32
+	dragged bool
+
+	// 折叠/收缩状态（GitHub 风格折叠）
+	collapsed bool
+
+	// 多次解析历史与翻页卡片
+	entries []explainEntry
+	curIdx  int
+}
+
+// explainEntry 是一条解释记录（支持卡片翻页与历史留存）。
+type explainEntry struct {
+	ID        string
+	Head      string
+	Text      string
+	Question  string
+	Cached    bool
+	CreatedAt time.Time
 }
 
 // explainMail 是流式片段的中转站：后台只写，主线程按节流取。
@@ -162,7 +184,11 @@ func (a *app) openSelectionExplain(fi int, lineStr string, lineNum int, question
 		if len(trimmed) > 36 {
 			trimmed = trimmed[:36] + "…"
 		}
-		head = fmt.Sprintf("第 %d 行: %s", lineNum, trimmed)
+		if a.diffSel.active && a.diffSel.file == fi && a.diffSel.startLine != a.diffSel.endLine {
+			head = fmt.Sprintf("L%d-L%d: %s", a.diffSel.startLine, a.diffSel.endLine, trimmed)
+		} else {
+			head = fmt.Sprintf("第 %d 行: %s", lineNum, trimmed)
+		}
 	}
 
 	a.ex = explainState{
@@ -181,8 +207,11 @@ func (a *app) openSelectionExplain(fi int, lineStr string, lineNum int, question
 	if text, ok := a.store.Lookup(a.ex.key); ok {
 		a.ex.text = text
 		a.ex.cached = true
+		a.recordExplainEntry(text, true)
+		a.rowsDirty = true
 		return
 	}
+	a.rowsDirty = true
 	a.startSelectionExplain(f.FileDiff, lineStr, lineNum, question, fileKey(f))
 }
 
@@ -206,6 +235,7 @@ func (a *app) startSelectionExplain(f diff.FileDiff, lineStr string, lineNum int
 		Question: question,
 		Context:  explain.LineWindow(lines, lineNum, explainAround, explainMaxCtx),
 	})
+	system = a.store.Config().EffectiveExplainPrompt(system)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	a.ex.cancel = cancel
@@ -239,6 +269,7 @@ func (a *app) startSelectionExplain(f diff.FileDiff, lineStr string, lineNum int
 			a.ex.text = strings.TrimSpace(text)
 			a.store.Put(key, a.ex.text)
 			a.persist()
+			a.recordExplainEntry(a.ex.text, false)
 		})
 	})
 }
@@ -275,8 +306,11 @@ func (a *app) openExplain(fi, hi int) {
 	if text, ok := a.store.Lookup(a.ex.key); ok {
 		a.ex.text = text
 		a.ex.cached = true
+		a.recordExplainEntry(text, true)
+		a.rowsDirty = true
 		return
 	}
+	a.rowsDirty = true
 	a.startExplain(f.FileDiff, h, hi, fileKey(f))
 }
 
@@ -307,6 +341,7 @@ func (a *app) startExplain(f diff.FileDiff, h diff.Hunk, hi int, contentKey stri
 		HunkIdx: hi,
 		Context: explain.Window(lines, h, explainAround, explainMaxCtx),
 	})
+	system = a.store.Config().EffectiveExplainPrompt(system)
 
 	// ctx 和信箱都在主线程建好，立刻挂到状态上 —— 否则用户在请求返回之前
 	// 关掉卡片，就没人去取消它了。
@@ -342,6 +377,7 @@ func (a *app) startExplain(f diff.FileDiff, h diff.Hunk, hi int, contentKey stri
 			a.ex.text = strings.TrimSpace(text)
 			a.store.Put(key, a.ex.text)
 			a.persist()
+			a.recordExplainEntry(a.ex.text, false)
 		})
 	})
 }
@@ -370,6 +406,7 @@ func (a *app) flushExplain(mail *explainMail) {
 func (a *app) closeExplain() {
 	a.cancelExplain()
 	a.ex = explainState{}
+	a.rowsDirty = true
 }
 
 func (a *app) cancelExplain() {
@@ -379,18 +416,80 @@ func (a *app) cancelExplain() {
 	}
 }
 
-// explainCard 画解释卡片。
-//
-// 它在 Overlay 层里，所以画在 diff 之上、不受列表裁剪 —— 和 Web 版的
-// 悬浮卡片是一个意思。没有做「点外面关掉」的全屏遮罩：遮罩会挡住底下的
-// 滚动和点击，而读 diff 的时候正是要一边看一边滚。关闭走 Esc、再点一次
-// ✨、或者卡片上的 ×。
+// explainCard 画解释卡片（支持鼠标拖拽位移、折叠收缩为胶囊、多记录翻页与单项删除）。
+// explainInlineRow 以 GitHub 风格在代码行间内嵌呈现 AI 解释卡片或折叠条。
+func (a *app) explainInlineRow(c *ui.Context, pal palette, r row) {
+	if !a.explainOpen() {
+		return
+	}
+	// 刷新仓库或改筛选之后，fi/hi 可能已经指向别的文件了 —— 收起解释
+	if a.ex.isSelection {
+		if a.ex.fi < 0 || a.ex.fi >= len(a.files) {
+			a.closeExplain()
+			return
+		}
+	} else if !a.isExplaining(a.ex.fi, a.ex.hi) {
+		a.closeExplain()
+		return
+	}
+
+	if a.ex.collapsed {
+		// GitHub 风格折叠态：简洁内嵌胶囊小条，点击展开
+		countStr := ""
+		if len(a.ex.entries) > 1 {
+			countStr = fmt.Sprintf(" (%d/%d)", a.ex.curIdx+1, len(a.ex.entries))
+		}
+		pill := ui.Row(c).Height(30).Shrink(0).FillWidth().
+			Margin(3, 16).Padding(0, 12).Gap(8).AlignItems(ui.Center).
+			Radius(radiusSM).Background(pal.surface2).Border(1, pal.hairline).
+			Cursor(ui.CursorPointer)
+		if pill.Hovered() {
+			pill.Background(pal.surface3)
+		}
+		fadeColors(pill)
+		pill.Children(func() {
+			sparkleCluster(c, 13, pal.inkMuted)
+			ui.Text(c, Tf("✨ AI 解释%s · 点击展开", "✨ AI Explanation%s · Click to expand", countStr)).
+				FontSize(11).FontWeight(weightMedium).TextColor(pal.ink)
+			drawIcon(c, iconChevronDown, 11, pal.inkSubtle)
+			ui.Spacer(c)
+			closeBtn := ui.ButtonBase(c).Size(18, 18).Radius(radiusXS).
+				AlignItems(ui.Center).Justify(ui.Center).Cursor(ui.CursorPointer)
+			closeBtn.Children(func() {
+				ui.Text(c, "×").FontSize(11).TextColor(pal.inkSubtle)
+			})
+			if closeBtn.Clicked() {
+				a.closeExplain()
+			}
+		})
+		if pill.Clicked() {
+			a.ex.collapsed = false
+			a.rowsDirty = true
+		}
+		return
+	}
+
+	// 展开态：GitHub 风格内嵌卡片，与上下代码流融为一体，彻底消除浮层遮挡代码
+	card := ui.Column(c).Shrink(0).FillWidth().
+		Margin(6, 16).Radius(cardRadius).
+		Background(pal.surface1).Border(1, pal.hairline).
+		Shadow(0, 2, 8, 0, ui.RGBA(0, 0, 0, 0.06))
+
+	card.Children(func() {
+		a.explainHead(c, pal)
+		a.explainBody(c, pal, 520)
+		if a.ex.isSelection {
+			a.explainPromptBar(c, pal)
+		}
+		a.explainFoot(c, pal)
+	})
+}
+
+// explainCard 呈现 AI 解释卡片浮层。
 func (a *app) explainCard(c *ui.Context, pal palette) {
 	if !a.explainOpen() {
 		return
 	}
-	// 刷新仓库或改筛选之后，fi/hi 可能已经指向别的文件了 —— 那时卡片上的
-	// 「已 review」会勾到别的文件上，不如直接收起。
 	if a.ex.isSelection {
 		if a.ex.fi < 0 || a.ex.fi >= len(a.files) {
 			a.closeExplain()
@@ -408,12 +507,10 @@ func (a *app) explainCard(c *ui.Context, pal palette) {
 	panel := ui.Box(c)
 	ui.Overlay(c, func() {
 		panel = ui.Box(c).Absolute().Left(at.x).Width(w).MaxHeight(at.maxH).
-			// 卡片是浮层：Surface 3 + 一道 hairline（§2.1），投影只留一点收边。
 			Radius(cardRadius).Background(pal.surface3).
 			Border(1, pal.hairline).
 			Shadow(0, 4, 12, 0, ui.RGBA(0, 0, 0, 0.16))
 		if at.up {
-			// 往上排时钉住下沿：内容短的话卡片贴着按钮，不会浮在半空
 			panel.Bottom(winH - at.y)
 		} else {
 			panel.Top(at.y)
@@ -426,45 +523,13 @@ func (a *app) explainCard(c *ui.Context, pal palette) {
 			}
 			a.explainFoot(c, pal)
 		})
-
-		// 出现和消失都从按钮那一侧滑出来一点点。
-		//
-		// 方向跟着卡片摆哪走：排在下面就从上方落下来，排在上面就从下方
-		// 升上去 —— 位移始终是「从 ✨ 按钮那里出来」，眼睛能顺着这条线
-		// 把卡片和它所属的那段改动连起来。8px 就够了，多了像弹窗。
-		//
-		// 卡片每帧重建，但它在 Overlay 里位置固定，ID 不变，所以起手的
-		// 那一帧能认出来是「新出现的」；窗口大小变化不触发动画（框架
-		// 自己的约定）。
-		//
-		// Position 必须关掉。框架默认三项（位置、尺寸、颜色）全动，而卡片
-		// 的位置每帧都从 ✨ 按钮重新算 —— 滚一下 diff、按钮挪了半屏，卡片
-		// 就会「飘」着追过去：指针按下去时按钮在这儿，松开时它还在半路上，
-		// 这一次点击就落空了。关掉它，滚动时卡片和按钮是钉在一起走的，
-		// 只在出现/消失那一下滑 8px（Enter/Exit 的 Motion 不受这一项管）。
-		//
-		// 尺寸同理：解释是流式吐出来的，卡片高度跟着长，动起来就成了
-		// 每 50ms 一次的抽搐。颜色留着 —— 换主题时卡片跟着一起淡过去。
-		away := float32(8)
-		if at.up {
-			away = -8
-		}
-		panel.Transition(ui.ElementTransition{
-			Duration: cardMotion,
-			Colors:   true, // 只开这一项：不开就等于「三项全开」
-			Enter:    &ui.Motion{Y: away, Opacity: 0},
-			Exit:     &ui.Motion{Y: away, Opacity: 0},
-		})
 	})
 }
 
 // cardPlacement 是卡片该摆哪儿。
 type cardPlacement struct {
-	// x 是左边缘；y 在 up 为假时是上边缘，为真时是下边缘 ——
-	// 贴下沿摆才能保证内容短的时候卡片紧挨着按钮，而不是浮在半空。
 	x, y, maxH float32
-	// up 表示排在 ✨ 按钮上方（下方放不下而且上方更宽敞）。
-	up bool
+	up         bool
 }
 
 // placeCard 算卡片的位置和最大高度：默认排在 ✨ 按钮下方、右边缘和按钮
@@ -487,29 +552,154 @@ func placeCard(anchor ui.Rect, winW, winH, w float32) cardPlacement {
 
 func clamp(v, lo, hi float32) float32 { return min(max(v, lo), hi) }
 
-// explainHead 是卡片顶部：标题、缓存标记、关闭按钮，下面一行是 hunk 头。
+// recordExplainEntry 记录一条解析结果，避免重复并保持历史可追溯。
+func (a *app) recordExplainEntry(text string, cached bool) {
+	if text == "" {
+		return
+	}
+	for i, e := range a.ex.entries {
+		if e.Text == text && e.Question == a.ex.question {
+			a.ex.curIdx = i
+			return
+		}
+	}
+	entry := explainEntry{
+		ID:        fmt.Sprintf("%d", time.Now().UnixNano()),
+		Head:      a.ex.head,
+		Text:      text,
+		Question:  a.ex.question,
+		Cached:    cached,
+		CreatedAt: time.Now(),
+	}
+	a.ex.entries = append(a.ex.entries, entry)
+	a.ex.curIdx = len(a.ex.entries) - 1
+}
+
+// syncCurrentExplainEntry 把当前翻到的卡片数据同步到主显示。
+func (a *app) syncCurrentExplainEntry() {
+	if a.ex.curIdx < 0 || a.ex.curIdx >= len(a.ex.entries) {
+		return
+	}
+	e := a.ex.entries[a.ex.curIdx]
+	a.ex.text = e.Text
+	a.ex.question = e.Question
+	a.ex.cached = e.Cached
+	a.ex.scroll = ui.ScrollState{}
+}
+
+// deleteCurrentExplainEntry 删除当前卡片条目。
+func (a *app) deleteCurrentExplainEntry() {
+	if len(a.ex.entries) == 0 {
+		a.closeExplain()
+		return
+	}
+	if a.ex.curIdx >= 0 && a.ex.curIdx < len(a.ex.entries) {
+		a.ex.entries = append(a.ex.entries[:a.ex.curIdx], a.ex.entries[a.ex.curIdx+1:]...)
+	}
+	if len(a.ex.entries) == 0 {
+		a.closeExplain()
+		return
+	}
+	if a.ex.curIdx >= len(a.ex.entries) {
+		a.ex.curIdx = len(a.ex.entries) - 1
+	}
+	a.syncCurrentExplainEntry()
+}
+
+// explainHead 是卡片顶部：支持拖拽位移、标题、翻页 < 1/3 >、删除某次、收缩折叠与关闭。
 func (a *app) explainHead(c *ui.Context, pal palette) {
-	// 头部和正文靠明度分界，不叠强调色（§5 禁止装饰性染色）：深色下头部
-	// 比卡片低一档，浅色下比卡片灰一档，两种模式里它都是一条「带子」。
 	ui.Column(c).Shrink(0).Padding(10, 12).Gap(4).
 		Background(pal.surface2).
-		// 圆角只给上面两角，和卡片一致：头部贴着卡片顶边，四角都给就会
-		// 把下面两个角也切掉，和正文之间出现两道缺口。
 		Radius(cardRadius, cardRadius, 0, 0).
 		BorderWidth(0, 0, 1, 0).BorderColor(pal.hairline).Children(func() {
 		ui.Row(c).Gap(7).AlignItems(ui.Center).Children(func() {
 			sparkleCluster(c, 15, pal.inkMuted)
-			title := "AI 解释"
+			title := T("AI 解释", "AI Explanation")
 			if a.ex.isSelection {
-				title = "AI 单行解释"
+				title = T("AI 单行解释", "AI Code Explanation")
 			}
 			ui.Text(c, title).FontSize(textBody).FontWeight(weightSemibold).TextColor(pal.ink)
 			if a.ex.cached {
-				// 「缓存」说的是这条解释的来源，不是状态告警 —— 一枚安静的
-				// 规范芯片就够，靠不着强调色。
-				specChip(c, pal, "缓存", ui.Transparent, statusChipH, statusChipText)
+				specChip(c, pal, T("缓存", "Cached"), ui.Transparent, statusChipH, statusChipText)
 			}
 			ui.Spacer(c)
+
+			// 多次解析翻页控制器 < 1/3 >
+			if len(a.ex.entries) > 1 {
+				ui.Row(c).Gap(3).AlignItems(ui.Center).Children(func() {
+					prevBtn := ui.ButtonBase(c).Size(20, 20).Radius(radiusXS).
+						AlignItems(ui.Center).Justify(ui.Center).Cursor(ui.CursorPointer).
+						Tooltip(T("上一条解析", "Previous explanation"))
+					if prevBtn.Hovered() && a.ex.curIdx > 0 {
+						prevBtn.Background(pal.surface3)
+					}
+					fadeColors(prevBtn)
+					prevBtn.Children(func() {
+						col := pal.ink
+						if a.ex.curIdx <= 0 {
+							col = pal.inkTertiary
+						}
+						ui.Text(c, "‹").FontSize(14).TextColor(col)
+					})
+					if prevBtn.Clicked() && a.ex.curIdx > 0 {
+						a.ex.curIdx--
+						a.syncCurrentExplainEntry()
+					}
+
+					ui.Text(c, fmt.Sprintf("%d/%d", a.ex.curIdx+1, len(a.ex.entries))).
+						FontSize(11).Font("monospace").TextColor(pal.inkSubtle)
+
+					nextBtn := ui.ButtonBase(c).Size(20, 20).Radius(radiusXS).
+						AlignItems(ui.Center).Justify(ui.Center).Cursor(ui.CursorPointer).
+						Tooltip(T("下一条解析", "Next explanation"))
+					if nextBtn.Hovered() && a.ex.curIdx < len(a.ex.entries)-1 {
+						nextBtn.Background(pal.surface3)
+					}
+					fadeColors(nextBtn)
+					nextBtn.Children(func() {
+						col := pal.ink
+						if a.ex.curIdx >= len(a.ex.entries)-1 {
+							col = pal.inkTertiary
+						}
+						ui.Text(c, "›").FontSize(14).TextColor(col)
+					})
+					if nextBtn.Clicked() && a.ex.curIdx < len(a.ex.entries)-1 {
+						a.ex.curIdx++
+						a.syncCurrentExplainEntry()
+					}
+				})
+			}
+
+			// 删除单次解析
+			delBtn := ui.ButtonBase(c).Size(20, 20).Radius(radiusXS).
+				AlignItems(ui.Center).Justify(ui.Center).Cursor(ui.CursorPointer).
+				Tooltip(T("删除此条解析", "Delete this explanation"))
+			if delBtn.Hovered() {
+				delBtn.Background(pal.surface3)
+			}
+			fadeColors(delBtn)
+			delBtn.Children(func() {
+				drawIcon(c, iconTrash, 12, pal.inkSubtle)
+			})
+			if delBtn.Clicked() {
+				a.deleteCurrentExplainEntry()
+			}
+
+			// 收缩/折叠按钮
+			collapseBtn := ui.ButtonBase(c).Size(20, 20).Radius(radiusXS).
+				AlignItems(ui.Center).Justify(ui.Center).Cursor(ui.CursorPointer).
+				Tooltip(T("收缩解析窗口", "Collapse explanation"))
+			if collapseBtn.Hovered() {
+				collapseBtn.Background(pal.surface3)
+			}
+			fadeColors(collapseBtn)
+			collapseBtn.Children(func() {
+				drawIcon(c, iconChevronUp, 12, pal.inkSubtle)
+			})
+			if collapseBtn.Clicked() {
+				a.ex.collapsed = true
+			}
+
 			if closeButton(c, pal) {
 				a.closeExplain()
 			}
@@ -517,7 +707,7 @@ func (a *app) explainHead(c *ui.Context, pal palette) {
 		ui.Text(c, a.ex.head).Font("monospace").FontSize(textCaption).
 			SingleLine().TextColor(pal.inkSubtle)
 		if a.ex.question != "" {
-			ui.Text(c, "追问: "+a.ex.question).FontSize(textCaption).
+			ui.Text(c, Tf("追问: %s", "Follow-up: %s", a.ex.question)).FontSize(textCaption).
 				SingleLine().TextColor(pal.inkMuted)
 		}
 	})
@@ -563,22 +753,22 @@ func (a *app) explainText(c *ui.Context, t *ui.Theme, pal palette) {
 			// 别处了（环境变量、供应商控制台）」留的路。两颗都摆出来，
 			// 设置那颗做成主按钮 —— 它才是这个错的正解。
 			if a.ex.fail.Auth {
-				if primaryAction(c, pal, "模型设置…", "", false).Clicked() {
+				if primaryAction(c, pal, T("模型设置…", "Model Settings…"), "", false).Clicked() {
 					a.openSettings()
 				}
 			}
-			if secondaryAction(c, pal, "重试", "", false).Clicked() {
+			if secondaryAction(c, pal, T("重试", "Retry"), "", false).Clicked() {
 				a.retryExplain()
 			}
 		})
 		return
 
 	case a.ex.needKey:
-		ui.Text(c, "还没有配置模型").Bold().FontSize(12)
-		ui.Text(c, "解释代码要接一个模型，填上 API key 就能用了。").
+		ui.Text(c, T("还没有配置模型", "No model configured")).Bold().FontSize(12)
+		ui.Text(c, T("解释代码要接一个模型，填上 API key 就能用了。", "Configure an AI model with an API key to explain code changes.")).
 			FontSize(12).TextColor(t.TextMuted)
 		cardActions(c, func() {
-			if primaryAction(c, pal, "模型设置…", "", false).Clicked() {
+			if primaryAction(c, pal, T("模型设置…", "Model Settings…"), "", false).Clicked() {
 				a.openSettings()
 			}
 		})
@@ -588,15 +778,15 @@ func (a *app) explainText(c *ui.Context, t *ui.Theme, pal palette) {
 		if a.ex.loading {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Spinner(c)
-				msg := "正在读这段改动…"
+				msg := T("正在读这段改动…", "Reading code changes…")
 				if a.ex.isSelection {
-					msg = "正在分析代码…"
+					msg = T("正在分析代码…", "Analyzing code…")
 				}
 				ui.Text(c, msg).FontSize(12).TextColor(t.TextMuted)
 			})
 			return
 		}
-		ui.Text(c, "没有内容").FontSize(12).TextColor(t.TextMuted)
+		ui.Text(c, T("没有内容", "No content")).FontSize(12).TextColor(t.TextMuted)
 		return
 	}
 
@@ -656,12 +846,12 @@ func (a *app) explainPromptBar(c *ui.Context, pal palette) {
 	ui.Row(c).Shrink(0).Padding(6, 12).Gap(6).AlignItems(ui.Center).
 		Background(pal.surface2).
 		BorderWidth(1, 0, 0, 0).BorderColor(pal.hairline).Children(func() {
-		in := ui.TextInput(c, &a.ex.promptInput).Placeholder("输入追问或关注重点…").Grow(1)
+		in := ui.TextInput(c, &a.ex.promptInput).Placeholder(T("输入追问或关注重点…", "Ask follow-up or specify focus…")).Grow(1)
 		if a.ex.focusPrompt {
 			in.Focus()
 			a.ex.focusPrompt = false
 		}
-		btn := secondaryAction(c, pal, "提问", "", false)
+		btn := secondaryAction(c, pal, T("提问", "Ask"), "", false)
 		if (in.Submitted() || btn.Clicked()) && !a.ex.loading {
 			q := strings.TrimSpace(a.ex.promptInput)
 			if q != "" {
@@ -772,13 +962,13 @@ func (a *app) explainFoot(c *ui.Context, pal palette) {
 	ui.Row(c).Shrink(0).Padding(8, 12).Gap(8).AlignItems(ui.Center).
 		BorderWidth(1, 0, 0, 0).BorderColor(pal.hairline).Children(func() {
 		v := viewed
-		ui.Checkbox(c, &v, "已 review")
+		ui.Checkbox(c, &v, T("已 review", "Reviewed"))
 		if v != viewed {
 			a.toggleViewed(*f)
 		}
 		ui.Spacer(c)
 		if a.ex.loading {
-			ui.Text(c, "生成中…").FontSize(textCaption).TextColor(pal.inkSubtle)
+			ui.Text(c, T("生成中…", "Generating…")).FontSize(textCaption).TextColor(pal.inkSubtle)
 		}
 	})
 }

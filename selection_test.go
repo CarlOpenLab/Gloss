@@ -261,3 +261,107 @@ func TestSelectionExplainRetry(t *testing.T) {
 		t.Errorf("重试后内容未更新：%q", a.ex.text)
 	}
 }
+
+// 测试 Diff 视图多行 Range 选区与 Notion 悬浮工具栏
+func TestRangeSelectionAndNotionToolbar(t *testing.T) {
+	srv, _ := fakeLLM(t, "选区多行解释结果")
+	a := richApp(t)
+	withProvider(t, a, srv)
+	tt := ui.NewTester(a.view, 1280, 860)
+
+	fi, _ := explainFixtures(t, a)
+	a.rebuildRows()
+	tt.Frame()
+
+	// 1. 测试 updateDiffRangeSel 选定多行
+	a.updateDiffRangeSel(fi, 10, 13, ui.Rect{X: 100, Y: 200, W: 600, H: 80})
+	tt.Frame()
+
+	if !a.diffSel.active {
+		t.Fatal("diffSel 应该处于 active 状态")
+	}
+	if a.diffSel.startLine != 10 || a.diffSel.endLine != 13 {
+		t.Fatalf("选区行号应为 10..13，实际为 %d..%d", a.diffSel.startLine, a.diffSel.endLine)
+	}
+
+	// 2. 检查 Notion 浮动工具栏是否渲染
+	if !tt.HasText("4 行 (L10-L13)") {
+		t.Errorf("Notion 工具栏应显示行数信息，实际文本: %q", tt.Texts())
+	}
+	if !tt.HasText("复制") || !tt.HasText("AI 解析") {
+		t.Errorf("Notion 工具栏应包含复制和 AI 解析按钮")
+	}
+
+	// 3. 点击「复制」
+	if err := tt.Click("复制所选代码"); err != nil {
+		t.Fatalf("点击复制按钮失败: %v", err)
+	}
+	tt.Frame()
+	if a.diffSel.active {
+		t.Error("点击复制后选区应关闭")
+	}
+	if a.opNote != "已复制 4 行代码到剪贴板" {
+		t.Errorf("opNote 应为简洁的行数提示，实际为 %q", a.opNote)
+	}
+	if strings.Contains(a.opNote, "some code here") {
+		t.Errorf("opNote 绝不应把被复制的代码内容弹出来: %q", a.opNote)
+	}
+
+	// 4. 再次选定多行并点击「AI 解析」
+	a.updateDiffRangeSel(fi, 5, 8, ui.Rect{X: 100, Y: 100, W: 600, H: 80})
+	tt.Frame()
+	if err := tt.Click("AI 解析所选代码"); err != nil {
+		t.Fatalf("点击 AI 解析按钮失败: %v", err)
+	}
+	settle(t, a)
+	tt.Frame()
+
+	if !a.explainOpen() {
+		t.Fatal("点击 AI 解析后解释卡片应打开")
+	}
+	if !a.ex.isSelection {
+		t.Fatal("解释卡片应标记为 isSelection")
+	}
+}
+
+// 测试英文模式下「Explain」按钮文案适配，以及单行点击不弹浮层、拖拽选区才弹浮层
+func TestEnglishExplainButtonsAndSingleClickNoToolbar(t *testing.T) {
+	srv, _ := fakeLLM(t, "English explanation")
+	a := richApp(t)
+	withProvider(t, a, srv)
+	a.setLocale("en")
+	defer a.setLocale("zh")
+	tt := ui.NewTester(a.view, 1280, 860)
+
+	fi, _ := explainFixtures(t, a)
+	a.rebuildRows()
+	tt.Frame()
+
+	// 1. 验证英文模式下按钮显示 "Explain" 而非 "解释"
+	if !tt.HasText("Explain") {
+		t.Errorf("英文模式下按钮应显示 'Explain'，实际文本: %q", tt.Texts())
+	}
+	if tt.HasText("解释") {
+		t.Errorf("英文模式下不应显示中文 '解释'")
+	}
+
+	// 2. 模拟单击单行（无拖拽、无多行选区），选区浮层不应该弹出
+	a.updateDiffRangeSel(fi, 3, 3, ui.Rect{X: 100, Y: 100, W: 600, H: 20})
+	a.diffSel.draggedRange = false
+	tt.Frame()
+
+	if tt.HasText("Copy") || tt.HasText("复制") {
+		t.Errorf("单行点击时不应弹出 Notion 选区浮层")
+	}
+
+	// 3. 模拟拖拽多行选区，选区浮层应该正常弹出
+	a.updateDiffRangeSel(fi, 3, 6, ui.Rect{X: 100, Y: 100, W: 600, H: 80})
+	tt.Frame()
+
+	if !tt.HasText("4 lines (L3-L6)") {
+		t.Errorf("多行选区应显示英文行数信息: %q", tt.Texts())
+	}
+	if !tt.HasText("Copy") {
+		t.Errorf("多行选区应显示英文 Copy 按钮: %q", tt.Texts())
+	}
+}

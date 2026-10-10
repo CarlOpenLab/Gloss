@@ -143,7 +143,6 @@ func TestAccentIsAchromatic(t *testing.T) {
 			{"Focus", th.Focus},
 			{"Selection", th.Selection},
 			{"pal.selection", pal.selection},
-			{"pal.lanes[0]（主干）", pal.lanes[0]},
 		} {
 			if spread(tc.c) > 16 {
 				t.Errorf("dark=%v: %s 带色相（RGB 极差 %d，彩度 %.2f）—— 强调色只有黑白两极",

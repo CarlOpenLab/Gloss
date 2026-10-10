@@ -114,6 +114,7 @@ func buildAppMenu(a *app) *mygo.Menu {
 
 	view := []*mygo.MenuItem{
 		m.tabDiff, m.tabHist,
+		a.menuCmd(T("切换终端 / Git 面板", "Toggle Terminal / Git Panel"), "CmdOrCtrl+J", a.toggleViewMode),
 		mygo.Separator(),
 		m.unified, m.split,
 		mygo.Separator(),
@@ -140,8 +141,13 @@ func buildAppMenu(a *app) *mygo.Menu {
 	menu := mygo.NewMenu([]*mygo.MenuItem{
 		{Label: appName, Submenu: a.appSubmenu()},
 		{Label: T("文件", "File"), Submenu: []*mygo.MenuItem{
+			a.menuCmd(T("新建项目标签页…", "New Project Tab…"), "CmdOrCtrl+T", a.chooseFolder),
 			a.menuCmd(T("打开仓库…", "Open Repository…"), "CmdOrCtrl+O", a.chooseFolder),
 			a.recentReposMenuItem(),
+			mygo.Separator(),
+			a.menuCmd(T("关闭标签页", "Close Tab"), "CmdOrCtrl+W", func() { a.closeTab(a.activeTab) }),
+			a.menuCmd(T("上一个标签页", "Previous Tab"), "CmdOrCtrl+Shift+[", a.prevTab),
+			a.menuCmd(T("下一个标签页", "Next Tab"), "CmdOrCtrl+Shift+]", a.nextTab),
 			mygo.Separator(),
 			m.commit,
 			m.stageAll,
@@ -152,7 +158,7 @@ func buildAppMenu(a *app) *mygo.Menu {
 			a.menuCmd(T("对比分支代码差异…", "Compare Branches…"), "CmdOrCtrl+Shift+D", func() { a.openCompareDialog("") }),
 			m.prList,
 			mygo.Separator(),
-			{Role: mygo.RoleClose, Label: T("关闭窗口", "Close Window")},
+			{Role: mygo.RoleClose, Accelerator: "CmdOrCtrl+Shift+W", Label: T("关闭窗口", "Close Window")},
 		}},
 		{Label: T("编辑", "Edit"), Submenu: editSubmenu()},
 		// 远程单开一层：这三条命令和「文件」里那些（打开、提交、打标签）不

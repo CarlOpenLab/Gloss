@@ -30,6 +30,11 @@ type command struct {
 // 所以它每次都要重新算。
 func (a *app) commands() []command {
 	cmds := []command{
+		{T("切换终端 / Git 面板", "Toggle Terminal / Git Panel"), "Ctrl+` / ⌘J", func(a *app) { a.toggleViewMode() }},
+		{T("新建项目标签页…", "New Project Tab…"), "⌘T", func(a *app) { a.chooseFolder() }},
+		{T("关闭标签页", "Close Tab"), "⌘W", func(a *app) { a.closeTab(a.activeTab) }},
+		{T("上一个项目标签页", "Previous Project Tab"), "⌘⇧[", func(a *app) { a.prevTab() }},
+		{T("下一个项目标签页", "Next Project Tab"), "⌘⇧]", func(a *app) { a.nextTab() }},
 		{T("打开仓库…", "Open Repository…"), "⌘O", func(a *app) { a.chooseFolder() }},
 		{T("刷新", "Refresh"), "⌘R", func(a *app) { a.reload() }},
 		{T("提交", "Commit"), "⌘⏎", func(a *app) { a.doCommit() }},

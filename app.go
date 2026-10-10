@@ -139,8 +139,11 @@ type app struct {
 	hunkCur string
 
 	// —— 视图 ——
-	split    bool    // true = split（左右对照），false = unified
-	codeSize float32 // 代码字号；0 表示用默认值
+	tabs      []*repoTab // 打开的多项目标签页
+	activeTab int        // 当前激活的标签页下标
+	viewMode  int        // 0 = Git GUI 面板, 1 = 内置终端
+	split     bool       // true = split（左右对照），false = unified
+	codeSize  float32    // 代码字号；0 表示用默认值
 	// menu 是菜单栏里那几个要跟着状态走的项目，见 menu.go。测试里没有
 	// 菜单，它是 nil —— syncMenu 因此什么都不做。
 	menu *appMenu
@@ -220,10 +223,12 @@ type app struct {
 	// hist 是提交列表本身的状态，histDiff 是选中那个提交的 diff 的状态。
 	// 必须分开：列表和 diff 是两路异步加载，共用一个的话点一个提交会让
 	// 整个列表闪成「正在读提交…」。
-	hist        loadState
-	histErr     string
-	histDiff    loadState
-	histDiffErr string
+	hist            loadState
+	histErr         string
+	histHasMore     bool
+	histLoadingMore bool
+	histDiff        loadState
+	histDiffErr     string
 
 	// —— AI 解释 ——
 	store *store.Store
@@ -247,6 +252,18 @@ type app struct {
 	editThemeMode string
 	editLocale    string
 	editAppIcon   string
+
+	// 自定义提示词配置
+	editCommitPrompt  string
+	editBranchPrompt  string
+	editExplainPrompt string
+
+	// 模型设置搜索过滤状态
+	providerSearch string
+	modelSearch    string
+
+	// 代码 diff 选区与 Notion 风格悬浮窗口状态
+	diffSel diffRangeSel
 
 	// —— 顶部弹窗（HeroUI 下拉）——
 	repoDropdownOpen   bool
@@ -292,6 +309,7 @@ type app struct {
 	// *ui.Context（WriteClipboard 是它的方法），先记在这里，view 开头
 	// 写进剪贴板并清掉 —— 一趟只有一帧的延迟。
 	copyText string
+	copyNote string
 
 	// confirm 是确认对话框的状态（confirmdialog.go）。
 	confirm confirmState
@@ -410,6 +428,31 @@ func (a *app) attachStore(s *store.Store) {
 	}
 	a.editIdx = cfg.Active
 	a.modelName = s.Provider().EffectiveModel()
+
+	// 恢复已打开的多项目标签页
+	a.tabs = nil
+	for _, p := range s.State().OpenRepos {
+		if p != "" {
+			a.tabs = append(a.tabs, &repoTab{
+				path:     p,
+				name:     filepath.Base(p),
+				viewMode: viewModeGit,
+				state:    loadIdle,
+			})
+		}
+	}
+	if len(a.tabs) == 0 && s.State().LastRepo != "" {
+		p := s.State().LastRepo
+		a.tabs = append(a.tabs, &repoTab{
+			path:     p,
+			name:     filepath.Base(p),
+			viewMode: viewModeGit,
+			state:    loadIdle,
+		})
+	}
+	if len(a.tabs) > 0 {
+		a.activeTab = 0
+	}
 }
 
 // persist 把设置、状态和缓存落盘。写文件不占主线程，扔到后台去。
@@ -530,8 +573,17 @@ func (a *app) view(c *ui.Context) {
 	// 放在最前面：这一帧的 Toast 就能把它报出来。
 	if a.copyText != "" {
 		c.WriteClipboard(a.copyText)
-		a.opNote = Tf("已复制 %s", "Copied %s", a.copyText)
+		note := a.copyNote
+		if note == "" {
+			if strings.Contains(a.copyText, "\n") || len(a.copyText) > 60 {
+				note = T("已复制到剪贴板", "Copied to clipboard")
+			} else {
+				note = Tf("已复制 %s", "Copied %s", a.copyText)
+			}
+		}
+		a.opNote = note
 		a.copyText = ""
+		a.copyNote = ""
 	}
 
 	// 快捷键要在最前面处理：c.Shortcut 是「注册即认领」的，注册得越早
@@ -546,13 +598,17 @@ func (a *app) view(c *ui.Context) {
 	// 只有主区不透明，保证代码区域的对比度稳定、不受壁纸颜色影响。
 	c.Root().Background(ui.Transparent)
 
-	ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
-		if a.sidebarOn {
-			a.sidebar(c, pal)
-		}
-		ui.Column(c).Grow(1).MinWidth(0).Background(pal.appBg).Children(func() {
-			a.toolbar(c, pal)
-			a.mainArea(c, pal)
+	ui.Column(c).Fill().AlignItems(ui.Stretch).Children(func() {
+		a.projectTabBar(c, pal)
+
+		ui.Row(c).Grow(1).FillWidth().MinHeight(0).AlignItems(ui.Stretch).Children(func() {
+			if a.sidebarOn {
+				a.sidebar(c, pal)
+			}
+			ui.Column(c).Grow(1).MinWidth(0).Background(pal.appBg).Children(func() {
+				a.toolbar(c, pal)
+				a.mainArea(c, pal)
+			})
 		})
 	})
 	a.paletteDialog(c, pal)
@@ -674,38 +730,49 @@ func shortPath(c *ui.Context, path string, width float32) string {
 // toolbarHeight 是工具栏那条带子的高度。toolbar 用的是同一个公式 ——
 // 分成两处算的话，主区的高度就会和实际差几个像素，分隔条的夹逼跟着错。
 func (a *app) toolbarHeight(c *ui.Context) float32 {
-	return max(c.TitleBar().Height, 52)
+	return 46
 }
 
-// toolbar 是自绘的标题栏：窗口用 TitleBarHidden，标题栏由 view 画出来，
-// 红绿灯浮在上面。高度取 max(bar.Height, 52)：窗口那边用 TrafficLightPosition
-// 把红绿灯摆在 52 高的带子正中间，算出来的 bar.Height 正好也是 52，于是
-// 红绿灯和这里的按钮落在同一条水平线上。
-//
-// 水平方向要不要让位，取决于侧栏开没开：侧栏在的时候它顶在最左边，红绿灯
-// 落在它头上（sidebar 里留了位），工具栏左边就按普通间距来；侧栏收起来了
-// 工具栏才直接贴着窗口左边缘，这时得把 bar.Left 让出来。
+// toolbar 是二级工具栏：提供 [Git 面板 | 终端] 模式切换及当前模式对应的操作。
 func (a *app) toolbar(c *ui.Context, pal palette) {
 	t := c.Theme()
 	bar := c.TitleBar()
 
 	padLeft := float32(12)
-	if !a.sidebarOn {
-		padLeft = bar.Left + 12
-	}
 
-	// 整条带子交给 ui.Toolbar 管：窗口窄到摆不下时，它会把放不下的控件
-	// 按顺序收进末尾的「»」菜单里，而不是把这一行挤到折行或裁掉 ——
-	// 窗口最小宽度 720，收窄时右边那几颗按钮本来就没地方摆。它还给这一行
-	// 一个整体的键盘焦点环和无障碍角色。
-	//
-	// 是「整条」而不是「右边那一簇」：Toolbar 嵌在别人的弹性行里时，
-	// 它自己那趟测量会把它算窄（它的子元素在上一趟布局里被标成绝对定位，
-	// 第二次测量就把它们跳过了），于是明明摆得下也冒出「»」。
 	ui.Toolbar(c, func() {
-		// 标题块给个宽度上限：仓库路径可以很长，不封顶的话它会把右边
-		// 那几颗工具按钮顶到「»」菜单里去 —— 路径是「我在看哪儿」的
-		// 补充信息，按钮才是要点的东西，谁让位不该反过来。
+		// 视图模式切换：Git 面板 ⟷ 内置终端
+		vm := a.viewMode
+		toolbarSegmentedIcons(c, pal, &vm, false,
+			segmentedIconItem{label: "Git", tip: T("Git 可视化面板 ⌘1 / Ctrl+~", "Git GUI Panel ⌘1 / Ctrl+~"), icon: iconFileDiff},
+			segmentedIconItem{label: "Terminal", tip: T("内置终端 ⌘2 / Ctrl+~", "Built-in Terminal ⌘2 / Ctrl+~"), icon: iconTerminal},
+		)
+		if vm != a.viewMode {
+			a.setViewMode(vm)
+		}
+
+		toolbarDivider(c, pal)
+
+		if a.viewMode == viewModeTerm {
+			if a.repoPath != "" {
+				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+					drawIcon(c, iconTerminal, 12, pal.inkSubtle)
+					ui.Text(c, a.repoPath).FontSize(textCaption).TextColor(pal.inkMuted).SingleLine()
+				})
+			}
+			ui.Spacer(c)
+			if toolIconButton(c, pal, T("清屏", "Clear"), T("清空终端屏幕", "Clear Terminal Screen"), false, false, drawTrashIcon) {
+				a.clearCurrentTerminal()
+			}
+			if toolIconButton(c, pal, T("重启", "Restart"), T("重启终端 Shell 进程", "Restart Terminal Shell Process"), false, false, drawZapIcon) {
+				a.restartCurrentTerminal()
+			}
+			if toolIconButton(c, pal, T("打开仓库…", "Open…"), T("打开本地 Git 仓库 ⌘O", "Open Local Git Repository ⌘O"), false, false, drawFolderIcon) {
+				a.chooseFolder()
+			}
+			return
+		}
+
 		// 侧栏未开启时在工具栏左侧展示仓库名下拉与分支；侧栏开启时仓库名已位于侧栏顶部，工具栏直接展示当前分支
 		if !a.sidebarOn {
 			a.repoHeader(c, t, pal)
@@ -766,9 +833,10 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 		if toolIconButton(c, pal, T("打开仓库…", "Open…"), T("打开本地 Git 仓库 ⌘O", "Open Local Git Repository ⌘O"), false, false, drawFolderIcon) {
 			a.chooseFolder()
 		}
-		if toolIconButton(c, pal, T("模型设置…", "Settings…"), T("偏好与设置 ⌘,", "Preferences & Settings ⌘,"), false, false, drawSettingsIcon) {
-			a.openSettings()
-		}
+		// 设置图标不在这里 —— 它已经在上方标签栏的右上角（projectTabBar）。
+		// 两处同时摆一枚一模一样的齿轮、相隔 48px，看着像画重了；而且终端
+		// 模式下这条工具栏右侧换成了清屏 / 重启 / 打开，设置只会在标签栏那
+		// 一枚上固定出现。⌘, 两条路都通。
 	}).Height(a.toolbarHeight(c)).Shrink(0).
 		Padding(0, bar.Right+12, 0, padLeft).
 		Gap(10).
@@ -1166,6 +1234,10 @@ func (a *app) branchQuickMenu(m *ui.Menu) {
 // 状态条排在两个 tab 之前：合并/变基卡着的时候，不管在看改动还是历史，
 // 「继续 / 跳过 / 中止」都得够得着 —— 它说的是仓库的状态，不是某个 tab 的。
 func (a *app) mainArea(c *ui.Context, pal palette) {
+	if a.viewMode == viewModeTerm {
+		a.terminalArea(c, pal)
+		return
+	}
 	ui.Column(c).Grow(1).FillWidth().MinHeight(0).Children(func() {
 		a.opBanner(c, pal)
 		a.pendingBar(c, pal)
@@ -1278,12 +1350,20 @@ func (a *app) chooseFolder() {
 		if err != nil || len(paths) == 0 {
 			return // 用户取消不算错误
 		}
-		a.dispatch(func() { a.openRepo(paths[0]) })
+		a.dispatch(func() { a.openInNewTab(paths[0]) })
 	})
 }
 
 // openRepo 在后台读仓库，读完回主线程写入状态。
 func (a *app) openRepo(path string) {
+	if len(a.tabs) == 0 {
+		a.tabs = []*repoTab{{path: filepath.Clean(path), name: filepath.Base(path), state: loadLoading}}
+		a.activeTab = 0
+	} else if cur := a.currentTab(); cur != nil {
+		cur.path = filepath.Clean(path)
+		cur.name = filepath.Base(path)
+	}
+
 	a.repoSeq++
 	seq := a.repoSeq
 	a.state = loadLoading
@@ -1517,7 +1597,14 @@ func (a *app) applyModel(m *gitrepo.Model) {
 
 	// 记住这个仓库，下次启动直接打开
 	a.store.SetLastRepo(a.repoPath)
-	a.persist()
+	if cur := a.currentTab(); cur != nil {
+		cur.path = a.repoPath
+		cur.name = a.repoName
+		cur.branch = a.branch
+		cur.detached = a.detached
+		cur.dirtyCount = len(m.Files)
+	}
+	a.persistOpenRepos()
 
 	// 正在看历史时别把主区切回工作区 —— 用户下一次刷新可能只是想
 	// 更新一下提交列表。

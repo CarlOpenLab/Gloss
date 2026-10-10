@@ -31,6 +31,21 @@ func (a *app) handleKeys(c *ui.Context) {
 	if c.Shortcut(ui.Cmd, ui.KeyO) {
 		a.chooseFolder()
 	}
+	if c.Shortcut(ui.Cmd, ui.KeyT) {
+		a.chooseFolder()
+	}
+	if c.Shortcut(ui.Cmd, ui.KeyW) {
+		a.closeTab(a.activeTab)
+	}
+	if c.Shortcut(ui.Ctrl, ui.KeyBackquote) || c.Shortcut(ui.Cmd, ui.KeyJ) {
+		a.toggleViewMode()
+	}
+	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyBracketLeft) || c.Shortcut(ui.Cmd|ui.Alt, ui.KeyLeft) {
+		a.prevTab()
+	}
+	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyBracketRight) || c.Shortcut(ui.Cmd|ui.Alt, ui.KeyRight) {
+		a.nextTab()
+	}
 	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyA) {
 		if a.tab == 0 && a.repoReady() && a.op == gitrepo.OpNone {
 			if a.unstagedCount() > 0 {
@@ -50,13 +65,25 @@ func (a *app) handleKeys(c *ui.Context) {
 		a.focusFilter = true
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyK) {
-		a.openPalette()
+		if a.viewMode == viewModeTerm {
+			a.clearCurrentTerminal()
+		} else {
+			a.openPalette()
+		}
 	}
 	if c.Shortcut(ui.Cmd, ui.Key1) {
-		a.setTab(0)
+		if a.viewMode == viewModeGit {
+			a.setTab(0)
+		} else {
+			a.setViewMode(viewModeGit)
+		}
 	}
 	if c.Shortcut(ui.Cmd, ui.Key2) {
-		a.setTab(1)
+		if a.viewMode == viewModeGit {
+			a.setTab(1)
+		} else {
+			a.setViewMode(viewModeTerm)
+		}
 	}
 	// 字号从「当前生效的字号」上加减，而不是从 a.codeSize 上 ——
 	// 后者 0 表示「用默认值」，直接 +1 会被夹到下限，第一次按就跳到底。

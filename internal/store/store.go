@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -49,6 +50,36 @@ type Config struct {
 	Locale string `json:"locale,omitempty"`
 	// AppIcon 是应用图标风格："black"（纯黑曜石）或 "white"（纯白极简）。
 	AppIcon string `json:"appIcon,omitempty"`
+	// CommitPrompt 是自定义 Git 提交信息提示词，留空使用内置预设。
+	CommitPrompt string `json:"commitPrompt,omitempty"`
+	// BranchPrompt 是自定义 Git 分支名生成提示词，留空使用内置预设。
+	BranchPrompt string `json:"branchPrompt,omitempty"`
+	// ExplainPrompt 是自定义 AI 代码解析提示词，留空使用内置预设。
+	ExplainPrompt string `json:"explainPrompt,omitempty"`
+}
+
+// EffectiveCommitPrompt 返回生效的 Git 提交信息生成系统提示词。
+func (c Config) EffectiveCommitPrompt(preset string) string {
+	if s := strings.TrimSpace(c.CommitPrompt); s != "" {
+		return s
+	}
+	return preset
+}
+
+// EffectiveBranchPrompt 返回生效的 Git 分支名生成系统提示词。
+func (c Config) EffectiveBranchPrompt(preset string) string {
+	if s := strings.TrimSpace(c.BranchPrompt); s != "" {
+		return s
+	}
+	return preset
+}
+
+// EffectiveExplainPrompt 返回生效的 AI 代码解释系统提示词。
+func (c Config) EffectiveExplainPrompt(preset string) string {
+	if s := strings.TrimSpace(c.ExplainPrompt); s != "" {
+		return s
+	}
+	return preset
 }
 
 // Provider 是当前选中的供应商配置。没有配置任何供应商时返回 nil，
@@ -67,8 +98,9 @@ func (c Config) Provider() *llm.Provider {
 
 // State 是跟着仓库走的界面状态。
 type State struct {
-	LastRepo    string            `json:"lastRepo,omitempty"`
-	RecentRepos []string          `json:"recentRepos,omitempty"`
+	LastRepo    string   `json:"lastRepo,omitempty"`
+	RecentRepos []string `json:"recentRepos,omitempty"`
+	OpenRepos   []string `json:"openRepos,omitempty"`
 	// Viewed 是「已 review」标记：文件路径 -> 当时的内容指纹。
 	Viewed map[string]string `json:"viewed,omitempty"`
 	// Drafts 是各仓库的提交信息草稿：仓库根路径 -> 还没提交出去的消息。
@@ -217,6 +249,22 @@ func (s *Store) SetLastRepo(path string) {
 		return
 	}
 	s.AddRecentRepo(path)
+}
+
+// SetOpenRepos 记住当前打开的多个项目仓库路径列表。
+func (s *Store) SetOpenRepos(paths []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.st.OpenRepos = slicesClone(paths)
+}
+
+func slicesClone(s []string) []string {
+	if s == nil {
+		return nil
+	}
+	c := make([]string, len(s))
+	copy(c, s)
+	return c
 }
 
 // Lookup 取一条解释缓存。

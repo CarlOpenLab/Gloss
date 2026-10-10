@@ -273,12 +273,10 @@ func paletteFor(t *ui.Theme) palette {
 			sideBg:       ui.Hex("#08090a"), // 介于 Canvas 与 Surface 1 之间
 			ref:          ui.Hex("#d0d6e0"), // 中性 Ink Muted
 			viewed:       ui.Hex("#27a644"),
-			// 拓扑图莫兰迪/精密仪器 8 色谱系（明度与彩度均衡）：
-			// 0 号留给主干，取中性 Ink —— 主线是黑白主调里最亮的一条，
-			// 侧栏「当前分支」那颗点、提交徽章上的本地分支点也都读它。
-			// 彩色只落在其余 7 条支线上，且不含紫。
+			// 拓扑图精密仪器 8 色谱系（明度与彩度均衡）：
+			// 0 号为主干，多颜色色彩方案，其余 7 条为支线，不含紫。
 			lanes: [8]ui.Color{
-				ui.Hex("#e6e6e6"), // 主干/HEAD: 中性 Ink
+				ui.Hex("#58a6ff"), // 主干/HEAD: 经典亮蓝
 				ui.Hex("#3eb489"), // 鼠尾草绿
 				ui.Hex("#e09f3e"), // 暖琥珀
 				ui.Hex("#4c86e8"), // 钢青蓝
@@ -326,7 +324,7 @@ func paletteFor(t *ui.Theme) palette {
 		ref:              ui.Hex("#4b535d"),
 		viewed:           ui.Hex("#27a644"),
 		lanes: [8]ui.Color{
-			ui.Hex("#0f1115"), // 主干/HEAD: 中性 Ink（浅色下是近黑）
+			ui.Hex("#0969da"), // 主干/HEAD: 经典亮蓝
 			ui.Hex("#2d9d74"),
 			ui.Hex("#c9822b"),
 			ui.Hex("#2f6fd0"),

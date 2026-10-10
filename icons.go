@@ -47,9 +47,13 @@ var (
 	// 减号 / 部分勾选（minus）
 	iconMinus = lucide(`<path d="M5 12h14"/>`)
 
-	// 折叠箭头（chevron-right / chevron-down）
+	// 折叠箭头（chevron-right / chevron-down / chevron-up）
 	iconChevronRight = lucide(`<path d="m9 18 6-6-6-6"/>`)
 	iconChevronDown  = lucide(`<path d="m6 9 6 6 6-6"/>`)
+	iconChevronUp    = lucide(`<path d="m18 15-6-6-6 6"/>`)
+
+	// 复制（copy）
+	iconCopy = lucide(`<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>`)
 
 	// 视图切换（columns-2 / rows-3）
 	iconSplit   = lucide(`<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M12 3v18"/>`)
@@ -93,6 +97,12 @@ var (
 
 	// 关闭/清空（x）
 	iconX = lucide(`<path d="M18 6 6 18"/><path d="m6 6 12 12"/>`)
+
+	// 终端（terminal）
+	iconTerminal = lucide(`<polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>`)
+
+	// 加号 / 新建（plus）
+	iconPlus = lucide(`<path d="M5 12h14"/><path d="M12 5v14"/>`)
 
 	// 改动 / 工作区文件（file-diff）
 	iconFileDiff = lucide(`<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M9 15h6"/><path d="M12 12v6"/>`)

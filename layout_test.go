@@ -594,3 +594,70 @@ func TestCleanRepoReloadDoesNotFlickerEmptyMessage(t *testing.T) {
 		t.Errorf("已有仓库刷新时不应在主区居中闪现「正在读取仓库…」：%q", tt.Texts())
 	}
 }
+
+// 文件栏栏头在「部分暂存」（既有已暂存又有未暂存）时不该折行。
+//
+// 这条曾经是坏的：栏头把勾选框、文件数、两颗文字药丸和一组增删总数挤在
+// 300px 里，半暂存时四样一起出现，摆不下就各自折成两行，整条栏头看着像
+// 碎了。现在栏头只留勾选框与文件数，多余的都去掉了。
+func TestFileHeaderNoWrapWhenHalfStaged(t *testing.T) {
+	a := richApp(t)
+	runGit(t, a.repoPath, "add", "README.md")
+	a.reload()
+	settle(t, a)
+
+	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+	tt.Frame()
+	tt.SetTitleBar(realTitleBar)
+	tt.Frame()
+
+	box, ok := tt.Find(strconv.Itoa(len(a.files)) + " 个文件")
+	if !ok {
+		t.Fatalf("找不到文件栏头：%q", tt.Texts())
+	}
+	// 单行 11px 的字高在 13 上下；折成两行会到 26 往上。
+	if box.H > 20 {
+		t.Errorf("部分暂存时文件栏头折行了：高 %.0f", box.H)
+	}
+}
+
+// 增删总数只在栏脚「总计」里报一次。曾经栏头也摆一份，两处相隔几十像素
+// 报同一个数字 —— 和「几个文件」是同一条规则。
+func TestFileTotalsReportedOnce(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+	tt.Frame()
+	tt.SetTitleBar(realTitleBar)
+	tt.Frame()
+
+	add := "+" + strconv.Itoa(a.totalAdd())
+	if n := countText(tt.Texts(), add); n != 1 {
+		t.Errorf("「%s」该只在栏脚报一次，实际 %d 次：%q", add, n, tt.Texts())
+	}
+}
+
+// 窄窗口下提交栏底部的动作按钮不能被顶出窗口右边。
+//
+// 主区放不下「状态 + 预检 + AI 生成 + 提交」一行时，提交栏要折成两行，
+// 而不是让提交按钮跑到窗口外面去 —— 那是用户唯一必须够得着的一颗按钮。
+func TestCommitBarKeepsActionsWhenNarrow(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 720, 620)
+	still(tt)
+	tt.Frame()
+	tt.SetTitleBar(realTitleBar)
+	tt.Frame()
+
+	btn, ok := tt.Find("提交")
+	if !ok {
+		t.Fatalf("窄窗口下找不到提交按钮：%q", tt.Texts())
+	}
+	if btn.X+btn.W > 720+1 {
+		t.Errorf("提交按钮右边缘 x=%.0f 出了 720 的窗口", btn.X+btn.W)
+	}
+	if btn.Y+btn.H > 620+1 {
+		t.Errorf("提交按钮下边缘 y=%.0f 出了 620 的窗口", btn.Y+btn.H)
+	}
+}

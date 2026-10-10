@@ -173,9 +173,9 @@ func hunkButton(c *ui.Context, pal palette, label, tip string, on bool, content 
 //
 // 卡片开着的时候，按钮自己就是「哪一段在讲」的指示灯（on 时填成强调色）。
 func explainButton(c *ui.Context, pal palette, on bool) *ui.Element {
-	return hunkButton(c, pal, "解释", "让 AI 讲讲这段改了什么", on, func(fg ui.Color) {
+	return hunkButton(c, pal, T("解释", "Explain"), T("让 AI 讲讲这段改了什么", "Ask AI to explain this change"), on, func(fg ui.Color) {
 		sparkleIcon(c, sparkleSize, fg)
-		ui.Text(c, "解释").FontSize(11).SingleLine().TextColor(fg)
+		ui.Text(c, T("解释", "Explain")).FontSize(11).SingleLine().TextColor(fg)
 	})
 }
 
@@ -187,7 +187,7 @@ func lineExplainButton(c *ui.Context, pal palette, on bool) *ui.Element {
 	t := c.Theme()
 	btn := ui.ButtonBase(c).Height(18).Shrink(0).Radius(radiusXS).
 		Padding(0, 5).Gap(3).AlignItems(ui.Center).Margin(0, 6, 0, 0).
-		Cursor(ui.CursorPointer).Label("AI 解释这一行").Tooltip("让 AI 解释这一行代码")
+		Cursor(ui.CursorPointer).Label(T("AI 解释这一行", "Explain this line with AI")).Tooltip(T("让 AI 解释这一行代码", "Ask AI to explain this line of code"))
 
 	hovered := btn.Hovered()
 	var bg, border, fg ui.Color
@@ -204,7 +204,7 @@ func lineExplainButton(c *ui.Context, pal palette, on bool) *ui.Element {
 
 	btn.Children(func() {
 		sparkleIcon(c, 11, fg)
-		ui.Text(c, "解释").FontSize(10).SingleLine().TextColor(fg)
+		ui.Text(c, T("解释", "Explain")).FontSize(10).SingleLine().TextColor(fg)
 	})
 	return btn
 }
@@ -215,9 +215,9 @@ func lineExplainButton(c *ui.Context, pal palette, on bool) *ui.Element {
 // 可见的字只有「暂存」两个字，而 Label 写成「暂存这一段」—— 无障碍名字和
 // 测试找它的凭据都得说清「这一段的」，屏幕上的字则要短。
 func stageHunkButton(c *ui.Context, pal palette, staged, lock bool) *ui.Element {
-	label, text, tip := "暂存这一段", "暂存", "把这一段改动放进暂存区"
+	label, text, tip := T("暂存这一段", "Stage hunk"), T("暂存", "Stage"), T("把这一段改动放进暂存区", "Stage this hunk in index")
 	if staged {
-		label, text, tip = "取消暂存这一段", "取消暂存", "把这一段改动移出暂存区"
+		label, text, tip = T("取消暂存这一段", "Unstage hunk"), T("取消暂存", "Unstage"), T("把这一段改动移出暂存区", "Unstage this hunk from index")
 	}
 	btn := hunkButton(c, pal, label, tip, false, func(fg ui.Color) {
 		ui.Text(c, text).FontSize(11).SingleLine().TextColor(fg)
@@ -508,6 +508,16 @@ func drawSettingsIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
 // drawFolderIcon 画「打开仓库」（Lucide folder）。
 func drawFolderIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
 	p.Icon(iconFolder, r, col)
+}
+
+// drawTrashIcon 画「清除 / 垃圾桶」（Lucide trash-2）。
+func drawTrashIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
+	p.Icon(iconTrash, r, col)
+}
+
+// drawZapIcon 画「闪电 / 重启」（Lucide zap）。
+func drawZapIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
+	p.Icon(iconZap, r, col)
 }
 
 // xButton 画一个方形叉号按钮，返回这一帧有没有被点中。
