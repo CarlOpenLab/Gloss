@@ -209,3 +209,4 @@ internal/
 - [ ] GitHub PR integration: Review PR diffs and publish AI explanations as comments
 - [ ] Pre-flight risk scan: Full-diff scan highlighting potential vulnerabilities
 - [ ] Single-line explanation / selection-based query
+- [ ] Free cross-line text selection in a diff: render each hunk as one multi-line selectable text (chunk long hunks by N lines), with native drag-select and ⌘C
