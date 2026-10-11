@@ -1,9 +1,11 @@
 package main
 
 import (
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -32,8 +34,156 @@ func TestSidebarClearsTitleBar(t *testing.T) {
 	}
 }
 
-// 侧栏收起来的时候，工具栏自己就贴着窗口左边缘了，这时轮到它让位。
-func TestToolbarClearsTitleBarWithoutSidebar(t *testing.T) {
+// 红绿灯浮在顶栏那条带子上，项目标签就挨着它 —— 左边要让开绿灯按钮的
+// 右沿，而且不能只让一两个像素：两个圆角凑在一起，标签的悬停底色一出来
+// 就像和窗口按钮连成了一片。
+func TestProjectTabClearsTrafficLights(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.SetTitleBar(realTitleBar)
+	tt.Frame()
+	tt.Frame()
+
+	tab, ok := tt.Find(a.repoName)
+	if !ok {
+		t.Fatalf("顶栏上找不到项目标签：%q", tt.Texts())
+	}
+	if tab.Y > realTitleBar.Height {
+		t.Fatalf("找到的 %q 不在顶栏上：y=%.0f", a.repoName, tab.Y)
+	}
+	if minX := realTitleBar.Left + 12; tab.X < minX {
+		t.Errorf("项目标签左边 x=%.0f，离窗口按钮（右沿 x=%.0f）太近了，至少该到 %.0f",
+			tab.X, realTitleBar.Left, minX)
+	}
+}
+
+// 项目路径不占顶栏的常驻位置。
+//
+// 从前侧栏收起时，工具栏那块仓库名下面还压着一行压短的路径 —— 项目标签
+// 刚报过名字，下一行又是一条路径，同一个项目在几像素之内自我介绍两遍。
+// 现在路径只在标签的悬停提示里：不占地方，想看时悬停就有。
+func TestProjectPathOnlyOnTabTooltip(t *testing.T) {
+	a := richApp(t)
+	a.sidebarOn = false // 仓库名那块摆出来 —— 从前那行路径就贴在它下面
+
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.SetTitleBar(realTitleBar)
+	tt.Frame()
+	tt.Frame()
+
+	tab, ok := tt.Find(a.repoName)
+	if !ok {
+		t.Fatalf("顶栏上找不到项目标签：%q", tt.Texts())
+	}
+	if tab.Y > realTitleBar.Height {
+		t.Fatalf("找到的 %q 不在顶栏上（y=%.0f）—— 别拿工具栏那块仓库名当标签",
+			a.repoName, tab.Y)
+	}
+	chip, ok := tt.Find(a.branch)
+	if !ok {
+		t.Fatalf("工具栏上找不到分支徽章：%q", tt.Texts())
+	}
+
+	// 顶栏到工具栏这一整块里不该有任何带斜杠的文字 —— 光比完整路径还不
+	// 够：从前那行是压短的（「…/T/xxx/001」），完整路径本来就不会出现。
+	band := chip.Y + chip.H
+	for _, s := range tt.Texts() {
+		if !strings.Contains(s, "/") {
+			continue
+		}
+		if r, found := tt.Find(s); found && r.Y <= band {
+			t.Errorf("顶栏这条带子里不该有路径，却有 %q（y=%.0f）", s, r.Y)
+		}
+	}
+
+	tt.Move(tab.X+tab.W/2, tab.Y+tab.H/2)
+	// 框架的 tooltip 要悬停满 600ms 才画（ui/widgets.go 的 Tooltip）
+	time.Sleep(700 * time.Millisecond)
+	tt.Frame()
+	if !tt.HasText(a.repoPath) {
+		t.Errorf("悬停在项目标签上该给出完整路径 %q：%q", a.repoPath, tt.Texts())
+	}
+}
+
+// 标签上只有项目名，没有分支名 —— 名字后面缀一段截掉一半的分支，多项目
+// 并排时谁都不好认。分支归下面工具栏的分支徽章（侧栏开着时归侧栏的分支树）。
+func TestProjectTabShowsNameOnly(t *testing.T) {
+	a := richApp(t)
+	a.sidebarOn = false // 关掉侧栏，分支名就只剩工具栏徽章那一处
+
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.SetTitleBar(realTitleBar)
+	tt.Frame()
+	tt.Frame()
+
+	for _, s := range tt.Texts() {
+		// 「main」和从前的「· main」都算：后缀比对把分隔符一并盖住
+		if s != a.branch && !strings.HasSuffix(s, " "+a.branch) {
+			continue
+		}
+		if r, found := tt.Find(s); found && r.Y <= realTitleBar.Height {
+			t.Errorf("标签上不该出现分支名，实际 %q（y=%.0f）", s, r.Y)
+		}
+	}
+}
+
+// 切换激活标签，整条带子不能有任何东西挪窝。
+//
+// 激活态一律只换颜色 —— 底色、边框、文字明度，宽度都是零。曾经激活态
+// 把名字换成 semibold：字宽比 regular 多一个多百分点，点一下标签，这个
+// 框就宽一点点，右边所有标签连同 [+] 跟着一起挪，看着像整条带子在抖。
+func TestTabSwitchKeepsLayoutStill(t *testing.T) {
+	a := richApp(t)
+	a.openInNewTab(a.repoPath)
+
+	dir2 := t.TempDir()
+	runGit(t, dir2, "init", "-b", "main")
+	runGit(t, dir2, "config", "user.email", "test@example.com")
+	runGit(t, dir2, "config", "user.name", "Test")
+	writeFile(t, filepath.Join(dir2, "a.go"), "package main\n")
+	runGit(t, dir2, "add", ".")
+	runGit(t, dir2, "commit", "-m", "init")
+	a.openInNewTab(dir2)
+	settle(t, a)
+
+	// 名字换成不会和别处撞车的两串，好在测试里定位这两个标签
+	a.tabs[0].name = "zz-alpha"
+	a.tabs[1].name = "zz-beta-longer"
+
+	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+	tt.Frame()
+	tt.SetTitleBar(realTitleBar)
+
+	boxes := func() map[string]ui.Rect {
+		tt.Frame()
+		out := map[string]ui.Rect{}
+		for _, s := range []string{"zz-alpha", "zz-beta-longer", "新建项目标签页"} {
+			r, ok := tt.Find(s)
+			if !ok {
+				t.Fatalf("界面上找不到 %q：%q", s, tt.Texts())
+			}
+			out[s] = r
+		}
+		return out
+	}
+
+	before := boxes()
+	for _, active := range []int{0, 1} {
+		a.activeTab = active
+		after := boxes()
+		for name, r := range before {
+			if after[name] != r {
+				t.Errorf("激活第 %d 个标签后 %q 挪了窝：%+v → %+v",
+					active, name, r, after[name])
+			}
+		}
+	}
+}
+
+// 红绿灯那条带子归顶栏管（见上），工具栏在它下面，不必再让位 —— 侧栏
+// 收起时它贴着窗口左边缘，侧栏开着时贴着侧栏右边缘。
+func TestToolbarHugsSidebarEdge(t *testing.T) {
 	a := richApp(t)
 	a.sidebarOn = false
 
@@ -42,27 +192,28 @@ func TestToolbarClearsTitleBarWithoutSidebar(t *testing.T) {
 	tt.Frame()
 	tt.Frame()
 
-	name, ok := tt.Find(a.repoName)
+	// 拿视图切换那两枚图标按钮定位工具栏的左沿：带文字的控件（仓库名、
+	// 分支徽章）在这两种状态里位置会变，只有它一直排在头一个。
+	seg, ok := tt.Find("Git")
 	if !ok {
-		t.Fatalf("找不到仓库名：%q", tt.Texts())
+		t.Fatalf("找不到工具栏的视图切换：%q", tt.Texts())
 	}
-	if name.X < realTitleBar.Left {
-		t.Errorf("工具栏文字左边 x=%.0f，红绿灯占到 x=%.0f —— 被压住了",
-			name.X, realTitleBar.Left)
+	if seg.X > 40 {
+		t.Errorf("侧栏收起时工具栏第一个控件左边 x=%.0f，该贴着窗口左边缘", seg.X)
 	}
 
-	// 反过来：侧栏开着的时候红绿灯被侧栏顶走，工具栏不该再白白缩进去 ——
-	// 文字左边贴着侧栏右边缘就行，不该再加上 bar.Left。
+	// 反过来：侧栏开着的时候工具栏跟在侧栏后面，不该再多缩一次 ——
+	// 左边贴着侧栏右边缘就行，不该再加上 bar.Left。
 	a.sidebarOn = true
 	tt.Frame()
 	tt.Frame()
-	name2, ok := tt.Find(a.repoName)
+	seg2, ok := tt.Find("Git")
 	if !ok {
-		t.Fatalf("侧栏开着时找不到仓库名：%q", tt.Texts())
+		t.Fatalf("侧栏开着时找不到工具栏的视图切换：%q", tt.Texts())
 	}
-	if want := float32(sidebarWidth) + 12; name2.X > want+2 {
-		t.Errorf("侧栏开着时工具栏文字左边 x=%.0f，该贴着侧栏右边缘的 %.0f",
-			name2.X, want)
+	if want := float32(sidebarWidth); seg2.X < want || seg2.X > want+40 {
+		t.Errorf("侧栏开着时工具栏第一个控件左边 x=%.0f，该贴着侧栏右边缘的 %.0f",
+			seg2.X, want)
 	}
 }
 
@@ -352,57 +503,6 @@ func TestToolbarKeepsTabsWhenNarrow(t *testing.T) {
 	if !tt.HasText(a.repoName) {
 		t.Errorf("仓库名任何宽度下都该在：%q", tt.Texts())
 	}
-}
-
-// 工具栏那行路径：放得下就原样显示，放不下从**头上**截 —— 路径的关键
-// 信息在末尾（在哪一级目录下、和重名的怎么区分），截尾留下的正好是
-// 「/Users/…」这种最没用的部分。
-func TestToolbarPathShortening(t *testing.T) {
-	a := richApp(t)
-	tt := ui.NewTester(a.view, 1280, 860)
-	still(tt)
-	tt.Frame()
-	tt.SetTitleBar(realTitleBar)
-
-	// 短路径原样显示
-	a.repoPath = "/tmp/gloss"
-	tt.Frame()
-	if !tt.HasText("/tmp/gloss") {
-		t.Errorf("放得下的路径该原样显示：%q", tt.Texts())
-	}
-
-	// 长路径：压短了，但尾巴还在（结尾是这个仓库）
-	long := "/Users/me/" + strings.Repeat("a-quite-long-directory-name/", 4) + "gloss"
-	a.repoPath = long
-	tt.Frame()
-	if tt.HasText(long) {
-		t.Errorf("这么长的路径该被压短：%q", tt.Texts())
-	}
-	tail := shortText(tt.Texts(), "…/")
-	if tail == "" {
-		t.Fatalf("压短之后该留下「…/」开头的尾巴：%q", tt.Texts())
-	}
-	if !strings.HasSuffix(tail, "/gloss") {
-		t.Errorf("留下的尾巴该以仓库名结尾，实际 %q", tail)
-	}
-
-	// 连两级都放不下（末两节本身就很长）：整行省掉 —— 只剩仓库名的话，
-	// 就是上面那行，摆两遍不是信息
-	a.repoPath = "/a/" + strings.Repeat("zh", 120) + "/gloss"
-	tt.Frame()
-	if s := shortText(tt.Texts(), "…/"); s != "" {
-		t.Errorf("压不出有意义的尾巴时该整行省掉，实际还有 %q", s)
-	}
-}
-
-// shortText 找出以 prefix 开头的第一段文字，没有返回空串。
-func shortText(texts []string, prefix string) string {
-	for _, s := range texts {
-		if strings.HasPrefix(s, prefix) {
-			return s
-		}
-	}
-	return ""
 }
 
 // 「几个文件」只在文件栏栏头报一次。曾经工具栏上也报一遍，两行隔几十像素

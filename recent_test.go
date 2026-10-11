@@ -55,30 +55,50 @@ func TestHeaderRepoMenuAndBranchQuickMenu(t *testing.T) {
 		t.Fatal("菜单中应该包含「最近打开的项目」")
 	}
 
-	// 确认仓库名和当前分支名能在界面上找到，且处于同一水平行（垂直位置居中对齐）
-	// 关闭侧栏以唯一定位工具栏上的分支徽章（避免与侧栏分支树中的同名项混淆）
+	// 项目名和分支名都在界面上：项目名归顶栏的项目标签，分支名归下面
+	// 工具栏的分支徽章。关掉侧栏以唯一定位工具栏上的分支徽章（避免与
+	// 侧栏分支树中的同名项混淆）。
+	//
+	// 以前这两样挤在工具栏的同一行里，这条盯的是「对齐」；项目名升到顶栏
+	// 之后改盯它们各在各自那条带子里 —— 项目名掉进工具栏、徽章飘进顶栏，
+	// 都是布局串了行。
 	a.sidebarOn = false
 	tt.Frame()
 	tt.Frame()
 
-	repoBox, okRepo := tt.Find(a.repoName)
-	if !okRepo {
-		t.Fatalf("界面上找不到仓库名 %q", a.repoName)
+	tab, okTab := tt.Find(a.repoName)
+	if !okTab {
+		t.Fatalf("顶栏上找不到项目名 %q", a.repoName)
 	}
-	branchBox, okBranch := tt.Find(a.branch)
-	if !okBranch {
+	chip, okChip := tt.Find(a.branch)
+	if !okChip {
 		t.Fatalf("界面上找不到当前分支名 %q", a.branch)
 	}
-
-	// 两者处于同一行，Y 轴重叠（差值小于 5 像素）
-	diffY := repoBox.Y - branchBox.Y
-	if diffY < -5 || diffY > 5 {
-		t.Errorf("仓库名与分支徽章应水平对齐在同一行：repoY=%.1f, branchY=%.1f", repoBox.Y, branchBox.Y)
+	if tab.Y >= chip.Y {
+		t.Errorf("项目名该在顶栏（y=%.1f），分支徽章该在它下面的工具栏（y=%.1f）",
+			tab.Y, chip.Y)
 	}
+}
+
+// toolbarRepoPoint 给出工具栏上那枚仓库名按钮的点击位置。
+//
+// 项目名在顶栏的项目标签上还有一份（那才是它的正主），tt.Find 先返回标签
+// 那一处 —— 点标签只是「切到当前标签」，什么也不会发生。侧栏收起时分支名
+// 只出现在工具栏，从分支徽章往左让开按钮自身的一小段宽度，落到的就是仓库
+// 按钮。
+func toolbarRepoPoint(tt *ui.Tester, branch string) (x, y float32, ok bool) {
+	chip, found := tt.Find(branch)
+	if !found {
+		return 0, 0, false
+	}
+	return chip.X - 20, chip.Y + chip.H/2, true
 }
 
 func TestHeaderRepoDropdownPopover(t *testing.T) {
 	a := richApp(t)
+	// 仓库下拉按钮在工具栏上：侧栏收起时工具栏摆着「仓库名 + 分支」那块
+	//（侧栏开着时它只剩分支徽章 —— 项目名已经固定在顶栏的标签上了）。
+	a.sidebarOn = false
 	tt := ui.NewTester(a.view, 1280, 860)
 	tt.Frame()
 	settle(t, a)
@@ -89,15 +109,17 @@ func TestHeaderRepoDropdownPopover(t *testing.T) {
 		t.Fatal("初始状态 repoDropdownOpen 应该为 false")
 	}
 
-	// 点击仓库名称按钮
-	if err := tt.Click(a.repoName); err != nil {
-		t.Fatalf("点击仓库按钮失败: %v", err)
+	// 仓库按钮就在同排分支徽章的左边（见 toolbarRepoPoint）。
+	repoX, repoY, ok := toolbarRepoPoint(tt, a.branch)
+	if !ok {
+		t.Fatalf("工具栏上找不到分支徽章 %q：%q", a.branch, tt.Texts())
 	}
+	tt.ClickAt(repoX, repoY)
 	tt.Frame()
 
 	// 验证弹窗已开启
 	if !a.repoDropdownOpen {
-		t.Fatal("点击后 repoDropdownOpen 应该为 true")
+		t.Fatalf("点击仓库按钮（x=%.0f, y=%.0f）后 repoDropdownOpen 应该为 true", repoX, repoY)
 	}
 
 	// 验证 HeroUI 弹窗内渲染的标题和操作项
@@ -112,13 +134,12 @@ func TestHeaderRepoDropdownPopover(t *testing.T) {
 	}
 
 	// 验证弹窗位置在仓库按钮下方，没有向上覆盖或重叠偏移
-	repoBox, _ := tt.Find(a.repoName)
 	titleBox, okTitle := tt.Find("最近打开的项目")
 	if !okTitle {
 		t.Fatal("未找到弹窗标题「最近打开的项目」")
 	}
-	if titleBox.Y <= repoBox.Y {
-		t.Errorf("弹窗应该出现在仓库按钮下方，但 titleBox.Y=%.1f <= repoBox.Y=%.1f", titleBox.Y, repoBox.Y)
+	if titleBox.Y <= repoY {
+		t.Errorf("弹窗应该出现在仓库按钮下方，但 titleBox.Y=%.1f <= 按钮 y=%.1f", titleBox.Y, repoY)
 	}
 
 	// 按 Escape 键关闭弹窗

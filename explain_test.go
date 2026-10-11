@@ -451,11 +451,15 @@ func TestSettingsDialogSavesProviders(t *testing.T) {
 		t.Fatalf("点预设：%v", err)
 	}
 	tt.Frame()
-	if i := a.editCfg.Active; a.editCfg.Providers[i].BaseURL != "https://api.deepseek.com" {
-		t.Errorf("预设没填进 Base URL：%+v", a.editCfg.Providers[i])
+	// 加预设只选中编辑，不悄悄切成当前生效 —— 启用是详情页那个开关的事
+	if got := a.editCfg.Providers[a.editIdx].BaseURL; got != "https://api.deepseek.com" {
+		t.Errorf("预设没填进 Base URL：%+v", a.editCfg.Providers[a.editIdx])
 	}
-
-	a.editCfg.Providers[a.editCfg.Active].APIKey = "sk-test"
+	if a.editCfg.Active == a.editIdx {
+		t.Errorf("加预设不该顺手把它设为当前生效，active=%d", a.editCfg.Active)
+	}
+	a.editCfg.Providers[a.editIdx].APIKey = "sk-test"
+	a.toggleEditActive() // 详情页头部那个开关绑定的就是这个行为
 	if err := tt.Click("保存"); err != nil {
 		t.Fatalf("点保存：%v", err)
 	}

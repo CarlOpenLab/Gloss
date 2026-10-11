@@ -423,7 +423,7 @@ func (a *app) commitBox(c *ui.Context, pal palette) {
 // 就先亮起来，等于提前替用户做了选择，而它旁边的「提交」才是这张卡片上
 // 唯一该被看见的动作。生成中只用强调色文字说话。
 func (a *app) aiCommitButton(c *ui.Context, t *ui.Theme, pal palette) {
-	tip := T("✨ AI 生成提交信息 (⌘I)", "✨ AI Generate Commit Message (⌘I)")
+	tip := Tf("✨ AI 生成提交信息 (%s)", "✨ AI Generate Commit Message (%s)", K("⌘I"))
 	if a.aiCommitLoading {
 		tip = T("正在生成提交信息… 点击取消", "Generating commit message… Click to cancel")
 	}
@@ -459,7 +459,7 @@ func (a *app) aiCommitButton(c *ui.Context, t *ui.Theme, pal palette) {
 				FontWeight(weightMedium).TextColor(fg)
 			ui.Box(c).Radius(radiusXS).Padding(1, 4).Background(pal.surface1).
 				Children(func() {
-					ui.Text(c, "⌘I").FontSize(textCaption).TextColor(pal.inkTertiary)
+					ui.Text(c, K("⌘I")).FontSize(textCaption).TextColor(pal.inkTertiary)
 				})
 		}
 	})
@@ -635,10 +635,10 @@ func cleanCommitMessage(msg string) string {
 // 悬停的明度差已经足够说明「能点」。
 func (a *app) commitButton(c *ui.Context, t *ui.Theme, pal palette) {
 	label := T("提交", "Commit")
-	tip := T("提交已暂存的更改 ⌘⏎", "Commit staged changes ⌘⏎")
+	tip := Tf("提交已暂存的更改 %s", "Commit staged changes %s", K("⌘⏎"))
 	if a.amend {
 		label = T("修改上次提交", "Amend Last Commit")
-		tip = T("追加修改至最近一次提交 (--amend) ⌘⏎", "Amend previous commit (--amend) ⌘⏎")
+		tip = Tf("追加修改至最近一次提交 (--amend) %s", "Amend previous commit (--amend) %s", K("⌘⏎"))
 		if n := a.stagedCount(); n > 0 {
 			label = Tf("修改上次提交 (%d 个文件)", "Amend (%d files)", n)
 		}
@@ -670,7 +670,7 @@ func (a *app) commitButton(c *ui.Context, t *ui.Theme, pal palette) {
 		ui.Text(c, label).FontSize(textButton).FontWeight(weightMedium).TextColor(fg)
 		if can {
 			ui.Box(c).Radius(radiusXS).Padding(1, 4).Background(t.AccentText.Alpha(0.2)).Children(func() {
-				ui.Text(c, "⌘⏎").FontSize(textCaption).TextColor(fg)
+				ui.Text(c, K("⌘⏎")).FontSize(textCaption).TextColor(fg)
 			})
 		}
 	})

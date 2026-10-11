@@ -47,18 +47,23 @@ func TestSettingsModalInteractions(t *testing.T) {
 	if len(a.editCfg.Providers) != 2 {
 		t.Fatalf("供应商数量应为 2，实际为 %d", len(a.editCfg.Providers))
 	}
-	if a.editCfg.Active != 1 {
-		t.Fatalf("添加后应自动激活新项，当前 active=%d", a.editCfg.Active)
+	// 添加预设只选中编辑，不悄悄切成当前生效
+	if a.editCfg.Active != 0 {
+		t.Fatalf("添加预设不应切换生效，当前 active=%d", a.editCfg.Active)
 	}
 	if a.editIdx != 1 {
-		t.Fatalf("添加后应自动聚焦新项，当前 editIdx=%d", a.editIdx)
+		t.Fatalf("添加后应聚焦新项，当前 editIdx=%d", a.editIdx)
 	}
 	if a.editCfg.Providers[1].BaseURL != "https://api.deepseek.com" {
 		t.Errorf("DeepSeek BaseURL 错误: %s", a.editCfg.Providers[1].BaseURL)
 	}
 
-	// 3. 填入 API key 并保存
+	// 3. 填入 API key，在详情页开关上启用 DeepSeek，然后保存
 	a.editCfg.Providers[1].APIKey = "sk-deepseek-test"
+	a.toggleEditActive() // 详情页头部那个开关绑定的就是这个行为
+	if a.editCfg.Active != 1 {
+		t.Fatalf("开关点上后 DeepSeek 应为当前生效，当前 active=%d", a.editCfg.Active)
+	}
 	if err := tt.Click("保存"); err != nil {
 		t.Fatalf("点保存: %v", err)
 	}
@@ -86,6 +91,9 @@ func TestSettingsModalInteractions(t *testing.T) {
 	tt.Frame()
 	if a.editIdx != 0 {
 		t.Errorf("切换选中小标应为 0，实际为 %d", a.editIdx)
+	}
+	if a.editCfg.Active != 1 {
+		t.Errorf("点击列表项只应选中编辑、不应切换生效，当前 active=%d", a.editCfg.Active)
 	}
 
 	// 点击删除按钮删除一项
@@ -135,6 +143,17 @@ func TestSettingsModalInteractions(t *testing.T) {
 	if err := tt.Click("Magpie（本地网关）"); err != nil {
 		t.Fatalf("点 Magpie 预设: %v", err)
 	}
+	tt.Frame()
+
+	// 点预设只是选中它，当前生效不变（这里添加前已有 Anthropic、DeepSeek
+	// 两家 —— 上一步的删除走的是取消，没落盘），Magpie 落在第 len-1 位。
+	if want := len(a.editCfg.Providers) - 1; a.editIdx != want {
+		t.Fatalf("点预设应聚焦新加的 Magpie（%d），当前 editIdx=%d", want, a.editIdx)
+	}
+	if a.editCfg.Active != 1 {
+		t.Fatalf("点预设不应切换生效，当前 active=%d", a.editCfg.Active)
+	}
+	a.toggleEditActive() // 用户自己在详情页开关上启用它
 	tt.Frame()
 
 	current := a.editCfg.Providers[a.editCfg.Active]
@@ -417,5 +436,49 @@ func TestAppIconFilesAreNeutralMonochrome(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// TestToggleEditActive：详情页开关可开可关 —— 关掉当前生效的供应商后
+// 处于「没有激活供应商」的状态，store.Provider() 回落环境变量。
+func TestToggleEditActive(t *testing.T) {
+	a := newApp()
+	s := store.Open(t.TempDir())
+	cfg := store.Config{
+		Providers: []llm.Provider{
+			{Name: "A", Type: "openai", Model: "m-a"},
+			{Name: "B", Type: "openai", Model: "m-b"},
+		},
+		Active: 0,
+	}
+	s.SetConfig(cfg)
+	a.attachStore(s)
+	// 模拟 openSettings：编辑的是配置的副本。
+	a.editCfg = s.Config()
+	a.editIdx = 1
+
+	// 选中 B，B 不是当前生效 → 打开它。
+	a.toggleEditActive()
+	if a.editCfg.Active != 1 {
+		t.Fatalf("开关应由 0 切到 1，实际 %d", a.editCfg.Active)
+	}
+
+	// B 已经是当前生效了 → 再点开关把它关掉。
+	a.toggleEditActive()
+	if a.editCfg.Active != -1 {
+		t.Fatalf("再点开关应关掉当前生效（-1），实际 %d", a.editCfg.Active)
+	}
+
+	// 从「没有激活」再点一次 → 又把 B 打开。
+	a.toggleEditActive()
+	if a.editCfg.Active != 1 {
+		t.Fatalf("空态再点开关应重新打开 B，实际 %d", a.editCfg.Active)
+	}
+
+	// store 面对 Active=-1 必须回落 nil（界面靠它走环境变量凭证链）。
+	cfg.Active = -1
+	s.SetConfig(cfg)
+	if p := s.Provider(); p != nil {
+		t.Fatalf("Active=-1 时 Provider() 应回落 nil，实际 %v", p)
 	}
 }

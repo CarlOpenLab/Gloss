@@ -748,8 +748,8 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 		// 视图模式切换：Git 面板 ⟷ 内置终端
 		vm := a.viewMode
 		toolbarSegmentedIcons(c, pal, &vm, false,
-			segmentedIconItem{label: "Git", tip: T("Git 可视化面板 ⌘1 / Ctrl+~", "Git GUI Panel ⌘1 / Ctrl+~"), icon: iconFileDiff},
-			segmentedIconItem{label: "Terminal", tip: T("内置终端 ⌘2 / Ctrl+~", "Built-in Terminal ⌘2 / Ctrl+~"), icon: iconTerminal},
+			segmentedIconItem{label: "Git", tip: Tf("Git 可视化面板 %s / Ctrl+~", "Git GUI Panel %s / Ctrl+~", K("⌘1")), icon: iconFileDiff},
+			segmentedIconItem{label: "Terminal", tip: Tf("内置终端 %s / Ctrl+~", "Built-in Terminal %s / Ctrl+~", K("⌘2")), icon: iconTerminal},
 		)
 		if vm != a.viewMode {
 			a.setViewMode(vm)
@@ -771,7 +771,7 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 			if toolIconButton(c, pal, T("重启", "Restart"), T("重启终端 Shell 进程", "Restart Terminal Shell Process"), false, false, drawZapIcon) {
 				a.restartCurrentTerminal()
 			}
-			if toolIconButton(c, pal, T("打开仓库…", "Open…"), T("打开本地 Git 仓库 ⌘O", "Open Local Git Repository ⌘O"), false, false, drawFolderIcon) {
+			if toolIconButton(c, pal, T("打开仓库…", "Open…"), Tf("打开本地 Git 仓库 %s", "Open Local Git Repository %s", K("⌘O")), false, false, drawFolderIcon) {
 				a.chooseFolder()
 			}
 			return
@@ -811,7 +811,7 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 			mode = 1
 		}
 		toolbarSegmentedIcons(c, pal, &mode, noRepo,
-			segmentedIconItem{label: "Unified", tip: T("统一视图（单栏） ⌘U", "Unified View ⌘U"), icon: iconUnified},
+			segmentedIconItem{label: "Unified", tip: Tf("统一视图（单栏） %s", "Unified View %s", K("⌘U")), icon: iconUnified},
 			segmentedIconItem{label: "Split", tip: T("左右对照（分栏）", "Split View"), icon: iconSplit},
 		)
 		if (mode == 1) != split {
@@ -827,14 +827,14 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 
 		// 刷新、设置、打开仓库（纯图标按钮，对齐 Fork 与 macOS 原生设计规范）
 		refreshing := a.state == loadLoading
-		refreshTip := T("刷新仓库状态 ⌘R", "Refresh Repository ⌘R")
+		refreshTip := Tf("刷新仓库状态 %s", "Refresh Repository %s", K("⌘R"))
 		if refreshing {
 			refreshTip = T("正在刷新仓库状态…", "Refreshing repository…")
 		}
 		if toolIconButton(c, pal, T("刷新", "Refresh"), refreshTip, noRepo, refreshing, drawRefreshIcon) {
 			a.reload()
 		}
-		if toolIconButton(c, pal, T("打开仓库…", "Open…"), T("打开本地 Git 仓库 ⌘O", "Open Local Git Repository ⌘O"), false, false, drawFolderIcon) {
+		if toolIconButton(c, pal, T("打开仓库…", "Open…"), Tf("打开本地 Git 仓库 %s", "Open Local Git Repository %s", K("⌘O")), false, false, drawFolderIcon) {
 			a.chooseFolder()
 		}
 		// 设置图标不在这里 —— 它已经在上方标签栏的右上角（projectTabBar）。
@@ -868,7 +868,7 @@ func (a *app) repoHeader(c *ui.Context, t *ui.Theme, pal palette) {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			repoBtn := ui.ButtonBase(c).Radius(radiusSM).Padding(2, 6, 2, 0).
 				Cursor(ui.CursorPointer).Label(name).
-				Tooltip(T("点击切换最近项目（或 ⌘O 打开本地仓库）", "Switch recent project (or ⌘O to open repository)"))
+				Tooltip(Tf("点击切换最近项目（或 %s 打开本地仓库）", "Switch recent project (or %s to open repository)", K("⌘O")))
 			if repoBtn.Hovered() || a.repoDropdownOpen {
 				repoBtn.Background(pal.surface2)
 			}
@@ -1008,7 +1008,7 @@ func (a *app) repoDropdownPanel(c *ui.Context, panel *ui.Element, pal palette) {
 		ui.Spacer(c)
 		ui.Box(c).Radius(radiusXS).Padding(1, 5).Background(pal.surface1).
 			Border(1, pal.hairlineStrong).Children(func() {
-			ui.Text(c, "⌘O").FontSize(textCaption).Font("monospace").TextColor(pal.inkSubtle)
+			ui.Text(c, K("⌘O")).FontSize(textCaption).Font("monospace").TextColor(pal.inkSubtle)
 		})
 	})
 	if openBtn.Clicked() {
@@ -1202,7 +1202,7 @@ func (a *app) recentReposMenu(m *ui.Menu) {
 	if hasRecent {
 		m.Separator()
 	}
-	if m.Item(T("打开其他本地仓库… ⌘O", "Open Other Local Repository… ⌘O")).Chosen() {
+	if m.Item(Tf("打开其他本地仓库… %s", "Open Other Local Repository… %s", K("⌘O"))).Chosen() {
 		a.chooseFolder()
 	}
 	if hasRecent {

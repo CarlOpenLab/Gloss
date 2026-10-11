@@ -483,7 +483,7 @@ func (a *app) detailEmpty(c *ui.Context, t *ui.Theme, pal palette) {
 			a.chooseFolder()
 		}
 		// 第一眼的地方，顺手把菜单里的那个键说一遍：下次就不用找按钮了。
-		ui.Text(c, T("快捷键 ⌘O", "Press ⌘O to open")).FontSize(textCaption).TextColor(t.TextMuted)
+		ui.Text(c, Tf("快捷键 %s", "Press %s to open", K("⌘O"))).FontSize(textCaption).TextColor(t.TextMuted)
 	case a.state == loadLoading && !a.repoReady():
 		ui.Spinner(c)
 		ui.Text(c, T("正在读取仓库…", "Loading repository…")).TextColor(t.TextMuted)

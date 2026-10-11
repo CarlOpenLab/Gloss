@@ -484,14 +484,28 @@ func (a *app) tabBarHeight(c *ui.Context) float32 {
 	return max(c.TitleBar().Height, 38)
 }
 
-// projectTabBar 呈现 Zed 风格的窗口顶栏：红绿灯安全边距、多项目 Tabs、新建项目 [+]、窗口拖拽区。
+// titleBarInset 是顶栏和第一个标签之间要留出的距离。
+//
+// bar.Left 量到的是 macOS 红绿灯里绿灯按钮的右沿。左内边距原先写死 80：本机上
+// 绿灯右沿已经在 78 上下，两边只剩两三个像素 —— 第一个标签的圆角底色贴着窗口
+// 按钮，鼠标一扫过去两个圆角凑在一起，像连成了一片。留到 18 这样一块完整的
+// 气口，两块才是两块。Linux / Windows 上 bar.Left 是 0（它们的窗口按钮在
+// 右上），走的是顶栏自己的 12。
+const titleBarInset = 18
+
+// projectTabBar 呈现 Zed 风格的窗口顶栏：给窗口控制按钮留出安全边距、多项目
+// 标签页、新建项目 [+]、窗口拖拽区。
 func (a *app) projectTabBar(c *ui.Context, pal palette) {
 	bar := c.TitleBar()
 	t := c.Theme()
 
-	padLeft := float32(80)
-	if bar.Left > padLeft {
-		padLeft = bar.Left + 12
+	// 窗口控制按钮让出来的两边内边距。bar 的 Left/Right 量的是它们各自的
+	// 右沿/左沿：macOS 是左上角的红绿灯，Linux 和 Windows 是右上角那一组
+	// （框架给的，见 ui.Context.TitleBar）。两者都归零时（全屏下控制按钮收
+	// 起来）顶栏自己留 12。
+	padLeft := float32(12)
+	if bar.Left > 0 {
+		padLeft = bar.Left + titleBarInset
 	}
 	padRight := float32(12)
 	if bar.Right > 0 {
@@ -509,7 +523,14 @@ func (a *app) projectTabBar(c *ui.Context, pal palette) {
 		DragWindow().
 		Children(func() {
 			if len(a.tabs) == 0 {
-				a.renderProjectTab(c, 0, &repoTab{name: "Gloss"}, pal, t)
+				// 一个标签页都还没建起来（直接 load 一个仓库就是这种状态），
+				// 顶栏也该是「当前打开的项目」，而不是写死的 Gloss —— 仓库
+				// 开着、顶栏却报另一个名字，是这一栏里最刺眼的一种错。
+				a.renderProjectTab(c, 0, &repoTab{
+					path:       a.repoPath,
+					name:       a.repoName,
+					dirtyCount: len(a.workFiles),
+				}, pal, t)
 			} else {
 				for i, tab := range a.tabs {
 					a.renderProjectTab(c, i, tab, pal, t)
@@ -519,7 +540,7 @@ func (a *app) projectTabBar(c *ui.Context, pal palette) {
 			// [+] 新建项目标签页
 			newBtn := ui.ButtonBase(c).Size(26, 26).Radius(radiusSM).
 				Cursor(ui.CursorPointer).Label(T("新建项目标签页", "New Project Tab")).
-				Tooltip(T("打开本地 Git 仓库作为新标签页 ⌘T / ⌘O", "Open Git repository in new tab ⌘T / ⌘O"))
+				Tooltip(Tf("打开本地 Git 仓库作为新标签页 %s / %s", "Open Git repository in new tab %s / %s", K("⌘T"), K("⌘O")))
 			if newBtn.Hovered() {
 				newBtn.Background(pal.surface2)
 			}
@@ -536,7 +557,7 @@ func (a *app) projectTabBar(c *ui.Context, pal palette) {
 			ui.Spacer(c).DragWindow()
 
 			// 右侧快捷工具
-			if toolIconButton(c, pal, T("模型设置…", "Settings…"), T("偏好与设置 ⌘,", "Preferences & Settings ⌘,"), false, false, drawSettingsIcon) {
+			if toolIconButton(c, pal, T("模型设置…", "Settings…"), Tf("偏好与设置 %s", "Preferences & Settings %s", K("⌘,")), false, false, drawSettingsIcon) {
 				a.openSettings()
 			}
 		})
@@ -573,17 +594,19 @@ func (a *app) renderProjectTab(c *ui.Context, idx int, tab *repoTab, pal palette
 			// 图标
 			drawIcon(c, iconFolder, 12, pal.inkSubtle)
 
-			// 仓库名
-			txt := ui.Text(c, name).FontSize(textCaption).SingleLine().MaxWidth(140)
+			// 仓库名。标签只回答「这是哪个项目」—— 一个标签里名字后面再
+			// 跟一段被截掉一半的分支名，多项目并排时反而谁都不好认；分支
+			// 归下面工具栏的分支徽章（侧栏开着时是侧栏的分支树）。
+			//
+			// 激活态只换颜色，不动几何：边框三态一律 1px（只在透明与
+			// hairlineStrong 之间换色），字重也保持 regular —— semibold 的
+			// 字宽比 regular 宽一个多百分点，切一次标签这个框就胖一点，
+			// 右边所有标签连同 [+] 跟着一起挪，点一下、晃一下。
+			txt := ui.Text(c, name).FontSize(textCaption).SingleLine().MaxWidth(180)
 			if isActive {
-				txt.FontWeight(weightSemibold).TextColor(pal.ink)
+				txt.TextColor(pal.ink)
 			} else {
 				txt.TextColor(pal.inkMuted)
-			}
-
-			// 分支信息
-			if tab.branch != "" {
-				ui.Text(c, "· "+tab.branch).FontSize(11).TextColor(pal.inkSubtle).SingleLine().MaxWidth(110)
 			}
 
 			// 待提交改动标记
@@ -594,7 +617,7 @@ func (a *app) renderProjectTab(c *ui.Context, idx int, tab *repoTab, pal palette
 			// 关闭按钮 ×
 			closeBtn := ui.ButtonBase(c).Size(16, 16).Radius(radiusXS).
 				Cursor(ui.CursorPointer).Label(T("关闭标签页", "Close Tab")).
-				Tooltip(T("关闭标签页 ⌘W", "Close Tab ⌘W"))
+				Tooltip(Tf("关闭标签页 %s", "Close Tab %s", K("⌘W")))
 			if closeBtn.Hovered() {
 				closeBtn.Background(pal.surface3)
 			}

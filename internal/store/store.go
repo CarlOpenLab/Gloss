@@ -85,11 +85,14 @@ func (c Config) EffectiveExplainPrompt(preset string) string {
 // Provider 是当前选中的供应商配置。没有配置任何供应商时返回 nil，
 // 此时 StreamExplanation 会走 Anthropic 的环境变量凭证链。
 func (c Config) Provider() *llm.Provider {
-	if len(c.Providers) == 0 {
+	// Active < 0 表示用户把当前生效的供应商关掉了（设置里那个开关可开可
+	// 关）：和没有任何供应商一样，都算「没有生效的供应商」，走环境变量
+	// 凭证链。大于等于列表长度的旧配置钳回第 0 个。
+	if len(c.Providers) == 0 || c.Active < 0 {
 		return nil
 	}
 	i := c.Active
-	if i < 0 || i >= len(c.Providers) {
+	if i >= len(c.Providers) {
 		i = 0
 	}
 	p := c.Providers[i]

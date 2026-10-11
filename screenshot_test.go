@@ -72,7 +72,9 @@ func TestDumpScreenshot(t *testing.T) {
 	tt.SetDark(false)
 	tt.Frame()
 
-	// 最近项目下拉弹窗（HeroUI 风格）
+	// 最近项目下拉弹窗（HeroUI 风格）。它挂在工具栏那块仓库名上，
+	// 而那块只在侧栏收起时才摆出来（开着的时候项目名归顶栏的标签）。
+	a.sidebarOn = false
 	a.repoDropdownOpen = true
 	tt.SetDark(false)
 	tt.Frame()
@@ -81,6 +83,9 @@ func TestDumpScreenshot(t *testing.T) {
 	tt.Frame()
 	writePNG(t, "/tmp/de-shot-dropdown-dark.png", tt.Image())
 	a.repoDropdownOpen = false
+	a.sidebarOn = true
+	tt.SetDark(false)
+	tt.Frame()
 
 	// 再单独看一眼带语法高亮的那个文件（它在列表靠下的位置，默认看不到）
 	a.fileFilter = "router"

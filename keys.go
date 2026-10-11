@@ -163,8 +163,7 @@ func (a *app) handleKeys(c *ui.Context) {
 }
 
 func (a *app) toggleSidebar() {
-	a.sidebarOn = !a.sidebarOn
-	a.saveViewSettings()
+	a.setSidebar(!a.sidebarOn)
 }
 
 // setCodeSize 调整代码字号。传 0 表示回到默认值。

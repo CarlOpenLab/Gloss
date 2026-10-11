@@ -181,10 +181,15 @@ func (a *app) openSettings() {
 	if len(a.editCfg.Providers) == 0 {
 		a.editCfg.Providers = []llm.Provider{{Name: "Anthropic", Type: "anthropic", Model: llm.DefaultModel}}
 	}
-	if a.editCfg.Active < 0 || a.editCfg.Active >= len(a.editCfg.Providers) {
-		a.editCfg.Active = 0
+	// Active 可以为 -1（用户把当前生效的供应商关了）——那种状态原样保留，
+	// 只把「编辑中」钳到一条真实存在的供应商上。
+	if a.editCfg.Active >= len(a.editCfg.Providers) {
+		a.editCfg.Active = len(a.editCfg.Providers) - 1
 	}
 	a.editIdx = a.editCfg.Active
+	if a.editIdx < 0 {
+		a.editIdx = 0
+	}
 	a.editThemeMode = a.themeMode
 	a.editLocale = a.locale
 	a.showAPIKey = false
@@ -550,72 +555,79 @@ func (a *app) generalSettingsPane(c *ui.Context, pal palette) {
 			ui.Box(c).Height(1).FillWidth().Background(pal.hairline)
 
 			// 2. 应用图标 (Application Icon)
-			ui.Column(c).Gap(10).FillWidth().Children(func() {
-				ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-					drawIcon(c, iconAppWindow, 15, t.Accent)
-					ui.Text(c, T("应用图标", "Application Icon")).FontSize(textBody).FontWeight(weightSemibold).TextColor(pal.ink)
-				})
-				ui.Text(c, T("选择 Gloss 在 macOS 坞栏（Dock）及系统的极简图标，免重启即时生效", "Choose minimalist icon style for macOS Dock; applies immediately")).
-					FontSize(11).TextColor(t.TextMuted)
+			//
+			// 只在 macOS 上摆：这一项改的是 Dock 图标和系统「关于」里的
+			// 那个（见 syncAppIcon），Windows 上 SetDockIcon 会去设窗口
+			// 图标、Linux 上什么都不做 —— 摆出来点得动却没处看，不如不摆。
+			// 别的地方的图标按平台各有一套默认，不需要用户选。
+			if isMacPlatform() {
+				ui.Column(c).Gap(10).FillWidth().Children(func() {
+					ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
+						drawIcon(c, iconAppWindow, 15, t.Accent)
+						ui.Text(c, T("应用图标", "Application Icon")).FontSize(textBody).FontWeight(weightSemibold).TextColor(pal.ink)
+					})
+					ui.Text(c, T("选择 Gloss 在 macOS 坞栏（Dock）及系统的极简图标，免重启即时生效", "Choose minimalist icon style for macOS Dock; applies immediately")).
+						FontSize(11).TextColor(t.TextMuted)
 
-				bmBlack, bmWhite := getIconBitmaps()
-				iconCards := []struct {
-					id     string
-					label  string
-					desc   string
-					bitmap *ui.Bitmap
-				}{
-					{"black", T("纯黑极简", "Pure Black"), T("深色曜石质感 · 高对比克制", "Obsidian neutral black · High contrast"), bmBlack},
-					{"white", T("纯白极简", "Pure White"), T("明亮纯白质感 · 干净通透", "Porcelain neutral white · Clean & crisp"), bmWhite},
-				}
+					bmBlack, bmWhite := getIconBitmaps()
+					iconCards := []struct {
+						id     string
+						label  string
+						desc   string
+						bitmap *ui.Bitmap
+					}{
+						{"black", T("纯黑极简", "Pure Black"), T("深色曜石质感 · 高对比克制", "Obsidian neutral black · High contrast"), bmBlack},
+						{"white", T("纯白极简", "Pure White"), T("明亮纯白质感 · 干净通透", "Porcelain clean white · Clean & crisp"), bmWhite},
+					}
 
-				ui.Row(c).Gap(12).FillWidth().Children(func() {
-					for _, ic := range iconCards {
-						ic := ic
-						selected := a.appIcon == ic.id || (a.appIcon == "" && ic.id == "black")
-						card := ui.ButtonBase(c).Grow(1).Height(64).Radius(radiusMD).Padding(8, 12).
-							Cursor(ui.CursorPointer).Label(ic.label)
+					ui.Row(c).Gap(12).FillWidth().Children(func() {
+						for _, ic := range iconCards {
+							ic := ic
+							selected := a.appIcon == ic.id || (a.appIcon == "" && ic.id == "black")
+							card := ui.ButtonBase(c).Grow(1).Height(64).Radius(radiusMD).Padding(8, 12).
+								Cursor(ui.CursorPointer).Label(ic.label)
 
-						// 选中态原来把底、边、图标、圆点四处都染成强调色。
-						// 现在只留两条：边框和图标 —— 「选中的是这个」说两遍
-						// 就够了，底上的那层淡蓝只是把卡片糊成一块。
-						border := pal.hairlineStrong
-						bg := pal.surface1
-						if selected {
-							border = t.Accent
-							bg = pal.selection
-						} else if card.Hovered() {
-							bg = pal.surface3
-						}
-						card.Border(1, border).Background(bg)
-						fadeColors(card)
+							// 选中态原来把底、边、图标、圆点四处都染成强调色。
+							// 现在只留两条：边框和图标 —— 「选中的是这个」说两遍
+							// 就够了，底上的那层淡蓝只是把卡片糊成一块。
+							border := pal.hairlineStrong
+							bg := pal.surface1
+							if selected {
+								border = t.Accent
+								bg = pal.selection
+							} else if card.Hovered() {
+								bg = pal.surface3
+							}
+							card.Border(1, border).Background(bg)
+							fadeColors(card)
 
-						card.Children(func() {
-							ui.Row(c).AlignItems(ui.Center).Gap(12).Fill().Children(func() {
-								if ic.bitmap != nil {
-									ui.Box(c).Size(40, 40).Radius(radiusMD).Clip().Children(func() {
-										ui.Image(c, ic.bitmap).Size(40, 40)
+							card.Children(func() {
+								ui.Row(c).AlignItems(ui.Center).Gap(12).Fill().Children(func() {
+									if ic.bitmap != nil {
+										ui.Box(c).Size(40, 40).Radius(radiusMD).Clip().Children(func() {
+											ui.Image(c, ic.bitmap).Size(40, 40)
+										})
+									} else {
+										ui.Box(c).Size(40, 40).Radius(radiusMD).Background(pal.surface3)
+									}
+
+									ui.Column(c).Gap(2).Grow(1).Children(func() {
+										ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
+											ui.Text(c, ic.label).FontSize(textBodySM).
+												FontWeight(weightSemibold).TextColor(pal.ink)
+										})
+										ui.Text(c, ic.desc).FontSize(textCaption).TextColor(pal.inkSubtle).SingleLine()
 									})
-								} else {
-									ui.Box(c).Size(40, 40).Radius(radiusMD).Background(pal.surface3)
-								}
-
-								ui.Column(c).Gap(2).Grow(1).Children(func() {
-									ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
-										ui.Text(c, ic.label).FontSize(textBodySM).
-											FontWeight(weightSemibold).TextColor(pal.ink)
-									})
-									ui.Text(c, ic.desc).FontSize(textCaption).TextColor(pal.inkSubtle).SingleLine()
 								})
 							})
-						})
 
-						if card.Clicked() {
-							a.setAppIcon(ic.id)
+							if card.Clicked() {
+								a.setAppIcon(ic.id)
+							}
 						}
-					}
+					})
 				})
-			})
+			}
 
 			ui.Box(c).Height(1).FillWidth().Background(pal.hairline)
 
@@ -696,7 +708,7 @@ func (a *app) generalSettingsPane(c *ui.Context, pal palette) {
 
 					ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 						minusBtn := ui.ButtonBase(c).Size(28, 28).Radius(radiusSM).Background(pal.surface2).Border(1, pal.hairlineStrong).
-							AlignItems(ui.Center).Justify(ui.Center).Cursor(ui.CursorPointer).Label("−").Tooltip(T("缩小代码字号 ⌘−", "Zoom Out ⌘-"))
+							AlignItems(ui.Center).Justify(ui.Center).Cursor(ui.CursorPointer).Label("−").Tooltip(Tf("缩小代码字号 %s", "Zoom Out %s", K("⌘−")))
 						if minusBtn.Hovered() {
 							minusBtn.Background(pal.surface3)
 						}
@@ -707,7 +719,7 @@ func (a *app) generalSettingsPane(c *ui.Context, pal palette) {
 						}
 
 						plusBtn := ui.ButtonBase(c).Size(28, 28).Radius(radiusSM).Background(pal.surface2).Border(1, pal.hairlineStrong).
-							AlignItems(ui.Center).Justify(ui.Center).Cursor(ui.CursorPointer).Label("+").Tooltip(T("放大代码字号 ⌘+", "Zoom In ⌘+"))
+							AlignItems(ui.Center).Justify(ui.Center).Cursor(ui.CursorPointer).Label("+").Tooltip(Tf("放大代码字号 %s", "Zoom In %s", K("⌘+")))
 						if plusBtn.Hovered() {
 							plusBtn.Background(pal.surface3)
 						}
@@ -718,7 +730,7 @@ func (a *app) generalSettingsPane(c *ui.Context, pal palette) {
 						}
 
 						resetBtn := ui.ButtonBase(c).Height(28).Padding(0, 10).Radius(radiusSM).Background(pal.surface2).Border(1, pal.hairlineStrong).
-							AlignItems(ui.Center).Justify(ui.Center).Cursor(ui.CursorPointer).Label(T("重置", "Reset")).Tooltip(T("恢复默认字号 ⌘0", "Actual Size ⌘0"))
+							AlignItems(ui.Center).Justify(ui.Center).Cursor(ui.CursorPointer).Label(T("重置", "Reset")).Tooltip(Tf("恢复默认字号 %s", "Actual Size %s", K("⌘0")))
 						if resetBtn.Hovered() {
 							resetBtn.Background(pal.surface3)
 						}
@@ -764,7 +776,7 @@ func (a *app) aboutSettingsPane(c *ui.Context, pal palette) {
 								TextColor(pal.inkSubtle)
 						})
 					})
-					ui.Text(c, T("原生 macOS 智能 Git 客户端", "Native macOS Git GUI with AI-powered diff review")).
+					ui.Text(c, T("原生智能 Git 客户端", "Native Git GUI with AI-powered diff review")).
 						FontSize(textBodySM).TextColor(pal.inkSubtle)
 				})
 			})
@@ -791,7 +803,7 @@ func (a *app) aboutSettingsPane(c *ui.Context, pal palette) {
 					{
 						iconPalette,
 						T("克制优雅的视觉设计", "Focused & Distraction-Free"),
-						T("跟随 macOS 深浅色外观无缝切换，全 Neutral 极简黑白图标设计，零多余杂色", "Seamless dark/light mode switching with pure neutral monochrome icons"),
+						T("深度集成系统外观，深浅色无缝切换，全 Neutral 极简黑白图标设计，零多余杂色", "Deep system appearance integration, seamless dark/light switching, pure neutral monochrome icons"),
 					},
 				}
 
@@ -940,8 +952,8 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 	if a.editIdx < 0 || a.editIdx >= len(a.editCfg.Providers) {
 		a.editIdx = 0
 	}
-	if a.editCfg.Active < 0 || a.editCfg.Active >= len(a.editCfg.Providers) {
-		a.editCfg.Active = 0
+	if a.editCfg.Active >= len(a.editCfg.Providers) {
+		a.editCfg.Active = len(a.editCfg.Providers) - 1
 	}
 
 	p := &a.editCfg.Providers[a.editIdx]
@@ -962,10 +974,10 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 			ui.Scroll(c).Grow(1).FillWidth().Padding(4, 6).Children(func() {
 				ui.Column(c).Gap(2).FillWidth().Children(func() {
 
-					// 分组 1: 已启用
+					// 分组 1: 已添加（只是加进来了，不是都启用了）
 					ui.Row(c).Padding(6, 6, 4, 6).AlignItems(ui.Center).FillWidth().Children(func() {
 						drawIcon(c, iconChevronDown, 12, pal.inkSubtle)
-						ui.Text(c, T("已启用", "Enabled")).FontSize(textCaption).FontWeight(weightSemibold).TextColor(pal.inkSubtle)
+						ui.Text(c, T("已添加", "Added")).FontSize(textCaption).FontWeight(weightSemibold).TextColor(pal.inkSubtle)
 						ui.Spacer(c)
 						ui.Text(c, fmt.Sprintf("%d", len(a.editCfg.Providers))).FontSize(textCaption).TextColor(pal.inkTertiary)
 					})
@@ -1011,12 +1023,13 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 									ui.Text(c, T("已添加", "Added")).FontSize(9).TextColor(pal.inkTertiary)
 								})
 								ui.Spacer(c)
-								// 状态小圆点（已启用的均带绿色小圆点）
-								dotCol := t.Success
-								if !isActive {
-									dotCol = t.Success.Alpha(0.65)
+								// 状态圆点：只有当前生效的供应商是实心绿点，其余一律
+								// 空心描边 —— 加进来的≠启用的，别让每行都像开着。
+								if isActive {
+									ui.Box(c).Size(7, 7).Radius(radiusPill).Background(t.Success)
+								} else {
+									ui.Box(c).Size(7, 7).Radius(radiusPill).Border(1, pal.hairlineStrong).Background(ui.Transparent)
 								}
-								ui.Box(c).Size(7, 7).Radius(radiusPill).Background(dotCol)
 							})
 						})
 						if rowBtn.Clicked() {
@@ -1127,7 +1140,9 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 				isActive := a.editIdx == a.editCfg.Active
 				sw := ui.Switch(c, &isActive)
 				if sw.Clicked() {
-					a.editCfg.Active = a.editIdx
+					// 这个开关是用户自己控制启用/禁用的地方：点选供应商
+					// 只选中编辑，开不开由这里说了算（可开可关）。
+					a.toggleEditActive()
 				}
 				ui.Box(c).Width(12)
 				if closeButton(c, pal) {
@@ -1138,23 +1153,6 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 			// 详情滚动区域
 			ui.Scroll(c).Grow(1).FillWidth().Padding(16, 20).Children(func() {
 				ui.Column(c).Gap(14).FillWidth().Children(func() {
-
-					// 绿色提示横幅（由 Gloss 本地管理）
-					ui.Row(c).FillWidth().Padding(10, 14).Radius(radiusMD).
-						Background(t.Success.Alpha(0.06)).Border(1, t.Success.Alpha(0.2)).
-						AlignItems(ui.Center).Gap(10).Children(func() {
-						ui.Box(c).Size(24, 24).Radius(radiusSM).Background(t.Success.Alpha(0.12)).
-							AlignItems(ui.Center).Justify(ui.Center).Children(func() {
-							drawIcon(c, iconShield, 13, t.Success)
-						})
-						ui.Column(c).Gap(2).Grow(1).Children(func() {
-							ui.Text(c, T("由 Gloss 本地管理", "Managed Locally by Gloss")).
-								FontSize(textBodySM).FontWeight(weightSemibold).TextColor(t.Success)
-							ui.Text(c, T("此供应商由你的本地客户端管理，密钥与配置仅存储在本地设备中，直连服务端，保证数据安全。",
-								"Credentials and endpoints are saved only on your local machine and connect directly.")).
-								FontSize(textCaption).TextColor(pal.inkSubtle)
-						})
-					})
 
 					// 基础 URL
 					ui.Column(c).Gap(4).FillWidth().Children(func() {
@@ -1347,27 +1345,10 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 						a.probeMagpie()
 					}
 
-					// 设为生效按钮
-					if a.editIdx != a.editCfg.Active {
-						useBtn := ui.ButtonBase(c).Height(28).Padding(0, 10).Radius(radiusSM).
-							Background(pal.surface2).Border(1, pal.hairlineStrong).Cursor(ui.CursorPointer).
-							Label(T("设为当前生效", "Set Active"))
-						if useBtn.Hovered() {
-							useBtn.Background(pal.surface3)
-						}
-						fadeColors(useBtn)
-						useBtn.Children(func() {
-							ui.Row(c).AlignItems(ui.Center).Gap(4).Children(func() {
-								drawIcon(c, iconCheck, 12, pal.ink)
-								ui.Text(c, T("设为当前生效", "Set Active")).FontSize(textCaption).FontWeight(weightMedium).TextColor(pal.ink)
-							})
-						})
-						if useBtn.Clicked() {
-							a.editCfg.Active = a.editIdx
-						}
-					}
-
-					// 删除按钮
+					// 删除供应商按钮。
+					//
+					// 「设为当前生效」在改版时删掉了：启用/禁用由详情页头部
+					// 那个开关独管，这里只剩删除，别让同一种操作有两个入口。
 					if len(a.editCfg.Providers) > 1 {
 						delBtn := ui.ButtonBase(c).Height(28).Padding(0, 10).Radius(radiusSM).
 							Background(ui.Transparent).Border(1, pal.hairlineStrong).Cursor(ui.CursorPointer).
@@ -1504,9 +1485,10 @@ func promptSection(c *ui.Context, pal palette, t *ui.Theme, title, desc string, 
 
 // addProvider 按预设追加一个供应商并选中它。若已存在，则直接聚焦至已有项，避免重复添加。
 func (a *app) addProvider(ps preset) {
+	// 加预设只「选中编辑」，不启用 —— 启用/禁用是用户自己在详情页那个
+	// 开关上决定的，不该被一次添加悄悄把当前生效切成刚加的这家。
 	if idx := findExistingPreset(a.editCfg.Providers, ps); idx >= 0 {
 		a.editIdx = idx
-		a.editCfg.Active = idx
 		return
 	}
 	a.editCfg.Providers = append(a.editCfg.Providers, llm.Provider{
@@ -1515,8 +1497,19 @@ func (a *app) addProvider(ps preset) {
 		BaseURL: ps.Base,
 		Model:   ps.Model,
 	})
-	a.editCfg.Active = len(a.editCfg.Providers) - 1
-	a.editIdx = a.editCfg.Active
+	a.editIdx = len(a.editCfg.Providers) - 1
+}
+
+// toggleEditActive 是详情页头部那个开关绑定的行为：开关当前生效的供应商，
+// 点上就把它关掉（Active = -1，AI 回落环境变量），没开着的则把它打开。
+func (a *app) toggleEditActive() {
+	if a.editIdx == a.editCfg.Active {
+		if a.editCfg.Active >= 0 {
+			a.editCfg.Active = -1
+		}
+	} else {
+		a.editCfg.Active = a.editIdx
+	}
 }
 
 func (a *app) removeProvider(i int) {
@@ -1527,9 +1520,7 @@ func (a *app) removeProvider(i int) {
 	if a.editCfg.Active >= len(a.editCfg.Providers) {
 		a.editCfg.Active = len(a.editCfg.Providers) - 1
 	}
-	if a.editCfg.Active < 0 {
-		a.editCfg.Active = 0
-	}
+	// Active 保持 -1 不归零：那是用户「关了当前生效」的合法状态。
 	if a.editIdx >= len(a.editCfg.Providers) {
 		a.editIdx = len(a.editCfg.Providers) - 1
 	}

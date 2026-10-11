@@ -30,43 +30,43 @@ type command struct {
 // 所以它每次都要重新算。
 func (a *app) commands() []command {
 	cmds := []command{
-		{T("切换终端 / Git 面板", "Toggle Terminal / Git Panel"), "Ctrl+` / ⌘J", func(a *app) { a.toggleViewMode() }},
-		{T("新建项目标签页…", "New Project Tab…"), "⌘T", func(a *app) { a.chooseFolder() }},
-		{T("关闭标签页", "Close Tab"), "⌘W", func(a *app) { a.closeTab(a.activeTab) }},
-		{T("上一个项目标签页", "Previous Project Tab"), "⌘⇧[", func(a *app) { a.prevTab() }},
-		{T("下一个项目标签页", "Next Project Tab"), "⌘⇧]", func(a *app) { a.nextTab() }},
-		{T("打开仓库…", "Open Repository…"), "⌘O", func(a *app) { a.chooseFolder() }},
-		{T("刷新", "Refresh"), "⌘R", func(a *app) { a.reload() }},
-		{T("提交", "Commit"), "⌘⏎", func(a *app) { a.doCommit() }},
-		{T("暂存全部改动", "Stage All Changes"), "⌘⇧A", func(a *app) { a.stageAll() }},
+		{T("切换终端 / Git 面板", "Toggle Terminal / Git Panel"), KS("⌘J / Ctrl+`"), func(a *app) { a.toggleViewMode() }},
+		{T("新建项目标签页…", "New Project Tab…"), K("⌘T"), func(a *app) { a.chooseFolder() }},
+		{T("关闭标签页", "Close Tab"), K("⌘W"), func(a *app) { a.closeTab(a.activeTab) }},
+		{T("上一个项目标签页", "Previous Project Tab"), K("⌘⇧["), func(a *app) { a.prevTab() }},
+		{T("下一个项目标签页", "Next Project Tab"), K("⌘⇧]"), func(a *app) { a.nextTab() }},
+		{T("打开仓库…", "Open Repository…"), K("⌘O"), func(a *app) { a.chooseFolder() }},
+		{T("刷新", "Refresh"), K("⌘R"), func(a *app) { a.reload() }},
+		{T("提交", "Commit"), K("⌘⏎"), func(a *app) { a.doCommit() }},
+		{T("暂存全部改动", "Stage All Changes"), K("⌘⇧A"), func(a *app) { a.stageAll() }},
 		{T("取消暂存全部改动", "Unstage All Changes"), "", func(a *app) { a.unstageAll() }},
 		{T("预检暂存区代码风险…", "Scan Staged Changes for Risks…"), "", func(a *app) { a.startRiskScan() }},
 		{T("储藏工作区改动…", "Stash Changes…"), "", func(a *app) { a.openStashDialog() }},
 		{T("新建标签…", "New Tag…"), "", func(a *app) { a.newTagAtHead() }},
-		{T("新建分支…", "New Branch…"), "⌘⇧N", func(a *app) { a.newBranchAtHead() }},
-		{T("抓取", "Fetch"), "⌘⇧F", func(a *app) { a.doFetch() }},
-		{T("拉取", "Pull"), "⌘⇧P", func(a *app) { a.doPull() }},
-		{T("推送", "Push"), "⌘⇧U", func(a *app) { a.doPush() }},
-		{T("查看改动", "Show Changes"), "⌘1", func(a *app) { a.setTab(0) }},
-		{T("查看历史", "Show History"), "⌘2", func(a *app) { a.setTab(1) }},
-		{T("筛选文件", "Filter Files"), "⌘F", func(a *app) { a.focusFilter = true }},
-		{T("统一视图（Unified）", "Unified View"), "⌘U", func(a *app) { a.setSplit(false) }},
+		{T("新建分支…", "New Branch…"), K("⌘⇧N"), func(a *app) { a.newBranchAtHead() }},
+		{T("抓取", "Fetch"), K("⌘⇧F"), func(a *app) { a.doFetch() }},
+		{T("拉取", "Pull"), K("⌘⇧P"), func(a *app) { a.doPull() }},
+		{T("推送", "Push"), K("⌘⇧U"), func(a *app) { a.doPush() }},
+		{T("查看改动", "Show Changes"), K("⌘1"), func(a *app) { a.setTab(0) }},
+		{T("查看历史", "Show History"), K("⌘2"), func(a *app) { a.setTab(1) }},
+		{T("筛选文件", "Filter Files"), K("⌘F"), func(a *app) { a.focusFilter = true }},
+		{T("统一视图（Unified）", "Unified View"), K("⌘U"), func(a *app) { a.setSplit(false) }},
 		{T("左右对照（Split）", "Split View"), "", func(a *app) { a.setSplit(true) }},
-		{T("模型设置…", "Settings…"), "⌘,", func(a *app) { a.openSettings() }},
+		{T("模型设置…", "Settings…"), K("⌘,"), func(a *app) { a.openSettings() }},
 		{T("外观: 跟随系统", "Theme: Follow System"), "", func(a *app) { a.setThemeMode("system") }},
 		{T("外观: 浅色模式", "Theme: Light Mode"), "", func(a *app) { a.setThemeMode("light") }},
 		{T("外观: 深色模式", "Theme: Dark Mode"), "", func(a *app) { a.setThemeMode("dark") }},
 		{T("语言: 简体中文", "Language: 简体中文"), "", func(a *app) { a.setLocale("zh") }},
 		{T("语言: English", "Language: English"), "", func(a *app) { a.setLocale("en") }},
-		{T("放大代码字号", "Increase Font Size"), "⌘+", func(a *app) { a.setCodeSize(a.codeSizeValue() + codeSizeStep) }},
-		{T("缩小代码字号", "Decrease Font Size"), "⌘−", func(a *app) { a.setCodeSize(a.codeSizeValue() - codeSizeStep) }},
-		{T("恢复默认字号", "Reset Font Size"), "⌘0", func(a *app) { a.setCodeSize(0) }},
+		{T("放大代码字号", "Increase Font Size"), K("⌘+"), func(a *app) { a.setCodeSize(a.codeSizeValue() + codeSizeStep) }},
+		{T("缩小代码字号", "Decrease Font Size"), K("⌘−"), func(a *app) { a.setCodeSize(a.codeSizeValue() - codeSizeStep) }},
+		{T("恢复默认字号", "Reset Font Size"), K("⌘0"), func(a *app) { a.setCodeSize(0) }},
 	}
 
 	if a.sidebarOn {
-		cmds = append(cmds, command{T("隐藏侧栏", "Hide Sidebar"), "⌘⇧B", func(a *app) { a.setSidebar(false) }})
+		cmds = append(cmds, command{T("隐藏侧栏", "Hide Sidebar"), K("⌘⇧B"), func(a *app) { a.setSidebar(false) }})
 	} else {
-		cmds = append(cmds, command{T("显示侧栏", "Show Sidebar"), "⌘⇧B", func(a *app) { a.setSidebar(true) }})
+		cmds = append(cmds, command{T("显示侧栏", "Show Sidebar"), K("⌘⇧B"), func(a *app) { a.setSidebar(true) }})
 	}
 	if a.canReachRemote() && !a.detached && a.hasUpstream(a.branch) {
 		cmds = append(cmds, command{T("强制推送（--force-with-lease）…", "Force Push (--force-with-lease)…"), "", func(a *app) { a.promptForcePush() }})
@@ -75,7 +75,7 @@ func (a *app) commands() []command {
 		cmds = append(cmds, command{T("收起 AI 解释", "Close AI Explanation"), "Esc", func(a *app) { a.closeExplain() }})
 	}
 	if a.repoReady() {
-		cmds = append(cmds, command{T("对比分支代码差异…", "Compare Branches…"), "⌘⇧D", func(a *app) { a.openCompareDialog("") }})
+		cmds = append(cmds, command{T("对比分支代码差异…", "Compare Branches…"), K("⌘⇧D"), func(a *app) { a.openCompareDialog("") }})
 		cmds = append(cmds, command{T("查看 GitHub Pull Requests…", "GitHub Pull Requests…"), "", func(a *app) { a.openPRDialog() }})
 	}
 	if a.compare.on {

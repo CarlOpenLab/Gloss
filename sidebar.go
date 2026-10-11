@@ -93,7 +93,7 @@ func (a *app) sidebarRepoCard(c *ui.Context, t *ui.Theme, pal palette) {
 	card := ui.ButtonBase(c).FillWidth().Radius(radiusSM).
 		Padding(5, 8).
 		Cursor(ui.CursorPointer).Label(name).
-		Tooltip(T("点击切换最近项目（或 ⌘O 打开本地仓库）", "Switch recent repository (⌘O)"))
+		Tooltip(Tf("点击切换最近项目（或 %s 打开本地仓库）", "Switch recent project (or %s to open repository)", K("⌘O")))
 
 	bg := ui.Transparent
 	if card.Hovered() || a.repoDropdownOpen {
@@ -139,10 +139,10 @@ func (a *app) sidebarWorkspaceNav(c *ui.Context, t *ui.Theme, pal palette) {
 	noRepo := !a.repoReady()
 
 	// 1. 改动（Local Changes）
-	a.sidebarNavItem(c, t, pal, 0, T("改动", "Changes"), T("工作区改动 ⌘1", "Working tree changes ⌘1"), iconFileDiff, noRepo, a.dirtyCount())
+	a.sidebarNavItem(c, t, pal, 0, T("改动", "Changes"), Tf("工作区改动 %s", "Working tree changes %s", K("⌘1")), iconFileDiff, noRepo, a.dirtyCount())
 
 	// 2. 历史（All Commits）
-	a.sidebarNavItem(c, t, pal, 1, T("历史", "History"), T("提交历史与拓扑图 ⌘2", "Commit history & graph ⌘2"), iconGitCommit, noRepo, 0)
+	a.sidebarNavItem(c, t, pal, 1, T("历史", "History"), Tf("提交历史与拓扑图 %s", "Commit history & graph %s", K("⌘2")), iconGitCommit, noRepo, 0)
 }
 
 // sidebarNavItem 画侧栏主导航的一行（如「改动」或「历史」）。
