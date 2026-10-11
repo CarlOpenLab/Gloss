@@ -55,6 +55,20 @@ type explainState struct {
 	key  string
 	head string // hunk 头，卡片上显示「在解释哪一段」
 
+	// scope 是这次解释的粒度：hunk 头的 ✨ 按钮讲整段，双击代码行讲那一行。
+	// 两套粒度共用同一张卡片，只有提示词和缓存 key 不同。
+	scope explainScope
+	// line 是单行解释指的那一行（scope 为 scopeLine 时有效）：行号和内容，
+	// 加上它在 hunk.Lines 里的下标 —— 行号会随刷新漂移，下标才是定位凭据。
+	line explainLine
+	// question 是单行解释的追问。它不是 app 的字段而是卡片的：追问是「就着
+	// 这次解释往下问」，切到另一行/另一段就该重新开始问。
+	question string
+
+	// askOn 是追问输入框这一帧是否该抢焦点。和 filepane 的 focusFilter 一个
+	// 套路：卡片在覆盖层里构建，和别的输入框抢焦点，置位晚一帧才轮到它。
+	askOn bool
+
 	// anchor 是 ✨ 按钮上一帧的位置。每帧从按钮重新取，所以滚动、
 	// 改窗口大小之后卡片会跟着走。
 	anchor ui.Rect
@@ -95,6 +109,49 @@ type explainEntry struct {
 	CreatedAt time.Time
 }
 
+// explainScope 是这次解释盯的粒度：整段变更块，还是某一行。
+type explainScope uint8
+
+const (
+	// scopeHunk 是 hunk 头的 ✨ 按钮那一套：讲整段改了什么。
+	scopeHunk explainScope = iota
+	// scopeLine 是双击代码行那一套：只讲这一行。
+	scopeLine
+)
+
+// explainLine 是被单独解释的那一行。
+//
+// 行号会随刷新、切提交而漂移，所以定位认 hunk 下标 + 行在 hunk 里的下标
+// （和 a.ex.fi / a.ex.hi 一个道理）；no 和 text 只是拿来显示和拼提示词的
+// 快照，每帧从行模型重新取，不用它倒推位置。
+type explainLine struct {
+	// lineIdx 是被解释的行在 hunk.Lines 里的下标。
+	lineIdx int
+	// no 是它在文件里的行号（新侧优先，纯删除的行用旧侧）。0 表示定位失败。
+	no int
+	// side 是 no 取自哪一侧：删除行在新侧没有行号，说的时候得讲清楚。
+	side diff.LineType
+	// text 是这一行的内容，去掉行首那个 +/-/空格 标记。
+	text string
+}
+
+// scopeTag 是卡片角标上的粒度说明：用户得知道这一趟讲的是「一段」还是「一行」。
+func (e explainLine) tag() string {
+	if e.no <= 0 {
+		return ""
+	}
+	old := e.side == diff.LineDel
+	return Tf("第 %d 行", "Line %d", e.no) + sideMark(old)
+}
+
+// sideMark 标出这一行取自旧侧还是新侧。空串表示说不清，此时别硬凑一个字。
+func sideMark(old bool) string {
+	if old {
+		return T("（旧）", " (old)")
+	}
+	return T("（新）", " (new)")
+}
+
 // explainMail 是流式片段的中转站：后台只写，主线程按节流取。
 type explainMail struct {
 	mu   sync.Mutex
@@ -133,8 +190,47 @@ func (a *app) isExplaining(fi, hi int) bool {
 	return a.ex.key == a.explainKey(a.files[fi], hi)
 }
 
+// isExplainingLine 判断这一行是不是当前打开的那个单行解释。
+//
+// lineIdx 是定位凭据（行号会漂），所以要的是「同一段的同一行」而不是「同一个行号」。
+func (a *app) isExplainingLine(fi, hi, lineIdx int) bool {
+	if !a.explainOpen() || a.ex.scope != scopeLine {
+		return false
+	}
+	return a.ex.fi == fi && a.ex.hi == hi && a.ex.line.lineIdx == lineIdx
+}
+
+// explainStillValid 判断卡片还指不指着还在的东西。
+//
+// 刷新、切文件之后 fi/hi 可能已经落到别的条目上（下标会漂，key 不会），
+// 这时卡片讲的就是别的东西了 —— 每次画卡片都先问一句，不成立就收掉。
+// 两种粒度分别对：hunk 那一套对 fi+hi，单行那一套再多对一行 lineIdx。
+func (a *app) explainStillValid() bool {
+	if !a.explainOpen() {
+		return false
+	}
+	if a.ex.fi < 0 || a.ex.fi >= len(a.files) {
+		return false
+	}
+	if a.ex.hi < 0 || a.ex.hi >= len(a.files[a.ex.fi].Hunks) {
+		return false
+	}
+	if a.ex.scope == scopeLine {
+		li := a.ex.line.lineIdx
+		return li >= 0 && li < len(a.files[a.ex.fi].Hunks[a.ex.hi].Lines)
+	}
+	return true
+}
+
+// explainKey 是这次解释的缓存 key。
+//
+// 同一行有多个 hunk 时，hunkIdx 也进 key：不同段里的同一行不是同一件事
+// （一段在改它，另一段只是它旁边变了），缓存共享会把两段的解释混成一份。
 func (a *app) explainKey(f gitrepo.File, hi int) string {
-	return explain.CacheKey(f.FileDiff, f.Hunks[hi], a.modelName)
+	if a.ex.scope != scopeLine {
+		return explain.CacheKey(f.FileDiff, f.Hunks[hi], a.modelName)
+	}
+	return explain.SelectionCacheKey(explain.Path(f.FileDiff), a.ex.line.text, a.ex.question, a.modelName)
 }
 
 // toggleExplain 点 ✨ 时调用：开着就关掉，关着就打开。
@@ -146,6 +242,15 @@ func (a *app) toggleExplain(fi, hi int) {
 	a.openExplain(fi, hi)
 }
 
+// toggleExplainLine 双击代码行时调用：开着同一行就关掉，否则打开那一行。
+func (a *app) toggleExplainLine(fi, hi, lineIdx int) {
+	if a.isExplainingLine(fi, hi, lineIdx) {
+		a.closeExplain()
+		return
+	}
+	a.openExplainLine(fi, hi, lineIdx)
+}
+
 // openExplain 打开卡片：有缓存就直接显示，没有就发起一次流式请求。
 func (a *app) openExplain(fi, hi int) {
 	if fi < 0 || fi >= len(a.files) || hi < 0 || hi >= len(a.files[fi].Hunks) {
@@ -155,12 +260,16 @@ func (a *app) openExplain(fi, hi int) {
 
 	f := a.files[fi]
 	h := f.Hunks[hi]
+	// scope 先落上、key 后算：explainKey 读 a.ex.scope 决定用哪套算法，
+	// 在字面量里一起写等于拿**旧**卡片的状态算新 key —— 上一张是单行
+	// 卡片时，这里会算出一个单行的 key 来。
 	a.ex = explainState{
-		fi:   fi,
-		hi:   hi,
-		key:  a.explainKey(f, hi),
-		head: hunkHeaderText(h),
+		fi:    fi,
+		hi:    hi,
+		head:  hunkHeaderText(h),
+		scope: scopeHunk,
 	}
+	a.ex.key = a.explainKey(f, hi)
 
 	if text, ok := a.store.Lookup(a.ex.key); ok {
 		a.ex.text = text
@@ -171,6 +280,61 @@ func (a *app) openExplain(fi, hi int) {
 	}
 	a.rowsDirty = true
 	a.startExplain(f.FileDiff, h, hi, fileKey(f))
+}
+
+// openExplainLine 只看某一行：要讲清「这一行在干什么、为什么这么写」。
+//
+// 它复用同一张卡片，所以和 hunk 那颗按钮共享暂存区、已 review 那一类
+// 栏脚开关 —— 换粒度不该换掉卡片本身。
+func (a *app) openExplainLine(fi, hi, lineIdx int) {
+	if fi < 0 || fi >= len(a.files) || hi < 0 || hi >= len(a.files[fi].Hunks) {
+		return
+	}
+	h := a.files[fi].Hunks[hi]
+	if lineIdx < 0 || lineIdx >= len(h.Lines) {
+		return
+	}
+	a.cancelExplain()
+
+	f := a.files[fi]
+	line := explainLine{
+		lineIdx: lineIdx,
+		no:      lineNum(h.Lines[lineIdx]),
+		side:    h.Lines[lineIdx].Type,
+		text:    strings.TrimLeft(h.Lines[lineIdx].Content, "+-"),
+	}
+	// head 留着 hunk 头：卡片要用它说「在讲哪个文件哪一段」，单行只多加
+	// 一行角标说第几行 —— 光有「第 12 行」不知道是哪个文件，还是两个都摆。
+	//
+	// scope 和 line 必须先落到 a.ex 上再算 key：explainKey 在单行粒度下
+	// 读的就是这两个字段，在结构体字面量里算 key 用的是**旧的** a.ex
+	// （上一张卡片的 scope 和行内容），算出来的 key 是错的。
+	a.ex = explainState{
+		fi:    fi,
+		hi:    hi,
+		head:  hunkHeaderText(h),
+		scope: scopeLine,
+		line:  line,
+	}
+	a.ex.key = a.explainKey(f, hi)
+
+	if text, ok := a.store.Lookup(a.ex.key); ok {
+		a.ex.text = text
+		a.ex.cached = true
+		a.recordExplainEntry(text, true)
+		a.rowsDirty = true
+		return
+	}
+	a.rowsDirty = true
+	a.startExplainLine(f.FileDiff, h, hi, lineIdx, fileKey(f))
+}
+
+// lineNum 是这一行在文件里的行号：新侧优先，纯删除的行退回旧侧。
+func lineNum(l diff.Line) int {
+	if l.NewNum > 0 {
+		return l.NewNum
+	}
+	return l.OldNum
 }
 
 // startExplain 起一个后台请求。参数全是值 —— 后台 goroutine 绝不碰 app。
@@ -213,31 +377,83 @@ func (a *app) startExplain(f diff.FileDiff, h diff.Hunk, hi int, contentKey stri
 	key := a.ex.key
 	prov := a.store.Provider()
 
-	onDelta := func(chunk string) {
+	a.run(func() { a.streamExplain(ctx, prov, key, mail, system, user) })
+}
+
+// startExplainLine 起一个单行解释的后台请求。
+//
+// 和 startExplain 分开而不是塞个 scope 参数进去：两者的提示词来源不同
+// （BuildSelectionPrompt vs BuildPrompt），共用的只有后面那一串流式收尾。
+func (a *app) startExplainLine(f diff.FileDiff, h diff.Hunk, hi, lineIdx int, contentKey string) {
+	if !a.store.Provider().Ready() {
+		a.ex.loading = false
+		a.ex.needKey = true
+		return
+	}
+	a.ex.needKey = false
+
+	var lines []string
+	if cc := a.contents[contentKey]; cc != nil {
+		lines = cc.lines
+	}
+	system, user := a.selectionPrompt(f, h, hi, lineIdx, lines)
+	system = a.store.Config().EffectiveExplainPrompt(system)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	a.ex.cancel = cancel
+	a.ex.loading = true
+	mail := &explainMail{last: time.Now()}
+	a.ex.mail = mail
+
+	key := a.ex.key
+	prov := a.store.Provider()
+
+	a.run(func() { a.streamExplain(ctx, prov, key, mail, system, user) })
+}
+
+// selectionPrompt 拼单行解释的提示词。
+//
+// 上下文围着这一行取，而不是围着整个 hunk：卡片上写的是「第 12 行」，
+// 给的上下文却是前后一整段，模型很容易顺势讲起整段来。行号以 hunk 里的
+// 那一行为准 —— 它跟用户双击的那一行是同一行。
+func (a *app) selectionPrompt(f diff.FileDiff, h diff.Hunk, hi, lineIdx int, lines []string) (string, string) {
+	l := h.Lines[lineIdx]
+	no := lineNum(l)
+	return explain.BuildSelectionPrompt(explain.SelectionRequest{
+		File:     f,
+		Code:     strings.TrimLeft(l.Content, "+-"),
+		LineNum:  no,
+		Question: a.ex.question,
+		Context:  explain.LineWindow(lines, no, explainAround/2, explainMaxCtx),
+	})
+}
+
+// streamExplain 是两种粒度共用的流式收尾。
+//
+// key 是这次请求的缓存 key，也是「卡片有没有换目标」的凭据：用户在请求
+// 返回前点到别的行、别的段，旧结果就该丢掉，不能接在当前卡片后面。
+func (a *app) streamExplain(ctx context.Context, prov *llm.Provider, key string, mail *explainMail, system, user string) {
+	text, err := llm.StreamExplanation(ctx, prov, system, user, func(chunk string) {
 		if mail.fill(chunk) {
 			a.dispatch(func() { a.flushExplain(mail) })
 		}
-	}
-
-	a.run(func() {
-		text, err := llm.StreamExplanation(ctx, prov, system, user, onDelta)
-		a.dispatch(func() {
-			if a.ex.key != key {
-				return // 已经换到别的变更块了，这次的结果丢掉
+	})
+	a.dispatch(func() {
+		if a.ex.key != key {
+			return // 已经换到别的变更块了，这次的结果丢掉
+		}
+		a.flushExplain(mail)
+		a.ex.loading = false
+		if err != nil {
+			if ctx.Err() == nil { // 自己取消的不算错误
+				a.ex.fail = llm.Describe(err)
 			}
-			a.flushExplain(mail)
-			a.ex.loading = false
-			if err != nil {
-				if ctx.Err() == nil { // 自己取消的不算错误
-					a.ex.fail = llm.Describe(err)
-				}
-				return
-			}
-			a.ex.text = strings.TrimSpace(text)
-			a.store.Put(key, a.ex.text)
-			a.persist()
-			a.recordExplainEntry(a.ex.text, false)
-		})
+			return
+		}
+		a.ex.text = strings.TrimSpace(text)
+		a.store.Put(key, a.ex.text)
+		a.persist()
+		a.recordExplainEntry(a.ex.text, false)
 	})
 }
 
@@ -281,7 +497,7 @@ func (a *app) explainInlineRow(c *ui.Context, pal palette, r row) {
 		return
 	}
 	// 刷新仓库或改筛选之后，fi/hi 可能已经指向别的文件了 —— 收起解释
-	if !a.isExplaining(a.ex.fi, a.ex.hi) {
+	if !a.explainStillValid() {
 		a.closeExplain()
 		return
 	}
@@ -336,6 +552,9 @@ func (a *app) explainInlineRow(c *ui.Context, pal palette, r row) {
 		card.Children(func() {
 			a.explainHead(c, pal)
 			a.explainBody(c, pal, 520)
+			if a.ex.scope == scopeLine {
+				a.askRow(c, pal)
+			}
 			a.explainFoot(c, pal)
 		})
 	})
@@ -489,8 +708,16 @@ func (a *app) explainHead(c *ui.Context, pal palette) {
 				a.closeExplain()
 			}
 		})
-		ui.Text(c, a.ex.head).Font("monospace").FontSize(textCaption).
-			SingleLine().TextColor(pal.inkSubtle)
+			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, a.ex.head).Font("monospace").FontSize(textCaption).
+					SingleLine().MinWidth(0).Grow(1).TextColor(pal.inkSubtle)
+				// 单行解释时把那一行指出来。放在 hunk 头这一行右端，
+				// 不另起一行：卡片讲的就是这一行，标题栏里就该看见是第几行。
+				if tag := a.ex.line.tag(); a.ex.scope == scopeLine && tag != "" {
+					ui.Text(c, tag).Font("monospace").FontSize(textCaption).SingleLine().
+						TextColor(pal.inkMuted)
+				}
+			})
 	})
 }
 
@@ -710,6 +937,58 @@ func (a *app) explainFoot(c *ui.Context, pal palette) {
 			ui.Text(c, T("生成中…", "Generating…")).FontSize(textCaption).TextColor(pal.inkSubtle)
 		}
 	})
+}
+
+// askRow 是单行解释底下的追问框：就着这一行再问一句，答案接在同一张卡片里。
+//
+// 只有单行解释有它。「这一段为什么改」是 hunk 那颗按钮的问题，问错了对象
+// 会得到一段泛泛的解释，不如不给。
+//
+// 输入框和卡片是一帧里构建的，所以它自己会的 Changed() 读不到 Enter ——
+// 回车在单行编辑器里是我们的 Submitted()，光标进去那一帧就该问值。
+func (a *app) askRow(c *ui.Context, pal palette) {
+	ui.Box(c).Shrink(0).Padding(8, 12).FillWidth().Children(func() {
+		in := ui.TextInput(c, &a.ex.question).
+			Placeholder(T("就这一行追问…", "Ask about this line…")).
+			Label(T("追问", "Follow-up question"))
+		fadeColors(in)
+		if a.ex.askOn {
+			in.Focus()
+			a.ex.askOn = false
+		}
+
+		if in.Submitted() {
+			a.ex.askOn = true
+			a.reAskLine()
+		}
+	})
+}
+
+// reAskLine 用当前的问题重问这一行。
+//
+// 老答案整块换掉：追问是在同一张卡片里接着聊，但每一次请求都该是一次完整
+// 的回答，不是接在半句话后面。
+func (a *app) reAskLine() {
+	if !a.explainOpen() || a.ex.scope != scopeLine {
+		return
+	}
+	if a.ex.fi < 0 || a.ex.fi >= len(a.files) || a.ex.hi < 0 || a.ex.hi >= len(a.files[a.ex.fi].Hunks) {
+		return
+	}
+	f := a.files[a.ex.fi]
+	h := f.Hunks[a.ex.hi]
+	if a.ex.line.lineIdx < 0 || a.ex.line.lineIdx >= len(h.Lines) {
+		return
+	}
+	a.cancelExplain()
+	a.ex.text = ""
+	a.ex.scroll = ui.ScrollState{}
+	a.ex.fail = llm.Failure{}
+	a.ex.needKey = false
+	// key 要重算：问题变了，缓存命中该变。换 key 也顺带让旧请求的结果落空
+	// （streamExplain 里比 key 才知道该不该收）。
+	a.ex.key = a.explainKey(f, a.ex.hi)
+	a.startExplainLine(f.FileDiff, h, a.ex.hi, a.ex.line.lineIdx, fileKey(f))
 }
 
 // mdStyleFor 从主题里取 Markdown 渲染要用的颜色。

@@ -72,7 +72,7 @@ When reviewing large pull requests or AI-generated diffs, the biggest bottleneck
   - Amend commits with pre-filled previous commit messages, supporting message-only adjustments or staged additions.
 - **Fetch, Pull & Push**: Dedicated toolbar actions with intelligent disable states for detached HEAD or repos without remotes. Provides plain-language translations for push rejections, divergences, and authentication requirements.
 - **GitHub-Style Diff View**: Red/green diff highlighting, dual-side line numbers, syntax highlighting (chroma), and file tree navigation.
-- **Per-Hunk AI Explanations**: Non-modal popups with streaming text. When multiple hunks exist in a single file, the prompt provides file context with accurate line numbers while focusing exclusively on the selected hunk. Cached by content hash + model name.
+- **Per-Hunk AI Explanations**: Non-modal popups with streaming text. When multiple hunks exist in a single file, the prompt provides file context with accurate line numbers while focusing exclusively on the selected hunk. Cached by content hash + model name. Double-click any code line to explain just that line, then keep asking follow-ups about it.
 - **Fork-Style Commit Graph**: Top pane displays commits alongside a calculated topology graph; bottom pane displays file trees on the left and diffs on the right.
 - **File Tree & Viewed Folding**: Collapsible directory tree with single-child path flattening and fuzzy search (`⌘F`). Marking files as `Viewed` collapses them to fit reviews on a single screen; automatically invalidates on content changes.
 - **Streamlined Conflict Resolution**: Amber status bar during merge/rebase/cherry-pick conflicts with step indicators (Continue / Skip / Abort). Interactive conflict cards allow two-way side picking and accept-deletion confirmations.
@@ -86,7 +86,8 @@ When reviewing large pull requests or AI-generated diffs, the biggest bottleneck
 |---|---|
 | `⌘K` | Open Command Palette |
 | `J` / `K` | Jump to Next / Previous hunk (Changes) or commit (History) |
-| `↓` / `↑` | Select Next / Previous commit (History) |
+| `↓` / `↑` | Select Next / Previous commit (History) or file (Changes) |
+| Double-click a diff line | Explain just that line with AI |
 | `⌘F` | Focus file filter input |
 | `⌘⏎` | Commit staged changes |
 | `⌘O` | Open repository |
@@ -206,9 +207,9 @@ internal/
 - [x] Local branch operations: New branch (`⌘⇧N`), rename, safe deletion
 - [x] Remote branch & integration: Delete remote branch, merge/rebase, force-with-lease push
 - [x] Draggable sidebar resizing
-- [ ] Keyboard navigation for the file list: `J` / `K` and `↑` / `↓` already move the selected commit on the history tab and jump between hunks on the changes tab; what's missing is arrow-key navigation over the changed-files list itself
+- [x] Keyboard navigation for the file list: `J` / `K` and `↑` / `↓` move the selected commit on the history tab; on the changes tab `↑` / `↓` move the selection in the changed-files list while `J` / `K` jump between hunks
 - [x] AI commit message & branch generation
 - [x] GitHub PR: list open PRs and review PR diffs
 - [x] Pre-flight risk scan: Full-diff scan highlighting potential vulnerabilities
-- [ ] Single-line explanation / selection-based query
+- [x] Single-line explanation / selection-based query: double-click a code line to explain just that line, with a follow-up question box
 - [ ] Free cross-line text selection in a diff: render each hunk as one multi-line selectable text (chunk long hunks by N lines), with native drag-select and ⌘C
