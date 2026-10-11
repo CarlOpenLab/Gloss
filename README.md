@@ -206,9 +206,9 @@ internal/
 - [x] Local branch operations: New branch (`⌘⇧N`), rename, safe deletion
 - [x] Remote branch & integration: Delete remote branch, merge/rebase, force-with-lease push
 - [x] Draggable sidebar resizing
-- [ ] Keyboard navigation for commit history (`J` / `K` in commit list)
-- [ ] AI commit message & branch generation
-- [ ] GitHub PR integration: Review PR diffs and publish AI explanations as comments
-- [ ] Pre-flight risk scan: Full-diff scan highlighting potential vulnerabilities
+- [ ] Keyboard navigation for the file list: `J` / `K` and `↑` / `↓` already move the selected commit on the history tab and jump between hunks on the changes tab; what's missing is arrow-key navigation over the changed-files list itself
+- [x] AI commit message & branch generation
+- [x] GitHub PR: list open PRs and review PR diffs
+- [x] Pre-flight risk scan: Full-diff scan highlighting potential vulnerabilities
 - [ ] Single-line explanation / selection-based query
 - [ ] Free cross-line text selection in a diff: render each hunk as one multi-line selectable text (chunk long hunks by N lines), with native drag-select and ⌘C
