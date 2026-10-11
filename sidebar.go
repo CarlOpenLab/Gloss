@@ -18,9 +18,9 @@ const (
 	sidebarMaxW     = float32(600)
 )
 
-// sidebar 是左侧栏：项目名称 + 工作区导航（改动/历史）+ 分支/远程/标签/储藏树。
+// sidebar 是左侧栏：工作区导航（改动/历史）+ 分支/远程/标签/储藏树。
 //
-// 参照 Fork 布局规范，侧栏顶部承载最高层级项目卡片与工作区导航。
+// 参照 Fork 布局规范，侧栏顶部承载工作区导航。
 func (a *app) sidebar(c *ui.Context, pal palette) {
 	t := c.Theme()
 	sw := a.sidebarWidth(c)
@@ -28,7 +28,7 @@ func (a *app) sidebar(c *ui.Context, pal palette) {
 	ui.Column(c).Width(sw).Shrink(0).
 		Background(pal.sideBg.Alpha(0.55)).
 		Children(func() {
-			// 侧栏顶部项目名称与工作区导航（Fork 风格：改动与历史）
+			// 侧栏顶部只有工作区导航（Fork 风格：改动与历史）
 			a.sidebarHeader(c, t, pal)
 
 			if a.repoReady() {
@@ -62,76 +62,21 @@ func (a *app) sidebar(c *ui.Context, pal palette) {
 		})
 }
 
-// sidebarHeader 呈现侧边栏顶部：仓库名称下拉卡片 + 工作区核心导航（改动 / 历史）。
-// 严格参照 Fork 交互设计，将仓库名与「改动 (带待提交计数角标)」/「历史」置于最高主导航层级。
+// sidebarHeader 呈现侧边栏顶部的工作区核心导航（改动 / 历史）。
+//
+// 这里原先还压着一张仓库名称卡片（名字 + 路径 + 最近项目下拉）。项目
+// 标签页固定到窗口顶栏之后（见 projectTabBar），同一个项目名在 60px 之内
+// 出现两遍，读起来像两个东西；顶栏那个还能切项目、建新项目，卡片只剩
+// 重复。最近项目仍然够得着：菜单栏「文件 → 最近打开的项目」和命令面板
+// （⌘K）里都有。
 func (a *app) sidebarHeader(c *ui.Context, t *ui.Theme, pal palette) {
-	ui.Column(c).Padding(2, 8, 4, 8).Gap(3).Shrink(0).FillWidth().Children(func() {
-		// 1. 仓库名称卡片（点击展开最近项目与打开仓库）
-		a.sidebarRepoCard(c, t, pal)
-
-		// 2. 工作区主导航（改动与历史）
+	ui.Column(c).Padding(6, 8, 4, 8).Gap(3).Shrink(0).FillWidth().Children(func() {
+		// 工作区主导航（改动与历史）
 		a.sidebarWorkspaceNav(c, t, pal)
 
 		// 分割线
 		ui.Box(c).Height(1).FillWidth().Margin(4, 2).Background(pal.hairline)
 	})
-}
-
-// sidebarRepoCard 呈现仓库名称与最近项目下拉卡片入口。
-func (a *app) sidebarRepoCard(c *ui.Context, t *ui.Theme, pal palette) {
-	name := a.repoName
-	if name == "" {
-		name = "Gloss"
-	}
-	hasRepo := a.repoReady()
-	sw := a.sidebarWidth(c)
-	sub := ""
-	if a.repoPath != "" {
-		sub = shortPath(c, a.repoPath, sw-40)
-	}
-
-	card := ui.ButtonBase(c).FillWidth().Radius(radiusSM).
-		Padding(5, 8).
-		Cursor(ui.CursorPointer).Label(name).
-		Tooltip(Tf("点击切换最近项目（或 %s 打开本地仓库）", "Switch recent project (or %s to open repository)", K("⌘O")))
-
-	bg := ui.Transparent
-	if card.Hovered() || a.repoDropdownOpen {
-		bg = pal.surface2
-	}
-	card.Background(bg)
-	fadeColors(card)
-
-	card.Children(func() {
-		ui.Column(c).Gap(2).FillWidth().Children(func() {
-			ui.Row(c).Gap(7).AlignItems(ui.Center).Children(func() {
-				folderCol := pal.inkSubtle
-				if hasRepo {
-					folderCol = pal.inkMuted
-				}
-				drawIcon(c, iconFolder, 14, folderCol)
-
-				ui.Text(c, name).FontSize(textBody).FontWeight(weightSemibold).
-					SingleLine().Grow(1).MinWidth(0).TextColor(pal.ink)
-
-				drawIcon(c, iconChevronDown, 10, pal.inkSubtle)
-			})
-			if sub != "" {
-				ui.Text(c, sub).FontSize(textCaption).SingleLine().TextColor(pal.inkSubtle).
-					Tooltip(a.repoPath)
-			}
-		})
-	})
-
-	if card.Clicked() {
-		a.branchDropdownOpen = false
-		a.repoDropdownOpen = !a.repoDropdownOpen
-	}
-	if a.repoDropdownOpen {
-		ui.PopoverBase(c, card, &a.repoDropdownOpen, func(panel *ui.Element) {
-			a.repoDropdownPanel(c, panel, pal)
-		})
-	}
 }
 
 // sidebarWorkspaceNav 呈现 Fork 规范的工作区核心导航项：改动（带改动文件计数）与 历史。

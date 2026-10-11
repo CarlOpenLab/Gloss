@@ -702,35 +702,6 @@ func (a *app) resetSidebarWidth() {
 	a.saveViewSettings()
 }
 
-// shortPath 把仓库路径压到 width 以内，从**头上**截。
-//
-// 不靠框架自带的省略：那个截的是尾，而路径的关键信息正好在末尾 —— 仓库
-// 在哪一级目录下、和重名的那些怎么区分。从头截之后留下的尾巴才是有用的，
-// 和正文的截断习惯相反，所以这里自己来。
-//
-// 先原样试；放不下退到「…/最后三级」，再退到两级。只剩最后一节时返回
-// 空串：那一节就是上面那行的仓库名，同一个词摆两行不是信息 —— 调用方
-// 据此把整行省掉。
-func shortPath(c *ui.Context, path string, width float32) string {
-	fits := func(s string) bool {
-		w, _ := c.MeasureText(0, ui.Span{Text: s, Size: 11})
-		return w <= width
-	}
-	if fits(path) {
-		return path
-	}
-	parts := strings.Split(strings.Trim(path, "/"), "/")
-	for _, n := range []int{3, 2} {
-		if n >= len(parts) {
-			continue
-		}
-		if s := "…/" + strings.Join(parts[len(parts)-n:], "/"); fits(s) {
-			return s
-		}
-	}
-	return ""
-}
-
 // toolbarHeight 是工具栏那条带子的高度。toolbar 用的是同一个公式 ——
 // 分成两处算的话，主区的高度就会和实际差几个像素，分隔条的夹逼跟着错。
 func (a *app) toolbarHeight(c *ui.Context) float32 {
@@ -850,53 +821,45 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 		Label(T("工具栏", "Toolbar"))
 }
 
-// repoHeader 是工具栏左侧的仓库选择器与路径说明：
-// 第一行是仓库名（带下拉箭头，点击展开最近项目），第二行是精简路径。
+// repoHeader 是工具栏左侧的仓库选择器：仓库名（带下拉箭头，点击展开最近
+// 项目）与当前分支徽章。
+//
+// 名字下面原先还压着一行精简路径。那行正好贴在项目标签正下方 —— 标签刚
+// 报过项目名，下一行又是一条路径，同一个项目在顶栏这一带要自我介绍两遍。
+// 路径本身没被藏起来：项目标签的悬停提示给完整路径，最近项目下拉里每条
+// 都带着。
 func (a *app) repoHeader(c *ui.Context, t *ui.Theme, pal palette) {
 	tw := a.titleWidth(c)
 	name := a.repoName
 	if name == "" {
 		name = "Gloss"
 	}
-	sub := T("未打开仓库", "No repository open")
-	if a.repoPath != "" {
-		sub = shortPath(c, a.repoPath, tw)
-	}
 
-	ui.Column(c).Gap(2).MinWidth(0).MaxWidth(tw).Children(func() {
-		// 第一行：[仓库名 ▾] 与 [分支徽章]，处于同一水平线上
-		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			repoBtn := ui.ButtonBase(c).Radius(radiusSM).Padding(2, 6, 2, 0).
-				Cursor(ui.CursorPointer).Label(name).
-				Tooltip(Tf("点击切换最近项目（或 %s 打开本地仓库）", "Switch recent project (or %s to open repository)", K("⌘O")))
-			if repoBtn.Hovered() || a.repoDropdownOpen {
-				repoBtn.Background(pal.surface2)
-			}
-			fadeColors(repoBtn)
-			repoBtn.Children(func() {
-				ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, name).FontWeight(weightSemibold).FontSize(textBody).SingleLine().MaxWidth(180)
-					drawIcon(c, iconChevronDown, 10, pal.inkSubtle)
-				})
-			})
-			if repoBtn.Clicked() {
-				a.branchDropdownOpen = false
-				a.repoDropdownOpen = !a.repoDropdownOpen
-			}
-			if a.repoDropdownOpen {
-				ui.PopoverBase(c, repoBtn, &a.repoDropdownOpen, func(panel *ui.Element) {
-					a.repoDropdownPanel(c, panel, pal)
-				})
-			}
-
-			a.branchChip(c, t, pal)
-		})
-
-		// 第二行：仓库路径（微型次级提示）
-		if sub != "" {
-			ui.Text(c, sub).FontSize(textCaption).TextColor(pal.inkSubtle).SingleLine().
-				Tooltip(a.repoPath)
+	ui.Row(c).Gap(8).AlignItems(ui.Center).MinWidth(0).MaxWidth(tw).Children(func() {
+		repoBtn := ui.ButtonBase(c).Radius(radiusSM).Padding(2, 6, 2, 0).
+			Cursor(ui.CursorPointer).Label(name).
+			Tooltip(Tf("点击切换最近项目（或 %s 打开本地仓库）", "Switch recent project (or %s to open repository)", K("⌘O")))
+		if repoBtn.Hovered() || a.repoDropdownOpen {
+			repoBtn.Background(pal.surface2)
 		}
+		fadeColors(repoBtn)
+		repoBtn.Children(func() {
+			ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, name).FontWeight(weightSemibold).FontSize(textBody).SingleLine().MaxWidth(180)
+				drawIcon(c, iconChevronDown, 10, pal.inkSubtle)
+			})
+		})
+		if repoBtn.Clicked() {
+			a.branchDropdownOpen = false
+			a.repoDropdownOpen = !a.repoDropdownOpen
+		}
+		if a.repoDropdownOpen {
+			ui.PopoverBase(c, repoBtn, &a.repoDropdownOpen, func(panel *ui.Element) {
+				a.repoDropdownPanel(c, panel, pal)
+			})
+		}
+
+		a.branchChip(c, t, pal)
 	})
 }
 
