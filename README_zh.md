@@ -9,13 +9,13 @@
 <h1 align="center">Gloss</h1>
 
 <p align="center">
-  <strong>原生 macOS Git 客户端 · 每个变更块都有 ✨ AI 逐块解释</strong><br>
+  <strong>跨平台 Git 客户端 · 每个变更块都有 ✨ AI 逐块解释</strong><br>
   <em>GPU 直接绘制 · 零 WebView · 单二进制</em>
 </p>
 
 <p align="center">
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.27+-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go 1.27+"></a>
-  <img src="https://img.shields.io/badge/Platform-macOS%20(Apple%20Silicon)-000000?style=flat-square&logo=apple&logoColor=white" alt="macOS">
+  <img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-000000?style=flat-square&logo=apple&logoColor=white" alt="macOS | Linux | Windows">
   <a href="https://github.com/egoist/mygo"><img src="https://img.shields.io/badge/GUI-mygo%20(GPU%20Direct)-4F46E5?style=flat-square" alt="mygo"></a>
   <img src="https://img.shields.io/badge/AI-Claude%20%7C%20DeepSeek%20%7C%20Ollama%20%7C%20OpenAI-6366F1?style=flat-square" alt="Multi-LLM">
   <img src="https://img.shields.io/badge/Architecture-Zero%20WebView-10B981?style=flat-square" alt="Zero WebView">
@@ -31,7 +31,7 @@
 
 日常 Review 别人（或者 AI 助手）写的大量改动代码时，最痛苦的不是看 diff，而是**看不懂这几行具体在解决什么、意图是什么、有没有暗坑**。
 
-Gloss 是一款专注于**高效代码阅读与安全 Git 操作**的原生 macOS 客户端：
+Gloss 是一款专注于**高效代码阅读与安全 Git 操作**的跨平台客户端（macOS / Linux / Windows）：
 - **哪里不懂点哪里**：每个变更块（hunk）边上都有独立 ✨ 解释按钮，AI 用人话讲清这段增删改动“做了什么、为什么做、有没有潜在风险”。
 - **纯粹的原生极速**：用 [mygo](https://github.com/egoist/mygo) 编写，GPU 直接绘制，**没有 webview、没有 JS 运行时、单个二进制文件**，启动如闪电，滚动丝滑，内存占用极低。
 
@@ -39,7 +39,7 @@ Gloss 是一款专注于**高效代码阅读与安全 Git 操作**的原生 macO
 
 ## 核心特性
 
-- ⚡ **原生 GPU 直绘**：零 Web 框架开销，极低内存占用，对齐 GitHub 视觉美学与 macOS 原生体验。
+- ⚡ **原生 GPU 直绘**：零 Web 框架开销，极低内存占用，对齐 GitHub 视觉美学与各平台原生体验。
 - ✨ **逐块 AI 解释（悬浮卡片）**：流式输出、不挤动 diff 排版。精准携带真实行号上下文，只针对当前 hunk 深度拆解，支持内容哈希去重缓存。
 - 🌲 **Fork 式上下分 & 拓扑图**：自研提交拓扑图，直观梳理分支合并脉络；下半区分立文件树与详细 diff。
 - 🔍 **Viewed 联动折叠**：标记已 review 的文件在 diff 中自动折叠，一屏扫完未审阅代码，文件变动标记自动失效。
@@ -101,6 +101,8 @@ Gloss 是一款专注于**高效代码阅读与安全 Git 操作**的原生 macO
 | `⌘+` / `⌘−` / `⌘0` | 代码字号放大 / 缩小 / 恢复默认 |
 | `⌘,` | 模型设置 |
 | `Esc` | 关掉解释卡片、确认框 |
+
+表里用的是 macOS 的写法。**Linux / Windows 上 `⌘` 一律是 `Ctrl`**：按的是同一个键，界面显示的也是 `Ctrl+…`（见 `keys_i18n.go`）。⌥ 变 `Alt`，⌫ 变 `Backspace`，⏎ 变 `Enter`。
 
 > 菜单栏（`menu.go`）里每一项都带着同一个快捷键：真实 macOS 应用里原生菜单会先把键吃掉，视图那条路走不到，两处的按键映射保持一致。
 

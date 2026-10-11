@@ -9,13 +9,13 @@
 <h1 align="center">Gloss</h1>
 
 <p align="center">
-  <strong>Native macOS Git client with inline ✨ AI hunk explanations.</strong><br>
+  <strong>Cross-platform Git client with inline ✨ AI hunk explanations.</strong><br>
   <em>Pure Go · GPU Direct Rendering · Zero WebViews</em>
 </p>
 
 <p align="center">
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.27+-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go 1.27+"></a>
-  <img src="https://img.shields.io/badge/Platform-macOS%20(Apple%20Silicon)-000000?style=flat-square&logo=apple&logoColor=white" alt="macOS">
+  <img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-000000?style=flat-square&logo=apple&logoColor=white" alt="macOS | Linux | Windows">
   <a href="https://github.com/egoist/mygo"><img src="https://img.shields.io/badge/GUI-mygo%20(GPU%20Direct)-4F46E5?style=flat-square" alt="mygo"></a>
   <img src="https://img.shields.io/badge/AI-Claude%20%7C%20DeepSeek%20%7C%20Ollama%20%7C%20OpenAI-6366F1?style=flat-square" alt="Multi-LLM">
   <img src="https://img.shields.io/badge/Architecture-Zero%20WebView-10B981?style=flat-square" alt="Zero WebView">
@@ -31,7 +31,7 @@
 
 When reviewing large pull requests or AI-generated diffs, the biggest bottleneck isn't looking at lines of code—it's understanding **why** each hunk was changed, what the author intended, and whether there are hidden pitfalls.
 
-**Gloss** is a native macOS Git client crafted for swift code review and safe everyday Git operations:
+**Gloss** is a cross-platform Git client (macOS, Linux, Windows) crafted for swift code review and safe everyday Git operations:
 
 - **Understand code at a glance**: Every diff hunk has a dedicated ✨ button. AI explains changes in plain language—what was modified, the rationale behind it, and potential edge cases.
 - **Blazing native performance**: Powered by [mygo](https://github.com/egoist/mygo), rendered directly via GPU. **Zero WebViews, zero JavaScript runtimes, single native binary**. Instant startup, silky smooth 60fps scrolling, minimal memory footprint.
@@ -98,7 +98,9 @@ When reviewing large pull requests or AI-generated diffs, the biggest bottleneck
 | `⌘,` | Model settings |
 | `Esc` | Dismiss explanation card / modal dialogs |
 
-> Menu items (`menu.go`) share identical shortcut mappings with `keys.go` to ensure native macOS menu event consistency.
+The table uses macOS notation. **On Linux and Windows, ⌘ means `Ctrl`** — the same key does the same thing, and the app displays `Ctrl+…` there (see `keys_i18n.go`). ⌥ becomes `Alt`, ⌫ becomes `Backspace`, ⏎ becomes `Enter`.
+
+> Menu items (`menu.go`) share identical shortcut mappings with `keys.go` to keep the native menu and the in-app shortcuts in sync.
 
 ---
 

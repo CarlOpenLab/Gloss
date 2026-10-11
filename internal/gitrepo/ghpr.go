@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -16,12 +17,29 @@ import (
 )
 
 var (
-	// ErrGhNotFound 表示系统未安装 gh 命令行工具。
-	ErrGhNotFound = errors.New("未检测到 gh (GitHub CLI) 工具，请先安装：brew install gh")
+	// ErrGhNotFound 表示系统未安装 gh 命令行工具。装上它的方式按平台说 ——
+	// 一句「brew install gh」在 Windows 上等于没说，而那正是多数用户会
+	// 撞上它的地方。
+	ErrGhNotFound = errors.New(ghInstallHint())
 
 	// ErrGhNotAuth 表示 gh 尚未完成 GitHub 登录认证或 Token 已失效。
 	ErrGhNotAuth = errors.New("gh 未登录或认证已失效，请在终端运行 gh auth login")
 )
+
+// ghInstallHint 按当前平台给出安装 gh 的命令。
+func ghInstallHint() string {
+	const pre = "未检测到 gh (GitHub CLI) 工具，请先安装："
+	switch runtime.GOOS {
+	case "darwin":
+		return pre + "brew install gh"
+	case "windows":
+		return pre + "winget install --id GitHub.cli"
+	default:
+		// Linux 的发行版包管理器五花八门，apt 是覆盖面最广的那个；
+		// 别的发行版用 conda-forge 或官方 apt/yum 源，见 gh 的安装文档。
+		return pre + "sudo apt install gh"
+	}
+}
 
 // 可被测试替换的函数钩子
 var (

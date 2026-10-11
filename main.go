@@ -1,4 +1,4 @@
-// Command Gloss 是一个原生 macOS 的 Git GUI，
+// Command Gloss 是一个跨平台的 Git GUI（macOS / Linux / Windows），
 // 核心是逐 hunk 的 AI 解释 —— review 大段代码时哪里不懂点哪里。
 package main
 

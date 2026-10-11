@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -195,5 +196,30 @@ exit 1
 	// 3. Success
 	if err := PostPRComment(context.Background(), repoDir, 101, "LGTM!"); err != nil {
 		t.Fatalf("PostPRComment failed: %v", err)
+	}
+}
+
+// 装 gh 的提示要按平台说 —— 「brew install gh」在 Windows 上等于没说，
+// 而那正是多数用户撞上「没装 gh」的地方。
+func TestGhInstallHintPerPlatform(t *testing.T) {
+	got := ghInstallHint()
+	if !strings.HasPrefix(got, "未检测到 gh (GitHub CLI) 工具，请先安装：") {
+		t.Errorf("提示的前缀不对：%q", got)
+	}
+	var wantCmd string
+	switch runtime.GOOS {
+	case "darwin":
+		wantCmd = "brew install gh"
+	case "windows":
+		wantCmd = "winget install --id GitHub.cli"
+	default:
+		wantCmd = "sudo apt install gh"
+	}
+	if !strings.HasSuffix(got, wantCmd) {
+		t.Errorf("%s 上该给 %q，实际 %q", runtime.GOOS, wantCmd, got)
+	}
+	// ErrGhNotFound 得是同一个提示 —— 它才是界面真正弹出来的那句。
+	if ErrGhNotFound.Error() != got {
+		t.Errorf("ErrGhNotFound 该等于 ghInstallHint()：\n got %q\nwant %q", ErrGhNotFound.Error(), got)
 	}
 }
