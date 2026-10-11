@@ -143,7 +143,8 @@ func (a *app) handleKeys(c *ui.Context) {
 
 	// J / K 与方向键导航。
 	// 历史 tab（tab == 1）：浏览历史提交列表时，J / K 与 Down / Up 移动选中的提交。
-	// 改动 tab（tab == 0）：J / K 跳上下一段改动（hunk）。
+	// 改动 tab（tab == 0）：J / K 跳上下一段改动（hunk），↑ / ↓ 在改动文件
+	// 列表里上下移 —— 一层管 diff 正文、一层管文件栏，两个键不冲突。
 	// 在模态对话框或输入框获取焦点时不响应。
 	if !a.modalOn() {
 		if a.tab == 1 && len(a.commits) > 0 {
@@ -153,7 +154,13 @@ func (a *app) handleKeys(c *ui.Context) {
 				a.navCommit(-1)
 			}
 		} else if a.tab == 0 && a.state == loadReady && len(a.files) > 0 {
-			if c.Shortcut(0, ui.KeyJ) {
+			// 方向键先给文件栏：没有选中过任何文件时这一下就是「选中第一个」，
+			// 有了选中就在列表里上下移。J / K 与它分开，仍然跳 hunk。
+			if c.Shortcut(0, ui.KeyDown) {
+				a.navFile(1)
+			} else if c.Shortcut(0, ui.KeyUp) {
+				a.navFile(-1)
+			} else if c.Shortcut(0, ui.KeyJ) {
 				a.jumpHunk(1)
 			} else if c.Shortcut(0, ui.KeyK) {
 				a.jumpHunk(-1)

@@ -514,3 +514,59 @@ func (a *app) detailEmpty(c *ui.Context, t *ui.Theme, pal palette) {
 		ui.Text(c, T("工作区状态良好，暂无代码变更。", "Working tree is clean, no uncommitted changes.")).TextColor(t.TextMuted)
 	}
 }
+
+// navFile 用方向键在「改动」文件列表里移动选中（dir：+1 下一个，-1 上一个）。
+//
+// 走的是和点击同一套状态：fileSel 记选中的文件，pendingScrollFile 请 diff
+// 滚到它。列表是树形扁平化出来的，中间夹着目录行（FileIdx 为 -1），所以
+// 要跳过它们 —— 方向键一下跳过一个目录，落到下一个真正的文件上。
+//
+// 没选中过任何文件时（fileSel < 0）从第一个文件开始，不至于按下去没反应。
+func (a *app) navFile(dir int) {
+	if len(a.files) == 0 {
+		return
+	}
+	rows := filetree.Flatten(a.tree, a.filesClosed, a.fileFilter != "")
+
+	// 当前选中的文件在这份扁平行里的位置；没选中时起算点要落在第一个
+	// **文件**行上 —— 列表的头一行常常是目录（FileIdx = -1），直接取 0
+	// 会撞在目录上，下面那一关又要求是文件，结果等于什么都没发生。
+	cur := -1
+	if a.fileSel >= 0 {
+		for i, r := range rows {
+			if r.Node.FileIdx == a.fileSel {
+				cur = i
+				break
+			}
+		}
+	}
+
+	// nextFrom 是「从哪儿开始找」：没选中过就从列表起点（↓）或终点（↑），
+	// 找的时候只认真实文件行。
+	next := -1
+	nextFrom := cur + dir
+	if cur < 0 {
+		if dir < 0 {
+			nextFrom = len(rows) - 1
+		} else {
+			nextFrom = 0
+		}
+	}
+	for i := nextFrom; i >= 0 && i < len(rows); i += dir {
+		if rows[i].Node.FileIdx >= 0 {
+			next = i
+			break
+		}
+	}
+	if next < 0 {
+		return // 已经到边界了
+	}
+
+	idx := rows[next].Node.FileIdx
+	if idx < 0 || idx >= len(a.files) {
+		return
+	}
+	a.fileSel = idx
+	a.pendingScrollFile = idx
+	a.filesList.ScrollIntoView(next)
+}
