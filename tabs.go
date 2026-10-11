@@ -254,6 +254,8 @@ func (a *app) switchTab(idx int) {
 	a.saveActiveTab()
 	a.activeTab = idx
 	a.restoreActiveTab()
+	// 切了仓库，自动刷新（autorefresh.go）重新盯新 tab 的仓库。
+	a.syncAutoWatch()
 
 	tab := a.currentTab()
 	if tab != nil {
@@ -332,6 +334,8 @@ func (a *app) closeTab(idx int) {
 		}
 		a.restoreActiveTab()
 	}
+	// 关掉/切换后活动仓库换了，自动刷新跟着换盯的对象。
+	a.syncAutoWatch()
 	a.persistOpenRepos()
 }
 

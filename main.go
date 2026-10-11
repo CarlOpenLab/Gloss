@@ -51,11 +51,14 @@ func main() {
 		// 后台 goroutine 改状态必须走这里：它把闭包投到主线程执行，
 		// 并请求重绘。直接改字段不会触发重绘。
 		a.dispatch = win.Update
+		// git 状态自动刷新（每次打开仓库后启动，改动/历史/侧栏自己跟上）。
+		a.startAutoRefresh()
 		// 冲突卡片上的「在编辑器打开」：交给系统默认应用。
 		a.openPath = func(p string) { _ = mygo.Shell.OpenPath(p) }
 
 		// 关窗前把提交框里还没提交的消息存成草稿，并优雅关闭所有终端会话。
 		win.OnClose(func(*mygo.CloseEvent) {
+			a.stopAutoRefresh()
 			a.saveCommitDraft()
 			a.closeAllTerminals()
 		})

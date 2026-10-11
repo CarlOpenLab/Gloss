@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -50,6 +51,16 @@ type app struct {
 	// loop 只在测试里用：dispatch 改成把闭包排进队列，由 settle 执行。
 	// 生产环境它是零值，没人碰。
 	loop mainLoop
+
+	// —— 自动刷新（autorefresh.go）——
+	// watchRoot 是当前要盯着自动刷新的仓库根（"" = 不盯）；watchVer 每次
+	// 模型重读自增，轮询 goroutine 靠它重新对齐基线。两个都是 atomic，
+	// 因为轮询线程要读它们，而写只发生在主线程。
+	// autoStop 关掉轮询；autoReloadedAt 防自动刷新风暴（主线程专用）。
+	watchRoot      atomic.Value // string
+	watchVer       atomic.Int32
+	autoStop       chan struct{}
+	autoReloadedAt time.Time
 
 	// —— 仓库 ——
 	// 打开失败时这两个也记着东西：试的是哪个文件夹（标题栏要摆出来，卡片
@@ -1563,6 +1574,9 @@ func (a *app) failOpen(path string, err error) {
 		a.repoPath = filepath.Clean(path)
 		a.repoName = filepath.Base(a.repoPath)
 	}
+	// 打开的不是 git 仓库，没什么可自动刷新的；顺手把轮询停在该缩着的
+	// 状态（reload 需要的 repoPath 字段还留着给错误卡片指代用）。
+	a.setAutoWatch("")
 }
 
 // applyModel 把加载结果写进 app。只在主线程调用。
@@ -1608,6 +1622,10 @@ func (a *app) applyModel(m *gitrepo.Model) {
 	}
 	a.state = loadReady
 	a.loadRefs()
+
+	// 这次加载完了，把自动刷新对齐到这份新状态上：外部改动了仓库才值得
+	// 再刷一次。裸 ⌘R、写操作后的重读也都走这里，baseline 跟着归位。
+	a.setAutoWatch(m.Repo.Root)
 }
 
 // workBranch 是「改动」列表该认的分支名。
