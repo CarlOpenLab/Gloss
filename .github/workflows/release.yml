@@ -9,34 +9,51 @@ permissions:
   contents: write
 
 jobs:
-  draft-release:
+  # 先建好 draft release 并把 CHANGELOG 的对应段落写进去。
+  # mygo -upload 对已存在的 release 不会再写 notes，所以这里必须自己带；
+  # 串行建一次也能避免几个 build job 并发调 gh release create 造出重复 release。
+  create-release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Create draft release
-        run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --draft \
-            --verify-tag \
-            --generate-notes \
-            --title "Gloss $GITHUB_REF_NAME" \
-            || true
+        with:
+          fetch-depth: 0
+      - name: Create draft release with the changelog notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            /^## / {
+              if (in_notes) exit
+              h = $2
+              gsub(/^\[/, "", h); sub(/\].*/, "", h); sub(/^v/, "", h)
+              in_notes = (h == v); next
+            }
+            in_notes { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "CHANGELOG.md 里没有 $version 的发布说明"; exit 1
+          fi
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
+            gh release create "$GITHUB_REF_NAME" \
+              --draft \
+              --title "Gloss $GITHUB_REF_NAME" \
+              --notes-file notes.md
 
   build:
-    needs: draft-release
+    needs: create-release
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: darwin/arm64
+          # macOS 只跑一个 job：mygo 的 DMG 名字不含架构（"<Name> <Version>.dmg"），
+          # arm64 / amd64 并行会同名互撞，即 v0.1.0 那次上传 404 的原因。
+          - platform: darwin/universal
             os: macos-latest
-          - platform: darwin/amd64
-            os: macos-latest
-          - platform: windows/amd64
-            os: ubuntu-latest
           - platform: linux/amd64
+            os: ubuntu-latest
+          - platform: windows/amd64
             os: ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
@@ -46,11 +63,29 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Build and upload
+      - name: Check that the tag matches mygo.json
         run: |
-          go tool mygo build \
-            -platform "${{ matrix.platform }}" \
-            -upload
+          want="v$(jq -r .version mygo.json)"
+          test "$GITHUB_REF_NAME" = "$want" || {
+            echo "tag $GITHUB_REF_NAME 与 mygo.json 的 version $want 不一致"; exit 1; }
+
+      # NSIS 只在 Windows 上自动下载，ubuntu runner 上必须自己装，否则没有
+      # "Gloss Setup X.Y.Z.exe"，windows job 会以 "nothing to upload" 失败。
+      - name: Install NSIS for the Windows installer
+        if: matrix.platform == 'windows/amd64'
+        run: sudo apt-get update && sudo apt-get install -y nsis
+
+      - name: Build and upload
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
+        run: go tool mygo build -platform "${{ matrix.platform }}" -upload
+
+      # 老版本 arm64 安装的更新 feed 是 update-darwin-arm64.json，通用包只产出
+      # update-darwin-universal.json，所以补一次按架构构建（-skip-dmg 避免 DMG 同名冲突）。
+      - name: Keep per-arch macOS update feeds
+        if: matrix.platform == 'darwin/universal'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
+        run: go tool mygo build -platform darwin/arm64,darwin/amd64 -skip-dmg -upload
