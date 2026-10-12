@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/plugins/updater"
 
 	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
 )
@@ -199,6 +200,7 @@ func buildAppMenu(a *app) *mygo.Menu {
 func (a *app) appSubmenu() []*mygo.MenuItem {
 	return []*mygo.MenuItem{
 		{Role: mygo.RoleAbout, Label: T("关于 ", "About ") + appName},
+		updater.MenuItem(),
 		mygo.Separator(),
 		a.menuCmd(T("模型设置…", "Settings…"), "CmdOrCtrl+,", a.openSettings),
 		mygo.Separator(),

@@ -3,5 +3,9 @@
   "identifier": "dev.carl.gloss",
   "version": "0.1.0",
   "icon": "resources/icon.png",
-  "out": "build"
+  "out": "build",
+  "updates": {
+    "publicKey": "4fVUs62eViL907cedpA7MlgVCPAilMBBRYTVPgV9x8s=",
+    "github": "CarlOpenLab/Gloss"
+  }
 }
