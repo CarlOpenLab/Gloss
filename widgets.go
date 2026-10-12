@@ -172,7 +172,14 @@ func hunkButton(c *ui.Context, pal palette, label, tip string, on bool, content 
 // explainButton 是 hunk 行右边那颗「✨ 解释」。
 //
 // 卡片开着的时候，按钮自己就是「哪一段在讲」的指示灯（on 时填成强调色）。
-func explainButton(c *ui.Context, pal palette, on bool) *ui.Element {
+// 加载中显示 spinner，让用户知道请求已经发出、正在等结果。
+func explainButton(c *ui.Context, pal palette, on, loading bool) *ui.Element {
+	if loading {
+		btn := hunkButton(c, pal, T("解释中…", "Explaining…"), T("正在读取代码改动…", "Reading code changes…"), true, func(fg ui.Color) {
+			ui.Spinner(c).Size(12, 12)
+		})
+		return btn
+	}
 	return hunkButton(c, pal, T("解释", "Explain"), T("让 AI 讲讲这段改了什么", "Ask AI to explain this change"), on, func(fg ui.Color) {
 		sparkleIcon(c, sparkleSize, fg)
 		ui.Text(c, T("解释", "Explain")).FontSize(11).SingleLine().TextColor(fg)

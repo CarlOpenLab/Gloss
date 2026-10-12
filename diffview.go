@@ -360,7 +360,7 @@ func (a *app) hunkHeaderRow(c *ui.Context, pal palette, r row) {
 		//
 		// 卡片讲的是单行时这颗不亮：亮着会让人以为整段都在讲，而这一趟
 		// 其实只讲了其中一行。真要讲整段，再点一下 ✨ 就是。
-		btn := explainButton(c, pal, a.isExplaining(r.file, r.hunk) && a.ex.scope != scopeLine)
+		btn := explainButton(c, pal, a.isExplaining(r.file, r.hunk) && a.ex.scope != scopeLine, a.ex.loading)
 		if btn.Clicked() {
 			a.toggleExplain(r.file, r.hunk)
 		}
