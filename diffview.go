@@ -74,7 +74,6 @@ func (a *app) rebuildRows() {
 	a.rowsDirty = false
 }
 
-
 // fileHeaderRowOf 找某个文件的文件头在行模型里的下标，没有返回 -1。
 //
 // 每次点击扫一遍而不是维护一张对照表：行模型一变（展开未改动区间、折叠、
@@ -243,7 +242,7 @@ func (a *app) fileHeaderRow(c *ui.Context, pal palette, r row) {
 }
 
 // hunkHeaderRow 是 @@ 那一行。左边是原始的 hunk 头，中间跟着 git 抓出来的
-// 函数名（Section），最右边是「暂存这一段」和「✨ 解释」。
+// 函数名（Section），最右边是「暂存这一段」。
 func (a *app) hunkHeaderRow(c *ui.Context, pal palette, r row) {
 	f := a.fileAt(r.file)
 	if f == nil || r.hunk >= len(f.Hunks) {
@@ -277,22 +276,6 @@ func (a *app) hunkHeaderRow(c *ui.Context, pal palette, r row) {
 			if stageHunkButton(c, pal, staged, a.op != gitrepo.OpNone).Clicked() {
 				a.toggleStageHunk(r.file, r.hunk)
 			}
-		}
-
-		// 按钮的选中态取点击**之前**的状态：刚点开的那一帧，按钮下一刻
-		// 才该变成「正在讲」，否则点下去的同时按钮先变色、面板才跟上，
-		// 两件事分在两帧上闪。
-		//
-		// 面板讲的是单行时这颗不亮：亮着会让人以为整段都在讲，而这一趟
-		// 其实只讲了其中一行。真要讲整段，再点一下 ✨ 就是。
-		btn := explainButton(c, pal, a.isExplaining(r.file, r.hunk) && a.ex.scope != scopeLine, a.ex.loading)
-		if btn.Clicked() {
-			a.toggleExplain(r.file, r.hunk, btn)
-		}
-		// 存 anchor 元素给 PopoverBase 做定位。点击之后的状态才是
-		// 「面板该锚在哪里」—— 顺序反了第一帧就会摆在左上角。
-		if a.isExplaining(r.file, r.hunk) {
-			a.ex.anchorEl = btn
 		}
 	})
 }
@@ -389,11 +372,6 @@ func (a *app) unifiedRow(c *ui.Context, pal palette, r row) {
 		hlFile = newHL
 	}
 
-	// 这一行正在被单独解释：给它描一道边。只描边不改底色 —— 增删行本来
-	// 就各有一条色带，再叠底色就看不出是增还是删了（我的记忆里那条
-	// 「同一信息不摆两遍」在这里也适用：边线已经说清「在讲这一行」）。
-	marked := a.isExplainingLine(r.file, r.hunk, r.lineIdx)
-
 	size := a.codeSizeValue()
 	// 高亮是按展开 tab 之后的文本切的，这里必须做同样的展开，
 	// 否则字节下标对不上，颜色会整段错位。
@@ -401,34 +379,12 @@ func (a *app) unifiedRow(c *ui.Context, pal palette, r row) {
 	targetLineNo := lineNoOf(r, oldNo, newNo)
 
 	rowEl := ui.Row(c).Height(lineH).Shrink(0).FillWidth().Background(lineBg).Cursor(ui.CursorText)
-	if marked {
-		rowEl.Border(1, pal.explainHover)
-	}
-	a.lineExplainHit(rowEl, r, rowEl)
 	rowEl.Children(func() {
 		ui.Box(c).Width(barW).AlignSelf(ui.Stretch).Background(bar)
 		a.gutter(c, pal, oldNo, gutBg)
 		a.gutter(c, pal, newNo, gutBg)
 		a.code(c, pal, hlFile, targetLineNo, text, size)
 	})
-}
-
-// lineExplainHit 给一行代码接上「双击只看这一行」。
-//
-// 双击而不是单击、也不是悬停弹小按钮：单击已经被「选中这一行」占着
-// （文件栏点一下就读 diff），悬停按钮在每一行上都会出现，整屏都是闪光。
-// 双击是显式的「我要细看这一行」，和侧栏分支、Gist 也是同一个套路。
-//
-// 只接 hunk 里的行（r.hunk >= 0），不接展开出来的未改动行：后者内容不在
-// patch 里，没有「这一行改了什么」可讲 —— 它压根没改。
-func (a *app) lineExplainHit(el *ui.Element, r row, anchor *ui.Element) {
-	if r.kind != rowLine || r.hunk < 0 || r.lineIdx < 0 {
-		return
-	}
-	if !el.DoubleClicked() {
-		return
-	}
-	a.toggleExplainLine(r.file, r.hunk, r.lineIdx, anchor)
 }
 
 // sideLine 是 split 模式下某一侧的半行。empty 表示这一侧空着 ——
@@ -476,11 +432,6 @@ func (a *app) splitHalf(c *ui.Context, pal palette, s sideLine, size float32, r 
 	}
 
 	half := ui.Row(c).Grow(1).MinWidth(0).AlignSelf(ui.Stretch).Background(bg).Cursor(ui.CursorText)
-	if !s.empty {
-		// 只有这一侧真有内容时才接双击 —— 空白那半接上去，点它就会
-		// 解释对面那一行，而眼睛看的是「这边没东西」。
-		a.lineExplainHit(half, r, half)
-	}
 	half.Children(func() {
 		ui.Box(c).Width(barW).AlignSelf(ui.Stretch).Background(bar)
 		a.gutter(c, pal, s.no, gutBg)

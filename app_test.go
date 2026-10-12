@@ -64,7 +64,7 @@ func loadApp(t *testing.T, dir string) *app {
 
 // settle 等所有后台任务跑完，并把它们投回主线程的闭包执行干净。
 //
-// 要循环：一轮回调里可能又起新的后台任务（比如解释结束后落盘），
+// 要循环：一轮回调里可能又起新的后台任务（比如一次提问结束后落盘），
 // 等一次只能等到第一层。
 func settle(t *testing.T, a *app) {
 	t.Helper()
@@ -87,6 +87,18 @@ func settle(t *testing.T, a *app) {
 			t.Fatal("后台任务超时")
 		}
 	}
+}
+
+// countText 数一段文本在界面里出现了几次 —— 用来确认某个控件
+// 是「多了一个」而不是「换了个地方」。
+func countText(texts []string, want string) int {
+	n := 0
+	for _, s := range texts {
+		if s == want {
+			n++
+		}
+	}
+	return n
 }
 
 func runGit(t *testing.T, dir string, args ...string) {

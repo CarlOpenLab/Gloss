@@ -9,7 +9,7 @@
 <h1 align="center">Gloss</h1>
 
 <p align="center">
-  <strong>Cross-platform Git client with inline ✨ AI hunk explanations.</strong><br>
+  <strong>Cross-platform Git client with AI change audits and commit messages.</strong><br>
   <em>Pure Go · GPU Direct Rendering · Zero WebViews</em>
 </p>
 
@@ -33,7 +33,7 @@ When reviewing large pull requests or AI-generated diffs, the biggest bottleneck
 
 **Gloss** is a cross-platform Git client (macOS, Linux, Windows) crafted for swift code review and safe everyday Git operations:
 
-- **Understand code at a glance**: Every diff hunk has a dedicated ✨ button. AI explains changes in plain language—what was modified, the rationale behind it, and potential edge cases.
+- **Catch risky changes early**: One click scans the staged diff and lists suspicious spots—hardcoded secrets, injection risks, and the like—ranked by severity and anchored to file and line.
 - **Blazing native performance**: Powered by [mygo](https://github.com/egoist/mygo), rendered directly via GPU. **Zero WebViews, zero JavaScript runtimes, single native binary**. Instant startup, silky smooth 60fps scrolling, minimal memory footprint.
 
 ---
@@ -41,7 +41,8 @@ When reviewing large pull requests or AI-generated diffs, the biggest bottleneck
 ## Features
 
 - ⚡ **GPU Direct Rendering**: Pure Go native interface built with `mygo`, styled around GitHub's visual palette.
-- ✨ **Inline AI Hunk Explanations**: Non-intrusive floating cards with streaming output. Grounded in exact line numbers; explains only the selected hunk without shifting the diff layout.
+- 🛡 **Pre-flight Risk Scan**: One click scans the staged diff for hardcoded secrets, injection risks, and other suspicious changes, grouped by severity and anchored to file and line.
+- 🤖 **AI Commit Messages & Branch Names**: Generate Conventional Commits messages from the staged diff (optionally steered by an intent hint), and name new branches from a one-line description.
 - 🌲 **Fork-Style Layout & Topology Graph**: Custom commit topology graph to visualize branching histories; split / unified diff toggle with chroma syntax highlighting.
 - 🔍 **Viewed Tracking**: Mark files as reviewed to collapse them into clean headers; automatically resets when file contents change.
 - 🛠 **Full Git Workflow**:
@@ -72,7 +73,8 @@ When reviewing large pull requests or AI-generated diffs, the biggest bottleneck
   - Amend commits with pre-filled previous commit messages, supporting message-only adjustments or staged additions.
 - **Fetch, Pull & Push**: Dedicated toolbar actions with intelligent disable states for detached HEAD or repos without remotes. Provides plain-language translations for push rejections, divergences, and authentication requirements.
 - **GitHub-Style Diff View**: Red/green diff highlighting, dual-side line numbers, syntax highlighting (chroma), and file tree navigation.
-- **Per-Hunk AI Explanations**: Non-modal popups with streaming text. When multiple hunks exist in a single file, the prompt provides file context with accurate line numbers while focusing exclusively on the selected hunk. Cached by content hash + model name. Double-click any code line to explain just that line, then keep asking follow-ups about it.
+- **Pre-flight Risk Scan**: The 🛡 Audit Changes button hands the full staged diff to your model and lists suspicious spots (hardcoded secrets, injection risks, …) grouped by severity—critical / high / medium / low—each anchored to a file and line. Provider failures are translated into plain language instead of raw HTTP errors.
+- **AI Commit Messages & Branch Names**: The AI button in the commit box drafts a Conventional Commits message from the staged diff, treating your notes in the message box as an intent hint; a zh/EN toggle picks the language. The new-branch dialog can generate a branch name from a one-line description.
 - **Fork-Style Commit Graph**: Top pane displays commits alongside a calculated topology graph; bottom pane displays file trees on the left and diffs on the right.
 - **File Tree & Viewed Folding**: Collapsible directory tree with single-child path flattening and fuzzy search (`⌘F`). Marking files as `Viewed` collapses them to fit reviews on a single screen; automatically invalidates on content changes.
 - **Streamlined Conflict Resolution**: Amber status bar during merge/rebase/cherry-pick conflicts with step indicators (Continue / Skip / Abort). Interactive conflict cards allow two-way side picking and accept-deletion confirmations.
@@ -87,7 +89,6 @@ When reviewing large pull requests or AI-generated diffs, the biggest bottleneck
 | `⌘K` | Open Command Palette |
 | `J` / `K` | Jump to Next / Previous hunk (Changes) or commit (History) |
 | `↓` / `↑` | Select Next / Previous commit (History) or file (Changes) |
-| Double-click a diff line | Explain just that line with AI |
 | `⌘F` | Focus file filter input |
 | `⌘⏎` | Commit staged changes |
 | `⌘O` | Open repository |
@@ -97,7 +98,7 @@ When reviewing large pull requests or AI-generated diffs, the biggest bottleneck
 | `⌘⇧F` / `⌘⇧P` / `⌘⇧U` | Fetch / Pull / Push |
 | `⌘+` / `⌘−` / `⌘0` | Zoom in / Zoom out / Reset font size |
 | `⌘,` | Model settings |
-| `Esc` | Dismiss explanation card / modal dialogs |
+| `Esc` | Exit branch compare / PR review |
 
 The table uses macOS notation. **On Linux and Windows, ⌘ means `Ctrl`** — the same key does the same thing, and the app displays `Ctrl+…` there (see `keys_i18n.go`). ⌥ becomes `Alt`, ⌫ becomes `Backspace`, ⏎ becomes `Enter`.
 
@@ -166,7 +167,6 @@ main.go / app.go         Window, menus, app state, root frame layout
   treeview.go            Shared tree rows (indentation, arrows, selection capsules)
   refs.go                Git reference grouping & filtering
   rows.go                Virtual list row models
-  explain.go             ✨ AI explanation card: anchoring, streaming, caching
   palette.go / keys.go   Command palette & shortcut bindings
   menu.go                macOS native menu bar commands
   settings.go            Model settings modal
@@ -185,10 +185,10 @@ internal/
   diff/                  Unified diff parser
     slice.go             Slice hunk patches for hunk-level staging
   highlight/             Chroma syntax tokenization and line slicing
-  explain/               Prompt construction & context windowing (pure functions)
+  explain/               Prompt construction for commit messages, branch names, PR review, and risk scans (pure functions)
   llm/                   Streaming client for Anthropic & OpenAI-compatible APIs
     failure.go           Plain-language provider error translator
-  store/                 Config, state, and cache persistence
+  store/                 Config and state persistence
   filetree/              Tree building, flattening, and fuzzy filtering
 ```
 
@@ -211,5 +211,4 @@ internal/
 - [x] AI commit message & branch generation
 - [x] GitHub PR: list open PRs and review PR diffs
 - [x] Pre-flight risk scan: Full-diff scan highlighting potential vulnerabilities
-- [x] Single-line explanation / selection-based query: double-click a code line to explain just that line, with a follow-up question box
 - [ ] Free cross-line text selection in a diff: render each hunk as one multi-line selectable text (chunk long hunks by N lines), with native drag-select and ⌘C

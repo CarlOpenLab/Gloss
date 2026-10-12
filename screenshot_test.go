@@ -3,11 +3,8 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"image"
 	"image/png"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,7 +12,6 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
-	"github.com/CarlOpenLab/Gloss/internal/llm"
 )
 
 // realTitleBar 是真实窗口里红绿灯占的地方（在本机量出来的：窗口用
@@ -27,9 +23,9 @@ var realTitleBar = ui.TitleBar{Height: 52, Left: 80}
 //
 // 截图要的是「稳下来之后长什么样」，而它在无头环境下不一定稳得下来：
 // 淡入、颜色过渡这些都按真实时间走（tester 没有自己的钟），而两张截图
-// 之间只隔几微秒 —— 拍到的是动画的第一帧：卡片刚滑出来还压着 diff、
-// 底色刚亮起还几乎全透明。接上系统的「减弱动态效果」这一档，框架就会
-// 直接摆到终点，拍到的正是用户看惯了的那一帧。
+// 之间只隔几微秒 —— 拍到的是动画的第一帧：底色刚亮起还几乎全透明。
+// 接上系统的「减弱动态效果」这一档，框架就会直接摆到终点，拍到的正是
+// 用户看惯了的那一帧。
 func still(t *ui.Tester) {
 	t.SetPreferences(ui.Preferences{ReduceMotion: true})
 }
@@ -118,69 +114,6 @@ func TestDumpScreenshot(t *testing.T) {
 	writePNG(t, "/tmp/de-shot-compare-dark.png", tt.Image())
 	a.exitCompare()
 	tt.SetDark(false)
-
-	// ✨ 解释卡片：定位、Markdown 排版、头尾两块
-	fi, hi := explainFixtures(t, a)
-	a.ex = explainState{
-		fi:   fi,
-		hi:   hi,
-		key:  a.explainKey(a.files[fi], hi),
-		head: a.files[fi].Hunks[hi].Header,
-		text: sampleExplanation,
-	}
-	a.ex.anchorEl = nil
-	tt.SetDark(false)
-	tt.Frame()
-	writePNG(t, "/tmp/de-shot-card.png", tt.Image())
-	tt.SetDark(true)
-	tt.Frame()
-	writePNG(t, "/tmp/de-shot-card-dark.png", tt.Image())
-
-	// 卡片翻到 ✨ 按钮上方（按钮贴底时）
-	a.ex.anchorEl = nil
-	tt.SetDark(false)
-	tt.Frame()
-	writePNG(t, "/tmp/de-shot-card-up.png", tt.Image())
-
-	// 还没有配模型：卡片讲的是该去哪儿配，不是「失败了」
-	a.ex = explainState{
-		fi: fi, hi: hi,
-		key:     a.explainKey(a.files[fi], hi),
-		head:    a.files[fi].Hunks[hi].Header,
-		needKey: true,
-	}
-	a.ex.anchorEl = nil
-	tt.Frame()
-	writePNG(t, "/tmp/de-shot-card-nokey.png", tt.Image())
-
-	// 请求真的失败了。这里特意走完整条链路 —— 假接口回一个真实的 Anthropic
-	// 错误信封，SDK 解析、我们收成 statusError、Describe 翻译成人话 —— 拍
-	// 到的才是「密钥填错了的用户」真正会看到的那张卡，而不是我手拼一张。
-	badKey := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprint(w, `{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}`)
-	}))
-	defer badKey.Close()
-	_, apiErr := llm.StreamExplanation(context.Background(), &llm.Provider{
-		Type: "anthropic", BaseURL: badKey.URL, APIKey: "sk-ant-wrong", Model: "claude-sonnet-5-5",
-	}, "系统提示", "用户提示", func(string) {})
-	if apiErr == nil {
-		t.Fatal("假接口该让这一趟失败")
-	}
-	a.ex = explainState{
-		fi: fi, hi: hi,
-		key:  a.explainKey(a.files[fi], hi),
-		head: a.files[fi].Hunks[hi].Header,
-		fail: llm.Describe(apiErr),
-	}
-	a.ex.anchorEl = nil
-	tt.Frame()
-	writePNG(t, "/tmp/de-shot-card-error.png", tt.Image())
-	tt.SetDark(true)
-	tt.Frame()
-	writePNG(t, "/tmp/de-shot-card-error-dark.png", tt.Image())
-	tt.SetDark(false)
-	a.ex = explainState{}
 
 	// 模型设置对话框
 	a.openSettings()
@@ -318,7 +251,7 @@ func TestDumpScreenshot(t *testing.T) {
 	cm := hist.commits[0]
 	hist.openTagDialog(cm.Hash, cm.Short+" · "+cm.Subject)
 	hist.tag.name = "v1.0.0"
-	hist.tag.msg = "第一个正式版本。\n\n- 提交拓扑图\n- 逐块 AI 解释"
+	hist.tag.msg = "第一个正式版本。\n\n- 提交拓扑图\n- 变更预检"
 	ht.Frame()
 	writePNG(t, "/tmp/de-shot-tag.png", ht.Image())
 	ht.SetDark(true)
@@ -655,25 +588,6 @@ func TestDumpToolbarOpCollision(t *testing.T) {
 	t.Logf("opRect: %+v (found=%v)", opRect, ok2)
 	writePNG(t, "/tmp/de-shot-collision.png", tt.Image())
 }
-
-
-// sampleExplanation 是一段有代表性的模型输出：一句话总结、要点、行内代码、
-// 代码块、加粗 —— 卡片上会出现的排版都在这。（用双引号写，省得反引号
-// 和 Go 的原始字符串字面量打架。）
-const sampleExplanation = "这段改动给 `route` 注册了健康检查端点，并新增了 `maxBody` 常量。\n" +
-	"\n" +
-	"- **做了什么**：把 `/health` 挂到 mux 上；`maxBody` 限制请求体大小\n" +
-	"- **为什么**：原来的 mux 是空的，服务起来后没有任何可探活的入口\n" +
-	"- **注意**：`maxBody` 现在还没有被真正用上，可能在后续提交里接进 handler\n" +
-	"\n" +
-	"改动位置在第 133 行附近：\n" +
-	"\n" +
-	"```go\n" +
-	"const maxBody = 1 << 20\n" +
-	"```\n" +
-	"\n" +
-	"总体是一次无风险的增量修改。"
-
 func writePNG(t *testing.T, path string, img image.Image) {
 	t.Helper()
 	f, err := os.Create(path)

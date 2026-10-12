@@ -39,7 +39,7 @@ func Describe(err error) Failure {
 
 	case errors.Is(err, ErrRefusal):
 		return Failure{
-			Title: "模型拒绝了解释这段代码",
+			Title: "模型拒绝了这次请求",
 			Hint:  "换一段代码或者换一个模型再试。",
 		}
 
@@ -67,7 +67,7 @@ func Describe(err error) Failure {
 		}
 	}
 
-	return Failure{Title: "解释失败了", Detail: truncate(err.Error(), detailMax)}
+	return Failure{Title: "生成失败了", Detail: truncate(err.Error(), detailMax)}
 }
 
 // detailMax 是原话保留的长度上限。

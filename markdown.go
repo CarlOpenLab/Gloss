@@ -213,3 +213,103 @@ func bulletParts(s string) (marker, rest string) {
 	}
 	return "•", s[2:]
 }
+
+// mdMarkerW 是列表符号那一栏的宽度。
+//
+// 定宽右对齐，而不是让符号自己撑：「•」和「10.」宽度差一倍，跟着内容走的话
+// 每一项的正文起点都不一样，一列读下来是锯齿。
+const mdMarkerW = 18
+
+// mdDotH 是无序列表那个圆点所在方盒的高度，取正文一行的高度。
+//
+// 13px 正文量出来的行距是 16（两行之间的基线距离）。圆点画在这一行的正中间，
+// 而不是让布局去居中：圆点盒比一行矮，它撑不高行，位置就由这里说了算。
+const mdDotH = 16
+
+// mdMarker 画列表项前面那一栏：无序的是圆点，有序的是编号。
+//
+// 圆点自己画，不用字体的「•」：那个字形在中文环境下落在一个比正文低、
+// 也比正文重的位置上（CJK 字体的中圆点是按全角方格居中的），一列读下来
+// 像一串挂着的小石子。和箭头、叉号一样，这种几何形状自己画才控得住。
+func (a *app) mdMarker(c *ui.Context, st mdStyle, marker string) {
+	if marker != "•" {
+		ui.Text(c, marker).FontSize(13).Width(mdMarkerW).
+			TextAlign(ui.End).TextColor(st.bullet)
+		return
+	}
+	ui.Box(c).Width(mdMarkerW).Height(mdDotH).Shrink(0).
+		Draw(func(p *ui.Painter, r ui.Rect) {
+			var path ui.Path
+			path.Circle(r.X+r.W/2, r.Y+r.H/2, 2.5)
+			p.FillPath(&path, st.bullet)
+		})
+}
+
+// mdBlockGap 是这一块和上一块之间留的空。
+//
+// 列表项之间收窄（同属一组的几行该挨着），其余段落之间放宽 —— 段与段的
+// 界线一眼看得出来，正文才不像一坨字。
+func mdBlockGap(blocks []mdBlock, i int) float32 {
+	if i == 0 {
+		return 0
+	}
+	if blocks[i].kind == mdBullet && blocks[i-1].kind == mdBullet {
+		return 3
+	}
+	return 8
+}
+
+// mdBlock 把一块排好版的 Markdown 画成元素。
+//
+// 不用一个 RichText 装下全文：那样段落一折行就顶到最左边，列表项的后续行
+// 会和符号对齐，代码块也只有贴着字的底色。见本文件顶上的说明。
+func (a *app) mdBlock(c *ui.Context, st mdStyle, b mdBlock, gap float32) {
+	switch b.kind {
+	case mdCode:
+		// 代码块有自己的底、内边距和圆角 —— 一片贴字的灰底认不出是代码块
+		ui.Box(c).Margin(gap, 0, 0, 0).Padding(7, 9).Radius(radiusSM).
+			Background(st.codeBg).Children(func() {
+			ui.RichText(c, ui.Span{Text: b.code, Font: st.mono, Color: st.code}).
+				FontSize(12)
+		})
+
+	case mdBullet:
+		// 符号和正文分两栏：折行自然落在正文那一栏里（悬挂缩进）
+		ui.Row(c).Margin(gap, 0, 0, 0).AlignItems(ui.Start).Gap(6).Children(func() {
+			a.mdMarker(c, st, b.marker)
+			ui.RichText(c, b.spans...).Grow(1).MinWidth(0).FontSize(13)
+		})
+
+	case mdQuote:
+		// 左边一条竖线，而不是行首一个「▏」字符：字符会跟着折行跑到第二行
+		// 的行首，看着像正文里混进了一个怪符号
+		ui.Row(c).Margin(gap, 0, 0, 0).AlignItems(ui.Start).Gap(8).Children(func() {
+			// 圆角取宽度的一半，竖线两端才是圆的 —— 这是几何，不是 §3 的
+			// 角 token，所以写出来而不是套一个 token。
+			ui.Box(c).Width(2).Shrink(0).Radius(1).AlignSelf(ui.Stretch).
+				Background(st.bullet.Alpha(0.4))
+			ui.RichText(c, b.spans...).Grow(1).MinWidth(0).FontSize(13)
+		})
+
+	default:
+		// 段落和标题：spans 里已经带了粗体和颜色
+		ui.RichText(c, b.spans...).Margin(gap, 0, 0, 0).FontSize(13)
+	}
+}
+
+// mdStyleFor 从主题里取 Markdown 渲染要用的颜色。
+func mdStyleFor(t *ui.Theme, pal palette) mdStyle {
+	return mdStyle{
+		text:   t.Text,
+		muted:  t.TextMuted,
+		code:   pal.code,
+		codeBg: pal.gapBg,
+		head:   t.Text,
+		// 列表符号用强调色，不用 pal.ref：后者是「分支引用」的意思（提交
+		// 列表的徽章、侧栏的引用、文件行的状态），一颗提亮的点落在 AI 结果
+		// 里会让人以为和某条分支有关。强调色在深色下是白、浅色下是黑，
+		// 和正文底色永远拉得开。
+		bullet: t.Accent,
+		mono:   "monospace",
+	}
+}

@@ -89,7 +89,7 @@ func emptyNote(c *ui.Context, t *ui.Theme, msg string) {
 // 定死成正方形。
 const xBtnSize = 26
 
-// closeButton 是右上角的关闭按钮（解释卡片、对话框）。
+// closeButton 是右上角的关闭按钮（对话框）。
 func closeButton(c *ui.Context, pal palette) bool { return xButton(c, pal, "关闭") }
 
 // removeButton 是列表行右边的删除按钮（模型设置里的供应商列表）。
@@ -126,10 +126,10 @@ func shieldIcon(c *ui.Context, size float32, color ui.Color) {
 	drawIcon(c, iconShield, size, color)
 }
 
-// explainBtnH 是 hunk 行上那颗小按钮的高度。比 hunk 行（26）矮一圈：上下
+// hunkBtnH 是 hunk 行上那颗小按钮的高度。比 hunk 行（26）矮一圈：上下
 // 各留 3px。填满整行的按钮看着是「贴」在色带上的，四周留出缝才像放上去的
 // 控件。
-const explainBtnH = 20
+const hunkBtnH = 20
 
 // hunkButton 起一颗 hunk 行上的幽灵按钮。
 //
@@ -137,53 +137,26 @@ const explainBtnH = 20
 // 这类按钮每条 hunk 都有，是界面上出现次数最多的控件，值得按它所在的底色
 // 单独调。
 //
-// 三态：常态是描边幽灵键（清楚可点，但不和代码抢视线）；悬停时底色提亮；
-// on 时填成强调色（✨ 解释用它表示「这一段正在讲」）。
-//
-// ✨ 解释和暂存这一段共用这一套：两处各画各的话，一排按钮里一眼就能看出
-// 是两种东西拼起来的。content 拿到的是这一档该用的前景色。
+// 两态：常态是描边幽灵键（清楚可点，但不和代码抢视线）；悬停时底色提亮。
+// content 拿到的是这一档该用的前景色。
 //
 // 圆角取 sm(6) 而不是通用按钮的 md(8)：§4.1 把幽灵键单列一档，它比按钮轻，
 // 圆角也跟着收一点。字号 11 同样比通用按钮小 —— 这几个字夹在代码行之间，
 // 和行号一个量级，不该比代码还抢眼。
-func hunkButton(c *ui.Context, pal palette, label, tip string, on bool, content func(fg ui.Color)) *ui.Element {
-	t := c.Theme()
-	btn := ui.ButtonBase(c).Height(explainBtnH).Shrink(0).Radius(radiusSM).
+func hunkButton(c *ui.Context, pal palette, label, tip string, content func(fg ui.Color)) *ui.Element {
+	btn := ui.ButtonBase(c).Height(hunkBtnH).Shrink(0).Radius(radiusSM).
 		Padding(0, 7).Gap(5).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).Label(label).Tooltip(tip)
 
-	hovered := btn.Hovered()
-	var bg, border, fg ui.Color
-	switch {
-	case on:
-		bg, border, fg = t.Accent, ui.Transparent, t.AccentText
-	case hovered:
-		bg, border, fg = pal.explainHover, pal.hunkText.Alpha(0.7), pal.hunkText
-	default:
-		bg, border, fg = ui.Transparent, pal.hunkText.Alpha(0.38), pal.hunkText
+	bg, border, fg := ui.Transparent, pal.hunkText.Alpha(0.38), pal.hunkText
+	if btn.Hovered() {
+		bg, border, fg = pal.hunkHover, pal.hunkText.Alpha(0.7), pal.hunkText
 	}
 	btn.Background(bg).Border(1, border)
 	fadeColors(btn)
 
 	btn.Children(func() { content(fg) })
 	return btn
-}
-
-// explainButton 是 hunk 行右边那颗「✨ 解释」。
-//
-// 卡片开着的时候，按钮自己就是「哪一段在讲」的指示灯（on 时填成强调色）。
-// 加载中显示 spinner，让用户知道请求已经发出、正在等结果。
-func explainButton(c *ui.Context, pal palette, on, loading bool) *ui.Element {
-	if loading {
-		btn := hunkButton(c, pal, T("解释中…", "Explaining…"), T("正在读取代码改动…", "Reading code changes…"), true, func(fg ui.Color) {
-			ui.Spinner(c).Size(12, 12)
-		})
-		return btn
-	}
-	return hunkButton(c, pal, T("解释", "Explain"), T("让 AI 讲讲这段改了什么", "Ask AI to explain this change"), on, func(fg ui.Color) {
-		sparkleIcon(c, sparkleSize, fg)
-		ui.Text(c, T("解释", "Explain")).FontSize(11).SingleLine().TextColor(fg)
-	})
 }
 
 // stageHunkButton 是「暂存 / 取消暂存这一段」。
@@ -196,7 +169,7 @@ func stageHunkButton(c *ui.Context, pal palette, staged, lock bool) *ui.Element 
 	if staged {
 		label, text, tip = T("取消暂存这一段", "Unstage hunk"), T("取消暂存", "Unstage"), T("把这一段改动移出暂存区", "Unstage this hunk from index")
 	}
-	btn := hunkButton(c, pal, label, tip, false, func(fg ui.Color) {
+	btn := hunkButton(c, pal, label, tip, func(fg ui.Color) {
 		ui.Text(c, text).FontSize(11).SingleLine().TextColor(fg)
 	})
 	return btn.Disabled(lock)

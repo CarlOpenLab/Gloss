@@ -26,7 +26,7 @@ import (
 // 「文件:字面量」，值必须写清为什么它是几何量 —— 加进来要付解释成本，这本身
 // 就是一道闸。
 var radiusLiteralExceptions = map[string]string{
-	"explain.go:1": "引用块左侧那条 2px 竖线的端头，圆角取它宽度的一半才是圆头；这是几何，不是设计 token",
+	"markdown.go:1": "引用块左侧那条 2px 竖线的端头，圆角取它宽度的一半才是圆头；这是几何，不是设计 token",
 }
 
 // TestNoRawRadiusLiterals 断言非测试代码里不再出现圆角数字字面量。

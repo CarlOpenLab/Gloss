@@ -71,9 +71,6 @@ func (a *app) commands() []command {
 	if a.canReachRemote() && !a.detached && a.hasUpstream(a.branch) {
 		cmds = append(cmds, command{T("强制推送（--force-with-lease）…", "Force Push (--force-with-lease)…"), "", func(a *app) { a.promptForcePush() }})
 	}
-	if a.explainOpen() {
-		cmds = append(cmds, command{T("收起 AI 解释", "Close AI Explanation"), "Esc", func(a *app) { a.closeExplain() }})
-	}
 	if a.repoReady() {
 		cmds = append(cmds, command{T("对比分支代码差异…", "Compare Branches…"), K("⌘⇧D"), func(a *app) { a.openCompareDialog("") }})
 		cmds = append(cmds, command{T("查看 GitHub Pull Requests…", "GitHub Pull Requests…"), "", func(a *app) { a.openPRDialog() }})

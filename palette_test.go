@@ -146,15 +146,6 @@ func TestPaletteCommandsFollowState(t *testing.T) {
 	if hasCommand(a.commands(), "隐藏侧栏") || !hasCommand(a.commands(), "显示侧栏") {
 		t.Error("侧栏收起时应该只有「显示侧栏」")
 	}
-
-	// 没开解释卡片时就不该有「收起 AI 解释」
-	if hasCommand(a.commands(), "收起 AI 解释") {
-		t.Error("卡片没开时不该有收起命令")
-	}
-	a.ex.key = "some-hunk-key"
-	if !hasCommand(a.commands(), "收起 AI 解释") {
-		t.Error("卡片开着时应该能收起")
-	}
 }
 
 func hasCommand(cmds []command, label string) bool {

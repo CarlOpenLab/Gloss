@@ -127,11 +127,10 @@ func (a *app) checkoutRef(ref gitrepo.Ref) {
 // finishCheckout 是换完分支之后的收尾：把界面挪回「改动」那一栏。
 //
 // 不调 setTab：它开头就是 `if !a.repoReady()` —— 而这里紧接着要打
-// loadLoading，那一刻 repoReady 是 false，调了等于没调。它里面那几句
-// （关卡片、清筛选）是这里必须做的，所以照抄一份。
+// loadLoading，那一刻 repoReady 是 false，调了等于没调。它里面清筛选
+// 那几句是这里必须做的，所以照抄一份。
 func (a *app) finishCheckout() {
 	a.tab = 0
-	a.closeExplain()
 	// 两个 tab 的文件集完全不同，筛选词跟着作废（和 setTab 一个道理）
 	a.fileFilter = ""
 	a.fileTreeFilter = ""

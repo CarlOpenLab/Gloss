@@ -1,4 +1,4 @@
-// Package store 把用户设置、界面状态和 AI 解释缓存落到磁盘。
+// Package store 把用户设置和界面状态落到磁盘。
 //
 // 目录由调用方给（桌面包传 mygo 的用户数据目录），所以这个包不依赖 mygo，
 // 测试里给个 t.TempDir() 就能完整跑。
@@ -15,17 +15,11 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/CarlOpenLab/Gloss/internal/llm"
 )
-
-// maxCacheEntries 是解释缓存的条数上限。每条几百字节，500 条足够覆盖
-// 常见的 review 场景，又不至于让 cache.json 无限膨胀。
-const maxCacheEntries = 500
 
 // Config 是用户设置。
 type Config struct {
@@ -54,8 +48,6 @@ type Config struct {
 	CommitPrompt string `json:"commitPrompt,omitempty"`
 	// BranchPrompt 是自定义 Git 分支名生成提示词，留空使用内置预设。
 	BranchPrompt string `json:"branchPrompt,omitempty"`
-	// ExplainPrompt 是自定义 AI 代码解析提示词，留空使用内置预设。
-	ExplainPrompt string `json:"explainPrompt,omitempty"`
 }
 
 // EffectiveCommitPrompt 返回生效的 Git 提交信息生成系统提示词。
@@ -69,14 +61,6 @@ func (c Config) EffectiveCommitPrompt(preset string) string {
 // EffectiveBranchPrompt 返回生效的 Git 分支名生成系统提示词。
 func (c Config) EffectiveBranchPrompt(preset string) string {
 	if s := strings.TrimSpace(c.BranchPrompt); s != "" {
-		return s
-	}
-	return preset
-}
-
-// EffectiveExplainPrompt 返回生效的 AI 代码解释系统提示词。
-func (c Config) EffectiveExplainPrompt(preset string) string {
-	if s := strings.TrimSpace(c.ExplainPrompt); s != "" {
 		return s
 	}
 	return preset
@@ -111,40 +95,25 @@ type State struct {
 	Drafts map[string]string `json:"drafts,omitempty"`
 }
 
-// cacheEntry 是一条解释缓存。At 用于超出上限时淘汰最旧的。
-type cacheEntry struct {
-	Text string `json:"text"`
-	At   int64  `json:"at"`
-}
-
-// Store 是三个文件的门面，可被多个 goroutine 同时使用。
+// Store 是两份文件（设置、状态）的门面，可被多个 goroutine 同时使用。
 type Store struct {
 	dir string
 
-	mu    sync.Mutex
-	cfg   Config
-	st    State
-	cache map[string]cacheEntry
+	mu  sync.Mutex
+	cfg Config
+	st  State
 }
 
-// Open 从 dir 读取已有的设置、状态和缓存。文件不存在或读不动都当作空，
+// Open 从 dir 读取已有的设置和状态。文件不存在或读不动都当作空，
 // 返回值不会是 nil。dir 为空表示「没有数据目录」：读写都变成空操作，
 // 应用照常能跑，只是这次的改动不会被保存。
 func Open(dir string) *Store {
-	s := &Store{dir: dir, cache: map[string]cacheEntry{}}
+	s := &Store{dir: dir}
 	if dir == "" {
 		return s
 	}
 	readJSON(filepath.Join(dir, "config.json"), &s.cfg)
 	readJSON(filepath.Join(dir, "state.json"), &s.st)
-	// 缓存文件换过一次结构（早期是 map[string]string），读不动就当空。
-	var c struct {
-		Entries map[string]cacheEntry `json:"entries"`
-	}
-	readJSON(filepath.Join(dir, "cache.json"), &c)
-	if c.Entries != nil {
-		s.cache = c.Entries
-	}
 	return s
 }
 
@@ -270,22 +239,7 @@ func slicesClone(s []string) []string {
 	return c
 }
 
-// Lookup 取一条解释缓存。
-func (s *Store) Lookup(key string) (string, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	e, ok := s.cache[key]
-	return e.Text, ok
-}
-
-// Put 写入一条解释缓存。
-func (s *Store) Put(key, text string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.cache[key] = cacheEntry{Text: text, At: time.Now().Unix()}
-}
-
-// Save 把三个文件写回磁盘。
+// Save 把两份文件写回磁盘。
 //
 // 用法是「改完就存」：文件都很小，写一次在毫秒级，不值得为它做脏标记或者
 // 防抖。整段加锁，所以并发调用是安全的（后一次写覆盖前一次，结果一致）。
@@ -293,7 +247,6 @@ func (s *Store) Save() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.prune()
 	if s.dir == "" {
 		return nil // 没有数据目录，没什么可存的
 	}
@@ -302,41 +255,11 @@ func (s *Store) Save() error {
 	if st.Viewed == nil {
 		st.Viewed = map[string]string{}
 	}
-	entries := map[string]cacheEntry{}
-	for k, v := range s.cache {
-		entries[k] = v
-	}
 
 	if err := writeJSON(filepath.Join(s.dir, "config.json"), s.cfg, 0o600); err != nil {
 		return err
 	}
-	if err := writeJSON(filepath.Join(s.dir, "state.json"), st, 0o644); err != nil {
-		return err
-	}
-	return writeJSON(filepath.Join(s.dir, "cache.json"),
-		struct {
-			Entries map[string]cacheEntry `json:"entries"`
-		}{entries}, 0o644)
-}
-
-// prune 在超过上限时丢掉最旧的缓存。调用方要持锁。
-func (s *Store) prune() {
-	if len(s.cache) <= maxCacheEntries {
-		return
-	}
-	type kv struct {
-		k  string
-		at int64
-	}
-	all := make([]kv, 0, len(s.cache))
-	for k, v := range s.cache {
-		all = append(all, kv{k, v.At})
-	}
-	// 新的排前面，砍掉末尾
-	sort.Slice(all, func(i, j int) bool { return all[i].at > all[j].at })
-	for _, e := range all[maxCacheEntries:] {
-		delete(s.cache, e.k)
-	}
+	return writeJSON(filepath.Join(s.dir, "state.json"), st, 0o644)
 }
 
 // readJSON 读一个 JSON 文件。任何失败都只是「没有这份配置」，不是错误。

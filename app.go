@@ -241,14 +241,10 @@ type app struct {
 	histDiff        loadState
 	histDiffErr     string
 
-	// —— AI 解释 ——
+	// —— AI 能力（智能提交、PR 评论、分支命名、风险扫描）——
 	store *store.Store
 	// commitLang 控制 AI 提交信息生成语言："" = 跟随预设默认, "zh" = 中文, "en" = 英文
 	commitLang string
-	// modelName 是当前生效的模型名，解释缓存的 key 里带它。它在设置变化时
-	// 更新一次，而不是每帧去问 store —— 那要加锁还可能要读环境变量。
-	modelName string
-	ex        explainState
 	// settingsOn 是「模型设置」对话框是否打开；editCfg 是编辑中的副本，
 	// 点确定之前不动真配置。
 	settingsOn    bool
@@ -267,9 +263,8 @@ type app struct {
 	editAppIcon   string
 
 	// 自定义提示词配置
-	editCommitPrompt  string
-	editBranchPrompt  string
-	editExplainPrompt string
+	editCommitPrompt string
+	editBranchPrompt string
 
 	// 模型设置搜索过滤状态
 	providerSearch string
@@ -339,7 +334,7 @@ type app struct {
 	// —— AI 提交信息生成 ——
 	aiCommitLoading bool
 	aiCommitCancel  context.CancelFunc
-	aiCommitMail    *explainMail
+	aiCommitMail    *aiMail
 
 	// —— 变更预检 ——
 	riskScan riskScanState
@@ -437,7 +432,6 @@ func (a *app) attachStore(s *store.Store) {
 		a.viewed = map[string]string{}
 	}
 	a.editIdx = cfg.Active
-	a.modelName = s.Provider().EffectiveModel()
 
 	// 恢复已打开的多项目标签页
 	a.tabs = nil
@@ -633,17 +627,13 @@ func (a *app) view(c *ui.Context) {
 	a.prDialog(c, pal)
 	a.prReviewModal(c, pal)
 	a.riskScanDialog(c, pal)
-	a.explainPopover(c, pal)
 
-	// Esc 退出分支对比/PR 检视或关掉卡片。放在最后，让对话框里正在编辑的输入框先有机会处理它。
+	// Esc 退出分支对比/PR 检视。放在最后，让对话框里正在编辑的输入框先有机会处理它。
 	if a.compare.on && !a.modalOn() && c.Shortcut(0, ui.KeyEscape) {
 		a.exitCompare()
 	}
 	if a.prReview.on && !a.modalOn() && c.Shortcut(0, ui.KeyEscape) {
 		a.exitPRReview()
-	}
-	if a.explainOpen() && !a.modalOn() && c.Shortcut(0, ui.KeyEscape) {
-		a.closeExplain()
 	}
 }
 
@@ -1420,6 +1410,9 @@ func (a *app) repoReady() bool {
 	return false
 }
 
+// clamp 把 v 钳进 [lo, hi]。
+func clamp(v, lo, hi float32) float32 { return min(max(v, lo), hi) }
+
 // sameRepo 判断两个路径指向的是否是同一个 git 仓库目录。
 // 能自动处理绝对/相对路径、末尾斜杠、以及符号链接（如 macOS /var 与 /private/var）。
 func sameRepo(p1, p2 string) bool {
@@ -1726,8 +1719,6 @@ func (a *app) showFiles(files []gitrepo.File, id string) {
 	}
 	// 记下的跳转位置同样作废：同样的 key 可能落在完全不同的行上
 	a.hunkCur = ""
-	// 卡片指向的是「第几个文件的第几段」，同样作废
-	a.closeExplain()
 	// 选中的文件和「该滚到哪」都是下标，换一份列表就指到别的文件上了
 	a.fileSel = -1
 	a.pendingScrollFile = -1

@@ -214,7 +214,7 @@ mygo 从 `CHANGELOG.md` 的 `## x.y.z` 标题下提取 release notes：
 ## [0.2.0] - 2026-10-15
 
 ### 新增
-- 支持 PR review 的逐行解释
+- 支持 PR review 的 diff 检视
 
 ### 修复
 - 修复了大文件 diff 渲染卡顿的问题

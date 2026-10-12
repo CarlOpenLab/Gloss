@@ -1,4 +1,3 @@
-// Package explain 提供代码解释、提交信息生成和分支名推荐的提示词与领域逻辑。
 package explain
 
 import (

@@ -196,7 +196,6 @@ func (a *app) openSettings() {
 	// 初始化提示词编辑状态
 	a.editCommitPrompt = a.editCfg.EffectiveCommitPrompt(explain.CommitSystemPrompt)
 	a.editBranchPrompt = a.editCfg.EffectiveBranchPrompt(explain.BranchSystemPrompt)
-	a.editExplainPrompt = a.editCfg.EffectiveExplainPrompt(explain.SystemPrompt)
 	a.providerSearch = ""
 	a.modelSearch = ""
 	a.settingsTab = settingsTabModels
@@ -796,8 +795,8 @@ func (a *app) aboutSettingsPane(c *ui.Context, pal palette) {
 					},
 					{
 						iconSparkles,
-						T("逐 Hunk AI 智能审查", "Per-Hunk AI Review"),
-						T("变更块级智能解释、变更风险提示与一键智能提交信息生成", "Smart hunk explanation, risk analysis, and Conventional Commits generation"),
+						T("AI 变更审查", "AI Change Review"),
+						T("变更块级风险提示与一键智能提交信息生成", "Risk analysis on code changes and Conventional Commits generation"),
 					},
 					{
 						iconPalette,
@@ -1366,8 +1365,8 @@ func (a *app) promptsSettingsPane(c *ui.Context, pal palette) {
 				ui.Column(c).Gap(2).Grow(1).Children(func() {
 					ui.Text(c, T("自定义 AI Prompt 提示词", "Custom AI Prompt Templates")).
 						FontSize(textBodySM).FontWeight(weightSemibold).TextColor(pal.ink)
-					ui.Text(c, T("定制智能提交、新建分支与 AI 代码解析的 Prompt 提示词。支持一键恢复官方预设。",
-						"Customize prompt templates for smart commit, branch naming, and diff explanation. Supports restoring default presets.")).
+					ui.Text(c, T("定制智能提交与新建分支的 Prompt 提示词。支持一键恢复官方预设。",
+						"Customize prompt templates for smart commit and branch naming. Supports restoring default presets.")).
 						FontSize(textCaption).TextColor(pal.inkSubtle)
 				})
 				resetAllBtn := ui.ButtonBase(c).Height(28).Padding(0, 10).Radius(radiusSM).
@@ -1383,7 +1382,6 @@ func (a *app) promptsSettingsPane(c *ui.Context, pal palette) {
 				if resetAllBtn.Clicked() {
 					a.editCommitPrompt = explain.CommitSystemPrompt
 					a.editBranchPrompt = explain.BranchSystemPrompt
-					a.editExplainPrompt = explain.SystemPrompt
 				}
 			})
 
@@ -1405,14 +1403,6 @@ func (a *app) promptsSettingsPane(c *ui.Context, pal palette) {
 				explain.BranchSystemPrompt,
 			)
 
-			// 3. AI Diff 解析提示词
-			promptSection(c, pal, t,
-				T("AI 代码变更解析提示词", "AI Diff Explanation Prompt"),
-				T("在 Diff 视图中对代码块或选中区域进行「✨ AI 解析」时的审查角色、风险评估与解释规范",
-					"System prompt used when explaining hunk diffs or selected code ranges"),
-				&a.editExplainPrompt,
-				explain.SystemPrompt,
-			)
 		})
 	})
 }
@@ -1506,8 +1496,7 @@ func (a *app) removeProvider(i int) {
 	}
 }
 
-// applySettings 保存设置，改名或换模型都会让旧解释对不上，所以顺便
-// 关掉当前卡片 —— 它显示的可能已经是另一个模型的话了。
+// applySettings 保存设置。
 func (a *app) applySettings() {
 	cfg := a.store.Config()
 	cfg.Providers = a.editCfg.Providers
@@ -1518,16 +1507,11 @@ func (a *app) applySettings() {
 	// 持久化保存提示词配置
 	cfg.CommitPrompt = strings.TrimSpace(a.editCommitPrompt)
 	cfg.BranchPrompt = strings.TrimSpace(a.editBranchPrompt)
-	cfg.ExplainPrompt = strings.TrimSpace(a.editExplainPrompt)
 
 	a.store.SetConfig(cfg)
 	a.persist()
-	a.modelName = a.store.Provider().EffectiveModel()
 
 	a.settingsOn = false
-	if a.explainOpen() {
-		a.closeExplain()
-	}
 }
 
 func providerLabel(p llm.Provider) string {

@@ -24,7 +24,6 @@ const (
 	rowNote                      // 二进制文件、文件过大之类的提示
 	rowConflict                  // 冲突文件：一行说明 + 挑一边的按钮
 	rowSection                   // 「已暂存 / 未暂存」两段之间的分隔行
-	rowExplain                   // ✨ 内嵌 AI 解释卡片行（GitHub 风格行间内嵌展开）
 )
 
 const (

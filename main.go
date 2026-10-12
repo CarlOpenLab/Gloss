@@ -1,13 +1,13 @@
 // Command Gloss 是一个跨平台的 Git GUI（macOS / Linux / Windows），
-// 核心是逐 hunk 的 AI 解释 —— review 大段代码时哪里不懂点哪里。
+// 主线是让 review 大段改动变轻松：逐 hunk 阅读、按块暂存、AI 风险预检。
 package main
 
 import (
 	"log"
 
 	"github.com/egoist/mygo"
-	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/plugins/updater"
+	"github.com/egoist/mygo/ui"
 
 	"github.com/CarlOpenLab/Gloss/internal/store"
 )
@@ -21,7 +21,7 @@ func main() {
 	mygo.Use(updater.Plugin)
 
 	mygo.App.WhenReady(func() {
-		// 设置、状态和解释缓存都在应用数据目录里。拿不到目录（极少见）
+		// 设置和状态都在应用数据目录里。拿不到目录（极少见）
 		// 就退回内存里的一份空 store —— 设置存不下，但应用照常能用。
 		dir, err := mygo.App.Path(mygo.PathUserData)
 		if err != nil {

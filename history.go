@@ -38,7 +38,6 @@ func (a *app) setTab(t int) {
 	}
 	oldTab := a.tab
 	a.tab = t
-	a.closeExplain()
 	// 两个 tab 的文件集完全不同，留着筛选词多半一个文件都看不到。
 	// 侧栏的 refFilter 不清：那是分支树，两个 tab 共用同一棵。
 	a.fileFilter = ""

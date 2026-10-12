@@ -482,3 +482,55 @@ func TestToggleEditActive(t *testing.T) {
 		t.Fatalf("Active=-1 时 Provider() 应回落 nil，实际 %v", p)
 	}
 }
+
+func TestSettingsDialogSavesProviders(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+
+	if err := tt.Click("模型设置…"); err != nil {
+		t.Fatalf("点模型设置：%v", err)
+	}
+	tt.Frame()
+	if !a.settingsOn {
+		t.Fatal("设置对话框没打开")
+	}
+	if !tt.HasText("模型设置") {
+		t.Errorf("对话框内容没画出来：%q", tt.Texts())
+	}
+
+	// 加一个 DeepSeek，改掉 API key，保存
+	if err := tt.Click("DeepSeek"); err != nil {
+		t.Fatalf("点预设：%v", err)
+	}
+	tt.Frame()
+	// 加预设只选中编辑，不悄悄切成当前生效 —— 启用是详情页那个开关的事
+	if got := a.editCfg.Providers[a.editIdx].BaseURL; got != "https://api.deepseek.com" {
+		t.Errorf("预设没填进 Base URL：%+v", a.editCfg.Providers[a.editIdx])
+	}
+	if a.editCfg.Active == a.editIdx {
+		t.Errorf("加预设不该顺手把它设为当前生效，active=%d", a.editCfg.Active)
+	}
+	a.editCfg.Providers[a.editIdx].APIKey = "sk-test"
+	a.toggleEditActive() // 详情页头部那个开关绑定的就是这个行为
+	if err := tt.Click("保存"); err != nil {
+		t.Fatalf("点保存：%v", err)
+	}
+	tt.Frame()
+
+	if a.settingsOn {
+		t.Error("保存之后对话框应该关掉")
+	}
+	p := a.store.Provider()
+	if p == nil || p.APIKey != "sk-test" {
+		t.Errorf("设置没写进 store：%+v", p)
+	}
+}
+
+// 视图默认左右对照（split）模式。
+func TestSplitSettingDefault(t *testing.T) {
+	a := richApp(t)
+	settle(t, a)
+	if !a.split {
+		t.Error("默认应该开启 split 模式")
+	}
+}

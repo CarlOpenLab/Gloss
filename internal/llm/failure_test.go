@@ -33,8 +33,8 @@ func TestDescribe(t *testing.T) {
 		{why: "请求本身有问题", err: &statusError{Code: 400}, title: "这次请求模型没收"},
 		{why: "没见过的码也得有个说法", err: &statusError{Code: 418}, title: "模型返回了 418"},
 		{why: "配没配全", err: ErrNoModel, title: "这个供应商还没配全", auth: true},
-		{why: "模型拒绝回答", err: ErrRefusal, title: "模型拒绝了解释这段代码"},
-		{why: "认不出来的错误", err: errors.New("某种没见过的失败"), title: "解释失败了"},
+		{why: "模型拒绝回答", err: ErrRefusal, title: "模型拒绝了这次请求"},
+		{why: "认不出来的错误", err: errors.New("某种没见过的失败"), title: "生成失败了"},
 	}
 	for _, c := range cases {
 		f := Describe(c.err)

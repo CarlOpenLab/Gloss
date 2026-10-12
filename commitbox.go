@@ -198,7 +198,7 @@ func stageFileButton(c *ui.Context, pal palette, s stageState, lock bool) *ui.El
 	case stageConflict:
 		label, text, tip = T("标记为已解决", "Mark as Resolved"), T("标记为已解决", "Mark as Resolved"), T("将文件冲突标记为已解决", "Mark conflict as resolved")
 	}
-	btn := ui.ButtonBase(c).Height(explainBtnH).Shrink(0).Radius(radiusSM).
+	btn := ui.ButtonBase(c).Height(hunkBtnH).Shrink(0).Radius(radiusSM).
 		Padding(0, 7).Gap(5).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).Disabled(lock).
 		Label(label).Tooltip(tip)
@@ -652,7 +652,7 @@ func (a *app) startAICommit() {
 	ctx, cancel := context.WithCancel(context.Background())
 	a.aiCommitCancel = cancel
 	a.aiCommitLoading = true
-	mail := &explainMail{last: time.Now()}
+	mail := &aiMail{last: time.Now()}
 	a.aiCommitMail = mail
 
 	existingMsg := strings.TrimSpace(a.commitMsg)
@@ -702,7 +702,7 @@ func (a *app) startAICommit() {
 }
 
 // flushAICommit 将后台积攒的 token 刷新到界面。
-func (a *app) flushAICommit(mail *explainMail) {
+func (a *app) flushAICommit(mail *aiMail) {
 	if mail != a.aiCommitMail {
 		return
 	}

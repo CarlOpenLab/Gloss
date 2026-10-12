@@ -36,7 +36,7 @@ type prReviewState struct {
 	reviewText  string
 	editMode    bool // false 为 Markdown 渲染预览，true 为编辑原文
 	loading     bool
-	mail        *explainMail
+	mail        *aiMail
 	cancel      context.CancelFunc
 	posting     bool
 	postErr     string
@@ -173,7 +173,7 @@ func (a *app) startAIReview() {
 	a.prReview.postErr = ""
 	a.prReview.reviewText = ""
 
-	mail := &explainMail{last: time.Now()}
+	mail := &aiMail{last: time.Now()}
 	a.prReview.mail = mail
 
 	system, user := explain.BuildPRReviewPrompt(a.prReview.pr, a.prReview.diffFiles)
@@ -205,7 +205,7 @@ func (a *app) startAIReview() {
 	})
 }
 
-func (a *app) flushAIReview(mail *explainMail) {
+func (a *app) flushAIReview(mail *aiMail) {
 	if mail != a.prReview.mail {
 		return
 	}

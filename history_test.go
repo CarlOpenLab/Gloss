@@ -206,31 +206,6 @@ func TestSetTabClearsFilter(t *testing.T) {
 	}
 }
 
-// 历史上一个提交的 diff 也能点 ✨ 解释 —— 主区拿到的是同样的文件列表。
-func TestHistoryCommitDiffIsExplainable(t *testing.T) {
-	srv, _ := fakeLLM(t, "这段提交的解释")
-	a := histApp(t)
-	withProvider(t, a, srv)
-	tt := ui.NewTester(a.view, 1280, 860)
-
-	a.setTab(1)
-	settle(t, a)
-	tt.Frame()
-
-	if err := tt.Click("解释"); err != nil {
-		t.Fatalf("点解释按钮：%v", err)
-	}
-	settle(t, a)
-	tt.Frame()
-
-	if !a.explainOpen() {
-		t.Fatal("历史里的 diff 也该能点开解释")
-	}
-	if !tt.HasText("这段提交的解释") {
-		t.Errorf("解释内容没出来：%q", tt.Texts())
-	}
-}
-
 func TestShortWhen(t *testing.T) {
 	now := time.Date(2026, 10, 6, 12, 0, 0, 0, time.Local)
 	cases := []struct {

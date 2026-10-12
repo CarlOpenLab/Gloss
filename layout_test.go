@@ -217,39 +217,6 @@ func TestToolbarHugsSidebarEdge(t *testing.T) {
 	}
 }
 
-// 卡片和对话框上的 × 要真的点得到。它从 ui.Button(c, "×") 换成了自己画的
-// 方形叉号（按钮上不再有文字），这条测试盯着它别变成点不中的装饰。
-//
-// 卡片是刚打开就点的 —— 也就是它可能还在淡入。这一条顺带钉住「卡片的位置
-// 不能跟着动画走」：位置一动，按下和松开之间按钮就溜到别处去了，这一次
-// 点击白点。（见 explain.go 里那段 Position 的说明。）
-func TestCloseButtonIsClickable(t *testing.T) {
-	a := richApp(t)
-	fi, hi := explainFixtures(t, a)
-	a.ex = explainState{
-		fi:   fi,
-		hi:   hi,
-		key:  a.explainKey(a.files[fi], hi),
-		head: a.files[fi].Hunks[hi].Header,
-		text: "这段改动做了什么。",
-	}
-	a.rowsDirty = true // 内嵌解释行要随行模型重建才出现
-
-	tt := ui.NewTester(a.view, 1280, 860)
-	tt.Frame()
-	if !a.explainOpen() {
-		t.Fatal("卡片应该是开着的")
-	}
-
-	if err := tt.Click("关闭"); err != nil {
-		t.Fatalf("点不到关闭按钮：%v", err)
-	}
-	tt.Frame()
-	if a.explainOpen() {
-		t.Error("点了 × 之后卡片该关掉")
-	}
-}
-
 // 「Fork 式布局」的形式化定义：提交列表在上、文件列表在下，两块都从侧栏
 // 右边开始 —— 也就是上下分，不是左右分。
 //

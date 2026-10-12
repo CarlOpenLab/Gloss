@@ -176,7 +176,7 @@ Gloss 是一个面向工程师的现代 Git GUI 客户端。本项目的设计�
 - **代码段 Hunk (@@ -a,b +c,d @@)**：
   - **彻底摒弃旧版亮蓝带**：底色统一采用 **Surface 2 (`#141516`)**，搭配 1px Hairline (`#23252a`) 边框。
   - 文本采用 `ink-subtle` (`#8a8f98`)，等宽字体显示。
-  - Hunk 右侧操作按钮（如暂存、解释）采用静音幽灵按钮。
+  - Hunk 右侧操作按钮（如暂存 / 取消暂存）采用静音幽灵按钮。
 - **分支与引用徽章 (Ref Badges)**：
   - 统一采用 **Surface 2 (`#141516`)** 底色 + 1px **Hairline (`#23252a`)** 边框 + **Ink Muted (`#d0d6e0`)** 文字。
   - 区别通过微型矢量图标（`iconGitBranch`, `iconGitCommit`, `iconTag`）或 6px 小圆点体现，不再整块涂成琥珀黄或亮蓝。
@@ -202,7 +202,7 @@ Gloss 是一个面向工程师的现代 Git GUI 客户端。本项目的设计�
 | `rounded.xs` | `4px` | 极小代码标签、文件树勾选框、微型图标底板 |
 | `rounded.sm` | `6px` | 工具栏分支芯片、树节点选中底带、分段控制器单元 |
 | `rounded.md` | `8px` | **全部通用按钮**、文本输入框、下拉框、搜索栏 |
-| `rounded.lg` | `12px` | 面板卡片、悬浮卡片、下拉浮层、AI 解释卡片 |
+| `rounded.lg` | `12px` | 面板卡片、悬浮卡片、下拉浮层 |
 | `rounded.xl` | `16px` | 模态弹窗（Settings, PR, Branch 对话框） |
 | `rounded.pill`| `9999px` | 数量计数器（Count Badges）、状态圆角药丸 |
 

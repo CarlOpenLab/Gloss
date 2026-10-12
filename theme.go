@@ -23,7 +23,7 @@ type palette struct {
 	// 有了这四个字段，组件直接写「我是第几级」，深度由明度表达。
 	surface1 ui.Color // 侧栏、文件列表、提交消息面板、主要容器
 	surface2 ui.Color // 卡片、hunk 栏、列表悬停态、徽章底
-	surface3 ui.Color // 浮层、下拉菜单、右键菜单、AI 解释卡片
+	surface3 ui.Color // 浮层、下拉菜单、右键菜单
 	surface4 ui.Color // 模态弹窗、设置窗口顶层面板
 
 	hairline         ui.Color // 基础 1px 细线（§2.2）
@@ -52,13 +52,13 @@ type palette struct {
 	fileBg    ui.Color // 文件头的背景
 	hunkBg    ui.Color // @@ 行背景
 	hunkText  ui.Color // @@ 行文字
-	// explainHover 是「✨ 解释」按钮悬停时的底色。它落在 hunk 带上，
+	// hunkHover 是 hunk 行上那颗幽灵按钮悬停时的底色。它落在 hunk 带上，
 	// 所以不能直接用 codeBg：深色下那是比带子更暗的一档，鼠标一指上去
 	// 按钮反而沉下去。浅色下要的是提亮（白），深色下要的是抬高一档的蓝灰。
-	explainHover ui.Color
-	sideBg       ui.Color // 删除侧留白（split 模式下对面没有对应行）
-	ref          ui.Color // 分支名、commit hash 的强调色
-	viewed       ui.Color // 已 review 的勾与文字
+	hunkHover ui.Color
+	sideBg    ui.Color // 删除侧留白（split 模式下对面没有对应行）
+	ref       ui.Color // 分支名、commit hash 的强调色
+	viewed    ui.Color // 已 review 的勾与文字
 
 	// selection 是列表与树的选中底带。
 	//
@@ -251,28 +251,28 @@ func paletteFor(t *ui.Theme) palette {
 			inkTertiary: ui.Hex("#62666d"),
 			// 选中底带：Surface 2 与 3 之间的一档灰，比悬停的 SurfaceHover
 			// 重一档，才压得住「选中的是这一行」。
-			selection:    ui.Hex("#1f2023"),
-			appBg:        ui.Hex("#010102"), // Linear Canvas: 极致纯净深黑
-			codeBg:       ui.Hex("#010102"),
-			code:         ui.Hex("#f7f8f8"), // Linear Ink
-			lineNo:       ui.Hex("#62666d"), // Linear Ink Tertiary
-			gutterBg:     ui.Hex("#010102"),
-			addBg:        ui.RGBA(39, 166, 68, 0.09), // 极淡半透明暗苔绿
-			addGutter:    ui.RGBA(39, 166, 68, 0.14),
-			addBar:       ui.Hex("#27a644"),          // Linear 语义绿发丝条
-			delBg:        ui.RGBA(229, 72, 77, 0.09), // 极淡半透明暗绯红
-			delGutter:    ui.RGBA(229, 72, 77, 0.14),
-			delBar:       ui.Hex("#e5484d"), // 校准红发丝条
-			gapBg:        ui.Hex("#0f1011"), // Surface 1
-			gapHover:     ui.Hex("#141516"), // Surface 2
-			gapText:      ui.Hex("#8a8f98"), // Ink Subtle
-			fileBg:       ui.Hex("#0f1011"), // Surface 1
-			hunkBg:       ui.Hex("#141516"), // Surface 2: 告别旧版刺眼亮蓝！
-			hunkText:     ui.Hex("#8a8f98"), // Ink Subtle 等宽中性文字
-			explainHover: ui.Hex("#18191a"), // Surface 3
-			sideBg:       ui.Hex("#08090a"), // 介于 Canvas 与 Surface 1 之间
-			ref:          ui.Hex("#d0d6e0"), // 中性 Ink Muted
-			viewed:       ui.Hex("#27a644"),
+			selection: ui.Hex("#1f2023"),
+			appBg:     ui.Hex("#010102"), // Linear Canvas: 极致纯净深黑
+			codeBg:    ui.Hex("#010102"),
+			code:      ui.Hex("#f7f8f8"), // Linear Ink
+			lineNo:    ui.Hex("#62666d"), // Linear Ink Tertiary
+			gutterBg:  ui.Hex("#010102"),
+			addBg:     ui.RGBA(39, 166, 68, 0.09), // 极淡半透明暗苔绿
+			addGutter: ui.RGBA(39, 166, 68, 0.14),
+			addBar:    ui.Hex("#27a644"),          // Linear 语义绿发丝条
+			delBg:     ui.RGBA(229, 72, 77, 0.09), // 极淡半透明暗绯红
+			delGutter: ui.RGBA(229, 72, 77, 0.14),
+			delBar:    ui.Hex("#e5484d"), // 校准红发丝条
+			gapBg:     ui.Hex("#0f1011"), // Surface 1
+			gapHover:  ui.Hex("#141516"), // Surface 2
+			gapText:   ui.Hex("#8a8f98"), // Ink Subtle
+			fileBg:    ui.Hex("#0f1011"), // Surface 1
+			hunkBg:    ui.Hex("#141516"), // Surface 2: 告别旧版刺眼亮蓝！
+			hunkText:  ui.Hex("#8a8f98"), // Ink Subtle 等宽中性文字
+			hunkHover: ui.Hex("#18191a"), // Surface 3
+			sideBg:    ui.Hex("#08090a"), // 介于 Canvas 与 Surface 1 之间
+			ref:       ui.Hex("#d0d6e0"), // 中性 Ink Muted
+			viewed:    ui.Hex("#27a644"),
 			// 拓扑图精密仪器 8 色谱系（明度与彩度均衡）：
 			// 0 号为主干，多颜色色彩方案，其余 7 条为支线，不含紫。
 			lanes: [8]ui.Color{
@@ -319,7 +319,7 @@ func paletteFor(t *ui.Theme) palette {
 		fileBg:           ui.Hex("#f7f8f9"),
 		hunkBg:           ui.Hex("#f0f2f5"),
 		hunkText:         ui.Hex("#4b535d"),
-		explainHover:     ui.Hex("#ffffff"),
+		hunkHover:        ui.Hex("#ffffff"),
 		sideBg:           ui.Hex("#f7f8f9"),
 		ref:              ui.Hex("#4b535d"),
 		viewed:           ui.Hex("#27a644"),

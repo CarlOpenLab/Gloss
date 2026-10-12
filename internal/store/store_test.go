@@ -22,9 +22,6 @@ func TestOpenOnEmptyDir(t *testing.T) {
 	if st := s.State(); len(st.Viewed) != 0 || st.LastRepo != "" {
 		t.Errorf("空目录应该给出空状态，got %+v", st)
 	}
-	if _, ok := s.Lookup("nope"); ok {
-		t.Error("空缓存不该命中")
-	}
 }
 
 // 存进去的东西要能读回来。
@@ -39,7 +36,6 @@ func TestSaveAndReopen(t *testing.T) {
 	})
 	s.SetViewed(map[string]string{"a.go": "fp1"})
 	s.SetLastRepo("/tmp/repo")
-	s.Put("k1", "解释内容")
 	if err := s.Save(); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -53,9 +49,6 @@ func TestSaveAndReopen(t *testing.T) {
 	}
 	if got := again.State(); got.Viewed["a.go"] != "fp1" || got.LastRepo != "/tmp/repo" {
 		t.Errorf("状态没读回来：%+v", got)
-	}
-	if text, ok := again.Lookup("k1"); !ok || text != "解释内容" {
-		t.Errorf("缓存没读回来：%q %v", text, ok)
 	}
 }
 
@@ -80,7 +73,7 @@ func TestConfigFileIsPrivate(t *testing.T) {
 // 配置坏了不能让应用起不来 —— 顶多是这次设置没了。
 func TestCorruptFilesAreIgnored(t *testing.T) {
 	dir := t.TempDir()
-	for _, name := range []string{"config.json", "state.json", "cache.json"} {
+	for _, name := range []string{"config.json", "state.json"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("{ 不是 JSON"), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -100,38 +93,6 @@ func TestCorruptFilesAreIgnored(t *testing.T) {
 	}
 }
 
-// 缓存超上限时丢最旧的，不能无限长。
-func TestCachePrunesOldest(t *testing.T) {
-	dir := t.TempDir()
-	s := Open(dir)
-	// 直接用内部结构塞，省得真的存 500 次
-	s.mu.Lock()
-	for i := 0; i < maxCacheEntries+10; i++ {
-		s.cache[string(rune(i))] = cacheEntry{Text: "x", At: int64(i)}
-	}
-	s.mu.Unlock()
-	if err := s.Save(); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-
-	got := Open(dir)
-	got.mu.Lock()
-	n := len(got.cache)
-	_, keptOldest := got.cache[string(rune(0))]
-	_, keptNewest := got.cache[string(rune(maxCacheEntries+9))]
-	got.mu.Unlock()
-
-	if n != maxCacheEntries {
-		t.Errorf("缓存条数 = %d, want %d", n, maxCacheEntries)
-	}
-	if keptOldest {
-		t.Error("最旧的一条应该被淘汰")
-	}
-	if !keptNewest {
-		t.Error("最新的一条不该被淘汰")
-	}
-}
-
 // 存的文件得是能读的 JSON，而不是 Go 的默认编码。
 func TestSavedFilesAreValidJSON(t *testing.T) {
 	dir := t.TempDir()
@@ -140,7 +101,7 @@ func TestSavedFilesAreValidJSON(t *testing.T) {
 	if err := s.Save(); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	for _, name := range []string{"config.json", "state.json", "cache.json"} {
+	for _, name := range []string{"config.json", "state.json"} {
 		b, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
 			t.Fatalf("读 %s: %v", name, err)

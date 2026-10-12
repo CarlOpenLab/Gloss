@@ -16,7 +16,7 @@ type Provider struct {
 	Model   string `json:"model"`
 }
 
-// DefaultModel 解释代码变更用 Sonnet 级别即可，性价比最高；可用 ANTHROPIC_MODEL 覆盖。
+// DefaultModel 生成提交信息、审查改动用 Sonnet 级别即可，性价比最高；可用 ANTHROPIC_MODEL 覆盖。
 const DefaultModel = "claude-sonnet-5-5"
 
 // StreamExplanation 按供应商类型分发到对应实现。
@@ -61,7 +61,7 @@ func (p *Provider) Ready() bool {
 	return false
 }
 
-// EffectiveModel 返回生效的模型名（用于缓存 key 区分不同模型的解释结果）。
+// EffectiveModel 返回生效的模型名。
 func (p *Provider) EffectiveModel() string {
 	if p != nil && p.Model != "" {
 		return p.Model
@@ -73,7 +73,7 @@ func (p *Provider) EffectiveModel() string {
 }
 
 // ErrRefusal 表示模型拒绝回答（极少见，一般说明内容触发了安全策略）。
-var ErrRefusal = errString("模型拒绝了解释这段代码")
+var ErrRefusal = errString("模型拒绝了这次请求")
 
 // 这两种是配置没填全，不是请求失败 —— 界面上要指去设置，不该说「失败了」。
 // 见 Describe。
