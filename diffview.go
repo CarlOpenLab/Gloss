@@ -261,10 +261,13 @@ func (a *app) fileHeaderRow(c *ui.Context, pal palette, r row) {
 	viewed := a.isViewed(*f)
 	folded := a.isFolded(*f)
 
+	// 文件头用 surface2 底 + 上下两道边，和 hunk 带（surface2 但只有一道边）
+	// 拉开层次。多个文件连续时，上下边线划出明确边界，一眼看出哪些 hunk 属于
+	// 哪个文件。原来的 fileBg 和 codeBg 几乎同色，文件之间没有视觉分隔。
 	row := ui.Row(c).Height(fileH).Shrink(0).FillWidth().
 		Padding(0, 12).Gap(10).AlignItems(ui.Center).
-		Background(pal.fileBg).Cursor(ui.CursorPointer).
-		BorderWidth(0, 0, 1, 0).BorderColor(pal.hairline)
+		Background(pal.surface2).Cursor(ui.CursorPointer).
+		Border(1, pal.hairline)
 	row.Children(func() {
 		foldChevron(c, !folded, t.TextMuted)
 
@@ -291,13 +294,11 @@ func (a *app) fileHeaderRow(c *ui.Context, pal palette, r row) {
 			ui.Text(c, T("已暂存", "Staged")).FontSize(11).TextColor(t.TextMuted)
 		}
 
-		// 整文件暂存/取消暂存：复用文件栏里那颗 stageBox，在 diff 里直接
-		// 点一下就能暂存这个文件的全部改动，不必切到文件面板或逐 hunk 点。
-		// 只出现在「改动」tab（a.tab == 0）且不是分支对比时 —— 历史提交和
-		// 储藏的 diff 是只读的，摆一颗点了不动的勾只会让人猜。
+		// 整文件暂存/取消暂存：带文字的按钮样式，和 hunk 级的 stageHunkButton
+		// 保持一致。裸 checkbox 在 diff 里没有上下文，用户不知道它是干嘛的。
 		if a.tab == 0 && !a.compare.on && f.Section != gitrepo.SectionNone {
-			box := stageBox(c, pal, stageStateOf(*f), a.op != gitrepo.OpNone)
-			if box.Clicked() {
+			stageBtn := stageFileButton(c, pal, stageStateOf(*f), a.op != gitrepo.OpNone)
+			if stageBtn.Clicked() {
 				a.toggleStageFile(*f)
 			}
 		}

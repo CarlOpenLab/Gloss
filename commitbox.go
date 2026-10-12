@@ -184,6 +184,67 @@ func (a *app) hunkStageable(f gitrepo.File) bool {
 	return false
 }
 
+// stageFileButton 是文件头行上的整文件暂存按钮。
+//
+// 和 hunk 级的 stageHunkButton 风格一致：带文字标签，不是裸 checkbox。
+// 三态：未暂存（空框+「暂存文件」）、已暂存（填色+勾+「取消暂存」）、
+// 冲突（琥珀框+「解决冲突」）。
+func stageFileButton(c *ui.Context, pal palette, s stageState, lock bool) *ui.Element {
+	t := c.Theme()
+	label, text, tip := T("暂存文件", "Stage File"), T("暂存文件", "Stage File"), T("将该文件加入暂存区", "Add this file to staging area")
+	switch s {
+	case stageOn:
+		label, text, tip = T("取消暂存", "Unstage"), T("取消暂存", "Unstage"), T("将该文件移出暂存区", "Remove this file from staging area")
+	case stageConflict:
+		label, text, tip = T("标记为已解决", "Mark as Resolved"), T("标记为已解决", "Mark as Resolved"), T("将文件冲突标记为已解决", "Mark conflict as resolved")
+	}
+	btn := ui.ButtonBase(c).Height(explainBtnH).Shrink(0).Radius(radiusSM).
+		Padding(0, 7).Gap(5).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer).Disabled(lock).
+		Label(label).Tooltip(tip)
+
+	hovered := btn.Hovered() && !lock
+	var bg, border, fg ui.Color
+	checked := false
+	switch s {
+	case stageOn:
+		checked = true
+		bg, border, fg = t.Accent, ui.Transparent, t.AccentText
+		if hovered {
+			bg, border, fg = t.AccentHover, ui.Transparent, t.AccentText
+		}
+	case stageConflict:
+		border, fg = t.Warning, t.Warning
+		if hovered {
+			bg = t.Warning.Alpha(0.14)
+		}
+	default:
+		fg = pal.inkMuted
+		if hovered {
+			border = pal.hairlineTertiary
+			bg = pal.surface2
+		} else {
+			border = pal.hairlineStrong
+		}
+	}
+	btn.Background(bg).Border(1, border)
+	fadeColors(btn)
+
+	btn.Children(func() {
+		if checked {
+			ui.Box(c).Size(12, 12).Shrink(0).
+				Draw(func(p *ui.Painter, r ui.Rect) { drawCheckMark(p, r, t.AccentText) })
+		} else if s == stageConflict {
+			warnIcon(c, 12, t.Warning)
+		} else {
+			ui.Box(c).Size(12, 12).Shrink(0).Radius(radiusXS).
+				Border(1, border)
+		}
+		ui.Text(c, text).FontSize(11).SingleLine().TextColor(fg)
+	})
+	return btn
+}
+
 // toggleStageHunk 暂存 / 取消暂存某一段改动。
 //
 // 传的是 hunk 的 ID（路径 + 带行号的原文的哈希）而不是下标：执行时会在
