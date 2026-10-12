@@ -18,7 +18,7 @@ func TestDoubleClickLineOpensLineCard(t *testing.T) {
 	tt := ui.NewTester(a.view, 1280, 860)
 
 	fi, hi, li := explainLineFixture(t, a)
-	a.openExplainLine(fi, hi, li)
+	a.openExplainLine(fi, hi, li, nil)
 	settle(t, a)
 	tt.Frame()
 
@@ -50,7 +50,7 @@ func TestLineExplainPromptCarriesTheLine(t *testing.T) {
 
 	// 先把卡片开成这一行，再拿它的 prompt 走一遍 —— prompt 用的是 a.ex，
 	// 和界面点出来的路径一致。
-	a.openExplainLine(fi, hi, li)
+	a.openExplainLine(fi, hi, li, nil)
 	system, user := a.selectionPrompt(f, h, hi, li, nil)
 
 	if system == "" {
@@ -78,7 +78,7 @@ func TestLineAndHunkKeysDiffer(t *testing.T) {
 	fi, hi, li := explainLineFixture(t, a)
 	f := a.files[fi]
 
-	a.openExplainLine(fi, hi, li)
+	a.openExplainLine(fi, hi, li, nil)
 	lineKey := a.ex.key
 	// 追问也要换 key：问的是另一件事，缓存不该互相命中。
 	first := lineKey
@@ -104,14 +104,14 @@ func TestLineExplainSecondOpenHitsCache(t *testing.T) {
 	withProvider(t, a, srv)
 
 	fi, hi, li := explainLineFixture(t, a)
-	a.openExplainLine(fi, hi, li)
+	a.openExplainLine(fi, hi, li, nil)
 	settle(t, a)
 	if *calls != 1 {
 		t.Fatalf("第一次应该请求一次，实际 %d 次", *calls)
 	}
 
 	a.closeExplain()
-	a.openExplainLine(fi, hi, li)
+	a.openExplainLine(fi, hi, li, nil)
 	settle(t, a)
 
 	if *calls != 1 {
@@ -132,7 +132,7 @@ func TestReAskLineReplacesAnswer(t *testing.T) {
 	withProvider(t, a, srv)
 
 	fi, hi, li := explainLineFixture(t, a)
-	a.openExplainLine(fi, hi, li)
+	a.openExplainLine(fi, hi, li, nil)
 	settle(t, a)
 	if *calls != 1 {
 		t.Fatalf("开局应该请求一次，实际 %d 次", *calls)
@@ -156,25 +156,15 @@ func TestLineCardFallsBackWhenRowGone(t *testing.T) {
 	fi, hi := explainFixtures(t, a)
 	li := 0
 
-	a.openExplainLine(fi, hi, li)
-	rows := []row{
-		{kind: rowFileHeader, file: fi},
-		{kind: rowHunkHeader, file: fi, hunk: hi},
+	a.openExplainLine(fi, hi, li, nil)
+	if !a.explainOpen() {
+		t.Fatal("openExplainLine 之后面板应该是开着的")
 	}
-	out := a.injectExplainRow(rows)
-	if len(out) != len(rows)+1 {
-		t.Fatalf("卡片行没插进去：%d 行", len(out))
+	if !a.ex.popoverOpen {
+		t.Fatal("悬浮面板应该是打开状态")
 	}
-	// 行模型里没有那一行（区间被折叠吃了），退到这一段的 hunk 头后面。
-	// hunk 头在下标 1，卡片该落在下标 2。
-	wantNav := []rowKind{rowFileHeader, rowHunkHeader, rowExplain}
-	if len(out) != len(wantNav) {
-		t.Fatalf("插入后 %d 行，该是 %d 行", len(out), len(wantNav))
-	}
-	for i, k := range wantNav {
-		if out[i].kind != k {
-			t.Errorf("第 %d 行是 %v，该是 %v", i, out[i].kind, k)
-		}
+	if a.ex.scope != scopeLine {
+		t.Fatalf("scope 应该是 scopeLine，实际是 %v", a.ex.scope)
 	}
 }
 
@@ -193,19 +183,16 @@ func TestLineCardInjectsUnderTheLine(t *testing.T) {
 		{kind: rowLine, file: fi, hunk: hi, lineIdx: 2},
 		{kind: rowLine, file: fi, hunk: hi, lineIdx: 3},
 	}
-	a.openExplainLine(fi, hi, li)
-	out := a.injectExplainRow(rows)
+	a.openExplainLine(fi, hi, li, nil)
 
-	// 第 3 行（下标 2）后面紧跟卡片，再往后才是 lineIdx=3
-	want := []rowKind{rowFileHeader, rowHunkHeader, rowLine, rowLine, rowLine, rowExplain, rowLine}
-	if len(out) != len(want) {
-		t.Fatalf("插入后 %d 行，该是 %d 行", len(out), len(want))
+	// 悬浮面板不再内嵌在行模型里，验证状态即可
+	if !a.explainOpen() {
+		t.Fatal("面板应该是开着的")
 	}
-	for i, k := range want {
-		if out[i].kind != k {
-			t.Errorf("第 %d 行是 %v，该是 %v（卡片该插在被解释那一行后面）", i, out[i].kind, k)
-		}
+	if a.ex.fi != fi || a.ex.hi != hi {
+		t.Fatalf("面板指向 %d:%d，该是 %d:%d", a.ex.fi, a.ex.hi, fi, hi)
 	}
+	_ = rows // rows fixture kept for future use
 }
 
 // 刷完之后卡片指的东西没了，得收起来 —— 不能挂着一张讲旧文件的卡片。
@@ -217,7 +204,7 @@ func TestLineCardClosesWhenTargetVanishes(t *testing.T) {
 	a := richApp(t)
 	fi, hi, li := explainLineFixture(t, a)
 
-	a.openExplainLine(fi, hi, li)
+	a.openExplainLine(fi, hi, li, nil)
 	if !a.explainStillValid() {
 		t.Fatal("刚打开的卡片应该是有效的")
 	}
@@ -257,13 +244,13 @@ func TestKeyFollowsScopeAfterSwitch(t *testing.T) {
 	fi, hi, li := explainLineFixture(t, a)
 
 	// 先开单行卡片，再点 ✨ 开整段 —— key 该是整段那一套
-	a.openExplainLine(fi, hi, li)
+	a.openExplainLine(fi, hi, li, nil)
 	lineKey := a.ex.key
 	if lineKey == "" {
 		t.Fatal("单行卡片的 key 不该是空的")
 	}
 
-	a.openExplain(fi, hi)
+	a.openExplain(fi, hi, nil)
 	hunkKey := a.ex.key
 	if hunkKey == lineKey {
 		t.Errorf("单行卡片的 key 用在了整段卡片上：%q", hunkKey)
@@ -275,7 +262,7 @@ func TestKeyFollowsScopeAfterSwitch(t *testing.T) {
 	}
 
 	// 再切回单行：这张卡讲的是同一行，key 该回到单行那一套
-	a.openExplainLine(fi, hi, li)
+	a.openExplainLine(fi, hi, li, nil)
 	if a.ex.key != lineKey {
 		t.Errorf("切回单行卡片 key = %q，该是 %q", a.ex.key, lineKey)
 	}
@@ -286,7 +273,7 @@ func TestQuestionChangesLineKey(t *testing.T) {
 	a := richApp(t)
 	fi, hi, li := explainLineFixture(t, a)
 
-	a.openExplainLine(fi, hi, li)
+	a.openExplainLine(fi, hi, li, nil)
 	before := a.ex.key
 
 	a.ex.question = "这里为什么不用锁？"

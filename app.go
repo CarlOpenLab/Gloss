@@ -633,6 +633,7 @@ func (a *app) view(c *ui.Context) {
 	a.prDialog(c, pal)
 	a.prReviewModal(c, pal)
 	a.riskScanDialog(c, pal)
+	a.explainPopover(c, pal)
 
 	// Esc 退出分支对比/PR 检视或关掉卡片。放在最后，让对话框里正在编辑的输入框先有机会处理它。
 	if a.compare.on && !a.modalOn() && c.Shortcut(0, ui.KeyEscape) {

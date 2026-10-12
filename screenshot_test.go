@@ -128,7 +128,7 @@ func TestDumpScreenshot(t *testing.T) {
 		head: a.files[fi].Hunks[hi].Header,
 		text: sampleExplanation,
 	}
-	a.ex.anchor = ui.Rect{X: 1120, Y: 180, W: 88, H: 22}
+	a.ex.anchorEl = nil
 	tt.SetDark(false)
 	tt.Frame()
 	writePNG(t, "/tmp/de-shot-card.png", tt.Image())
@@ -137,7 +137,7 @@ func TestDumpScreenshot(t *testing.T) {
 	writePNG(t, "/tmp/de-shot-card-dark.png", tt.Image())
 
 	// 卡片翻到 ✨ 按钮上方（按钮贴底时）
-	a.ex.anchor = ui.Rect{X: 1120, Y: 800, W: 88, H: 22}
+	a.ex.anchorEl = nil
 	tt.SetDark(false)
 	tt.Frame()
 	writePNG(t, "/tmp/de-shot-card-up.png", tt.Image())
@@ -149,7 +149,7 @@ func TestDumpScreenshot(t *testing.T) {
 		head:    a.files[fi].Hunks[hi].Header,
 		needKey: true,
 	}
-	a.ex.anchor = ui.Rect{X: 1120, Y: 180, W: 88, H: 22}
+	a.ex.anchorEl = nil
 	tt.Frame()
 	writePNG(t, "/tmp/de-shot-card-nokey.png", tt.Image())
 
@@ -173,7 +173,7 @@ func TestDumpScreenshot(t *testing.T) {
 		head: a.files[fi].Hunks[hi].Header,
 		fail: llm.Describe(apiErr),
 	}
-	a.ex.anchor = ui.Rect{X: 1120, Y: 180, W: 88, H: 22}
+	a.ex.anchorEl = nil
 	tt.Frame()
 	writePNG(t, "/tmp/de-shot-card-error.png", tt.Image())
 	tt.SetDark(true)

@@ -71,82 +71,9 @@ func (a *app) rebuildRows() {
 		}
 	}
 	a.rows = buildRows(a.files, a.contents, a.expanded, a.split, collapsed)
-	if a.explainOpen() {
-		a.rows = a.injectExplainRow(a.rows)
-	}
 	a.rowsDirty = false
 }
 
-// injectExplainRow 将当前处于打开状态的 AI 解释卡片作为 GitHub 风格的行间内嵌行（rowExplain）插入到行模型中。
-func (a *app) injectExplainRow(rows []row) []row {
-	if !a.explainOpen() {
-		return rows
-	}
-	expRow := row{
-		kind: rowExplain,
-		file: a.ex.fi,
-		hunk: a.ex.hi,
-		key:  "ex:" + a.ex.key,
-	}
-
-	// 单行解释：卡片插在被解释那一行的正下方。
-	//
-	// 认 lineIdx 而不是行号：同一个 hunk 里同一行只出现一次，而行号会随刷新、
-	// 切提交漂走。「那一行此刻不在行模型里」（被折叠的区间吃了、diff 换了）
-	// 就退到这一段的 hunk header 底下 —— 仍然贴着正在讲的那一段。
-	if a.ex.scope == scopeLine {
-		for i := range rows {
-			r := rows[i]
-			if r.file == a.ex.fi && r.hunk == a.ex.hi &&
-				r.kind == rowLine && r.lineIdx == a.ex.line.lineIdx {
-				return injectRowAt(rows, i, expRow)
-			}
-		}
-		if i := a.explainAnchorRow(rows); i >= 0 {
-			return injectRowAt(rows, i, expRow)
-		}
-		return append(rows, expRow)
-	}
-
-	targetIdx := -1
-	// Hunk 解释：插入在对应 hunk header 的紧下方
-	for i, r := range rows {
-		if r.file == a.ex.fi && r.kind == rowHunkHeader && r.hunk == a.ex.hi {
-			targetIdx = i
-			break
-		}
-	}
-
-	if targetIdx >= 0 {
-		return injectRowAt(rows, targetIdx, expRow)
-	}
-
-	// 兜底：插入在对应文件头后
-	for i, r := range rows {
-		if r.file == a.ex.fi && r.kind == rowFileHeader {
-			return injectRowAt(rows, i, expRow)
-		}
-	}
-	return append(rows, expRow)
-}
-
-// injectRowAt 把卡片插在 rows[i] 后面。
-func injectRowAt(rows []row, i int, expRow row) []row {
-	result := make([]row, 0, len(rows)+1)
-	result = append(result, rows[:i+1]...)
-	result = append(result, expRow)
-	return append(result, rows[i+1:]...)
-}
-
-// explainAnchorRow 找单行解释的兜底落点：这一段 hunk header 的下标。
-func (a *app) explainAnchorRow(rows []row) int {
-	for i, r := range rows {
-		if r.file == a.ex.fi && r.kind == rowHunkHeader && r.hunk == a.ex.hi {
-			return i
-		}
-	}
-	return -1
-}
 
 // fileHeaderRowOf 找某个文件的文件头在行模型里的下标，没有返回 -1。
 //
@@ -190,8 +117,6 @@ func (a *app) diffRow(c *ui.Context, pal palette, r row) {
 		a.noteRow(c, pal, r)
 	case rowConflict:
 		a.conflictRow(c, pal, r)
-	case rowExplain:
-		a.explainInlineRow(c, pal, r)
 	default:
 		a.codeRow(c, pal, r)
 	}
@@ -355,19 +280,19 @@ func (a *app) hunkHeaderRow(c *ui.Context, pal palette, r row) {
 		}
 
 		// 按钮的选中态取点击**之前**的状态：刚点开的那一帧，按钮下一刻
-		// 才该变成「正在讲」，否则点下去的同时按钮先变色、卡片才跟上，
+		// 才该变成「正在讲」，否则点下去的同时按钮先变色、面板才跟上，
 		// 两件事分在两帧上闪。
 		//
-		// 卡片讲的是单行时这颗不亮：亮着会让人以为整段都在讲，而这一趟
+		// 面板讲的是单行时这颗不亮：亮着会让人以为整段都在讲，而这一趟
 		// 其实只讲了其中一行。真要讲整段，再点一下 ✨ 就是。
 		btn := explainButton(c, pal, a.isExplaining(r.file, r.hunk) && a.ex.scope != scopeLine, a.ex.loading)
 		if btn.Clicked() {
-			a.toggleExplain(r.file, r.hunk)
+			a.toggleExplain(r.file, r.hunk, btn)
 		}
-		// 但锚点必须问点击**之后**的状态：这一帧刚点开时，卡片要靠同一个
-		// 按钮的位置来定位，顺序反了第一帧就会摆在左上角。
+		// 存 anchor 元素给 PopoverBase 做定位。点击之后的状态才是
+		// 「面板该锚在哪里」—— 顺序反了第一帧就会摆在左上角。
 		if a.isExplaining(r.file, r.hunk) {
-			a.ex.anchor = btn.Bounds()
+			a.ex.anchorEl = btn
 		}
 	})
 }
@@ -479,7 +404,7 @@ func (a *app) unifiedRow(c *ui.Context, pal palette, r row) {
 	if marked {
 		rowEl.Border(1, pal.explainHover)
 	}
-	a.lineExplainHit(rowEl, r)
+	a.lineExplainHit(rowEl, r, rowEl)
 	rowEl.Children(func() {
 		ui.Box(c).Width(barW).AlignSelf(ui.Stretch).Background(bar)
 		a.gutter(c, pal, oldNo, gutBg)
@@ -496,14 +421,14 @@ func (a *app) unifiedRow(c *ui.Context, pal palette, r row) {
 //
 // 只接 hunk 里的行（r.hunk >= 0），不接展开出来的未改动行：后者内容不在
 // patch 里，没有「这一行改了什么」可讲 —— 它压根没改。
-func (a *app) lineExplainHit(el *ui.Element, r row) {
+func (a *app) lineExplainHit(el *ui.Element, r row, anchor *ui.Element) {
 	if r.kind != rowLine || r.hunk < 0 || r.lineIdx < 0 {
 		return
 	}
 	if !el.DoubleClicked() {
 		return
 	}
-	a.toggleExplainLine(r.file, r.hunk, r.lineIdx)
+	a.toggleExplainLine(r.file, r.hunk, r.lineIdx, anchor)
 }
 
 // sideLine 是 split 模式下某一侧的半行。empty 表示这一侧空着 ——
@@ -554,7 +479,7 @@ func (a *app) splitHalf(c *ui.Context, pal palette, s sideLine, size float32, r 
 	if !s.empty {
 		// 只有这一侧真有内容时才接双击 —— 空白那半接上去，点它就会
 		// 解释对面那一行，而眼睛看的是「这边没东西」。
-		a.lineExplainHit(half, r)
+		a.lineExplainHit(half, r, half)
 	}
 	half.Children(func() {
 		ui.Box(c).Width(barW).AlignSelf(ui.Stretch).Background(bar)

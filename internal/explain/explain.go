@@ -37,14 +37,22 @@ type Request struct {
 	HunkIdx int
 	// Context 是 hunk 附近的文件内容，每行行首带真实行号。可以为空。
 	Context string
+	// Question 是追问。空表示首次解释，非空表示就着这次解释往下问。
+	Question string
 }
 
-// CacheKey 是解释结果的缓存 key：hunk 的内容哈希 + 模型名。
+// CacheKey 是解释结果的缓存 key：hunk 的内容哈希 + 模型名 + 追问。
 //
 // 用内容哈希而不是行号，所以同一个改动块出现在哪个文件位置、哪次提交里
 // 都能命中同一份缓存；而换了模型会重新问一遍 —— 不同模型的解释不该互相顶替。
+// 追问也进 key：同一个 hunk 问不同问题是不同的请求，不能共用缓存。
 func CacheKey(f diff.FileDiff, h diff.Hunk, model string) string {
 	return diff.HunkID(Path(f), h) + ":" + model
+}
+
+// QuestionCacheKey 是带追问的缓存 key。
+func QuestionCacheKey(f diff.FileDiff, h diff.Hunk, question, model string) string {
+	return diff.HunkID(Path(f), h) + ":q:" + question + ":" + model
 }
 
 // BuildPrompt 拼出 (system, user) 两条消息。
@@ -78,6 +86,10 @@ func BuildPrompt(req Request) (string, string) {
 		h.OldStart, h.OldLines, h.NewStart, h.NewLines)
 	b.WriteString(h.Raw())
 	b.WriteString("```\n")
+
+	if req.Question != "" {
+		fmt.Fprintf(&b, "\n## 追问\n%s\n", req.Question)
+	}
 	return SystemPrompt, b.String()
 }
 

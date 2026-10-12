@@ -61,17 +61,17 @@ type explainState struct {
 	// line 是单行解释指的那一行（scope 为 scopeLine 时有效）：行号和内容，
 	// 加上它在 hunk.Lines 里的下标 —— 行号会随刷新漂移，下标才是定位凭据。
 	line explainLine
-	// question 是单行解释的追问。它不是 app 的字段而是卡片的：追问是「就着
-	// 这次解释往下问」，切到另一行/另一段就该重新开始问。
+	// question 是当前追问。空表示首次解释，非空表示就着这次解释往下问。
 	question string
 
 	// askOn 是追问输入框这一帧是否该抢焦点。和 filepane 的 focusFilter 一个
 	// 套路：卡片在覆盖层里构建，和别的输入框抢焦点，置位晚一帧才轮到它。
 	askOn bool
 
-	// anchor 是 ✨ 按钮上一帧的位置。每帧从按钮重新取，所以滚动、
-	// 改窗口大小之后卡片会跟着走。
-	anchor ui.Rect
+	// popoverOpen 是 PopoverBase 的 open 指针。false 时面板关闭。
+	popoverOpen bool
+	// anchorEl 是 ✨ 按钮的元素引用，传给 PopoverBase 做定位锚点。
+	anchorEl *ui.Element
 
 	text    string
 	loading bool
@@ -91,9 +91,6 @@ type explainState struct {
 	mail *explainMail
 
 	scroll ui.ScrollState
-
-	// 折叠/收缩状态（GitHub 风格折叠）
-	collapsed bool
 
 	// 多次解析历史与翻页卡片
 	entries []explainEntry
@@ -226,33 +223,40 @@ func (a *app) explainStillValid() bool {
 //
 // 同一行有多个 hunk 时，hunkIdx 也进 key：不同段里的同一行不是同一件事
 // （一段在改它，另一段只是它旁边变了），缓存共享会把两段的解释混成一份。
+// question 也进 key：同一个 hunk 问不同问题是不同的请求，不能共用缓存。
 func (a *app) explainKey(f gitrepo.File, hi int) string {
 	if a.ex.scope != scopeLine {
+		if a.ex.question != "" {
+			return explain.QuestionCacheKey(f.FileDiff, f.Hunks[hi], a.ex.question, a.modelName)
+		}
 		return explain.CacheKey(f.FileDiff, f.Hunks[hi], a.modelName)
 	}
 	return explain.SelectionCacheKey(explain.Path(f.FileDiff), a.ex.line.text, a.ex.question, a.modelName)
 }
 
 // toggleExplain 点 ✨ 时调用：开着就关掉，关着就打开。
-func (a *app) toggleExplain(fi, hi int) {
+// anchor 是 ✨ 按钮的元素引用，用于定位悬浮面板。
+func (a *app) toggleExplain(fi, hi int, anchor *ui.Element) {
 	if a.isExplaining(fi, hi) {
 		a.closeExplain()
 		return
 	}
-	a.openExplain(fi, hi)
+	a.openExplain(fi, hi, anchor)
 }
 
 // toggleExplainLine 双击代码行时调用：开着同一行就关掉，否则打开那一行。
-func (a *app) toggleExplainLine(fi, hi, lineIdx int) {
+// anchor 是双击行的元素引用，用于定位悬浮面板。
+func (a *app) toggleExplainLine(fi, hi, lineIdx int, anchor *ui.Element) {
 	if a.isExplainingLine(fi, hi, lineIdx) {
 		a.closeExplain()
 		return
 	}
-	a.openExplainLine(fi, hi, lineIdx)
+	a.openExplainLine(fi, hi, lineIdx, anchor)
 }
 
-// openExplain 打开卡片：有缓存就直接显示，没有就发起一次流式请求。
-func (a *app) openExplain(fi, hi int) {
+// openExplain 打开悬浮面板：有缓存就直接显示，没有就发起一次流式请求。
+// anchor 是 ✨ 按钮的元素引用，传给 PopoverBase 做定位锚点。
+func (a *app) openExplain(fi, hi int, anchor *ui.Element) {
 	if fi < 0 || fi >= len(a.files) || hi < 0 || hi >= len(a.files[fi].Hunks) {
 		return
 	}
@@ -264,10 +268,12 @@ func (a *app) openExplain(fi, hi int) {
 	// 在字面量里一起写等于拿**旧**卡片的状态算新 key —— 上一张是单行
 	// 卡片时，这里会算出一个单行的 key 来。
 	a.ex = explainState{
-		fi:    fi,
-		hi:    hi,
-		head:  hunkHeaderText(h),
-		scope: scopeHunk,
+		fi:          fi,
+		hi:          hi,
+		head:        hunkHeaderText(h),
+		scope:       scopeHunk,
+		popoverOpen: true,
+		anchorEl:    anchor,
 	}
 	a.ex.key = a.explainKey(f, hi)
 
@@ -275,18 +281,14 @@ func (a *app) openExplain(fi, hi int) {
 		a.ex.text = text
 		a.ex.cached = true
 		a.recordExplainEntry(text, true)
-		a.rowsDirty = true
 		return
 	}
-	a.rowsDirty = true
 	a.startExplain(f.FileDiff, h, hi, fileKey(f))
 }
 
 // openExplainLine 只看某一行：要讲清「这一行在干什么、为什么这么写」。
-//
-// 它复用同一张卡片，所以和 hunk 那颗按钮共享暂存区、已 review 那一类
-// 栏脚开关 —— 换粒度不该换掉卡片本身。
-func (a *app) openExplainLine(fi, hi, lineIdx int) {
+// anchor 是双击行的元素引用，传给 PopoverBase 做定位锚点。
+func (a *app) openExplainLine(fi, hi, lineIdx int, anchor *ui.Element) {
 	if fi < 0 || fi >= len(a.files) || hi < 0 || hi >= len(a.files[fi].Hunks) {
 		return
 	}
@@ -310,11 +312,13 @@ func (a *app) openExplainLine(fi, hi, lineIdx int) {
 	// 读的就是这两个字段，在结构体字面量里算 key 用的是**旧的** a.ex
 	// （上一张卡片的 scope 和行内容），算出来的 key 是错的。
 	a.ex = explainState{
-		fi:    fi,
-		hi:    hi,
-		head:  hunkHeaderText(h),
-		scope: scopeLine,
-		line:  line,
+		fi:          fi,
+		hi:          hi,
+		head:        hunkHeaderText(h),
+		scope:       scopeLine,
+		line:        line,
+		popoverOpen: true,
+		anchorEl:    anchor,
 	}
 	a.ex.key = a.explainKey(f, hi)
 
@@ -322,10 +326,8 @@ func (a *app) openExplainLine(fi, hi, lineIdx int) {
 		a.ex.text = text
 		a.ex.cached = true
 		a.recordExplainEntry(text, true)
-		a.rowsDirty = true
 		return
 	}
-	a.rowsDirty = true
 	a.startExplainLine(f.FileDiff, h, hi, lineIdx, fileKey(f))
 }
 
@@ -359,10 +361,11 @@ func (a *app) startExplain(f diff.FileDiff, h diff.Hunk, hi int, contentKey stri
 		lines = cc.lines
 	}
 	system, user := explain.BuildPrompt(explain.Request{
-		File:    f,
-		Hunk:    h,
-		HunkIdx: hi,
-		Context: explain.Window(lines, h, explainAround, explainMaxCtx),
+		File:     f,
+		Hunk:     h,
+		HunkIdx:  hi,
+		Context:  explain.Window(lines, h, explainAround, explainMaxCtx),
+		Question: a.ex.question,
 	})
 	system = a.store.Config().EffectiveExplainPrompt(system)
 
@@ -477,11 +480,10 @@ func (a *app) flushExplain(mail *explainMail) {
 	}
 }
 
-// closeExplain 关闭卡片并掐掉进行中的请求。
+// closeExplain 关闭悬浮面板并掐掉进行中的请求。
 func (a *app) closeExplain() {
 	a.cancelExplain()
 	a.ex = explainState{}
-	a.rowsDirty = true
 }
 
 func (a *app) cancelExplain() {
@@ -491,73 +493,42 @@ func (a *app) cancelExplain() {
 	}
 }
 
-// explainInlineRow 以 GitHub 风格在代码行间内嵌呈现 AI 解释卡片或折叠条。
-func (a *app) explainInlineRow(c *ui.Context, pal palette, r row) {
-	if !a.explainOpen() {
+// explainPopover 用 PopoverBase 在锚点元素附近弹出悬浮面板。
+//
+// 不再内嵌在行模型里：面板不占 diff 空间、不随列表虚拟化，点外部/Esc 关闭。
+// 每帧检查 popoverOpen —— PopoverBase 在用户点外部时自动设 false，这时清理状态。
+func (a *app) explainPopover(c *ui.Context, pal palette) {
+	if !a.explainOpen() || !a.ex.popoverOpen {
 		return
 	}
-	// 刷新仓库或改筛选之后，fi/hi 可能已经指向别的文件了 —— 收起解释
+	if a.ex.anchorEl == nil {
+		a.closeExplain()
+		return
+	}
 	if !a.explainStillValid() {
 		a.closeExplain()
 		return
 	}
 
-	if a.ex.collapsed {
-		// GitHub 风格折叠态：简洁内嵌胶囊小条，点击展开
-		countStr := ""
-		if len(a.ex.entries) > 1 {
-			countStr = fmt.Sprintf(" (%d/%d)", a.ex.curIdx+1, len(a.ex.entries))
-		}
-		// 外层 Box 负责左右内边距：卡片铺满列表宽度再加外侧 margin 会顶到
-		// 右侧滚动条上，关闭按钮就点不到了。
-		ui.Box(c).FillWidth().Shrink(0).Padding(3, 16).Children(func() {
-			pill := ui.Row(c).Height(30).Shrink(0).FillWidth().
-				Padding(0, 12).Gap(8).AlignItems(ui.Center).
-				Radius(radiusSM).Background(pal.surface2).Border(1, pal.hairline).
-				Cursor(ui.CursorPointer)
-			if pill.Hovered() {
-				pill.Background(pal.surface3)
-			}
-			fadeColors(pill)
-			pill.Children(func() {
-				sparkleCluster(c, 13, pal.inkMuted)
-				ui.Text(c, Tf("✨ AI 解释%s · 点击展开", "✨ AI Explanation%s · Click to expand", countStr)).
-					FontSize(11).FontWeight(weightMedium).TextColor(pal.ink)
-				drawIcon(c, iconChevronDown, 11, pal.inkSubtle)
-				ui.Spacer(c)
-				closeBtn := ui.ButtonBase(c).Size(18, 18).Radius(radiusXS).
-					AlignItems(ui.Center).Justify(ui.Center).Cursor(ui.CursorPointer)
-				closeBtn.Children(func() {
-					ui.Text(c, "×").FontSize(11).TextColor(pal.inkSubtle)
-				})
-				if closeBtn.Clicked() {
-					a.closeExplain()
-				}
-			})
-			if pill.Clicked() {
-				a.ex.collapsed = false
-				a.rowsDirty = true
-			}
-		})
-		return
-	}
-
-	// 展开态：GitHub 风格内嵌卡片，与上下代码流融为一体，彻底消除浮层遮挡代码。
-	// 同样用外层 Box 的内边距代替 margin，右侧给滚动条留出空间。
-	ui.Box(c).FillWidth().Shrink(0).Padding(6, 16).Children(func() {
-		card := ui.Column(c).Shrink(0).FillWidth().Radius(cardRadius).
-			Background(pal.surface1).Border(1, pal.hairline).
-			Shadow(0, 2, 8, 0, ui.RGBA(0, 0, 0, 0.06))
-
-		card.Children(func() {
-			a.explainHead(c, pal)
-			a.explainBody(c, pal, 520)
-			if a.ex.scope == scopeLine {
+	ui.PopoverBase(c, a.ex.anchorEl, &a.ex.popoverOpen, func(panel *ui.Element) {
+		ui.Column(c).Shrink(0).Width(560).MaxHeight(520).
+			Radius(cardRadius).
+			Background(pal.surface1).
+			Border(1, pal.hairline).
+			Shadow(0, 2, 8, 0, ui.RGBA(0, 0, 0, 0.06)).
+			Children(func() {
+				a.explainHead(c, pal)
+				a.explainBody(c, pal, 520)
 				a.askRow(c, pal)
-			}
-			a.explainFoot(c, pal)
-		})
+				a.explainFoot(c, pal)
+			})
 	})
+
+	// PopoverBase 捕获 Esc / 点击外部后设 popoverOpen = false，
+	// 但 explainOpen() 看的是 key —— 在这里同步关闭状态。
+	if !a.ex.popoverOpen {
+		a.closeExplain()
+	}
 }
 
 func clamp(v, lo, hi float32) float32 { return min(max(v, lo), hi) }
@@ -687,21 +658,6 @@ func (a *app) explainHead(c *ui.Context, pal palette) {
 			})
 			if delBtn.Clicked() {
 				a.deleteCurrentExplainEntry()
-			}
-
-			// 收缩/折叠按钮
-			collapseBtn := ui.ButtonBase(c).Size(20, 20).Radius(radiusXS).
-				AlignItems(ui.Center).Justify(ui.Center).Cursor(ui.CursorPointer).
-				Tooltip(T("收缩解析窗口", "Collapse explanation"))
-			if collapseBtn.Hovered() {
-				collapseBtn.Background(pal.surface3)
-			}
-			fadeColors(collapseBtn)
-			collapseBtn.Children(func() {
-				drawIcon(c, iconChevronUp, 12, pal.inkSubtle)
-			})
-			if collapseBtn.Clicked() {
-				a.ex.collapsed = true
 			}
 
 			if closeButton(c, pal) {
@@ -939,17 +895,19 @@ func (a *app) explainFoot(c *ui.Context, pal palette) {
 	})
 }
 
-// askRow 是单行解释底下的追问框：就着这一行再问一句，答案接在同一张卡片里。
+// askRow 是面板底下的追问框：就着这次解释再问一句，答案接在同一张面板里。
 //
-// 只有单行解释有它。「这一段为什么改」是 hunk 那颗按钮的问题，问错了对象
-// 会得到一段泛泛的解释，不如不给。
-//
-// 输入框和卡片是一帧里构建的，所以它自己会的 Changed() 读不到 Enter ——
-// 回车在单行编辑器里是我们的 Submitted()，光标进去那一帧就该问值。
+// 所有粒度都能追问：hunk 粒度问「这一段为什么这样改」，单行粒度问
+// 「这一行什么意思」。输入框和面板是一帧里构建的，所以它自己的 Changed()
+// 读不到 Enter —— 回车在单行编辑器里是我们的 Submitted()。
 func (a *app) askRow(c *ui.Context, pal palette) {
 	ui.Box(c).Shrink(0).Padding(8, 12).FillWidth().Children(func() {
+		placeholder := T("追问…", "Ask a follow-up…")
+		if a.ex.scope == scopeLine {
+			placeholder = T("就这一行追问…", "Ask about this line…")
+		}
 		in := ui.TextInput(c, &a.ex.question).
-			Placeholder(T("就这一行追问…", "Ask about this line…")).
+			Placeholder(placeholder).
 			Label(T("追问", "Follow-up question"))
 		fadeColors(in)
 		if a.ex.askOn {
@@ -959,14 +917,47 @@ func (a *app) askRow(c *ui.Context, pal palette) {
 
 		if in.Submitted() {
 			a.ex.askOn = true
-			a.reAskLine()
+			a.reAsk()
 		}
 	})
 }
 
+// reAsk 用当前的问题重问。根据 scope 分发到 reAskHunk 或 reAskLine。
+func (a *app) reAsk() {
+	if a.ex.scope == scopeLine {
+		a.reAskLine()
+		return
+	}
+	a.reAskHunk()
+}
+
+// reAskHunk 用当前的问题重问这个 hunk。
+//
+// 老答案整块换掉：追问是在同一张面板里接着聊，但每一次请求都该是一次完整
+// 的回答，不是接在半句话后面。
+func (a *app) reAskHunk() {
+	if !a.explainOpen() || a.ex.scope != scopeHunk {
+		return
+	}
+	if a.ex.fi < 0 || a.ex.fi >= len(a.files) || a.ex.hi < 0 || a.ex.hi >= len(a.files[a.ex.fi].Hunks) {
+		return
+	}
+	f := a.files[a.ex.fi]
+	h := f.Hunks[a.ex.hi]
+	a.cancelExplain()
+	a.ex.text = ""
+	a.ex.scroll = ui.ScrollState{}
+	a.ex.fail = llm.Failure{}
+	a.ex.needKey = false
+	// key 要重算：问题变了，缓存命中该变。换 key 也顺带让旧请求的结果落空
+	// （streamExplain 里比 key 才知道该不该收）。
+	a.ex.key = a.explainKey(f, a.ex.hi)
+	a.startExplain(f.FileDiff, h, a.ex.hi, fileKey(f))
+}
+
 // reAskLine 用当前的问题重问这一行。
 //
-// 老答案整块换掉：追问是在同一张卡片里接着聊，但每一次请求都该是一次完整
+// 老答案整块换掉：追问是在同一张面板里接着聊，但每一次请求都该是一次完整
 // 的回答，不是接在半句话后面。
 func (a *app) reAskLine() {
 	if !a.explainOpen() || a.ex.scope != scopeLine {

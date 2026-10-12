@@ -60,7 +60,7 @@ func TestExplainTogglesFromButton(t *testing.T) {
 	tt := ui.NewTester(a.view, 1280, 860)
 
 	fi, hi := explainFixtures(t, a)
-	a.openExplain(fi, hi)
+	a.openExplain(fi, hi, nil)
 	settle(t, a)
 	tt.Frame()
 	if !a.explainOpen() {
@@ -110,7 +110,7 @@ func TestExplainEscapeCloses(t *testing.T) {
 	tt := ui.NewTester(a.view, 1280, 860)
 
 	fi, hi := explainFixtures(t, a)
-	a.openExplain(fi, hi)
+	a.openExplain(fi, hi, nil)
 	settle(t, a)
 	tt.Frame()
 
@@ -129,14 +129,14 @@ func TestExplainSecondOpenHitsCache(t *testing.T) {
 	tt := ui.NewTester(a.view, 1280, 860)
 
 	fi, hi := explainFixtures(t, a)
-	a.openExplain(fi, hi)
+	a.openExplain(fi, hi, nil)
 	settle(t, a)
 	if *calls != 1 {
 		t.Fatalf("第一次应该请求一次，实际 %d 次", *calls)
 	}
 
 	a.closeExplain()
-	a.openExplain(fi, hi)
+	a.openExplain(fi, hi, nil)
 	settle(t, a)
 	tt.Frame()
 
@@ -164,7 +164,7 @@ func TestExplainSavesToStore(t *testing.T) {
 	withProvider(t, a, srv)
 
 	fi, hi := explainFixtures(t, a)
-	a.openExplain(fi, hi)
+	a.openExplain(fi, hi, nil)
 	settle(t, a)
 
 	key := a.explainKey(a.files[fi], hi)
@@ -195,7 +195,7 @@ func TestExplainShowsError(t *testing.T) {
 	before := countText(tt.Texts(), "模型设置…")
 
 	fi, hi := explainFixtures(t, a)
-	a.openExplain(fi, hi)
+	a.openExplain(fi, hi, nil)
 	settle(t, a)
 	tt.Frame()
 
@@ -241,7 +241,7 @@ func TestExplainRetryAfterError(t *testing.T) {
 	tt := ui.NewTester(a.view, 1280, 860)
 
 	fi, hi := explainFixtures(t, a)
-	a.openExplain(fi, hi)
+	a.openExplain(fi, hi, nil)
 	settle(t, a)
 	tt.Frame()
 	if !tt.HasText("重试") {
@@ -313,7 +313,7 @@ func TestExplainWithoutProvider(t *testing.T) {
 	before := countText(tt.Texts(), "模型设置…")
 
 	fi, hi := explainFixtures(t, a)
-	a.openExplain(fi, hi)
+	a.openExplain(fi, hi, nil)
 	settle(t, a)
 	tt.Frame()
 
@@ -363,7 +363,7 @@ func TestExplainCloseCancelsRequest(t *testing.T) {
 	a := richApp(t)
 	withProvider(t, a, srv)
 	fi, hi := explainFixtures(t, a)
-	a.openExplain(fi, hi)
+	a.openExplain(fi, hi, nil)
 
 	<-started
 	a.closeExplain()
@@ -385,7 +385,7 @@ func TestExplainCardDoesNotBlockScrolling(t *testing.T) {
 	tt := ui.NewTester(a.view, 1280, 860)
 
 	fi, hi := explainFixtures(t, a)
-	a.openExplain(fi, hi)
+	a.openExplain(fi, hi, nil)
 	settle(t, a)
 	tt.Frame()
 
@@ -417,7 +417,7 @@ func TestExplainInvalidatedOnReload(t *testing.T) {
 	withProvider(t, a, srv)
 
 	fi, hi := explainFixtures(t, a)
-	a.openExplain(fi, hi)
+	a.openExplain(fi, hi, nil)
 	settle(t, a)
 
 	if !a.isExplaining(fi, hi) {
