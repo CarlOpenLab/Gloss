@@ -7,12 +7,18 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/plugins/updater"
 
 	"github.com/CarlOpenLab/Gloss/internal/store"
 )
 
 func main() {
 	a := newApp()
+
+	// 自动更新：后台每天检查一次 GitHub Release，有新版本时弹出
+	// Sparkle 风格窗口（release notes + 安装/稍后/跳过）。dev 构建
+	// 和包管理器安装（.deb 等）不会触发。
+	mygo.Use(updater.Plugin)
 
 	mygo.App.WhenReady(func() {
 		// 设置、状态和解释缓存都在应用数据目录里。拿不到目录（极少见）

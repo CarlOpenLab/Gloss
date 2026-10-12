@@ -6,6 +6,9 @@
 build/
 mygo_windows_*.syso
 
+# 更新签名私钥（公钥在 mygo.json 里，私钥只在本地和 CI secrets 里）
+mygo-update.key
+
 # 测试留下的临时 store（不该出现在仓库里）
 config.json
 state.json
