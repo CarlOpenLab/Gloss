@@ -216,9 +216,9 @@ func TestLangOf(t *testing.T) {
 // 系统提示是模型行为的唯一约束，改它多半是有意的；这里钉住几条关键要求，
 // 免得手滑删掉。
 func TestSystemPromptKeepsKeyConstraints(t *testing.T) {
-	for _, want := range []string{"只解释给你的这一个变更块", "中文", "250 字"} {
+	for _, want := range []string{"Only explain the single hunk", "Chinese", "250 words"} {
 		if !strings.Contains(SystemPrompt, want) {
-			t.Errorf("系统提示里缺 %q", want)
+			t.Errorf("System prompt missing %q", want)
 		}
 	}
 }

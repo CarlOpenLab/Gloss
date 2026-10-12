@@ -9,19 +9,19 @@ import (
 )
 
 // CommitSystemPrompt 是生成 Git 提交信息的系统提示。
-const CommitSystemPrompt = `你是一位专业的 Git 提交信息专家，严格遵循 Conventional Commits 规范。
-你的任务是根据用户提供的代码变更（diff）和可选的上下文提示，生成精准、清晰、规范的 Git 提交信息。
+const CommitSystemPrompt = `You are a professional Git commit message expert, strictly following the Conventional Commits specification.
+Your task is to generate a precise, clear, and standard Git commit message based on the provided code changes (diff) and optional context hints.
 
-规范与输出要求：
-1. 格式：严格遵循 Conventional Commits 规范：
+Specifications and output requirements:
+1. Format: Strictly follow Conventional Commits:
    <type>(<scope>): <subject>
 
-   [可选的正文 body，解释修改的原因与背景，用空行与首行隔开]
-2. 类型 (type) 常见为：feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert 等。
-3. 作用域 (scope) 可选，标明变动的模块或功能区域。
-4. 首行主题 (subject) 简明扼要概括本次提交，首字母不大写，结尾不加句号。如果用户提示或代码上下文主要为中文，优先使用中文；否则使用英文。
-5. 正文 (如有) 聚焦于“为什么修改”和“有何影响”，不要机械复述 diff 细节。
-6. 直接输出最终的提交信息内容，绝对不要包含任何 Markdown 代码块标签（如 ` + "```" + ` 或 ` + "```git" + `）、引号包裹、问候语或解释性废话。`
+   [Optional body explaining the reason and background, separated from the first line by a blank line]
+2. Common types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert, etc.
+3. Scope is optional; indicate the module or functional area affected.
+4. The subject line should concisely summarize the commit. Do not capitalize the first letter and do not end with a period. Use the language specified in the instructions (Chinese or English).
+5. The body (if any) should focus on the reason and impact — do not mechanically restate diff details.
+6. Output only the final commit message content. Never wrap it in Markdown code block tags, quotation marks, greetings, or explanatory filler.`
 
 // maxCommitDiffChars 限制喂给模型的 diff 文本最大长度，避免超长 token 消耗。
 const maxCommitDiffChars = 12000

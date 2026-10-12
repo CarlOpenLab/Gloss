@@ -52,7 +52,7 @@ func TestBuildPRReviewPrompt(t *testing.T) {
 
 	sys, user := BuildPRReviewPrompt(pr, files)
 
-	if !strings.Contains(sys, "GitHub PR Code Review 专家") {
+	if !strings.Contains(sys, "GitHub PR Code Review expert") {
 		t.Errorf("System prompt missing role definition: %s", sys)
 	}
 

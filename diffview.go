@@ -276,7 +276,7 @@ func (a *app) fileHeaderRow(c *ui.Context, pal palette, r row) {
 			SingleLine().TextColor(name)
 
 		if folded {
-			ui.Text(c, "已折叠").FontSize(11).TextColor(t.TextMuted)
+			ui.Text(c, T("已折叠", "Folded")).FontSize(11).TextColor(t.TextMuted)
 		}
 		if f.AddCount > 0 {
 			ui.Textf(c, "+%d", f.AddCount).Font("monospace").FontSize(11).Bold().
@@ -287,10 +287,25 @@ func (a *app) fileHeaderRow(c *ui.Context, pal palette, r row) {
 				FontFeatures("tnum").TextColor(pal.delBar)
 		}
 
+		if f.Section == gitrepo.SectionStaged {
+			ui.Text(c, T("已暂存", "Staged")).FontSize(11).TextColor(t.TextMuted)
+		}
+
+		// 整文件暂存/取消暂存：复用文件栏里那颗 stageBox，在 diff 里直接
+		// 点一下就能暂存这个文件的全部改动，不必切到文件面板或逐 hunk 点。
+		// 只出现在「改动」tab（a.tab == 0）且不是分支对比时 —— 历史提交和
+		// 储藏的 diff 是只读的，摆一颗点了不动的勾只会让人猜。
+		if a.tab == 0 && !a.compare.on && f.Section != gitrepo.SectionNone {
+			box := stageBox(c, pal, stageStateOf(*f), a.op != gitrepo.OpNone)
+			if box.Clicked() {
+				a.toggleStageFile(*f)
+			}
+		}
+
 		// Checkbox 要的是 *bool，而 viewed 是按指纹存在 map 里的。
 		// 传一份副本进去，变了再回写 —— 中间不碰真实状态。
 		v := viewed
-		ui.Checkbox(c, &v, "已 review")
+		ui.Checkbox(c, &v, T("已 review", "Reviewed"))
 		if v != viewed {
 			a.toggleViewed(*f)
 		}

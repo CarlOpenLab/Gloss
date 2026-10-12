@@ -243,6 +243,8 @@ type app struct {
 
 	// —— AI 解释 ——
 	store *store.Store
+	// commitLang 控制 AI 提交信息生成语言："" = 跟随预设默认, "zh" = 中文, "en" = 英文
+	commitLang string
 	// modelName 是当前生效的模型名，解释缓存的 key 里带它。它在设置变化时
 	// 更新一次，而不是每帧去问 store —— 那要加锁还可能要读环境变量。
 	modelName string

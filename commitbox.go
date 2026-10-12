@@ -110,13 +110,14 @@ func stageStateOf(f gitrepo.File) stageState {
 // 冲突的解法只有一种：把文件改成你要的样子，然后 `git add` 告诉 git
 // 「这就算解了」。按钮上的词因此不叫「暂存」——那是别的文件的事。
 func stageLabel(f gitrepo.File) string {
+	p := pathOf(f)
 	if f.Section == gitrepo.SectionStaged {
-		return "取消暂存 " + pathOf(f)
+		return Tf("取消暂存 %s", "Unstage %s", p)
 	}
 	if f.Status == gitrepo.StatusConflict {
-		return "标记为已解决 " + pathOf(f)
+		return Tf("标记为已解决 %s", "Mark %s as Resolved", p)
 	}
-	return "暂存 " + pathOf(f)
+	return Tf("暂存 %s", "Stage %s", p)
 }
 
 // stagePaths 是整文件暂存/取消暂存要交给 git 的路径。
@@ -381,6 +382,7 @@ func (a *app) commitBox(c *ui.Context, pal palette) {
 						Justify(ui.End).Children(func() {
 						a.riskScanButton(c, t, pal)
 						a.aiCommitButton(c, t, pal)
+						a.commitLangButton(c, t, pal)
 						a.commitButton(c, t, pal)
 					})
 				})
@@ -395,10 +397,11 @@ func (a *app) commitBox(c *ui.Context, pal palette) {
 
 					ui.Spacer(c)
 
-					// 右侧：功能按钮组（预检 -> AI -> 提交 CTA）
+					// 右侧：功能按钮组（预检 -> AI -> 语言切换 -> 提交 CTA）
 					ui.Row(c).Shrink(0).Gap(7).AlignItems(ui.Center).Children(func() {
 						a.riskScanButton(c, t, pal)
 						a.aiCommitButton(c, t, pal)
+						a.commitLangButton(c, t, pal)
 						a.commitButton(c, t, pal)
 					})
 				})
@@ -469,6 +472,48 @@ func (a *app) aiCommitButton(c *ui.Context, t *ui.Theme, pal palette) {
 			a.cancelAICommit()
 		} else {
 			a.startAICommit()
+		}
+	}
+}
+
+// commitLangButton 切换 AI 提交信息的生成语言。
+func (a *app) commitLangButton(c *ui.Context, t *ui.Theme, pal palette) {
+	lang := a.commitLang
+	if lang == "" {
+		lang = "zh"
+	}
+	label := "中"
+	if lang == "en" {
+		label = "EN"
+	}
+	tip := T("AI 提交信息语言：中文", "AI commit language: Chinese")
+	if lang == "en" {
+		tip = T("AI 提交信息语言：英文", "AI commit language: English")
+	}
+
+	btn := ui.ButtonBase(c).Shrink(0).Height(26).Radius(radiusMD).
+		Padding(0, 8).Cursor(ui.CursorPointer).Tooltip(tip)
+	hovered := btn.Hovered()
+	var bg, border, fg ui.Color
+	switch {
+	case lang == "en":
+		bg, border, fg = pal.surface3, pal.hairlineStrong, pal.ink
+	case hovered:
+		bg, border, fg = pal.surface3, pal.hairlineStrong, pal.ink
+	default:
+		bg, border, fg = pal.surface2, pal.hairlineStrong, pal.inkMuted
+	}
+	btn.Background(bg).Border(1, border)
+	fadeColors(btn)
+	btn.Children(func() {
+		ui.Text(c, label).FontSize(textCaption).FontWeight(weightMedium).TextColor(fg)
+	})
+
+	if btn.Clicked() {
+		if a.commitLang == "en" {
+			a.commitLang = "zh"
+		} else {
+			a.commitLang = "en"
 		}
 	}
 }
@@ -554,6 +599,14 @@ func (a *app) startAICommit() {
 
 	system, user := explain.BuildCommitPrompt(staged, existingMsg)
 	system = a.store.Config().EffectiveCommitPrompt(system)
+	// 如果用户显式选了语言，在 system prompt 末尾追加语言指令
+	if a.commitLang != "" {
+		lang := "Chinese"
+		if a.commitLang == "en" {
+			lang = "English"
+		}
+		system += "\n\nIMPORTANT: Write the commit message in " + lang + " only."
+	}
 	prov := a.store.Provider()
 
 	onDelta := func(chunk string) {

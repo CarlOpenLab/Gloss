@@ -3,7 +3,6 @@ package main
 import (
 	_ "embed"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -62,7 +61,7 @@ type preset struct {
 // providerPresets 覆盖常用服务商及本地网关，按开箱即用性排序。
 var providerPresets = []preset{
 	{
-		Label: "Magpie（本地网关）",
+		Label: "Magpie",
 		Type:  "openai",
 		Base:  "http://127.0.0.1:3425/v1",
 		Model: "opencode-go/deepseek-v4.1-flash",
@@ -404,7 +403,7 @@ func (a *app) settingsBody(c *ui.Context, pal palette) {
 				a.settingsTab = settingsTabGeneral
 			})
 
-			settingsSidebarItem(c, t, T("提示词设置", "AI Prompts"), iconSliders, a.settingsTab == settingsTabPrompts, func() {
+			settingsSidebarItem(c, t, T("提示词设置", "Prompts"), iconSliders, a.settingsTab == settingsTabPrompts, func() {
 				a.settingsTab = settingsTabPrompts
 			})
 
@@ -974,14 +973,6 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 			ui.Scroll(c).Grow(1).FillWidth().Padding(4, 6).Children(func() {
 				ui.Column(c).Gap(2).FillWidth().Children(func() {
 
-					// 分组 1: 已添加（只是加进来了，不是都启用了）
-					ui.Row(c).Padding(6, 6, 4, 6).AlignItems(ui.Center).FillWidth().Children(func() {
-						drawIcon(c, iconChevronDown, 12, pal.inkSubtle)
-						ui.Text(c, T("已添加", "Added")).FontSize(textCaption).FontWeight(weightSemibold).TextColor(pal.inkSubtle)
-						ui.Spacer(c)
-						ui.Text(c, fmt.Sprintf("%d", len(a.editCfg.Providers))).FontSize(textCaption).TextColor(pal.inkTertiary)
-					})
-
 					for i := range a.editCfg.Providers {
 						i := i
 						curr := &a.editCfg.Providers[i]
@@ -1018,10 +1009,6 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 								}
 								ui.Text(c, label).FontSize(textCaption).FontWeight(weightMedium).
 									TextColor(txtCol).SingleLine()
-								ui.Box(c).Padding(1, 4).Radius(radiusXS).Background(pal.surface3).
-									Border(1, pal.hairline).Children(func() {
-									ui.Text(c, T("已添加", "Added")).FontSize(9).TextColor(pal.inkTertiary)
-								})
 								ui.Spacer(c)
 								// 状态圆点：只有当前生效的供应商是实心绿点，其余一律
 								// 空心描边 —— 加进来的≠启用的，别让每行都像开着。
@@ -1037,51 +1024,41 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 						}
 					}
 
-					// 统计未添加的预设数量
-					var unaddedPresets []preset
+					// 未添加的预设，合并在同一个列表里
 					for _, ps := range providerPresets {
-						if findExistingPreset(a.editCfg.Providers, ps) < 0 {
-							if a.providerSearch == "" || strings.Contains(strings.ToLower(ps.Label), strings.ToLower(a.providerSearch)) {
-								unaddedPresets = append(unaddedPresets, ps)
-							}
+						if findExistingPreset(a.editCfg.Providers, ps) >= 0 {
+							continue
 						}
-					}
+						if a.providerSearch != "" && !strings.Contains(strings.ToLower(ps.Label), strings.ToLower(a.providerSearch)) {
+							continue
+						}
+						ps := ps
+						pBtn := ui.ButtonBase(c).Height(34).FillWidth().Radius(radiusSM).Padding(0, 8).
+							Cursor(ui.CursorPointer).Label(ps.Label)
+						bg := ui.Transparent
+						if pBtn.Hovered() {
+							bg = pal.surface2.Alpha(0.5)
+						}
+						pBtn.Background(bg)
+						fadeColors(pBtn)
 
-					if len(unaddedPresets) > 0 {
-						// 分组 2: 未启用预设
-						ui.Row(c).Padding(10, 6, 4, 6).AlignItems(ui.Center).FillWidth().Children(func() {
-							drawIcon(c, iconChevronDown, 12, pal.inkSubtle)
-							ui.Text(c, T("未启用", "Available Presets")).FontSize(textCaption).FontWeight(weightSemibold).TextColor(pal.inkSubtle)
-							ui.Spacer(c)
-							ui.Text(c, fmt.Sprintf("%d", len(unaddedPresets))).FontSize(textCaption).TextColor(pal.inkTertiary)
-						})
-
-						for _, ps := range unaddedPresets {
-							ps := ps
-							pBtn := ui.ButtonBase(c).Height(32).FillWidth().Radius(radiusSM).Padding(0, 8).
-								Cursor(ui.CursorPointer).Label(ps.Label)
-							bg := ui.Transparent
-							if pBtn.Hovered() {
-								bg = pal.surface2.Alpha(0.5)
-							}
-							pBtn.Background(bg)
-							fadeColors(pBtn)
-
-							pBtn.Children(func() {
-								ui.Row(c).AlignItems(ui.Center).Gap(8).Fill().Children(func() {
-									ui.Box(c).Size(18, 18).Radius(radiusXS).Background(pal.surface3).
-										AlignItems(ui.Center).Justify(ui.Center).Children(func() {
-										drawIcon(c, iconSparkle, 10, pal.inkTertiary)
-									})
-									ui.Text(c, ps.Label).FontSize(textCaption).TextColor(pal.inkSubtle).SingleLine()
-									ui.Spacer(c)
-									// 截图中的未启用空心圆圈 ○
-									ui.Box(c).Size(8, 8).Radius(radiusPill).Border(1, pal.hairlineStrong).Background(ui.Transparent)
+						pBtn.Children(func() {
+							ui.Row(c).AlignItems(ui.Center).Gap(8).Fill().Children(func() {
+								ui.Box(c).Size(20, 20).Radius(radiusXS).Background(pal.surface3).
+									Border(1, pal.hairline).AlignItems(ui.Center).Justify(ui.Center).Children(func() {
+									drawIcon(c, iconSparkles, 11, pal.inkMuted)
 								})
+								ui.Text(c, ps.Label).FontSize(textCaption).FontWeight(weightMedium).
+									TextColor(pal.inkMuted).SingleLine()
+								ui.Box(c).Padding(1, 4).Radius(radiusXS).Background(pal.surface3).
+									Border(1, pal.hairline).Children(func() {
+									ui.Text(c, T("预设", "Preset")).FontSize(9).TextColor(pal.inkTertiary)
+								})
+								ui.Spacer(c)
 							})
-							if pBtn.Clicked() {
-								a.addProvider(ps)
-							}
+						})
+						if pBtn.Clicked() {
+							a.addProvider(ps)
 						}
 					}
 				})
