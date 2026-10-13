@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -141,6 +142,32 @@ func TestDumpScreenshot(t *testing.T) {
 	tt.Frame()
 	writePNG(t, "/tmp/de-shot-folded.png", tt.Image())
 	a.toggleViewed(a.files[0])
+
+	// 文件行右键菜单截不进图：菜单是系统的原生菜单，不在这一帧的画面里
+	// （测试里只能读它的条目，见 filemenu_test.go）。这里改拍它点开之后的
+	// 那个「查看文件历史…」弹窗 —— 挑一列提交、点一条跳去历史 tab。
+	if len(a.files) > 0 {
+		now := time.Now()
+		a.fileHist.on = true
+		a.fileHist.path = pathOf(a.files[0])
+		a.fileHist.state = loadReady
+		a.fileHist.commits = []gitrepo.Commit{
+			{Hash: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2", Short: "a1b2c3d", Subject: "feat: add router middleware",
+				Author: "carl", When: now.Add(-2 * time.Hour)},
+			{Hash: "e4f5g6h7i8j9e4f5g6h7i8j9e4f5g6h7i8j9e4f5", Short: "e4f5g6h", Subject: "fix: handle empty route list",
+				Author: "carl", When: now.Add(-26 * time.Hour)},
+			{Hash: "1122334455661122334455661122334455661122", Short: "1122334", Subject: "refactor: split handler from routing",
+				Author: "mika", When: now.AddDate(0, 0, -9)},
+		}
+		tt.Frame()
+		writePNG(t, "/tmp/de-shot-filehist.png", tt.Image())
+		tt.SetDark(true)
+		tt.Frame()
+		writePNG(t, "/tmp/de-shot-filehist-dark.png", tt.Image())
+		tt.SetDark(false)
+		a.closeFileHistory()
+		tt.Frame()
+	}
 
 	// ⌘K 命令栏
 	a.openPalette()

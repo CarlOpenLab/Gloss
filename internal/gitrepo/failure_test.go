@@ -120,6 +120,23 @@ func TestDescribeKnownFailures(t *testing.T) {
 	}
 }
 
+// 丢弃撞上 pathspec：文件在点下去和 git 跑起来之间变了样（又被暂存、
+// 或者被别处删掉）。它不能落到下面那条通用的「引用已经不在了」上 ——
+// 丢改动够不着任何远端，那句话是答非所问。
+func TestDescribeDiscardPathspec(t *testing.T) {
+	f := Describe(OpDiscard, errors.New("error: pathspec 'a.txt' did not match any file(s) known to git"))
+	if f.Title != "这个文件已经没有什么可丢的了" {
+		t.Errorf("标题 = %q", f.Title)
+	}
+	if f.Hint == "" {
+		t.Error("该告诉用户下一步（列表已经重新读过）")
+	}
+	// 同一个错误在别的 op 下仍然走通用那条：这是丢弃自己的话术。
+	if got := Describe(OpCheckout, errors.New("error: pathspec 'a.txt' did not match any file(s) known to git")).Title; got != "这条引用已经不在了" {
+		t.Errorf("别的 op 下的 pathspec 标题 = %q", got)
+	}
+}
+
 // 认不出的错误：兜底标题说清是哪一步没成，原话留给 Detail 可查。
 func TestDescribeUnknownKeepsDetail(t *testing.T) {
 	f := Describe(OpPush, errors.New("fatal: something we have never seen"))
@@ -179,6 +196,7 @@ func TestOpTitles(t *testing.T) {
 		{OpConflict, "解决冲突没成功"},
 		{OpForcePush, "强制推送没成功"},
 		{OpAm, "应用补丁没成功"},
+		{OpDiscard, "丢弃改动没成功"},
 	}
 	for _, c := range cases {
 		if got := opTitle(c.op); got != c.want {

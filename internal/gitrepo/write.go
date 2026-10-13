@@ -3,6 +3,9 @@ package gitrepo
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/CarlOpenLab/Gloss/internal/diff"
@@ -57,6 +60,89 @@ func (r *Repo) UnstageFile(ctx context.Context, paths ...string) error {
 	args := append([]string{"reset", "-q", "--"}, clean...)
 	_, err := run(ctx, r.Root, args...)
 	return err
+}
+
+// RestoreFile 丢弃工作区里这些路径上的未暂存改动，把它们恢复成 index 里的
+// 样子（`git checkout -- <paths>`）。
+//
+// 路径是变参、和 StageFile 一个口径：未暂存的重命名要新旧两个路径一起给，
+// 否则只把新路径恢复出来，旧路径仍然是「被删掉」的状态，看着像丢弃没生效。
+//
+// 只对 git 已经认识的文件有效 —— 未跟踪的文件走 RemoveFiles：checkout 对
+// 它是 "pathspec did not match any file(s) known to git"，翻译过来是一句
+// 和用户做的事毫不相干的「引用不在了」。
+func (r *Repo) RestoreFile(ctx context.Context, paths ...string) error {
+	clean := cleanPaths(paths)
+	if len(clean) == 0 {
+		return nil
+	}
+	args := append([]string{"checkout", "--"}, clean...)
+	_, err := run(ctx, r.Root, args...)
+	return err
+}
+
+// RemoveFiles 把工作区里这些路径上的文件删掉，用来丢弃未跟踪的改动 ——
+// git 还不认识它们，「恢复原状」就是从磁盘上拿走。
+//
+// 文件已经不在（用户刚在别处删了）不算失败：要的结果已经达成了。路径先
+// 夹进仓库根、确认没跑出去（`..` 和绝对路径在这一步挡下 —— 拼接是纯字面
+// 的，`a/../../x` 这种会在 Clean 之后被 Rel 认出来），因为这个函数真的会
+// 删文件，是这一层里唯一不可逆的那把刀。仓库里指向外面的符号链接不受影响：
+// os.Remove 摘的是链接本身，不是它指向的东西。
+func (r *Repo) RemoveFiles(ctx context.Context, paths ...string) error {
+	for _, p := range cleanPaths(paths) {
+		full, err := r.worktreePath(p)
+		if err != nil {
+			return err
+		}
+		if err := os.Remove(full); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+// worktreePath 把一个仓库内的相对路径拼成磁盘上的绝对路径，跑出仓库的
+// 一律拒绝。
+func (r *Repo) worktreePath(p string) (string, error) {
+	if p == "" || filepath.IsAbs(p) {
+		return "", fmt.Errorf("路径不在仓库里: %q", p)
+	}
+	full := filepath.Join(r.Root, filepath.FromSlash(p))
+	rel, err := filepath.Rel(r.Root, full)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("路径跑到仓库外面去了: %q", p)
+	}
+	return full, nil
+}
+
+// AddIgnore 把一条路径写进仓库根的 .gitignore，一行一条（`/<path>`）。
+//
+// 带上前导斜杠：不带的话 `build` 会连子目录里的同名文件一起忽略，用户点
+// 的是「忽略这一个」。同一行已经在了就什么都不做 —— .gitignore 是用户
+// 自己的文件，重复追加是最容易把别人的文件写脏的一种做法。
+func (r *Repo) AddIgnore(ctx context.Context, p string) error {
+	if p == "" {
+		return nil
+	}
+	line := "/" + strings.TrimPrefix(filepath.ToSlash(p), "/")
+	path := filepath.Join(r.Root, ".gitignore")
+	old, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	for _, l := range strings.Split(string(old), "\n") {
+		if strings.TrimSpace(l) == line {
+			return nil
+		}
+	}
+	var b strings.Builder
+	b.Write(old)
+	if len(old) > 0 && !strings.HasSuffix(string(old), "\n") {
+		b.WriteString("\n")
+	}
+	b.WriteString(line + "\n")
+	return os.WriteFile(path, []byte(b.String()), 0o644)
 }
 
 // StageHunk 把未暂存段里的某一段改动放进 index。

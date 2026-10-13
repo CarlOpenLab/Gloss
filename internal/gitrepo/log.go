@@ -58,6 +58,34 @@ func (r *Repo) Log(ctx context.Context, rev string, limit, skip int) ([]Commit, 
 	return parseLog(string(out)), nil
 }
 
+// FileLog 读某个文件的提交历史（新到旧）。
+//
+// --follow 让它跟住重命名：文件改过名字之后，改名之前那些提交也在它的历史
+// 里 —— 不然「这个文件的历史」会在改名那一刻凭空断掉，而那正是用户想看的
+// 地方。（--follow 只认单个路径，这也是这里不收变参的原因。）
+//
+// 路径用 `--` 隔开：文件名可以是纯哈希的样子，不隔开会被当成 revision，
+// 报一句和用户做的事毫不相干的错。
+func (r *Repo) FileLog(ctx context.Context, path string, limit int) ([]Commit, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	if path == "" {
+		return nil, nil
+	}
+	format := "%H%x00%h%x00%an%x00%aI%x00%D%x00%P%x00%s%x1e"
+	args := []string{
+		"-c", "core.quotePath=false", "log", "--no-color",
+		"--date=iso-strict", "--follow", "--pretty=format:" + format,
+		"-n", strconv.Itoa(limit), "--", path,
+	}
+	out, err := run(ctx, r.Root, args...)
+	if err != nil {
+		return nil, err
+	}
+	return parseLog(string(out)), nil
+}
+
 func parseLog(out string) []Commit {
 	var commits []Commit
 	for _, rec := range strings.Split(out, "\x1e") {

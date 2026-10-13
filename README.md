@@ -61,6 +61,8 @@ When reviewing large pull requests or AI-generated diffs, the biggest bottleneck
 
 - **Local Repositories**: Open any working copy to inspect uncommitted changes. The sidebar organizes Branches, Remotes, Tags, and Stashes. Click a branch to focus on its commit history; click a stash to view its exact changes.
 - **Staging & Commits**: Stage entire files or individual hunks via dedicated buttons on hunk headers. Work is cleanly divided between "Staged" and "Unstaged" areas. Draft messages are preserved per repository even when switching contexts (`⌘⏎` to commit).
+- **File Row Context Menu**: Right-click any file row in the Changes, History, or Stash views — stage / unstage (conflict rows get "Use Ours / Use Theirs" plus "Mark Resolved" instead), discard changes… (untracked files say "Delete File…"; both ask first), open in editor, reveal in Finder, copy path / relative path / file name, view file history…, mark as reviewed, and add to `.gitignore`. Rows in History and Stash views are read-only, so actions that would touch the working tree simply aren't there.
+- **View File History…**: Lists the commits that touched this file (`git log --follow`, so it follows renames) and jumps straight to the selected commit in the History tab — no digging through the whole branch history to find which commits it appeared in.
 - **Branch Switching, Checkout & Tags**: Double-click branches or tags in the sidebar to check them out. Checking out remote branches automatically sets up local tracking branches. Detached HEAD states trigger warning badges in the toolbar.
 - **Branch Integration & Remote Management**:
   - Right-click local branches to merge or rebase onto target branches (with safety confirmations and conflict assistance).
@@ -162,6 +164,8 @@ main.go / app.go         Window, menus, app state, root frame layout
   newbranchdialog.go     Create branch from selected commit
   graph.go               Topology graph: layout computation & line drawing
   filepane.go            Bottom pane left: file list & staging controls
+  filemenu.go            File row context menu: stage / discard / copy / history / ignore
+  filehist.go            "View File History…" dialog: this file's own commits, jump to one
   diffview.go            Diff rendering, syntax highlighting, folding
   commitbox.go           Staging checkboxes, hunk staging buttons, commit box
   checkout.go            Checkout handlers, double-click, cleanup
@@ -170,7 +174,7 @@ main.go / app.go         Window, menus, app state, root frame layout
   opbanner.go            Operation feedback banners (error bar / success toast)
   pendingbar.go          Amber conflict status bar: continue / skip / abort
   confirmdialog.go       Destructive action confirmation dialogs
-  resolve.go             Conflict resolution: two-way side picking & file actions
+  resolve.go             Conflict resolution: two-way side picking & cards (menu lives in filemenu.go)
   treeview.go            Shared tree rows (indentation, arrows, selection capsules)
   refs.go                Git reference grouping & filtering
   rows.go                Virtual list row models
@@ -218,5 +222,6 @@ internal/
 - [x] AI commit message & branch generation
 - [x] GitHub PR: list open PRs and review PR diffs
 - [x] Pre-flight risk scan: Full-diff scan highlighting potential vulnerabilities
+- [x] File row context menu: stage / discard (delete for untracked) / reveal in Finder / copy path three ways / view file history / mark reviewed / add to `.gitignore`
 - [x] Drag-to-reorder providers, with presets moved into the Add Provider menu
 - [ ] Free cross-line text selection in a diff: render each hunk as one multi-line selectable text (chunk long hunks by N lines), with native drag-select and ⌘C

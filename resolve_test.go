@@ -190,7 +190,9 @@ func TestConflictMenuOnFileRow(t *testing.T) {
 	tt.Frame()
 
 	items := rightClick(t, tt, "a.txt")
-	for _, want := range []string{"用当前分支的", "用被并入的", "在编辑器打开", "标记为已解决"} {
+	// 条目标签带路径（「标记为已解决 a.txt」）：菜单是通用的那一份（见
+	// fileMenu），暂存/解决这类动作一律把是谁说清楚。
+	for _, want := range []string{"用当前分支的", "用被并入的", "在编辑器打开", "标记为已解决 a.txt"} {
 		if !menuHas(items, want) {
 			t.Fatalf("冲突文件的右键菜单里该有 %q，实际 %v", want, items)
 		}

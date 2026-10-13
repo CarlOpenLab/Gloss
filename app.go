@@ -332,6 +332,14 @@ type app struct {
 	// 什么都不发生 —— 无头环境里打开文件本来也无从谈起。
 	openPath func(string)
 
+	// revealPath 在系统的文件管理器里亮出这个文件（文件行右键的「在访达
+	// 中显示」）。main.go 接 mygo 的 Shell.ShowItemInFolder，测试里同样是
+	// nil —— 和 openPath 一个道理。
+	revealPath func(string)
+
+	// fileHist 是「文件历史」对话框的状态（filehist.go）。
+	fileHist fileHistState
+
 	// commitMsg 是提交框里的消息；草稿按仓库持久化（store.Drafts），
 	// draftFor 记着当前这份草稿属于哪个仓库。
 	commitMsg string
@@ -598,6 +606,10 @@ func (a *app) view(c *ui.Context) {
 		a.copyNote = ""
 	}
 
+	// 从文件历史跳去看某次提交（见 consumeHistoryJump）。和上面那次剪贴板
+	// 写入一样，都是「回调里只记一笔、下一帧开头再做」的事。
+	a.consumeHistoryJump()
+
 	// 快捷键要在最前面处理：c.Shortcut 是「注册即认领」的，注册得越早
 	// 越先拿到键。
 	a.handleKeys(c)
@@ -640,6 +652,7 @@ func (a *app) view(c *ui.Context) {
 	a.prDialog(c, pal)
 	a.prReviewModal(c, pal)
 	a.riskScanDialog(c, pal)
+	a.fileHistDialog(c, pal)
 
 	// Esc 退出分支对比/PR 检视。放在最后，让对话框里正在编辑的输入框先有机会处理它。
 	if a.compare.on && !a.modalOn() && c.Shortcut(0, ui.KeyEscape) {
@@ -1468,7 +1481,7 @@ func sameRepo(p1, p2 string) bool {
 // 其余耗时操作（如网络交互的抓取/拉取/推送，或较重的变基/合并/检出）才在此展示。
 func (a *app) toolbarOpVisible() bool {
 	switch a.op {
-	case gitrepo.OpNone, gitrepo.OpStage, gitrepo.OpUnstage, gitrepo.OpCommit, gitrepo.OpAmend:
+	case gitrepo.OpNone, gitrepo.OpStage, gitrepo.OpUnstage, gitrepo.OpCommit, gitrepo.OpAmend, gitrepo.OpDiscard:
 		return false
 	default:
 		return true
@@ -1625,7 +1638,7 @@ func (a *app) workBranch() string {
 // 菜单在系统层拦键、视图在自己那一帧拦，各写各的判断迟早漏掉一处
 // （新加一个对话框，忘了改其中一个，⌘R 就会在对话框背后偷偷刷新）。
 func (a *app) modalOn() bool {
-	return a.palette.on || a.settingsOn || a.tag.on || a.reset.on || a.newBranch.on || a.rename.on || a.confirm.on || a.stashDlg.on || a.compare.dialog || a.prDlg.on || a.prReview.reviewModal || a.riskScan.dialog
+	return a.palette.on || a.settingsOn || a.tag.on || a.reset.on || a.newBranch.on || a.rename.on || a.confirm.on || a.stashDlg.on || a.compare.dialog || a.prDlg.on || a.prReview.reviewModal || a.riskScan.dialog || a.fileHist.on
 }
 
 // toggleAmend 切换修改上次提交状态。勾选时预填最近一次提交的说明。

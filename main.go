@@ -61,6 +61,8 @@ func main() {
 		a.startAutoRefresh()
 		// 冲突卡片上的「在编辑器打开」：交给系统默认应用。
 		a.openPath = func(p string) { _ = mygo.Shell.OpenPath(p) }
+		// 文件行右键的「在访达中显示」：在文件管理器里亮出这个文件。
+		a.revealPath = func(p string) { mygo.Shell.ShowItemInFolder(p) }
 
 		// 关窗前把提交框里还没提交的消息存成草稿，并优雅关闭所有终端会话。
 		win.OnClose(func(*mygo.CloseEvent) {

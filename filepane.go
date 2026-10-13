@@ -387,12 +387,11 @@ func (a *app) treeRow(c *ui.Context, pal palette, r filetree.Row) {
 			Tooltip(f.Status.Label())
 	})
 
-	// 冲突文件挂右键菜单：挑一边、去编辑器、「标记为已解决」在这里都
-	// 够得着 —— 卡片在 diff 那边，用户对着文件列表数还有几个冲突时，
-	// 不该为了每个文件先滚过去。
-	if f.Section == gitrepo.SectionUnstaged && f.Status == gitrepo.StatusConflict {
-		row.ContextMenu(func(m *ui.Menu) { a.conflictMenu(m, f) })
-	}
+	// 右键菜单：暂存、丢弃、复制路径、看这个文件的历史……都在这里（见
+	// fileMenu）。挂在每一行上，不挑状态 —— 一条路径能做的事本来就差不多，
+	// 该灰的项菜单自己会灰。历史/储藏里的行也一样（那边的 diff 是只读的，
+	// 菜单里就只剩读的那几项）。
+	row.ContextMenu(func(m *ui.Menu) { a.fileMenu(m, f) })
 
 	if box != nil && box.Clicked() {
 		a.toggleStageFile(f)

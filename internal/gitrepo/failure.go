@@ -44,6 +44,7 @@ const (
 	OpConflict
 	OpForcePush
 	OpAm // 用户自己在终端里跑的补丁序列停在半路（git am）
+	OpDiscard
 )
 
 // Describe 把 git 的错误整理成人话。
@@ -255,6 +256,14 @@ func Describe(op Op, err error) Failure {
 	case strings.Contains(low, "index.lock"):
 		f.Title = "另一个 git 进程正占着仓库"
 		f.Hint = "等它跑完再试。别手动删 .git/index.lock —— 真有残留时 git 自己会处理。"
+	case op == OpDiscard && strings.Contains(low, "pathspec"):
+		// 丢弃撞上 pathspec，几乎只有一个来路：文件在点下去和 git 跑起来之间
+		// 变成 git 不认识的了（刚被暂存又撤了、或者被别处删掉）。git 的原话
+		// 是「pathspec 不匹配任何已知文件」，对着「丢弃改动」四个字看是天书；
+		// 而下面那条通用的「引用已经不在了 / 远端可能被 prune 掉了」更是答非
+		// 所问 —— 丢改动够不着任何远端。
+		f.Title = "这个文件已经没有什么可丢的了"
+		f.Hint = "它在你点下去之后被改过（多半已经暂存、或者已经被删掉）。列表重新读过了，看一眼现在的状态再说。"
 	case strings.Contains(low, "pathspec"),
 		strings.Contains(low, "did not match any file"),
 		strings.Contains(low, "unknown revision"),
@@ -379,6 +388,8 @@ func opTitle(op Op) string {
 		return "强制推送没成功"
 	case OpAm:
 		return "应用补丁没成功"
+	case OpDiscard:
+		return "丢弃改动没成功"
 	}
 	return "这个操作没成功"
 }
