@@ -225,3 +225,9 @@ internal/
 - [x] File row context menu: stage / discard (delete for untracked) / reveal in Finder / copy path three ways / view file history / mark reviewed / add to `.gitignore`
 - [x] Drag-to-reorder providers, with presets moved into the Add Provider menu
 - [ ] Free cross-line text selection in a diff: render each hunk as one multi-line selectable text (chunk long hunks by N lines), with native drag-select and ⌘C
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).
