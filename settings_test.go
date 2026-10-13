@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"image/png"
+	"strings"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -38,9 +39,13 @@ func TestSettingsModalInteractions(t *testing.T) {
 		t.Fatal("未渲染出模型设置标题")
 	}
 
-	// 2. 添加 DeepSeek 预设
-	if err := tt.Click("DeepSeek"); err != nil {
-		t.Fatalf("点快捷添加 DeepSeek: %v", err)
+	// 2. 从「添加供应商」菜单里加 DeepSeek
+	if err := tt.Click("添加供应商"); err != nil {
+		t.Fatalf("点添加供应商: %v", err)
+	}
+	tt.Frame()
+	if err := tt.ChooseMenuItem("DeepSeek"); err != nil {
+		t.Fatalf("菜单里选 DeepSeek: %v", err)
 	}
 	tt.Frame()
 
@@ -139,13 +144,18 @@ func TestSettingsModalInteractions(t *testing.T) {
 	a.magpieModels = []string{"opencode-go/deepseek-v4.1-flash", "codex-2/gpt-6-sol"}
 	tt.Frame()
 
-	// 点击「Magpie（本地网关）」
-	if err := tt.Click("Magpie（本地网关）"); err != nil {
-		t.Fatalf("点 Magpie 预设: %v", err)
+	// 从底部「添加供应商」菜单里把 Magpie 加进来（预设不再摆在左栏里：
+	// 点一下就跳到已添加那段上面去，看着像「点一下排序自己变了」）
+	if err := tt.Click("添加供应商"); err != nil {
+		t.Fatalf("点添加供应商: %v", err)
+	}
+	tt.Frame()
+	if err := tt.ChooseMenuItem("Magpie"); err != nil {
+		t.Fatalf("菜单里选 Magpie: %v", err)
 	}
 	tt.Frame()
 
-	// 点预设只是选中它，当前生效不变（这里添加前已有 Anthropic、DeepSeek
+	// 添加只选中它，当前生效不变（这里添加前已有 Anthropic、DeepSeek
 	// 两家 —— 上一步的删除走的是取消，没落盘），Magpie 落在第 len-1 位。
 	if want := len(a.editCfg.Providers) - 1; a.editIdx != want {
 		t.Fatalf("点预设应聚焦新加的 Magpie（%d），当前 editIdx=%d", want, a.editIdx)
@@ -209,51 +219,166 @@ func TestPresetDeduplication(t *testing.T) {
 		t.Fatalf("初始供应商数量应为 1，实际为 %d", len(a.editCfg.Providers))
 	}
 
-	// 再次点击预设中的 Anthropic
-	if err := tt.Click("Anthropic"); err != nil {
-		t.Fatalf("点 Anthropic 预设: %v", err)
+	// 打开「添加供应商」菜单：已经在列表里的 Anthropic 灰着，选不动
+	openAdd := func() {
+		t.Helper()
+		if err := tt.Click("添加供应商"); err != nil {
+			t.Fatalf("点添加供应商: %v", err)
+		}
+		tt.Frame()
 	}
+	openAdd()
+	if err := tt.ChooseMenuItem("Anthropic"); err == nil {
+		t.Error("已添加的 Anthropic 在菜单里应该是灰的")
+	}
+	tt.CloseMenu()
 	tt.Frame()
-
-	// 供应商数量应仍然为 1（不会被重复添加）
 	if len(a.editCfg.Providers) != 1 {
-		t.Fatalf("重复点击 Anthropic 预设不应增加供应商，数量应为 1，实际为 %d", len(a.editCfg.Providers))
-	}
-	if a.editIdx != 0 {
-		t.Errorf("重复点击应聚焦至已有项，editIdx=%d", a.editIdx)
+		t.Fatalf("再点一次 Anthropic 不该增加供应商，数量应为 1，实际为 %d", len(a.editCfg.Providers))
 	}
 
-	// 添加 DeepSeek 预设
-	if err := tt.Click("DeepSeek"); err != nil {
-		t.Fatalf("点 DeepSeek 预设: %v", err)
+	// 从菜单里添加 DeepSeek
+	openAdd()
+	if err := tt.ChooseMenuItem("DeepSeek"); err != nil {
+		t.Fatalf("菜单里选 DeepSeek: %v", err)
 	}
 	tt.Frame()
 	if len(a.editCfg.Providers) != 2 {
 		t.Fatalf("添加 DeepSeek 后应有 2 个供应商，实际为 %d", len(a.editCfg.Providers))
 	}
-
-	// 再次点击 DeepSeek 预设
-	if err := tt.Click("DeepSeek"); err != nil {
-		t.Fatalf("再次点 DeepSeek 预设: %v", err)
-	}
-	tt.Frame()
-
-	// 供应商数量依然为 2，且聚焦在第 1 项（DeepSeek）
-	if len(a.editCfg.Providers) != 2 {
-		t.Fatalf("重复点击 DeepSeek 预设不应重复添加，供应商数量应仍为 2，实际为 %d", len(a.editCfg.Providers))
-	}
 	if a.editIdx != 1 {
-		t.Errorf("重复点击应聚焦至已有的 DeepSeek，当前 editIdx=%d", a.editIdx)
+		t.Errorf("新加的那家应该被选中，当前 editIdx=%d", a.editIdx)
 	}
 
-	// 检查界面上是否存在已添加标记文本 "已添加"
-	if !tt.HasText("已添加") {
-		t.Errorf("界面上应对已添加的预设显示「已添加」状态徽章")
+	// 再加一次：菜单里它已经灰了，进不来
+	openAdd()
+	if err := tt.ChooseMenuItem("DeepSeek"); err == nil {
+		t.Error("已添加的 DeepSeek 在菜单里应该是灰的")
+	}
+	tt.CloseMenu()
+	tt.Frame()
+	if len(a.editCfg.Providers) != 2 {
+		t.Fatalf("重复添加 DeepSeek 不应增加供应商，数量应仍为 2，实际为 %d", len(a.editCfg.Providers))
+	}
+
+	// 左栏只画已经加进来的：没加的预设连行都没有（以前它们接在下面，
+	// 点一下会跳进上面那段，看着像排序自己变了）
+	for _, name := range []string{"Ollama（本地）", "OpenRouter", "智谱 GLM"} {
+		if tt.HasText(name) {
+			t.Errorf("未添加的预设 %q 不该出现在左栏里", name)
+		}
+	}
+	for _, name := range []string{"Anthropic", "DeepSeek"} {
+		if !tt.HasText(name) {
+			t.Errorf("已添加的 %q 应该还在左栏里", name)
+		}
 	}
 
 	// 取消关闭
 	_ = tt.Click("取消")
 	tt.Frame()
+}
+
+// TestProviderDragReorder 拖行首的手柄能把供应商换位置，选中与生效跟着走。
+func TestProviderDragReorder(t *testing.T) {
+	a := richApp(t)
+	s := store.Open(t.TempDir())
+	s.SetConfig(store.Config{
+		Providers: []llm.Provider{
+			{Name: "AAA", Type: "openai", BaseURL: "https://a.example.com", Model: "m1"},
+			{Name: "BBB", Type: "openai", BaseURL: "https://b.example.com", Model: "m2"},
+			{Name: "CCC", Type: "openai", BaseURL: "https://c.example.com", Model: "m3"},
+		},
+		Active: 1,
+	})
+	a.attachStore(s)
+
+	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+	tt.Frame()
+	if err := tt.Click("模型设置…"); err != nil {
+		t.Fatalf("点模型设置: %v", err)
+	}
+	tt.Frame()
+
+	// Find 拿到的是整行（行按钮先登记 Label，名字文本在它里面）：
+	// 行首 8px 内边距 + 11px 手柄，中心大约在行内 13px 处
+	ra, _ := tt.Find("AAA")
+	rb, _ := tt.Find("BBB")
+	if ra.H == 0 || rb.Y <= ra.Y {
+		t.Fatalf("三行没摆出来: AAA=%+v BBB=%+v", ra, rb)
+	}
+	gripX := rb.X + 13
+	tt.Move(gripX, rb.Y+rb.H/2)
+	tt.Frame()
+	if c := tt.Cursor(); c != ui.CursorGrab {
+		t.Errorf("悬停在拖动手柄上光标应该是 CursorGrab，实际是 %v", c)
+	}
+
+	// 把 BBB 拖到 AAA 的上半条 = 插到 AAA 前面
+	tt.Press(gripX, rb.Y+rb.H/2)
+	tt.Move(gripX, rb.Y+rb.H/2-10)
+	tt.Frame()
+	tt.Move(gripX, ra.Y+4)
+	tt.Frame()
+	tt.Release(gripX, ra.Y+4)
+	tt.Frame()
+	tt.Frame()
+
+	if got := providerNames(a.editCfg.Providers); got != "BBB, AAA, CCC" {
+		t.Fatalf("拖过之后顺序应为 BBB, AAA, CCC，实际为 %s", got)
+	}
+	// 被拖的那家原来在下标 1，也是当时生效的那家；两处下标都得跟着走
+	if a.editIdx != 0 {
+		t.Errorf("选中应该跟着被拖的那家走，editIdx=%d", a.editIdx)
+	}
+	if a.editCfg.Active != 0 {
+		t.Errorf("生效的也应该跟着被拖的那家走，active=%d", a.editCfg.Active)
+	}
+
+	// 再把它拖回末尾：落在最后一行（CCC）的下半条
+	rb, _ = tt.Find("BBB")
+	rc, _ := tt.Find("CCC")
+	tt.Press(rb.X+13, rb.Y+rb.H/2)
+	tt.Move(rb.X+13, rb.Y+rb.H/2+10)
+	tt.Frame()
+	tt.Move(rb.X+13, rc.Y+rc.H-4)
+	tt.Frame()
+	tt.Release(rb.X+13, rc.Y+rc.H-4)
+	tt.Frame()
+	tt.Frame()
+
+	if got := providerNames(a.editCfg.Providers); got != "AAA, CCC, BBB" {
+		t.Fatalf("拖到末尾后顺序应为 AAA, CCC, BBB，实际为 %s", got)
+	}
+	if a.editIdx != 2 || a.editCfg.Active != 2 {
+		t.Errorf("拖到末尾后选中与生效都应落在下标 2，实际 editIdx=%d active=%d", a.editIdx, a.editCfg.Active)
+	}
+
+	// 点行里的名字仍然是选中，不会因为多了个手柄就点不动
+	if err := tt.Click("AAA"); err != nil {
+		t.Fatalf("点行名字: %v", err)
+	}
+	tt.Frame()
+	if a.editIdx != 0 {
+		t.Errorf("点名字应该选中那一行，editIdx=%d", a.editIdx)
+	}
+	// 点手柄也一样选中（手柄只吃不拖的那一下）
+	ra, _ = tt.Find("AAA")
+	tt.ClickAt(ra.X+13, ra.Y+ra.H/2)
+	tt.Frame()
+	if a.editIdx != 0 {
+		t.Errorf("点手柄也应该选中那一行，editIdx=%d", a.editIdx)
+	}
+}
+
+// providerNames 把供应商名字连起来，方便断言顺序。
+func providerNames(ps []llm.Provider) string {
+	out := make([]string, 0, len(ps))
+	for _, p := range ps {
+		out = append(out, p.Name)
+	}
+	return strings.Join(out, ", ")
 }
 
 func TestThemeAndLocaleSettings(t *testing.T) {
@@ -499,8 +624,12 @@ func TestSettingsDialogSavesProviders(t *testing.T) {
 	}
 
 	// 加一个 DeepSeek，改掉 API key，保存
-	if err := tt.Click("DeepSeek"); err != nil {
-		t.Fatalf("点预设：%v", err)
+	if err := tt.Click("添加供应商"); err != nil {
+		t.Fatalf("点添加供应商：%v", err)
+	}
+	tt.Frame()
+	if err := tt.ChooseMenuItem("DeepSeek"); err != nil {
+		t.Fatalf("菜单里选 DeepSeek：%v", err)
 	}
 	tt.Frame()
 	// 加预设只选中编辑，不悄悄切成当前生效 —— 启用是详情页那个开关的事

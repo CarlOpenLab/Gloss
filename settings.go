@@ -968,123 +968,51 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 				ui.TextInput(c, &a.providerSearch).Placeholder(T("搜索供应商", "Search providers")).FillWidth()
 			})
 
-			// 可滚动供应商列表
+			// 可滚动供应商列表。
+			//
+			// 这一栏只画「已经加进来的」供应商。未添加的预设原来接在已添加
+			// 那段的屁股后面，点一下会当场跳进上面那段、下面的行跟着整体
+			// 挪一格 —— 用起来就像「点了它一下，排序自己变了」。加预设改走
+			// 底部「添加供应商」那个菜单（见 addProviderMenu）。
+			//
+			// 顺序由用户自己拖行首那个手柄决定。拖动是自己接的（没有用
+			// 框架 List 的 Reorder）：那条路要求整行都是拖动源，而行本身是
+			// 个按钮 —— 按钮会先一步吃掉按下事件，拖不起来。手柄当拖动源、
+			// 行自己当落点，正好也就成了「只有手柄能拖」（见 providerRow）。
+			rows := a.visibleProviders()
+
 			ui.Scroll(c).Grow(1).FillWidth().Padding(4, 6).Children(func() {
 				ui.Column(c).Gap(2).FillWidth().Children(func() {
-
-					for i := range a.editCfg.Providers {
-						i := i
-						curr := &a.editCfg.Providers[i]
-						label := providerLabel(*curr)
-						if a.providerSearch != "" && !strings.Contains(strings.ToLower(label), strings.ToLower(a.providerSearch)) {
-							continue
+					for k, i := range rows {
+						k, i := k, i
+						// 上沿 = 插在这一家前面，下沿 = 插在下一家前面
+						// （末尾那一行的下沿就是「放到最后」）。
+						next := len(a.editCfg.Providers)
+						if k+1 < len(rows) {
+							next = rows[k+1]
 						}
-						selected := i == a.editIdx
-						isActive := i == a.editCfg.Active
-
-						rowBtn := ui.ButtonBase(c).Height(34).FillWidth().Radius(radiusSM).Padding(0, 8).
-							Cursor(ui.CursorPointer).Label(label)
-						bg := ui.Transparent
-						border := ui.Transparent
-						if selected {
-							bg = pal.surface2
-							border = pal.hairlineStrong
-						} else if rowBtn.Hovered() {
-							bg = pal.surface2.Alpha(0.5)
-						}
-						rowBtn.Background(bg).Border(1, border)
-						fadeColors(rowBtn)
-
-						rowBtn.Children(func() {
-							ui.Row(c).AlignItems(ui.Center).Gap(8).Fill().Children(func() {
-								// 供应商图标
-								ui.Box(c).Size(20, 20).Radius(radiusXS).Background(pal.surface3).
-									Border(1, pal.hairline).AlignItems(ui.Center).Justify(ui.Center).Children(func() {
-									drawIcon(c, iconSparkles, 11, pal.inkMuted)
-								})
-								txtCol := pal.inkMuted
-								if selected {
-									txtCol = pal.ink
-								}
-								ui.Text(c, label).FontSize(textCaption).FontWeight(weightMedium).
-									TextColor(txtCol).SingleLine()
-								ui.Spacer(c)
-								// 状态圆点：只有当前生效的供应商是实心绿点，其余一律
-								// 空心描边 —— 加进来的≠启用的，别让每行都像开着。
-								if isActive {
-									ui.Box(c).Size(7, 7).Radius(radiusPill).Background(t.Success)
-								} else {
-									ui.Box(c).Size(7, 7).Radius(radiusPill).Border(1, pal.hairlineStrong).Background(ui.Transparent)
-								}
-							})
-						})
-						if rowBtn.Clicked() {
-							a.editIdx = i
-						}
-					}
-
-					// 未添加的预设，合并在同一个列表里
-					for _, ps := range providerPresets {
-						if findExistingPreset(a.editCfg.Providers, ps) >= 0 {
-							continue
-						}
-						if a.providerSearch != "" && !strings.Contains(strings.ToLower(ps.Label), strings.ToLower(a.providerSearch)) {
-							continue
-						}
-						ps := ps
-						pBtn := ui.ButtonBase(c).Height(34).FillWidth().Radius(radiusSM).Padding(0, 8).
-							Cursor(ui.CursorPointer).Label(ps.Label)
-						bg := ui.Transparent
-						if pBtn.Hovered() {
-							bg = pal.surface2.Alpha(0.5)
-						}
-						pBtn.Background(bg)
-						fadeColors(pBtn)
-
-						pBtn.Children(func() {
-							ui.Row(c).AlignItems(ui.Center).Gap(8).Fill().Children(func() {
-								ui.Box(c).Size(20, 20).Radius(radiusXS).Background(pal.surface3).
-									Border(1, pal.hairline).AlignItems(ui.Center).Justify(ui.Center).Children(func() {
-									drawIcon(c, iconSparkles, 11, pal.inkMuted)
-								})
-								ui.Text(c, ps.Label).FontSize(textCaption).FontWeight(weightMedium).
-									TextColor(pal.inkMuted).SingleLine()
-								ui.Box(c).Padding(1, 4).Radius(radiusXS).Background(pal.surface3).
-									Border(1, pal.hairline).Children(func() {
-									ui.Text(c, T("预设", "Preset")).FontSize(9).TextColor(pal.inkTertiary)
-								})
-								ui.Spacer(c)
-							})
-						})
-						if pBtn.Clicked() {
-							a.addProvider(ps)
-						}
+						a.providerRow(c, pal, t, i, next)
 					}
 				})
 			})
 
-			// 底部 + 添加 按钮
+			// 底部 + 添加 按钮：点开一份预设清单
 			ui.Box(c).Height(1).FillWidth().Background(pal.hairline)
 			addBtn := ui.ButtonBase(c).Height(36).FillWidth().Padding(0, 12).
-				AlignItems(ui.Center).Gap(6).Cursor(ui.CursorPointer).Label(T("添加", "Add Provider"))
+				AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(T("添加供应商", "Add Provider"))
+			addBtn.Menu(func(m *ui.Menu) { a.addProviderMenu(m) })
 			if addBtn.Hovered() {
 				addBtn.Background(pal.surface2)
 			}
 			fadeColors(addBtn)
 			addBtn.Children(func() {
-				ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
+				ui.Row(c).Fill().AlignItems(ui.Center).Gap(6).Children(func() {
 					ui.Text(c, "+").FontSize(14).TextColor(pal.inkMuted)
-					ui.Text(c, T("添加", "Add Provider")).FontSize(textCaption).FontWeight(weightMedium).TextColor(pal.ink)
+					ui.Text(c, T("添加供应商", "Add Provider")).FontSize(textCaption).FontWeight(weightMedium).TextColor(pal.ink)
+					ui.Spacer(c)
+					drawIcon(c, iconChevronDown, 10, pal.inkSubtle)
 				})
 			})
-			if addBtn.Clicked() {
-				a.addProvider(preset{
-					Label: "自定义服务商",
-					Type:  "openai",
-					Base:  "",
-					Model: "",
-				})
-			}
 		})
 
 		// ==========================================
@@ -1454,6 +1382,11 @@ func promptSection(c *ui.Context, pal palette, t *ui.Theme, title, desc string, 
 func (a *app) addProvider(ps preset) {
 	// 加预设只「选中编辑」，不启用 —— 启用/禁用是用户自己在详情页那个
 	// 开关上决定的，不该被一次添加悄悄把当前生效切成刚加的这家。
+	//
+	// 顺手把筛选词清掉：刚加的那家落在列表末尾，留着筛选词很可能它根本
+	// 不在屏幕上，用户会以为没加上（选中态在看不见的地方，等于没有）。
+	// 预设选择走的是菜单，筛选框本来就是给已添加列表用的，清掉不丢东西。
+	a.providerSearch = ""
 	if idx := findExistingPreset(a.editCfg.Providers, ps); idx >= 0 {
 		a.editIdx = idx
 		return
@@ -1465,6 +1398,204 @@ func (a *app) addProvider(ps preset) {
 		Model:   ps.Model,
 	})
 	a.editIdx = len(a.editCfg.Providers) - 1
+}
+
+// addProviderMenu 是底部「添加供应商」菜单：一份预设清单，已经在列表里的
+// 那些灰着 —— 灰比「点了没反应」清楚，也比把已加过的从菜单里藏起来好找。
+//
+// 末尾那条「自定义 OpenAI 兼容」是张白纸（类型 openai、地址和模型都空着），
+// 原来底部那个「添加」按钮点下去加的就是它，改成菜单后别把它弄丢了。
+func (a *app) addProviderMenu(m *ui.Menu) {
+	for i, ps := range providerPresets {
+		ps := ps
+		if i == len(providerPresets)-1 {
+			// 白纸单独一段：上面是「装好就能用」的，这条要用户自己填。
+			m.Separator()
+		}
+		added := findExistingPreset(a.editCfg.Providers, ps) >= 0
+		if m.Item(ps.Label).Disabled(added).Chosen() {
+			a.addProvider(ps)
+		}
+	}
+}
+
+// visibleProviders 是筛选词筛过之后还要画的供应商下标，按列表顺序。
+//
+// 记下标而不是记 provider 值：选中态、拖动落地全都按下标走，中间多一层
+// 值拷贝只会多一处对不上的机会。
+func (a *app) visibleProviders() []int {
+	rows := make([]int, 0, len(a.editCfg.Providers))
+	q := strings.ToLower(a.providerSearch)
+	for i := range a.editCfg.Providers {
+		if q != "" && !strings.Contains(strings.ToLower(providerLabel(a.editCfg.Providers[i])), q) {
+			continue
+		}
+		rows = append(rows, i)
+	}
+	return rows
+}
+
+// providerRowH 是供应商列表一行的高度。落点区按它切上下两半，所以单独
+// 拎出来当一个数用。
+const providerRowH = float32(34)
+
+// providerDrag 是在供应商列表里拖着某一家走的载荷：from 是它拖动前的下标。
+//
+// 自己定义一个类型而不是复用框架 List 那套：一是那条路要求整行都能拖，
+// 而行是个按钮、会先吃掉按下事件；二是载荷带上下标，落地时不用再去猜
+// 拖的是谁。
+type providerDrag struct {
+	from int
+}
+
+// providerRow 画供应商列表的一行：拖动手柄、图标、名字、生效状态点。
+//
+// 行是按钮，但拖动**只认行首那个手柄** —— 手柄是独立的拖动源，按在名字
+// 或者空白处仍然是选中（见 providerDrag）。next 是「下一家」在
+// a.editCfg.Providers 里的下标：指针落在行的下半条时，这一家要插到
+// next 前面（也就是插到这一行后面）。
+func (a *app) providerRow(c *ui.Context, pal palette, t *ui.Theme, i, next int) {
+	if i < 0 || i >= len(a.editCfg.Providers) {
+		return
+	}
+	label := providerLabel(a.editCfg.Providers[i])
+	selected := i == a.editIdx
+	isActive := i == a.editCfg.Active
+	// 筛选态不给拖：画出来的行下标不再是连着的，落点算出的「下一家」会隔
+	// 着好几家，拖一下跳到看不见的地方 —— 不如干脆按住不动。
+	draggable := a.providerSearch == ""
+
+	rowBtn := ui.ButtonBase(c).Height(providerRowH).FillWidth().Radius(radiusSM).Padding(0, 8).
+		Cursor(ui.CursorPointer).Label(label)
+	bg := ui.Transparent
+	border := ui.Transparent
+	if selected {
+		bg = pal.surface2
+		border = pal.hairlineStrong
+	} else if rowBtn.Hovered() {
+		bg = pal.surface2.Alpha(0.5)
+	}
+	rowBtn.Background(bg).Border(1, border)
+	fadeColors(rowBtn)
+
+	var handle *ui.Element
+	rowBtn.Children(func() {
+		ui.Row(c).AlignItems(ui.Center).Gap(8).Fill().Children(func() {
+			// 拖动手柄。六个点平时很淡，指着它才亮起来 —— 它是这一行唯一
+			// 能拖的地方，别让它和名字抢视线。
+			grip := pal.inkTertiary
+			if rowBtn.Hovered() || rowBtn.Pressed() {
+				grip = pal.inkMuted
+			}
+			handle = drawIcon(c, iconGrip, 11, grip).Cursor(ui.CursorGrab)
+			if draggable {
+				handle.Drag(providerDrag{from: i})
+			}
+			if handle.Dragging() {
+				handle.Cursor(ui.CursorGrabbing)
+			}
+			// 供应商图标
+			ui.Box(c).Size(20, 20).Radius(radiusXS).Background(pal.surface3).
+				Border(1, pal.hairline).AlignItems(ui.Center).Justify(ui.Center).Children(func() {
+				drawIcon(c, iconSparkles, 11, pal.inkMuted)
+			})
+			txtCol := pal.inkMuted
+			if selected {
+				txtCol = pal.ink
+			}
+			ui.Text(c, label).FontSize(textCaption).FontWeight(weightMedium).
+				TextColor(txtCol).SingleLine()
+			ui.Spacer(c)
+			// 状态圆点：只有当前生效的供应商是实心绿点，其余一律
+			// 空心描边 —— 加进来的≠启用的，别让每行都像开着。
+			if isActive {
+				ui.Box(c).Size(7, 7).Radius(radiusPill).Background(t.Success)
+			} else {
+				ui.Box(c).Size(7, 7).Radius(radiusPill).Border(1, pal.hairlineStrong).Background(ui.Transparent)
+			}
+		})
+	})
+	if rowBtn.Clicked() || handle.Clicked() {
+		a.editIdx = i
+	}
+
+	// 落点就是行按钮自己。不用另外摆两块半行的落点区：框架只把「指针下
+	// 最上面那个元素 + 它的祖先」放进命中链，兄弟元素根本收不到 Drop 和
+	// DragOver；而盖在行上面的方块又会让手柄的 id 跟着结构下标一起挪，
+	// 拖到一半手柄就不再是当初按下的那个了（手柄靠 id 认出自己在被拖）。
+	// 指针在行的上半条 = 插在这一家前面，下半条 = 插到下一家前面。
+	dropAt := func() int {
+		if _, y, _ := rowBtn.PointerPosition(); y > providerRowH/2 {
+			return next
+		}
+		return i
+	}
+	if _, over := ui.DragOver[providerDrag](rowBtn); over {
+		at := dropAt()
+		rowBtn.DrawOver(func(p *ui.Painter, r ui.Rect) {
+			y := r.Y
+			if at == next {
+				y = r.Y + r.H
+			}
+			// 缩进 4px：不压到行首那个手柄，看着像一条「插进列表里」的缝。
+			p.Fill(ui.Rect{X: r.X + 4, Y: y - 1, W: r.W - 8, H: 2}, c.Theme().Accent, 1)
+		})
+	}
+	if draggable {
+		if d, ok := ui.Drop[providerDrag](rowBtn); ok {
+			a.moveProvider(d.from, dropAt())
+		}
+	}
+}
+
+// moveProvider 把 from 上的那家供应商搬到 to 前面（to 是拖动前的下标，
+// 等于列表长度表示搬到末尾）。
+func (a *app) moveProvider(from, to int) {
+	ps := a.editCfg.Providers
+	if from < 0 || from >= len(ps) || to < 0 || to > len(ps) {
+		return
+	}
+	// 落回原位（to == from）或者原地不动（to == from+1，等于搬到自己
+	// 前面）都什么都不用做。
+	if to == from || to == from+1 {
+		return
+	}
+	// to 说的是「搬到谁前面」，所以先把这一项摘出来，剩下的下标整体前移
+	// 一位，再往 at 前面插。
+	at := to
+	if to > from {
+		at--
+	}
+	moved := ps[from]
+	rest := make([]llm.Provider, 0, len(ps)-1)
+	rest = append(rest, ps[:from]...)
+	rest = append(rest, ps[from+1:]...)
+	out := make([]llm.Provider, 0, len(ps))
+	out = append(out, rest[:at]...)
+	out = append(out, moved)
+	out = append(out, rest[at:]...)
+	a.editCfg.Providers = out
+
+	// 「正在编辑的」和「当前生效的」都是这份切片的下标，搬完得跟着走 ——
+	// 不换的话用户拖的是 A，右边详情页悄悄换成了 B。
+	a.editIdx = remapProviderIndex(a.editIdx, from, at)
+	if a.editCfg.Active >= 0 {
+		a.editCfg.Active = remapProviderIndex(a.editCfg.Active, from, at)
+	}
+}
+
+// remapProviderIndex 把「拖动前在第 i 位的那个供应商」换算成拖动后的下标。
+// from 是被拖走的那一项原来的下标，to 是它拖完之后的下标。
+func remapProviderIndex(i, from, to int) int {
+	switch {
+	case i == from:
+		return to
+	case from < to && i > from && i <= to:
+		return i - 1 // 被它跨过去的那些整体前移一位
+	case to < from && i >= to && i < from:
+		return i + 1 // 整体后移一位
+	}
+	return i
 }
 
 // toggleEditActive 是详情页头部那个开关绑定的行为：开关当前生效的供应商，

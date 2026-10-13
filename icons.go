@@ -113,6 +113,10 @@ var (
 	// 跟随系统外观（monitor）
 	iconMonitor = lucide(`<rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>`)
 
+	// 拖动排序手柄（grip-vertical）。六个点各自填色：描边版的 r=1 圆在
+	// 11px 的尺寸下只剩一圈糊边的轮廓，填实了才看得清是「抓手」。
+	iconGrip = lucide(`<circle cx="9" cy="12" r="1" fill="currentColor"/><circle cx="9" cy="5" r="1" fill="currentColor"/><circle cx="9" cy="19" r="1" fill="currentColor"/><circle cx="15" cy="12" r="1" fill="currentColor"/><circle cx="15" cy="5" r="1" fill="currentColor"/><circle cx="15" cy="19" r="1" fill="currentColor"/>`)
+
 	// 语言切换（globe）
 	iconGlobe = lucide(`<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>`)
 

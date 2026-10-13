@@ -135,6 +135,8 @@ go test ./...                # Headless rendering tests, no display required
 
 Open **Settings (`⌘,`)** from the top right menu to configure your API provider and key. The configuration is securely stored at `~/Library/Application Support/Gloss/config.json` (permissions `0600`).
 
+The provider column lists only the providers you've added; drag the handle at the start of a row to reorder them (the order is part of the draft — it lands on Save, and Cancel throws it away). New ones come from the **Add Provider** button's menu, which also shows built-in presets for Anthropic Claude, DeepSeek, Kimi, Qwen, GLM, OpenRouter and Ollama, plus custom OpenAI-compatible endpoints; providers already in the list are greyed out there.
+
 Alternatively, Gloss falls back to standard environment variables:
 
 ```bash
@@ -216,4 +218,5 @@ internal/
 - [x] AI commit message & branch generation
 - [x] GitHub PR: list open PRs and review PR diffs
 - [x] Pre-flight risk scan: Full-diff scan highlighting potential vulnerabilities
+- [x] Drag-to-reorder providers, with presets moved into the Add Provider menu
 - [ ] Free cross-line text selection in a diff: render each hunk as one multi-line selectable text (chunk long hunks by N lines), with native drag-select and ⌘C
