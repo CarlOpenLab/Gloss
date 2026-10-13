@@ -136,6 +136,13 @@ type app struct {
 	// 都建了出来，几万行的仓库会立刻卡死）。
 	built int
 
+	// —— 查找（find.go）——
+	find findState
+	// findGen 是「仓库内容」的版本号：文件列表换了、或者文件内容分批读回来，
+	// 都自增一下，查找据此重扫。刻意放在 findState 外面 —— 它记的是内容版本，
+	// 切标签页、关查找栏都不该动它。
+	findGen int
+
 	// —— 展开状态 ——
 	// expanded 记录每个未改动区间展开了多少行，key 见 rows.go 的 gapKey。
 	// 跨帧保留，所以刷新后展开状态还在（文件内容变了才会对不上）。
@@ -276,7 +283,8 @@ type app struct {
 
 	// —— 命令栏（⌘K）——
 	palette paletteState
-	// focusFilter 是 ⌘F 的一次性请求：下帧把焦点放进筛选框。
+	// focusFilter 是 ⌘P（以及命令栏里的「筛选文件」）的一次性请求：
+	// 下帧把焦点放进筛选框。
 	focusFilter bool
 
 	// —— 写操作（暂存 / 提交 / 检出 / 抓取……）——
@@ -594,6 +602,11 @@ func (a *app) view(c *ui.Context) {
 	// 越先拿到键。
 	a.handleKeys(c)
 
+	// 查找对账。放在快捷键之后、建控件之前：⌘F/⌘G 这一帧刚改过状态，
+	// 打字也已经在输入阶段写进 a.find.query 了，早一步算出来的命中
+	// 这一帧就能涂上。
+	a.syncFind()
+
 	// 跟上这一帧的状态：菜单里的勾要在被拉开之前就是对的，而状态这一帧
 	// 刚被快捷键改过。
 	a.syncMenu()
@@ -634,6 +647,14 @@ func (a *app) view(c *ui.Context) {
 	}
 	if a.prReview.on && !a.modalOn() && c.Shortcut(0, ui.KeyEscape) {
 		a.exitPRReview()
+	}
+	// Esc 收查找栏。同样是放在最后 —— 焦点在查找框里时 Esc 会被它自己在
+	// 元素那一层认走，走不到这里；这条是「焦点不在框里」（比如刚点过
+	// 「下一个」）时的兜底。
+	//
+	// 终端模式不认：那时候 Esc 是发给 shell 的。
+	if a.find.on && a.viewMode == viewModeGit && !a.modalOn() && c.Shortcut(0, ui.KeyEscape) {
+		a.closeFind()
 	}
 }
 
@@ -1755,6 +1776,10 @@ func (a *app) applyFilter() {
 	a.files = filterFiles(a.allFiles, a.fileFilter)
 	a.rebuildTree()
 	a.rowsDirty = true
+	// 换了一份文件列表 = 查找索引整个作废。所有换 a.files 的路径（工作区/
+	// 提交/储藏/对比/PR 的读取、切 tab、改筛选词、内容缓存被剪）最终都过
+	// 这里，所以这一处就够，别处不用再各自记得自增。
+	a.findGen++
 }
 
 // filterFiles 按筛选词挑出要显示的文件。

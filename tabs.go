@@ -178,6 +178,9 @@ func (a *app) restoreActiveTab() {
 	if a.activeTab < 0 || a.activeTab >= len(a.tabs) {
 		return
 	}
+	// 查找索引整个作废：它的 key 里有 a.files 的下标，而下面几行就把
+	// a.files 换成另一个仓库的了。这里不走 applyFilter，所以得自己说一声。
+	a.invalidate()
 	tab := a.tabs[a.activeTab]
 	a.repoPath = tab.path
 	a.repoName = tab.name
@@ -326,6 +329,8 @@ func (a *app) closeTab(idx int) {
 		a.workFiles = nil
 		a.files = nil
 		a.state = loadIdle
+		// 同上：下面不走 restoreActiveTab，这里把列表清空了也得让查找知道。
+		a.invalidate()
 	} else {
 		if a.activeTab >= len(a.tabs) {
 			a.activeTab = len(a.tabs) - 1

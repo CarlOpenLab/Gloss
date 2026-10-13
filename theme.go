@@ -60,6 +60,15 @@ type palette struct {
 	ref       ui.Color // 分支名、commit hash 的强调色
 	viewed    ui.Color // 已 review 的勾与文字
 
+	// —— 查找（find.go）——
+	// 命中底色用半透明琥珀：它要叠在 codeBg / 新增行 / 删除行三种底上，
+	// 半透明才能混出「这一行还是绿的，但这段字被框住了」——不透明的色块会把
+	// 增删信息整个盖掉。当前命中更重一档，另加一道下划线（只靠深浅不够快，
+	// 连按「下一个」时视线得能立刻钉住新落点）。
+	findBg        ui.Color // 全部命中的底色
+	findBgActive  ui.Color // 当前命中的底色
+	findUnderline ui.Color // 当前命中的下划线
+
 	// selection 是列表与树的选中底带。
 	//
 	// 取中性灰阶而不是拿 Accent 淡染：Accent 是「白」（见 glossTheme），
@@ -273,6 +282,12 @@ func paletteFor(t *ui.Theme) palette {
 			sideBg:    ui.Hex("#08090a"), // 介于 Canvas 与 Surface 1 之间
 			ref:       ui.Hex("#d0d6e0"), // 中性 Ink Muted
 			viewed:    ui.Hex("#27a644"),
+			// 查找命中：深色下取拓扑图那颗暖琥珀（#e09f3e），压在近黑底上
+			// 读得清，又和增删的绿/红拉开色相。透明度比浅色下高一档 ——
+			// 白底上 0.20 已经很明显，同样的比例压在 #010102 上几乎看不见。
+			findBg:        ui.RGBA(224, 159, 62, 0.40),
+			findBgActive:  ui.RGBA(224, 159, 62, 0.78),
+			findUnderline: ui.Hex("#e09f3e"),
 			// 拓扑图精密仪器 8 色谱系（明度与彩度均衡）：
 			// 0 号为主干，多颜色色彩方案，其余 7 条为支线，不含紫。
 			lanes: [8]ui.Color{
@@ -323,6 +338,10 @@ func paletteFor(t *ui.Theme) palette {
 		sideBg:           ui.Hex("#f7f8f9"),
 		ref:              ui.Hex("#4b535d"),
 		viewed:           ui.Hex("#27a644"),
+		// 查找命中：浅色下压深一档到琥珀棕（#d97706），白底上才有足够对比度。
+		findBg:        ui.RGBA(217, 119, 6, 0.20),
+		findBgActive:  ui.RGBA(217, 119, 6, 0.42),
+		findUnderline: ui.Hex("#b45309"),
 		lanes: [8]ui.Color{
 			ui.Hex("#0969da"), // 主干/HEAD: 经典亮蓝
 			ui.Hex("#2d9d74"),

@@ -148,6 +148,18 @@ func TestDumpScreenshot(t *testing.T) {
 	writePNG(t, "/tmp/de-shot-palette.png", tt.Image())
 	a.closePalette()
 
+	// 查找：栏开着、有命中，一眼看出「当前那条」和「其余的」深浅不同
+	a.find.on = true
+	a.find.query = "CHANGED"
+	tt.Frame()
+	tt.Frame()
+	writePNG(t, "/tmp/de-shot-find.png", tt.Image())
+	tt.SetDark(true)
+	tt.Frame()
+	writePNG(t, "/tmp/de-shot-find-dark.png", tt.Image())
+	tt.SetDark(false)
+	a.closeFind()
+
 	// 空状态：没打开仓库时第一眼看到的东西
 	empty := newApp()
 	et := ui.NewTester(empty.view, 1280, 860)

@@ -445,6 +445,16 @@ func drawRefreshIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
 	p.Icon(iconRefresh, r, col)
 }
 
+// drawChevronUpIcon / drawChevronDownIcon 是查找栏里「上一条 / 下一条」的箭头
+// （Lucide chevron-up / chevron-down）。
+func drawChevronUpIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
+	p.Icon(iconChevronUp, r, col)
+}
+
+func drawChevronDownIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
+	p.Icon(iconChevronDown, r, col)
+}
+
 // drawSlidersIcon 画「设置」（Lucide sliders-horizontal）。
 func drawSlidersIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
 	p.Icon(iconSliders, r, col)

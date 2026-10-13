@@ -265,7 +265,7 @@ func TestHistoryNavIgnoredWhenModalOrTyping(t *testing.T) {
 	}
 
 	// 2. 聚焦文件筛选框输入，打 j 应该进入输入框，不应导航提交
-	tt.Key(ui.Cmd, ui.KeyF)
+	tt.Key(ui.Cmd, ui.KeyP)
 	tt.Frame()
 
 	tt.TypeKey(0, ui.KeyJ, "j")

@@ -102,6 +102,9 @@ func (a *app) loadContents(seq int) {
 					a.contentFP[p] = res.fp
 				}
 				a.rowsDirty = true
+				// 未改动行也是能搜的正文，而它是按 contentBatch 分批长出来的
+				// —— 每批到达都得让查找重扫一次，否则「刚读到的那段搜不到」。
+				a.findGen++
 			})
 		}
 

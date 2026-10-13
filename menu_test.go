@@ -73,7 +73,8 @@ func TestMenuAccelerators(t *testing.T) {
 		"缩小代码字号": "CmdOrCtrl+-",
 		"恢复默认字号": "CmdOrCtrl+0",
 		"命令栏…":   "CmdOrCtrl+K",
-		"筛选文件":   "CmdOrCtrl+F",
+		"在差异中查找": "CmdOrCtrl+F",
+		"筛选文件":   "CmdOrCtrl+P",
 		"新建分支…":  "CmdOrCtrl+Shift+N",
 		"抓取":     "CmdOrCtrl+Shift+F",
 		"拉取":     "CmdOrCtrl+Shift+P",
@@ -230,5 +231,14 @@ func TestMenuCommands(t *testing.T) {
 	tt.Frame()
 	if a.tab != before {
 		t.Errorf("设置面板开着时菜单也不该在背后切 tab：tab = %d, want %d", a.tab, before)
+	}
+}
+
+// 「检查更新…」那一项归 mygo 的自动更新插件，插件只在真实的 App.Run 之前
+// 注册（main.go）。测试里换成一个替身 —— 菜单里那一格照旧，但不再去碰一个
+// 没装插件的调用：它要么 panic，要么卡在等主线程队列上（见 updaterMenuItem）。
+func init() {
+	updaterMenuItem = func() *mygo.MenuItem {
+		return &mygo.MenuItem{Label: T("检查更新…", "Check for Updates…")}
 	}
 }

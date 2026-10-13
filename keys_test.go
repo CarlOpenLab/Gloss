@@ -210,12 +210,12 @@ func TestSidebarToggleShortcut(t *testing.T) {
 //
 // 这里原来还断言「顺手把侧栏打开」—— 侧栏的筛选框改成筛分支之后，
 // 「找文件」和侧栏开不开就没关系了。
-func TestFindFocusesFilter(t *testing.T) {
+func TestFilterFocusesFilter(t *testing.T) {
 	a := richApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
 
 	a.sidebarOn = false
-	tt.Key(ui.Cmd, ui.KeyF)
+	tt.Key(ui.Cmd, ui.KeyP)
 	tt.Frame()
 
 	if a.sidebarOn {
@@ -231,9 +231,43 @@ func TestFindFocusesFilter(t *testing.T) {
 	if a.refFilter != "" {
 		t.Errorf("侧栏的筛选框不该收到这些字，refFilter = %q", a.refFilter)
 	}
+	// 找文件和找内容是两条路：筛文件不该顺手把查找栏也开出来。
+	if a.find.on || a.find.query != "" {
+		t.Errorf("⌘P 不该碰查找：on = %v, query = %q", a.find.on, a.find.query)
+	}
 }
 
-// 焦点在筛选框里时打 J 只是打了一个字母，不该跳 hunk。
+// ⌘F 开的是「在差异中查找」，打进去的字进的是查找框而不是文件筛选框。
+func TestFindShortcutOpensFind(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+
+	if len(a.files) == 0 {
+		t.Fatal("这条测试的前提是有 diff 可搜")
+	}
+
+	tt.Key(ui.Cmd, ui.KeyF)
+	tt.Frame()
+	if !a.find.on {
+		t.Fatal("⌘F 该打开查找栏")
+	}
+	if !tt.HasText("在差异中查找") {
+		t.Errorf("查找栏没画出来：%q", tt.Texts())
+	}
+
+	tt.Type("handler")
+	tt.Frame()
+	if a.find.query != "handler" {
+		t.Errorf("输入没进查找框，query = %q", a.find.query)
+	}
+	// ⌘F 打开的是查找，不是文件筛选 —— 这两个框不共享输入。
+	if a.fileFilter != "" {
+		t.Errorf("⌘F 不该碰文件筛选，fileFilter = %q", a.fileFilter)
+	}
+}
+
+// 焦点在查找框里时打 J 只是打了一个字母，不该跳 hunk。
 func TestJumpHunkIgnoredWhileTyping(t *testing.T) {
 	a := richApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
@@ -250,8 +284,8 @@ func TestJumpHunkIgnoredWhileTyping(t *testing.T) {
 	if first > 0 {
 		t.Errorf("在筛选框里打 j 不该跳 hunk，可视区从第 %d 行开始了", first)
 	}
-	if a.fileFilter != "j" {
-		t.Errorf("j 应该打进了筛选框，filter = %q", a.fileFilter)
+	if a.find.query != "j" {
+		t.Errorf("j 应该打进了查找框，query = %q", a.find.query)
 	}
 }
 
@@ -321,10 +355,20 @@ func TestShortcutsWithoutRepo(t *testing.T) {
 		{ui.Cmd, ui.Key1}, {ui.Cmd, ui.Key2}, {ui.Cmd, ui.KeyEqual},
 		{ui.Cmd | ui.Shift, ui.KeyEqual},
 		{ui.Cmd, ui.KeyMinus}, {ui.Cmd, ui.Key0},
+		// ⌘P 是筛文件，⌘G / ⌘⇧G 是「上/下一条命中」，Esc 收查找栏。
+		{ui.Cmd, ui.KeyP}, {ui.Cmd, ui.KeyG}, {ui.Cmd | ui.Shift, ui.KeyG},
+		{0, ui.KeyEscape},
 		{0, ui.KeyJ}, {0, ui.KeyK},
 		{0, ui.KeyDown}, {0, ui.KeyUp},
 	} {
 		tt.Key(c.mods, c.key)
 		tt.Frame()
+	}
+
+	// 没有 diff 可搜：⌘F 不该开出一条搜不到东西的栏，⌘G / Esc 也不该
+	// 把状态搅乱。
+	if a.find.on || a.find.query != "" || len(a.find.matches) > 0 {
+		t.Errorf("没有仓库时查找不该动：on = %v, query = %q, %d 条命中",
+			a.find.on, a.find.query, len(a.find.matches))
 	}
 }

@@ -264,6 +264,33 @@ func gapKeyOf(path string, from int) string {
 	return fmt.Sprintf("g:%s:%d", path, from)
 }
 
+// gapSpan 是一段未改动区间（新侧行号）。
+type gapSpan struct{ from, n int }
+
+// fileGaps 列出文件里所有的未改动区间。
+//
+// 这段算术必须和 buildRows 里 appendGap 的那几行完全一致（prevEnd 的推进、
+// NewStartLine/NewEndLine 的约定、末尾区间按文件总行数算）—— 查找跳转靠它
+// 把「第 N 行」映射回 gapKeyOf(path, from)，算错一行就会展开错的区间。
+// 一致性由 TestFileGapsMatchesBuildRows 钉住。
+//
+// total 是新侧总行数，0 表示内容没读到（末尾那段区间也就无从谈起）。
+func fileGaps(f gitrepo.File, total int) []gapSpan {
+	var out []gapSpan
+	prevEnd := 0
+	for hi := range f.Hunks {
+		h := &f.Hunks[hi]
+		if n := h.NewStartLine() - (prevEnd + 1); n > 0 {
+			out = append(out, gapSpan{from: prevEnd + 1, n: n})
+		}
+		prevEnd = h.NewEndLine()
+	}
+	if n := total - prevEnd; n > 0 {
+		out = append(out, gapSpan{from: prevEnd + 1, n: n})
+	}
+	return out
+}
+
 // appendGap 在 prevEnd 和 nextStart 之间插入未改动区间。
 // prevEnd 是上一个 hunk 结束的新侧行号（0 表示文件开头），
 // nextStart 是下一个 hunk 开始的新侧行号（文件行数+1 表示文件末尾）。

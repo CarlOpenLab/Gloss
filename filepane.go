@@ -119,6 +119,11 @@ func (a *app) detailPane(c *ui.Context, pal palette) {
 		a.filePaneSplitter(c, pal)
 		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
 			if a.hasDiff() {
+				// 查找栏停在 diff 顶上。停在同一列里而不是浮在它上面：
+				// 它会占掉几十像素的高度，diff 跟着缩，两者永不重叠。
+				if a.find.on {
+					a.findBar(c, pal)
+				}
 				a.diffView(c, pal)
 				return
 			}
@@ -255,7 +260,7 @@ func (a *app) masterStageBox(c *ui.Context, t *ui.Theme, pal palette) {
 // 名字一样的话测试和无障碍工具都认不出找的是哪一个。
 func (a *app) fileFilterInput(c *ui.Context, pal palette) {
 	in := searchField(c, pal, &a.fileFilter, T("筛选文件", "Filter files"))
-	// ⌘F（以及命令栏里的「筛选文件」）之后把焦点放进来。
+	// ⌘P（以及命令栏里的「筛选文件」）之后把焦点放进来。
 	//
 	// 置位的那一帧文件栏可能已经画过（命令栏在覆盖层里，晚于它），所以要
 	// 留到下一帧才轮到这儿。那时命令栏已经收掉、它的输入框不再构建，没有

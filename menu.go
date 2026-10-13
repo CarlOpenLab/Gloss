@@ -33,6 +33,15 @@ import (
 // 和窗口标题、工具栏上那个兜底的名字是同一个。
 const appName = "Gloss"
 
+// updaterMenuItem 是「检查更新…」那一项。单独抽成一个变量，好让测试替换。
+//
+// 这一项由 mygo 的自动更新插件提供，而插件是在 App.Run 之前注册的
+// （main.go 的 mygo.Use）。测试既不注册插件也没有事件循环，直接调它要来的
+// 只有两种下场：没注册时 panic，注册了则卡在等主线程队列上 —— 而那个队列
+// 只有真的跑起来的事件循环才会倒。菜单本身和这一项无关，换成替身不影响
+// 别处的断言。
+var updaterMenuItem = func() *mygo.MenuItem { return updater.MenuItem() }
+
 // appMenu 是菜单里需要跟着界面状态走的那几项，其余的项目建好就不再动。
 //
 // 要记着的有两种：单选/复选的勾（菜单展开时看得见，勾错了很扎眼），和
@@ -55,6 +64,7 @@ type appMenu struct {
 	push        *mygo.MenuItem
 	forcePush   *mygo.MenuItem
 	prList      *mygo.MenuItem
+	find        *mygo.MenuItem
 	themeSystem *mygo.MenuItem
 	themeLight  *mygo.MenuItem
 	themeDark   *mygo.MenuItem
@@ -84,13 +94,14 @@ func buildAppMenu(a *app) *mygo.Menu {
 		}
 	})
 	m.newBranch = a.menuCmd(T("新建分支…", "New Branch…"), "CmdOrCtrl+Shift+N", a.newBranchAtHead)
+	m.find = a.menuCmd(T("在差异中查找", "Find in Diff"), "CmdOrCtrl+F", a.openFind)
 	m.newTag = a.menuCmd(T("新建标签…", "New Tag…"), "", a.newTagAtHead)
 	m.stash = a.menuCmd(T("储藏工作区改动…", "Stash Changes…"), "", a.openStashDialog)
 	m.prList = a.menuCmd(T("查看 GitHub Pull Requests…", "GitHub Pull Requests…"), "", a.openPRDialog)
 
 	// 抓取 / 拉取 / 推送的键是挑出来的：F 和 P 是 Fetch 和 Pull，U 是「上传」
-	// 那个 up（Push 的 P 被拉取占了）。三个都带 ⇧ —— ⌘F 已经是「筛选文件」，
-	// 而 ⌘P 在 Mac 上历来是打印，不抢。
+	// 那个 up（Push 的 P 被拉取占了）。三个都带 ⇧ —— 光键位的 ⌘F 和 ⌘P 都
+	// 有了主人（在差异中查找 / 筛选文件），单键轮不到它们。
 	m.fetch = a.menuCmd(T("抓取", "Fetch"), "CmdOrCtrl+Shift+F", a.doFetch)
 	m.pull = a.menuCmd(T("拉取", "Pull"), "CmdOrCtrl+Shift+P", a.doPull)
 	m.push = a.menuCmd(T("推送", "Push"), "CmdOrCtrl+Shift+U", a.doPush)
@@ -134,7 +145,10 @@ func buildAppMenu(a *app) *mygo.Menu {
 		mygo.Separator(),
 		m.refresh,
 		a.menuCmd(T("命令栏…", "Command Palette…"), "CmdOrCtrl+K", a.openPalette),
-		a.menuCmd(T("筛选文件", "Filter Files"), "CmdOrCtrl+F", func() { a.focusFilter = true }),
+		m.find,
+		// 「筛选文件」本质是 quick-open（找的是路径），所以摆在 ⌘P 上；
+		// ⌘F 归「在差异中查找」—— 找内容和找文件是两件事。
+		a.menuCmd(T("筛选文件", "Filter Files"), "CmdOrCtrl+P", func() { a.focusFilter = true }),
 		mygo.Separator(),
 		{Role: mygo.RoleToggleFullScreen, Label: T("进入全屏", "Toggle Full Screen")},
 	}
@@ -200,7 +214,7 @@ func buildAppMenu(a *app) *mygo.Menu {
 func (a *app) appSubmenu() []*mygo.MenuItem {
 	return []*mygo.MenuItem{
 		{Role: mygo.RoleAbout, Label: T("关于 ", "About ") + appName},
-		updater.MenuItem(),
+		updaterMenuItem(),
 		mygo.Separator(),
 		a.menuCmd(T("模型设置…", "Settings…"), "CmdOrCtrl+,", a.openSettings),
 		mygo.Separator(),
@@ -309,6 +323,9 @@ func (a *app) syncMenu() {
 	enableItem(m.newBranch, !noRepo && a.op == gitrepo.OpNone)
 	enableItem(m.newTag, !noRepo && a.op == gitrepo.OpNone)
 	enableItem(m.prList, !noRepo)
+	// 没有 diff 可搜的时候灰着：和 ⌘F 那条路一个判断（openFind 自己也再看
+	// 一眼），菜单只是先把话说在前面。
+	enableItem(m.find, a.hasDiff())
 
 	// 远程三条：没有远程就没得抓也没得推（`git fetch --all` 在这种情况下
 	// 静默成功，等错误等不到）；分离 HEAD 上拉取和推送没有落点，抓取照常。

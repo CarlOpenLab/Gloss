@@ -58,11 +58,30 @@ func (a *app) handleKeys(c *ui.Context) {
 	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyN) {
 		a.newBranchAtHead()
 	}
-	if c.Shortcut(ui.Cmd, ui.KeyF) {
-		// 焦点给主区那个文件筛选框，不是侧栏的分支筛选框 —— review 时
-		// 想找的是文件。也不再把侧栏拽开：那个框现在筛的是分支，开不开
-		// 和「找文件」没关系。
-		a.focusFilter = true
+	// ⌘F 和 ⌘P 只在 Git 面板里认。终端模式下 diff 根本不在屏幕上，认了
+	// 要么白开一条搜不到东西的栏，要么把 focusFilter 挂在那儿 —— 等用户
+	// 切回 Git 面板，一个不知道什么时候按下的 ⌘P 会突然把焦点抢走。
+	// ⌘G 跟着 ⌘F 走：栏是那里开的，两个「上/下一条」也不该跑到终端里去认。
+	if a.viewMode == viewModeGit {
+		if c.Shortcut(ui.Cmd, ui.KeyF) {
+			a.openFind()
+		}
+		if c.Shortcut(ui.Cmd, ui.KeyP) {
+			// 焦点给主区那个文件筛选框，不是侧栏的分支筛选框 —— review 时
+			// 想找的是文件。也不再把侧栏拽开：那个框现在筛的是分支，开不开
+			// 和「找文件」没关系。
+			//
+			// 这个键本来是 ⌘F，让给了「在差异中查找」：⌘F = 找内容、
+			// ⌘P = 找文件，是编辑器和 Git 客户端的通行分法。
+			a.focusFilter = true
+		}
+		// 查找栏的两个「上/下一条」。⌘G 是「再找一次」的老键位，⇧ 反向。
+		if c.Shortcut(ui.Cmd, ui.KeyG) {
+			a.findNext(1)
+		}
+		if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyG) {
+			a.findNext(-1)
+		}
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyK) {
 		if a.viewMode == viewModeTerm {
@@ -146,7 +165,10 @@ func (a *app) handleKeys(c *ui.Context) {
 	// 改动 tab（tab == 0）：J / K 跳上下一段改动（hunk），↑ / ↓ 在改动文件
 	// 列表里上下移 —— 一层管 diff 正文、一层管文件栏，两个键不冲突。
 	// 在模态对话框或输入框获取焦点时不响应。
-	if !a.modalOn() {
+	//
+	// 查找输入框里另说：J / K 会被编辑框自己吃掉（打的是字），可裸 ↑ / ↓
+	// 单行编辑框不认，会漏到这儿来 —— 用上一帧的焦点状态挡一道。
+	if !a.modalOn() && !a.find.focused {
 		if a.tab == 1 && len(a.commits) > 0 {
 			if c.Shortcut(0, ui.KeyJ) || c.Shortcut(0, ui.KeyDown) {
 				a.navCommit(1)

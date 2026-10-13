@@ -44,6 +44,23 @@ func (a *app) diffView(c *ui.Context, pal palette) {
 		a.pendingScrollFile = -1
 	}
 
+	// 查找跳转。和 pendingScrollFile 同一个位置、同一个道理：行模型这时候
+	// 才是新的（阻挡目标的文件刚展开、未改动区间刚放行），按行下标滚才对得上。
+	if m := a.find.pending; m != nil {
+		a.find.pending = nil
+		if i := a.rowForFind(m.file, m.hunk, m.line); i >= 0 {
+			// 已经看得见就不动滚动位置：连按「下一个」时视图不该来回弹。
+			first, last := a.diffList.Visible()
+			if i < first || i > last {
+				// 居中而不是贴着顶：文件头是钉在列表顶上的，贴顶会让目标
+				// 正好压在钉子下面。
+				a.diffList.ScrollTo(i, ui.Center)
+			}
+			// 手动跳走了，J/K 的出发点作废（和 pendingScrollFile 一个道理）
+			a.hunkCur = ""
+		}
+	}
+
 	// Key 用行的稳定标识而不是下标：展开一个未改动区间会让它后面所有行的
 	// 下标整体后移，没有 Key 的话列表的滚动位置和行状态会跟着乱跳。
 	a.diffList.Key = func(i int) any { return a.rows[i].key }
@@ -383,7 +400,7 @@ func (a *app) unifiedRow(c *ui.Context, pal palette, r row) {
 		ui.Box(c).Width(barW).AlignSelf(ui.Stretch).Background(bar)
 		a.gutter(c, pal, oldNo, gutBg)
 		a.gutter(c, pal, newNo, gutBg)
-		a.code(c, pal, hlFile, targetLineNo, text, size)
+		a.code(c, pal, hlFile, targetLineNo, text, size, a.rowFindLine(r))
 	})
 }
 
@@ -395,6 +412,7 @@ type sideLine struct {
 	kind  diff.LineType
 	no    int             // 这一侧的行号
 	hl    *highlight.File // 该去哪份高亮里查
+	fl    findLine        // 这一侧要涂的查找命中
 }
 
 func (a *app) splitRow(c *ui.Context, pal palette, r row) {
@@ -439,31 +457,35 @@ func (a *app) splitHalf(c *ui.Context, pal palette, s sideLine, size float32, r 
 			ui.Spacer(c)
 			return
 		}
-		a.code(c, pal, s.hl, s.no, s.text, size)
+		a.code(c, pal, s.hl, s.no, s.text, size, s.fl)
 	})
 }
 
 // splitSides 返回一行在左右两侧的内容。
 func (a *app) splitSides(f gitrepo.File, r row) (left, right sideLine) {
 	if r.fromGap {
-		// 未改动区间在两侧是同一行，只是行号不同
+		// 未改动区间在两侧是同一行，只是行号不同 —— 内容一样，命中也一样，
+		// 所以两侧都涂。
 		newHL, oldHL := a.highlightFor(f)
 		text := expandTabs(a.contentLine(f, r.newNo))
-		return sideLine{text: text, kind: diff.LineContext, no: r.oldNo, hl: oldHL},
-			sideLine{text: text, kind: diff.LineContext, no: r.newNo, hl: newHL}
+		fl := a.findLineOf(r.file, -1, r.newNo)
+		return sideLine{text: text, kind: diff.LineContext, no: r.oldNo, hl: oldHL, fl: fl},
+			sideLine{text: text, kind: diff.LineContext, no: r.newNo, hl: newHL, fl: fl}
 	}
-	return a.sideOf(f, r.lhunk, r.lidx, true), a.sideOf(f, r.hunk, r.lineIdx, false)
+	return a.sideOf(f, r.file, r.lhunk, r.lidx, true), a.sideOf(f, r.file, r.hunk, r.lineIdx, false)
 }
 
 // sideOf 取 hunk 里第 idx 行在某一侧的样子。old 为 true 是旧侧。
 // idx 越界或那一侧本来就没有这一行（新增行在旧侧不存在）时返回空。
-func (a *app) sideOf(f gitrepo.File, hunk, idx int, old bool) sideLine {
+func (a *app) sideOf(f gitrepo.File, fi, hunk, idx int, old bool) sideLine {
 	if idx < 0 || hunk < 0 || hunk >= len(f.Hunks) || idx >= len(f.Hunks[hunk].Lines) {
 		return sideLine{empty: true}
 	}
 	l := f.Hunks[hunk].Lines[idx]
 	newHL, oldHL := a.highlightFor(f)
-	s := sideLine{text: l.Content, kind: l.Type, hl: newHL, no: l.NewNum}
+	// 命中的 key 用的是 hunk 内下标，和两侧的行号无关：删除行只会在旧侧
+	// 被查到（新侧那一半的 idx 是另一条行，或者是空），新增行反过来。
+	s := sideLine{text: l.Content, kind: l.Type, hl: newHL, no: l.NewNum, fl: a.findLineOf(fi, hunk, idx)}
 	if old {
 		s.hl, s.no = oldHL, l.OldNum
 	}
@@ -476,14 +498,14 @@ func (a *app) sideOf(f gitrepo.File, hunk, idx int, old bool) sideLine {
 
 // code 是半行/整行里代码那一块：可伸缩、横向裁掉超出的部分。
 // 支持鼠标悬停 Tooltip 显示完整代码，避免单行超长被省略截断时看不到全貌。
-func (a *app) code(c *ui.Context, pal palette, hl *highlight.File, lineNo int, text string, size float32) {
+func (a *app) code(c *ui.Context, pal palette, hl *highlight.File, lineNo int, text string, size float32, fl findLine) {
 	b := ui.Box(c).Grow(1).MinWidth(0).ClipX().Padding(0, 0, 0, codeGap).
 		Justify(ui.Center)
 	if strings.TrimSpace(text) != "" {
 		b.Tooltip(text)
 	}
 	b.Children(func() {
-		ui.RichText(c, lineSpans(pal, hl, lineNo, text)...).
+		ui.RichText(c, lineSpans(pal, hl, lineNo, text, fl)...).
 			Font("monospace").FontSize(size).SingleLine().TextColor(pal.code).Selectable()
 	})
 }
@@ -499,12 +521,21 @@ func lineNoOf(r row, oldNo, newNo int) int {
 	return oldNo
 }
 
-// lineSpans 把一行切成带颜色的片段。没有高亮（认不出后缀、文件太大、
+// lineSpans 把一行切成带颜色的片段，再叠上查找命中。
+//
+// 查找底色在 rawLineSpans 的**每个出口**上统一叠（见 applyFind）—— 只包外层
+// 会漏掉三条早退路径，那些正好是没有语法高亮的行（.txt、未知后缀、内容还没
+// 读到的行），它们的查找底色会整个消失。
+func lineSpans(pal palette, hl *highlight.File, lineNo int, text string, fl findLine) []ui.Span {
+	return applyFind(rawLineSpans(pal, hl, lineNo, text), text, fl, pal)
+}
+
+// rawLineSpans 是纯语法高亮那一层。没有高亮（认不出后缀、文件太大、
 // 内容还没读到、行号对不上）时整行一个片段，走默认前景色。
 //
 // 片段必须严丝合缝地铺满整行 —— RichText 按片段依次排版，多一段少一段
 // 都会让画面和实际内容对不上，所以空隙和越界都在这里补齐。
-func lineSpans(pal palette, hl *highlight.File, lineNo int, text string) []ui.Span {
+func rawLineSpans(pal palette, hl *highlight.File, lineNo int, text string) []ui.Span {
 	plain := []ui.Span{{Text: text, Color: pal.code}}
 	if hl.Plain() {
 		return plain

@@ -76,7 +76,8 @@ When reviewing large pull requests or AI-generated diffs, the biggest bottleneck
 - **Pre-flight Risk Scan**: The 🛡 Audit Changes button hands the full staged diff to your model and lists suspicious spots (hardcoded secrets, injection risks, …) grouped by severity—critical / high / medium / low—each anchored to a file and line. Provider failures are translated into plain language instead of raw HTTP errors.
 - **AI Commit Messages & Branch Names**: The AI button in the commit box drafts a Conventional Commits message from the staged diff, treating your notes in the message box as an intent hint; a zh/EN toggle picks the language. The new-branch dialog can generate a branch name from a one-line description.
 - **Fork-Style Commit Graph**: Top pane displays commits alongside a calculated topology graph; bottom pane displays file trees on the left and diffs on the right.
-- **File Tree & Viewed Folding**: Collapsible directory tree with single-child path flattening and fuzzy search (`⌘F`). Marking files as `Viewed` collapses them to fit reviews on a single screen; automatically invalidates on content changes.
+- **File Tree & Viewed Folding**: Collapsible directory tree with single-child path flattening and fuzzy search (`⌘P`). Marking files as `Viewed` collapses them to fit reviews on a single screen; automatically invalidates on content changes.
+- **Find in Diff (`⌘F`)**: Search the diff as you type — every match is highlighted with live counting, and `↵` / `⌘G` walk through them. Matches inside unchanged regions or collapsed files are revealed automatically, so a hit is never somewhere you can't see it.
 - **Streamlined Conflict Resolution**: Amber status bar during merge/rebase/cherry-pick conflicts with step indicators (Continue / Skip / Abort). Interactive conflict cards allow two-way side picking and accept-deletion confirmations.
 - **Command Palette (`⌘K`)**: Quick access to all application actions with keyboard-first workflows.
 
@@ -89,7 +90,11 @@ When reviewing large pull requests or AI-generated diffs, the biggest bottleneck
 | `⌘K` | Open Command Palette |
 | `J` / `K` | Jump to Next / Previous hunk (Changes) or commit (History) |
 | `↓` / `↑` | Select Next / Previous commit (History) or file (Changes) |
-| `⌘F` | Focus file filter input |
+| `⌘F` | Find in diff (search the changed lines) |
+| `↵` / `⇧↵` | Next / previous match (in the find box) |
+| `⌘G` / `⌘⇧G` | Next / previous match |
+| `Esc` | Close the find bar |
+| `⌘P` | Focus file filter input |
 | `⌘⏎` | Commit staged changes |
 | `⌘O` | Open repository |
 | `⌘1` / `⌘2` | Switch between Changes / History |
