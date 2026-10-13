@@ -552,11 +552,11 @@ func (a *app) projectTabBar(c *ui.Context, pal palette) {
 				}
 			}
 
-			// [+] 新建项目标签页
+			// [+] 新建项目标签页：先给一份「打开过的项目」，末位才是打开本地文件夹。
 			newBtn := ui.ButtonBase(c).Size(26, 26).Radius(radiusSM).
 				Cursor(ui.CursorPointer).Label(T("新建项目标签页", "New Project Tab")).
-				Tooltip(Tf("打开本地 Git 仓库作为新标签页 %s / %s", "Open Git repository in new tab %s / %s", K("⌘T"), K("⌘O")))
-			if newBtn.Hovered() {
+				Tooltip(Tf("打开项目或本地 Git 仓库 %s / %s", "Open a project or local Git repository %s / %s", K("⌘T"), K("⌘O")))
+			if newBtn.Hovered() || a.newTabMenuOpen {
 				newBtn.Background(pal.surface2)
 			}
 			fadeColors(newBtn)
@@ -566,7 +566,15 @@ func (a *app) projectTabBar(c *ui.Context, pal palette) {
 				})
 			})
 			if newBtn.Clicked() {
-				a.chooseFolder()
+				// 同一时刻只留一个顶栏下拉，否则两个浮层会叠在一起。
+				a.repoDropdownOpen = false
+				a.branchDropdownOpen = false
+				a.newTabMenuOpen = !a.newTabMenuOpen
+			}
+			if a.newTabMenuOpen {
+				ui.PopoverBase(c, newBtn, &a.newTabMenuOpen, func(panel ui.Element) {
+					a.newProjectMenuPanel(c, panel, pal)
+				})
 			}
 
 			ui.Spacer(c).DragWindow()
@@ -576,6 +584,124 @@ func (a *app) projectTabBar(c *ui.Context, pal palette) {
 				a.openSettings()
 			}
 		})
+}
+
+// newProjectMenuPanel 是顶栏 [+] 的下拉：先列「打开过的项目」，末位才是
+// 「打开本地文件夹…」。
+//
+// 参照 Zed：在项目之间来回跳时，第一步应该是「从认识的名字里挑一个」，
+// 而不是每次都被推去系统文件夹选择器、重走一遍路径。所以历史列表在前，
+// 系统选择器退到末位。
+//
+// 高度是这块的主要约束。面板从窗口最顶端往下展开，而最近项目最多记 10 条：
+// 窗口一矮，长历史就会把末尾的「打开本地文件夹…」顶到可视区外面 —— 它偏偏
+// 是唯一没法靠滚动找到的项（它在滚动列表之外）。所以列表高度按当前窗口高度
+// 现算，并给标题、分隔线、末项预留固定空间；行高也比工具栏那份压一档，
+// 因为这里只需要认出项目名。
+func (a *app) newProjectMenuPanel(c *ui.Context, panel ui.Element, pal palette) {
+	panel.Radius(radiusLG).Background(pal.surface3).Border(1, pal.hairline).
+		Shadow(0, 6, 16, 0, ui.RGBA(0, 0, 0, 0.18)).
+		Margin(6, 0, 0, 0).Padding(6).MinWidth(300).MaxWidth(420).Gap(2)
+
+	recent := make([]string, 0, len(a.store.State().RecentRepos))
+	for _, p := range a.store.State().RecentRepos {
+		if p != "" {
+			recent = append(recent, p)
+		}
+	}
+
+	// 标题
+	ui.Row(c).Padding(6, 8, 4, 8).Gap(6).AlignItems(ui.Center).Children(func() {
+		drawIcon(c, iconClock, 12, pal.inkSubtle)
+		ui.Text(c, T("最近打开的项目", "Recent Projects")).FontSize(textCaption).
+			FontWeight(weightSemibold).TextColor(pal.inkSubtle)
+	})
+
+	if len(recent) == 0 {
+		ui.Box(c).Padding(4, 8, 8, 8).Children(func() {
+			ui.Text(c, T("还没有打开过项目", "No projects opened yet")).
+				FontSize(textBodySM).TextColor(pal.inkSubtle)
+		})
+	} else {
+		_, winH := c.Size()
+		// 先跟工具栏那份下拉一样封在 320（10 条历史在这个高度里放得下，
+		// 不用滚），窗口不够高时再往下压：顶栏 + 面板留白 + 标题 + 分隔线
+		// + 末项合计约 132。
+		listMax := float32(320)
+		if avail := winH - a.tabBarHeight(c) - 132; avail < listMax {
+			listMax = avail
+		}
+		if listMax < 104 { // 至少露出三行
+			listMax = 104
+		}
+		ui.Scroll(c).MaxHeight(listMax).FillWidth().Children(func() {
+			for _, p := range recent {
+				a.newProjectRecentRow(c, p, pal)
+			}
+		})
+	}
+
+	ui.Box(c).Height(1).FillWidth().Margin(4, 2).Background(pal.hairline)
+
+	// 末位：打开本地文件夹
+	addBtn := ui.ButtonBase(c).Radius(radiusSM).Padding(6, 8).
+		Cursor(ui.CursorPointer).FillWidth().Label(T("打开本地文件夹…", "Open Local Folder…"))
+	if addBtn.Hovered() {
+		addBtn.Background(pal.surface4)
+	}
+	fadeColors(addBtn)
+	addBtn.Children(func() {
+		ui.Row(c).AlignItems(ui.Center).Gap(8).FillWidth().Children(func() {
+			drawIcon(c, iconFolderPlus, 13, pal.inkMuted)
+			ui.Text(c, T("打开本地文件夹…", "Open Local Folder…")).
+				FontSize(textButton).TextColor(pal.ink).Grow(1).SingleLine()
+			specChip(c, pal, K("⌘O"), ui.Transparent, rowChipH, rowChipText)
+		})
+	})
+	if addBtn.Clicked() {
+		a.newTabMenuOpen = false
+		a.chooseFolder()
+	}
+}
+
+// newProjectRecentRow 画 [+] 下拉里的一行最近项目：选中即在新标签页打开
+// （已经在标签页里的会切过去，而不是开出第二份）。
+func (a *app) newProjectRecentRow(c *ui.Context, path string, pal palette) {
+	base := filepath.Base(path)
+	if base == "" || base == "." || base == string(filepath.Separator) {
+		base = path
+	}
+	opened := false
+	for _, t := range a.tabs {
+		if sameRepo(t.path, path) {
+			opened = true
+			break
+		}
+	}
+
+	row := ui.ButtonBase(c).Radius(radiusSM).Padding(6, 8).
+		Cursor(ui.CursorPointer).FillWidth().Label(path)
+	if row.Hovered() {
+		row.Background(pal.surface4)
+	}
+	fadeColors(row)
+	row.Children(func() {
+		ui.Row(c).AlignItems(ui.Center).Gap(8).FillWidth().Children(func() {
+			drawIcon(c, iconFolder, 13, pal.inkMuted)
+			ui.Text(c, base).FontSize(textBodySM).TextColor(pal.ink).
+				Grow(1).SingleLine()
+			if opened {
+				specChip(c, pal, T("已打开", "Open"), ui.Transparent, rowChipH, rowChipText)
+			} else {
+				ui.Text(c, filepath.Dir(path)).FontSize(textCaption).
+					TextColor(pal.inkSubtle).MaxWidth(150).SingleLine()
+			}
+		})
+	})
+	if row.Clicked() {
+		a.newTabMenuOpen = false
+		a.openInNewTab(path)
+	}
 }
 
 // renderProjectTab 呈现单个项目标签页。

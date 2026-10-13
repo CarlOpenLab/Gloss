@@ -280,6 +280,10 @@ type app struct {
 	// —— 顶部弹窗（HeroUI 下拉）——
 	repoDropdownOpen   bool
 	branchDropdownOpen bool
+	// newTabMenuOpen 是顶栏 [+] 那个「新建项目」下拉：列已经打开过的项目，
+	// 末位才是「打开本地文件夹…」。以前 [+] 会直接弹系统文件夹选择器，
+	// 想回到刚关掉的项目得重走一遍路径。参照 Zed 的做法改成先给一份历史。
+	newTabMenuOpen bool
 
 	// —— 命令栏（⌘K）——
 	palette paletteState
@@ -895,6 +899,7 @@ func (a *app) repoHeader(c *ui.Context, t *ui.Theme, pal palette) {
 		})
 		if repoBtn.Clicked() {
 			a.branchDropdownOpen = false
+			a.newTabMenuOpen = false
 			a.repoDropdownOpen = !a.repoDropdownOpen
 		}
 		if a.repoDropdownOpen {
@@ -1094,6 +1099,7 @@ func (a *app) branchChip(c *ui.Context, t *ui.Theme, pal palette) {
 	})
 	if chip.Clicked() {
 		a.repoDropdownOpen = false
+		a.newTabMenuOpen = false
 		a.branchDropdownOpen = !a.branchDropdownOpen
 	}
 	if a.branchDropdownOpen {
