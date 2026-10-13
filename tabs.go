@@ -181,6 +181,7 @@ func (a *app) restoreActiveTab() {
 	// 查找索引整个作废：它的 key 里有 a.files 的下标，而下面几行就把
 	// a.files 换成另一个仓库的了。这里不走 applyFilter，所以得自己说一声。
 	a.invalidate()
+	a.closeEmbeddedEditors()
 	tab := a.tabs[a.activeTab]
 	a.repoPath = tab.path
 	a.repoName = tab.name
