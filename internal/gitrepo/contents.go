@@ -21,6 +21,37 @@ func (r *Repo) ContentsAt(ctx context.Context, rev, path string) ([]byte, error)
 	return run(ctx, r.Root, "show", rev+":"+path)
 }
 
+// ConflictContents returns the three useful texts for a conflicted path:
+// the common ancestor (stage 1), our side (stage 2), and their side (stage 3).
+// A missing stage means that side deleted the file. The worktree is returned as
+// the editable result, including conflict markers when Git wrote them.
+func (r *Repo) ConflictContents(ctx context.Context, path string) (base, ours, theirs, worktree []byte, err error) {
+	for _, item := range []struct {
+		rev string
+		out *[]byte
+	}{
+		{":1", &base},
+		{":2", &ours},
+		{":3", &theirs},
+	} {
+		data, e := r.ContentsAt(ctx, item.rev, path)
+		if e != nil {
+			// A missing stage is the normal representation of a delete/modify
+			// conflict, not a failed load.
+			continue
+		}
+		*item.out = data
+	}
+	worktree, err = r.Contents(path)
+	return
+}
+
+// WriteContents replaces a worktree file without touching the index. The
+// embedded resolver stages it separately after the write has succeeded.
+func (r *Repo) WriteContents(path string, data []byte) error {
+	return os.WriteFile(filepath.Join(r.Root, path), data, 0o644)
+}
+
 // NewLines 返回文件在「新的一侧」的内容按行切开的结果。
 //
 // 已删除的文件没有新内容，返回 nil。返回的切片不含末尾换行造成的空串，

@@ -540,7 +540,7 @@ const findFieldW = 240
 // 不用 ui.FindBar：它的文案（"Find"、"No matches"、"N of M"）在框架里写死
 // 成英文，从外面盖不掉 —— 和 searchField 不用 ui.SearchField 是同一条理由。
 func (a *app) findBar(c *ui.Context, pal palette) {
-	var in *ui.Element
+	var in ui.Element
 	bar := ui.Row(c).Key("find-bar").Shrink(0).FillWidth().Height(findBarH).
 		Padding(0, 12).Gap(6).AlignItems(ui.Center).
 		Background(pal.surface1).

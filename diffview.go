@@ -247,8 +247,8 @@ func (a *app) fileHeaderRow(c *ui.Context, pal palette, r row) {
 		// Checkbox 要的是 *bool，而 viewed 是按指纹存在 map 里的。
 		// 传一份副本进去，变了再回写 —— 中间不碰真实状态。
 		v := viewed
-		ui.Checkbox(c, &v, T("已 review", "Reviewed"))
-		if v != viewed {
+		reviewBox := ui.Checkbox(c, &v, T("已 review", "Reviewed"))
+		if reviewBox.Changed() {
 			a.toggleViewed(*f)
 		}
 	})

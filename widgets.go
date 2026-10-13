@@ -16,7 +16,7 @@ const hoverMotion = 120 * time.Millisecond
 //
 // 只开 Colors：这些元素的尺寸和位置跟着布局走，不该有动画 —— 列表滚动时
 // 每一行都在动，再给位置加过渡就成了一片黏糊糊的挪动。
-func fadeColors(e *ui.Element) *ui.Element {
+func fadeColors(e ui.Element) ui.Element {
 	return e.Transition(ui.ElementTransition{Colors: true, Duration: hoverMotion})
 }
 
@@ -143,7 +143,7 @@ const hunkBtnH = 20
 // 圆角取 sm(6) 而不是通用按钮的 md(8)：§4.1 把幽灵键单列一档，它比按钮轻，
 // 圆角也跟着收一点。字号 11 同样比通用按钮小 —— 这几个字夹在代码行之间，
 // 和行号一个量级，不该比代码还抢眼。
-func hunkButton(c *ui.Context, pal palette, label, tip string, content func(fg ui.Color)) *ui.Element {
+func hunkButton(c *ui.Context, pal palette, label, tip string, content func(fg ui.Color)) ui.Element {
 	btn := ui.ButtonBase(c).Height(hunkBtnH).Shrink(0).Radius(radiusSM).
 		Padding(0, 7).Gap(5).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).Label(label).Tooltip(tip)
@@ -164,7 +164,7 @@ func hunkButton(c *ui.Context, pal palette, label, tip string, content func(fg u
 // 按下的方向和文件行那颗勾选框一致：填色 = 已经在暂存区里，点它拿出来。
 // 可见的字只有「暂存」两个字，而 Label 写成「暂存这一段」—— 无障碍名字和
 // 测试找它的凭据都得说清「这一段的」，屏幕上的字则要短。
-func stageHunkButton(c *ui.Context, pal palette, staged, lock bool) *ui.Element {
+func stageHunkButton(c *ui.Context, pal palette, staged, lock bool) ui.Element {
 	label, text, tip := T("暂存这一段", "Stage hunk"), T("暂存", "Stage"), T("把这一段改动放进暂存区", "Stage this hunk in index")
 	if staged {
 		label, text, tip = T("取消暂存这一段", "Unstage hunk"), T("取消暂存", "Unstage"), T("把这一段改动移出暂存区", "Unstage this hunk from index")
@@ -206,9 +206,9 @@ const searchH = 28
 // 名字同时挂在框和输入框上：框是给测试和无障碍工具找的（返回的是整块
 // 的位置，和上面那行文字左对齐），输入框是给读屏软件的（它才是可输入的
 // 那个控件）。Find 取先遍历到的，也就是外面这块。
-func searchField(c *ui.Context, pal palette, value *string, placeholder string) *ui.Element {
+func searchField(c *ui.Context, pal palette, value *string, placeholder string) ui.Element {
 	t := c.Theme()
-	var in *ui.Element
+	var in ui.Element
 
 	// 搜索栏在 §3 里明确归到 md(8)，和文本输入框同一档 —— 它就是个输入框。
 	box := ui.Row(c).Height(searchH).Shrink(0).AlignItems(ui.Center).
@@ -242,7 +242,7 @@ func searchField(c *ui.Context, pal palette, value *string, placeholder string) 
 	// 聚焦换成强调色。
 	border := pal.hairlineStrong
 	switch {
-	case in != nil && in.Focused():
+	case in.Valid() && in.Focused():
 		border = t.Accent
 	case box.Hovered():
 		border = pal.hairlineTertiary
@@ -276,7 +276,7 @@ func toolbarDivider(c *ui.Context, pal palette) {
 //
 // 轨道给 md(8)、单元给 sm(6)：单元嵌在轨道里，四周各留着 2px 内边距，
 // 8 - 2 = 6 正好同心 —— 两个圆角各自独立取值的话，内圆会顶到外圆的弧上。
-func toolbarSegmentedText(c *ui.Context, pal palette, selected *int, off bool, labels ...string) *ui.Element {
+func toolbarSegmentedText(c *ui.Context, pal palette, selected *int, off bool, labels ...string) ui.Element {
 	parts := ui.SegmentedBase(c, selected, len(labels))
 	g := parts.Track
 	g.Height(28).AlignItems(ui.Center).Padding(2).Gap(2).Radius(radiusMD).
@@ -319,7 +319,7 @@ type segmentedIconItem struct {
 
 // toolbarSegmentedIcons 是工具栏上的图标分段控件（如「Unified / Split」切换）。
 // 与文字版同一套取值：轨道 md(8)、单元 sm(6)、图标用 Lucide 标准矢量。
-func toolbarSegmentedIcons(c *ui.Context, pal palette, selected *int, off bool, items ...segmentedIconItem) *ui.Element {
+func toolbarSegmentedIcons(c *ui.Context, pal palette, selected *int, off bool, items ...segmentedIconItem) ui.Element {
 	parts := ui.SegmentedBase(c, selected, len(items))
 	g := parts.Track
 	g.Height(28).AlignItems(ui.Center).Padding(2).Gap(2).Radius(radiusMD).
@@ -352,6 +352,9 @@ func toolbarSegmentedIcons(c *ui.Context, pal palette, selected *int, off bool, 
 			})
 		}
 	})
+	// MyGo 0.4 controls apply pending input through Changed; without this call
+	// the local mode value is still the previous frame when the caller reads it.
+	g.Changed()
 	return g
 }
 
@@ -366,7 +369,12 @@ func toolButton(c *ui.Context, pal palette, label, tip string, off, loading bool
 	disabled := off || loading
 	btn := ui.ButtonBase(c).Height(28).Shrink(0).Radius(radiusSM).
 		Padding(0, 9).Gap(6).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).Label(label).Tooltip(tip).Disabled(disabled)
+		Cursor(ui.CursorPointer).Label(label).Disabled(disabled)
+	if disabled && tip != "" {
+		btn.Tooltip(tip)
+	} else {
+		btn.Tooltip(tip)
+	}
 
 	bg := ui.Transparent
 	fg := pal.inkSubtle
@@ -535,7 +543,7 @@ const actionBtnHeight = 28.0
 // Hovered()，而禁用元素不报 hover —— 调用方一旦把 Disabled 写在 Tooltip 前面，
 // 那句「为什么点不了」就永远不会浮出来（resolve.go / pendingbar.go 都踩过）。
 // 摆在这里，顺序只对一次。
-func primaryAction(c *ui.Context, pal palette, label, tip string, disabled bool) *ui.Element {
+func primaryAction(c *ui.Context, pal palette, label, tip string, disabled bool) ui.Element {
 	t := c.Theme()
 	btn := ui.ButtonBase(c).Shrink(0).Height(actionBtnHeight).Radius(radiusMD).
 		Padding(0, 12).Gap(5).AlignItems(ui.Center).
@@ -566,7 +574,7 @@ func primaryAction(c *ui.Context, pal palette, label, tip string, disabled bool)
 //
 // 它和 primaryAction 的差别不只在颜色：两者同高同宽，谁主谁次由**有没有实心底**
 // 说清楚 —— 只靠色相区分的话，红绿色盲的用户看不出哪颗是「就这么办」。
-func secondaryAction(c *ui.Context, pal palette, label, tip string, disabled bool) *ui.Element {
+func secondaryAction(c *ui.Context, pal palette, label, tip string, disabled bool) ui.Element {
 	btn := ui.ButtonBase(c).Shrink(0).Height(actionBtnHeight).Radius(radiusMD).
 		Padding(0, 12).Gap(5).AlignItems(ui.Center).
 		Label(label).Tooltip(tip).Disabled(disabled).Cursor(ui.CursorPointer)
@@ -602,7 +610,7 @@ func secondaryAction(c *ui.Context, pal palette, label, tip string, disabled boo
 func specModal(c *ui.Context, pal palette, open *bool, fn func()) {
 	t := c.Theme()
 	w, h := c.Size()
-	ui.DialogBase(c, open, func(back, panel *ui.Element) {
+	ui.DialogBase(c, open, func(back, panel ui.Element) {
 		back.Background(ui.RGBA(0, 0, 0, 0.25))
 		panel.Padding(t.Space(5)).Gap(t.Space(3)).Radius(radiusXL).
 			Background(pal.surface4).Border(1, pal.hairline).

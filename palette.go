@@ -169,7 +169,7 @@ func (a *app) paletteDialog(c *ui.Context, pal palette) {
 	a.palette.sel = clampSel(a.palette.sel, len(cmds))
 
 	open := true
-	ui.DialogBase(c, &open, func(back, panel *ui.Element) {
+	ui.DialogBase(c, &open, func(back, panel ui.Element) {
 		back.Background(ui.RGBA(0, 0, 0, 0.25))
 		// 模态落 Surface 4（§2.1），圆角 xl(16)（§3）；投影收到贴着边的一圈 ——
 		// 阶梯已经把「它浮在最上面」说清楚了，大模糊只会糊出一圈灰边。
@@ -177,7 +177,7 @@ func (a *app) paletteDialog(c *ui.Context, pal palette) {
 			Background(pal.surface4).Border(1, pal.hairline).
 			Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.24))
 		panel.Children(func() {
-			var in *ui.Element
+			var in ui.Element
 			ui.Box(c).Padding(10, 12).Shrink(0).
 				BorderWidth(0, 0, 1, 0).BorderColor(pal.hairline).Children(func() {
 				in = ui.TextInput(c, &a.palette.query).Placeholder(T("输入命令…", "Type a command…")).Focus()

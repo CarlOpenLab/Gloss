@@ -653,6 +653,8 @@ func (a *app) view(c *ui.Context) {
 	a.prReviewModal(c, pal)
 	a.riskScanDialog(c, pal)
 	a.fileHistDialog(c, pal)
+	a.conflictEditor(c, pal)
+	a.nativeDiffDialog(c, pal)
 
 	// Esc 退出分支对比/PR 检视。放在最后，让对话框里正在编辑的输入框先有机会处理它。
 	if a.compare.on && !a.modalOn() && c.Shortcut(0, ui.KeyEscape) {
@@ -1638,7 +1640,7 @@ func (a *app) workBranch() string {
 // 菜单在系统层拦键、视图在自己那一帧拦，各写各的判断迟早漏掉一处
 // （新加一个对话框，忘了改其中一个，⌘R 就会在对话框背后偷偷刷新）。
 func (a *app) modalOn() bool {
-	return a.palette.on || a.settingsOn || a.tag.on || a.reset.on || a.newBranch.on || a.rename.on || a.confirm.on || a.stashDlg.on || a.compare.dialog || a.prDlg.on || a.prReview.reviewModal || a.riskScan.dialog || a.fileHist.on
+	return a.conflictEdit.on || a.nativeDiff.on || a.palette.on || a.settingsOn || a.tag.on || a.reset.on || a.newBranch.on || a.rename.on || a.confirm.on || a.stashDlg.on || a.compare.dialog || a.prDlg.on || a.prReview.reviewModal || a.riskScan.dialog || a.fileHist.on
 }
 
 // toggleAmend 切换修改上次提交状态。勾选时预填最近一次提交的说明。

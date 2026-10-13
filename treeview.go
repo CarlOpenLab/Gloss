@@ -60,7 +60,7 @@ type treeRowOpts struct {
 // 里面那个往里缩 8px 的圆角块负责好看 —— 底色直接铺到窗口边上会显得很生硬。
 //
 // 箭头画在行里面，点它会同时命中整行，所以调用方要先问 Arrow 再问 Row。
-func treeRow(c *ui.Context, t *ui.Theme, pal palette, o treeRowOpts, content func()) (row, arrow *ui.Element) {
+func treeRow(c *ui.Context, t *ui.Theme, pal palette, o treeRowOpts, content func()) (row, arrow ui.Element) {
 	row = ui.Row(c).Height(treeRowH).Shrink(0).FillWidth().Cursor(ui.CursorPointer)
 	// 悬停要在建行的当口就问：这时读的是上一帧的命中结果，等子元素都建完
 	// 再问也行，但那时已经过了画底色的地方。

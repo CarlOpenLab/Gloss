@@ -60,6 +60,23 @@ func (r *Repo) ResolveTheirs(ctx context.Context, path string) error {
 	return r.resolveConflict(ctx, path, SideTheirs)
 }
 
+// ResolveManual writes an edited worktree result and stages it as the final
+// resolution. It rechecks the unmerged index first so a stale editor cannot
+// overwrite a conflict that another actor already resolved.
+func (r *Repo) ResolveManual(ctx context.Context, path string, data []byte) error {
+	sides, err := r.pathSides(ctx, path)
+	if err != nil {
+		return err
+	}
+	if sides == 0 {
+		return ErrNotConflicted
+	}
+	if err := r.WriteContents(path, data); err != nil {
+		return err
+	}
+	return r.StageFile(ctx, path)
+}
+
 func (r *Repo) resolveConflict(ctx context.Context, path string, side ConflictSides) error {
 	sides, err := r.pathSides(ctx, path)
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -59,9 +60,6 @@ func deleteModifyRepo(t *testing.T, oursDeleted bool) *Repo {
 	return r
 }
 
-// 变基里「用重放中的」拿到的必须是**正在重放那条提交**的内容 —— 全篇
-// 最关键的一格。照合并的习惯理解（ours = 自己），这里会拿到变基目标的
-// 代码，而且毫无提示。
 func TestResolveTheirsInRebaseTakesReplayedCommit(t *testing.T) {
 	r := conflictRepo(t)
 	ctx := context.Background()
@@ -79,7 +77,6 @@ func TestResolveTheirsInRebaseTakesReplayedCommit(t *testing.T) {
 	}
 }
 
-// 变基里的「用变基目标的」= git 的 --ours（和合并相反的那一边）。
 func TestResolveOursInRebaseTakesOntoTarget(t *testing.T) {
 	r := conflictRepo(t)
 	ctx := context.Background()
@@ -97,7 +94,6 @@ func TestResolveOursInRebaseTakesOntoTarget(t *testing.T) {
 	}
 }
 
-// 合并里两边各拿各的：ours = 当前分支，theirs = 被并入的。
 func TestResolveInMergeTakesBothSides(t *testing.T) {
 	ctx := context.Background()
 
@@ -120,12 +116,10 @@ func TestResolveInMergeTakesBothSides(t *testing.T) {
 	}
 }
 
-// Load 把「哪边删了文件」读出来：对方删了 → 我们这边有 stage、对方没有；
-// 我们删了 → 反过来。界面靠它提前说清「按下去是删除」。
 func TestLoadConflictStages(t *testing.T) {
 	ctx := context.Background()
 
-	r := deleteModifyRepo(t, false) // 对方删了 a.txt
+	r := deleteModifyRepo(t, false)
 	m, err := r.Load(ctx)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -138,7 +132,7 @@ func TestLoadConflictStages(t *testing.T) {
 		t.Errorf("对方删了它：Stages = %+v，want 只有我们这边", f.Stages)
 	}
 
-	r2 := deleteModifyRepo(t, true) // 我们删了 a.txt
+	r2 := deleteModifyRepo(t, true)
 	m2, err := r2.Load(ctx)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -148,7 +142,6 @@ func TestLoadConflictStages(t *testing.T) {
 		t.Errorf("我们删了它：Stages = %+v，want 只有对方那边", f2.Stages)
 	}
 
-	// 普通两边都改的冲突：两边都在。
 	r3 := conflictRepo(t)
 	gitExpectFail(t, r3.Root, "merge", "topic")
 	m3, err := r3.Load(ctx)
@@ -159,7 +152,6 @@ func TestLoadConflictStages(t *testing.T) {
 		t.Errorf("两边都改了：Stages = %+v，want 两边都在", f3.Stages)
 	}
 
-	// 干净仓库：没有冲突，Stages 全是零值。
 	r4 := tempRepo(t)
 	m4, err := r4.Load(ctx)
 	if err != nil {
@@ -172,8 +164,6 @@ func TestLoadConflictStages(t *testing.T) {
 	}
 }
 
-// 对方删了文件：「用对方那边的」就是接受删除 —— 文件从工作区消失，
-// 未合并条目清零。
 func TestResolveTheirsOnModifyDeleteAcceptsDeletion(t *testing.T) {
 	r := deleteModifyRepo(t, false)
 	ctx := context.Background()
@@ -188,7 +178,6 @@ func TestResolveTheirsOnModifyDeleteAcceptsDeletion(t *testing.T) {
 	}
 }
 
-// 对方删了文件：「用当前分支的」= 留下我们改的那份。
 func TestResolveOursOnModifyDeleteKeepsOurVersion(t *testing.T) {
 	r := deleteModifyRepo(t, false)
 	ctx := context.Background()
@@ -203,13 +192,10 @@ func TestResolveOursOnModifyDeleteKeepsOurVersion(t *testing.T) {
 	}
 }
 
-// 我们删了文件：两个方向各自成立 —— 「用对方的」把文件拿回来，
-// 「用当前分支的」保持删除。删除-修改的两个方向都落成 git rm 或 add，
-// 不是想当然的 checkout。
 func TestResolveOnDeleteModifyBothDirections(t *testing.T) {
 	ctx := context.Background()
 
-	take := deleteModifyRepo(t, true) // 我们删了、对方改了
+	take := deleteModifyRepo(t, true)
 	if err := take.ResolveTheirs(ctx, "a.txt"); err != nil {
 		t.Fatalf("ResolveTheirs: %v", err)
 	}
@@ -232,9 +218,6 @@ func TestResolveOnDeleteModifyBothDirections(t *testing.T) {
 	}
 }
 
-// 已经解决过的文件再点一次：拒绝。对没有冲突条目的路径，`checkout
-// --ours` 会静默退化成普通 checkout（把 index 里的版本盖回工作区）、
-// `rm -f` 会真的把文件删掉 —— 一个按旧状态点下来的按钮不该有这种后果。
 func TestResolveRefusesWhenNotConflicted(t *testing.T) {
 	r := conflictRepo(t)
 	ctx := context.Background()
@@ -253,8 +236,54 @@ func TestResolveRefusesWhenNotConflicted(t *testing.T) {
 	}
 }
 
-// 储藏 apply 撞出来的冲突没有 MERGE_HEAD（Pending 是零值），但 stage
-// 信息照读、两边照能挑 —— ours 是当前分支，theirs 是储藏里的那份。
+func TestResolveManualWritesAndStagesEditedResult(t *testing.T) {
+	r := conflictRepo(t)
+	ctx := context.Background()
+	gitExpectFail(t, r.Root, "merge", "topic")
+	if err := r.ResolveManual(ctx, "a.txt", []byte("main + topic\n")); err != nil {
+		t.Fatalf("ResolveManual: %v", err)
+	}
+	if got := readText(t, filepath.Join(r.Root, "a.txt")); got != "main + topic\n" {
+		t.Errorf("a.txt = %q，want 手工合并结果", got)
+	}
+	if got := gitOut(t, r.Root, "ls-files", "-u"); got != "" {
+		t.Errorf("手工解决后不该还有未合并条目：%q", got)
+	}
+	if got := gitOut(t, r.Root, "show", ":a.txt"); got != "main + topic\n" {
+		t.Errorf("index 中的解决结果 = %q", got)
+	}
+}
+
+func TestConflictContentsReturnsStagesAndMarkers(t *testing.T) {
+	r := conflictRepo(t)
+	ctx := context.Background()
+	gitExpectFail(t, r.Root, "merge", "topic")
+	base, ours, theirs, worktree, err := r.ConflictContents(ctx, "a.txt")
+	if err != nil {
+		t.Fatalf("ConflictContents: %v", err)
+	}
+	if string(base) != "one\ntwo\nthree\n" || string(ours) != "main\n" || string(theirs) != "topic\n" {
+		t.Fatalf("stages = base %q, ours %q, theirs %q", base, ours, theirs)
+	}
+	if !strings.Contains(string(worktree), "<<<<<<<") || !strings.Contains(string(worktree), ">>>>>>>") {
+		t.Fatalf("工作区应该保留冲突标记：%q", worktree)
+	}
+}
+
+func TestResolveManualRefusesWhenAlreadyResolved(t *testing.T) {
+	r := conflictRepo(t)
+	ctx := context.Background()
+	gitExpectFail(t, r.Root, "merge", "topic")
+	write(t, filepath.Join(r.Root, "a.txt"), "外面解好的\n")
+	git(t, r.Root, "add", "a.txt")
+	if err := r.ResolveManual(ctx, "a.txt", []byte("不该覆盖\n")); !errors.Is(err, ErrNotConflicted) {
+		t.Fatalf("手工编辑器在竞态下该拒绝：%v", err)
+	}
+	if got := readText(t, filepath.Join(r.Root, "a.txt")); got != "外面解好的\n" {
+		t.Errorf("拒绝后不该覆盖外部结果：%q", got)
+	}
+}
+
 func TestResolveTheirsInStashConflict(t *testing.T) {
 	r := tempRepo(t)
 	ctx := context.Background()
@@ -284,9 +313,6 @@ func TestResolveTheirsInStashConflict(t *testing.T) {
 	}
 }
 
-// ls-files -u -z 的解析：路径里的空格和中文按原字节来（-z 不做转义），
-// 记录之间以 NUL 分隔、头和路径之间以第一个 TAB 分 —— 这是量出来的格式，
-// 钉在这里免得哪天「顺手」改回按空格切。
 func TestParseSides(t *testing.T) {
 	out := "100644 df967b96 1\tdir 空/b c.txt\x00" +
 		"100644 e5cdc043 2\tdir 空/b c.txt\x00" +

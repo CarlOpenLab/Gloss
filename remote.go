@@ -188,81 +188,85 @@ func drawPushIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
 //
 // 悬停与按下照工具按钮的规矩升 Surface 阶梯，不再叠外发光（§5 禁止）。
 func iconToolButton(c *ui.Context, pal palette, label, tip string, off bool, icon iconDraw, badge int, inFlight bool) bool {
-	btn := ui.ButtonBase(c).Height(28).Shrink(0).Radius(radiusSM).
-		Cursor(ui.CursorPointer).Label(label).Tooltip(tip).Disabled(off)
+	var clicked bool
+	outer := ui.Box(c).Shrink(0).Tooltip(tip)
+	outer.Children(func() {
+		btn := ui.ButtonBase(c).Height(28).Shrink(0).Radius(radiusSM).
+			Cursor(ui.CursorPointer).Label(label).Disabled(off)
 
-	if badge > 0 {
-		btn.Padding(0, 7).Gap(5).AlignItems(ui.Center)
-	} else {
-		btn.Width(28).Center()
-	}
-
-	bg := ui.Transparent
-	border := ui.Transparent
-	borderW := float32(0)
-	fg := pal.inkSubtle
-
-	if badge > 0 {
-		borderW = 1
-		switch {
-		case off:
-			// 禁用时连边框都不给：一枚灰按钮还描着边，看着仍像能点的。
-			bg, border, fg = ui.Transparent, ui.Transparent, pal.inkTertiary
-			btn.Cursor(ui.CursorDefault)
-		case btn.Pressed():
-			bg, border, fg = pal.surface3, pal.hairlineStrong, pal.ink
-		case btn.Hovered():
-			bg, border, fg = pal.surface2, pal.hairlineStrong, pal.ink
-		default:
-			bg, border, fg = pal.surface1, pal.hairline, pal.inkMuted
-		}
-	} else {
-		switch {
-		case off:
-			fg = pal.inkTertiary
-			btn.Cursor(ui.CursorDefault)
-		case btn.Pressed():
-			bg = pal.surface3
-			fg = pal.ink
-		case btn.Hovered():
-			bg = pal.surface2
-			fg = pal.ink
-		}
-	}
-
-	btn.Background(bg)
-	if borderW > 0 {
-		btn.Border(borderW, border)
-	}
-	fadeColors(btn)
-
-	btn.Children(func() {
 		if badge > 0 {
-			// 图标和数字排在一条中线上：数字用等宽 + tnum，一列扫下来位数不同
-			// 也不会把图标推来推去。
-			ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
-				if inFlight {
-					ui.Spinner(c).Size(14, 14)
-				} else {
-					ui.Box(c).Size(14, 14).Shrink(0).
-						Draw(func(p *ui.Painter, r ui.Rect) { icon(p, r, fg) })
-				}
-				countStr := strconv.Itoa(badge)
-				if badge > 99 {
-					countStr = "99+"
-				}
-				ui.Text(c, countStr).FontSize(textCaption).FontWeight(weightMedium).
-					FontFeatures("tnum").TextColor(fg)
-			})
+			btn.Padding(0, 7).Gap(5).AlignItems(ui.Center)
 		} else {
-			if inFlight {
-				ui.Spinner(c).Size(16, 16)
-			} else {
-				ui.Box(c).Size(16, 16).Shrink(0).
-					Draw(func(p *ui.Painter, r ui.Rect) { icon(p, r, fg) })
+			btn.Width(28).Center()
+		}
+
+		bg := ui.Transparent
+		border := ui.Transparent
+		borderW := float32(0)
+		fg := pal.inkSubtle
+
+		if badge > 0 {
+			borderW = 1
+			switch {
+			case off:
+				// 禁用时连边框都不给：一枚灰按钮还描着边，看着仍像能点的。
+				bg, border, fg = ui.Transparent, ui.Transparent, pal.inkTertiary
+				btn.Cursor(ui.CursorDefault)
+			case btn.Pressed():
+				bg, border, fg = pal.surface3, pal.hairlineStrong, pal.ink
+			case btn.Hovered():
+				bg, border, fg = pal.surface2, pal.hairlineStrong, pal.ink
+			default:
+				bg, border, fg = pal.surface1, pal.hairline, pal.inkMuted
+			}
+		} else {
+			switch {
+			case off:
+				fg = pal.inkTertiary
+				btn.Cursor(ui.CursorDefault)
+			case btn.Pressed():
+				bg = pal.surface3
+				fg = pal.ink
+			case btn.Hovered():
+				bg = pal.surface2
+				fg = pal.ink
 			}
 		}
-	})
 
-	return btn.Clicked()
+		btn.Background(bg)
+		if borderW > 0 {
+			btn.Border(borderW, border)
+		}
+		fadeColors(btn)
+
+		btn.Children(func() {
+			if badge > 0 {
+				// 图标和数字排在一条中线上：数字用等宽 + tnum，一列扫下来位数不同
+				// 也不会把图标推来推去。
+				ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
+					if inFlight {
+						ui.Spinner(c).Size(14, 14)
+					} else {
+						ui.Box(c).Size(14, 14).Shrink(0).
+							Draw(func(p *ui.Painter, r ui.Rect) { icon(p, r, fg) })
+					}
+					countStr := strconv.Itoa(badge)
+					if badge > 99 {
+						countStr = "99+"
+					}
+					ui.Text(c, countStr).FontSize(textCaption).FontWeight(weightMedium).
+						FontFeatures("tnum").TextColor(fg)
+				})
+			} else {
+				if inFlight {
+					ui.Spinner(c).Size(16, 16)
+				} else {
+					ui.Box(c).Size(16, 16).Shrink(0).
+						Draw(func(p *ui.Painter, r ui.Rect) { icon(p, r, fg) })
+				}
+			}
+		})
+		clicked = btn.Clicked()
+	})
+	return clicked
 }

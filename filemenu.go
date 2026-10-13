@@ -25,8 +25,8 @@ func (a *app) fileMenu(m *ui.Menu, f gitrepo.File) {
 	unstaged := f.Section == gitrepo.SectionUnstaged
 
 	if live && conflict {
-		// 冲突文件那三项（用我们的 / 用他们的 / 标记为已解决）摆最前面：
-		// 冲突是眼下唯一该做的事，别的都排后面。
+		// 冲突文件的解决动作摆最前面：保留远端统一 fileMenu，同时提供
+		// 内置 Diff 编辑器和外部编辑器两条手工解决路径。
 		act := a.conflictActionsFor(f)
 		if m.Item(act.ours).Disabled(busy).Chosen() {
 			a.resolveFile(f, gitrepo.SideOurs, act.ours)
@@ -34,7 +34,17 @@ func (a *app) fileMenu(m *ui.Menu, f gitrepo.File) {
 		if m.Item(act.theirs).Disabled(busy).Chosen() {
 			a.resolveFile(f, gitrepo.SideTheirs, act.theirs)
 		}
+		if m.Item("内置编辑器").Disabled(busy).Chosen() {
+			a.openConflictEditor(f)
+		}
+		if m.Item("Diff 预览").Disabled(busy).Chosen() {
+			a.openNativeDiff(f)
+		}
 		m.Separator()
+	} else if live && !conflict {
+		if m.Item("Diff 预览").Disabled(busy).Chosen() {
+			a.openNativeDiff(f)
+		}
 	}
 
 	if live {

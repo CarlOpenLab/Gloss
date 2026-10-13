@@ -17,10 +17,10 @@ func TestDiffViewShowsCodeLines(t *testing.T) {
 	tt := ui.NewTester(a.view, 1280, 860)
 
 	for _, want := range []string{
-		"internal/server/handler.go", // 文件头（列表的 header）
-		"line 3: CHANGED",            // 旧侧被删掉的那行
-		"line 3: CHANGED AGAIN",      // 新侧加上的那行
-		"line 52: CHANGED TOO",       // 第二个 hunk，隔着一段未改动区间
+		"internal/server/handler.go",
+		"line 3: CHANGED",
+		"line 3: CHANGED AGAIN",
+		"line 52: CHANGED TOO",
 		"line 52: 也改了",
 		"line 6: 新加的一行 with 中文",
 	} {
@@ -30,8 +30,6 @@ func TestDiffViewShowsCodeLines(t *testing.T) {
 	}
 }
 
-// git 把函数名直接接在 @@ 头后面，我们把它单独画在右边 ——
-// 不切掉的话同一句话会连着出现两遍。
 func TestHunkHeaderSectionNotDuplicated(t *testing.T) {
 	a := richApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
@@ -55,14 +53,12 @@ func TestHunkHeaderText(t *testing.T) {
 		t.Errorf("hunkHeaderText = %q", got)
 	}
 
-	// 没有函数名时原样返回
 	bare := diff.Hunk{Header: "@@ -1,3 +1,4 @@"}
 	if got := hunkHeaderText(bare); got != "@@ -1,3 +1,4 @@" {
 		t.Errorf("无函数名时 = %q", got)
 	}
 }
 
-// 未改动区间默认折成一条；点一下摊开，摊开的行要带上真实行号和内容。
 func TestGapExpandsOnClick(t *testing.T) {
 	a := richApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
@@ -71,7 +67,6 @@ func TestGapExpandsOnClick(t *testing.T) {
 	if !tt.HasText(bar) {
 		t.Fatalf("没有看到折叠条，实际文本：%q", tt.Texts())
 	}
-	// 折叠着的第 20 行不该在界面上
 	if tt.HasText("line 20: some code here") {
 		t.Fatal("还没展开就看到了区间里的行")
 	}
@@ -81,8 +76,6 @@ func TestGapExpandsOnClick(t *testing.T) {
 	}
 	tt.Frame()
 
-	// 区间 key 里带的是 fileKey（含段落前缀），这里照界面自己的口径取那一份 ——
-	// 钉的是「点了一下展开状态确实落到那个区间上」，不是 key 长什么样。
 	key := ""
 	for i := range a.files {
 		if pathOf(a.files[i]) == "internal/server/handler.go" {
@@ -103,7 +96,6 @@ func TestGapExpandsOnClick(t *testing.T) {
 	}
 }
 
-// 内容还没读到时也要能折叠 —— 行号靠 hunk 的位置算得出来，不依赖文件内容。
 func TestGapShowsWithoutContents(t *testing.T) {
 	a := richApp(t)
 	a.contents = nil
@@ -115,16 +107,12 @@ func TestGapShowsWithoutContents(t *testing.T) {
 	}
 }
 
-// 末尾那段未改动区间要靠文件总行数才算得出来，所以内容必须读到。
 func TestTrailingGapAfterContentsLoad(t *testing.T) {
 	a := richApp(t)
 	if a.contents[fileKey(a.files[0])] == nil {
 		t.Fatal("文件内容应该已经读进来了")
 	}
 
-	// handler.go 的最后一个 hunk 结束在第 60 行，正好是文件末尾，没有尾部区间；
-	// README.md 只有 4 行且 hunk 覆盖到第 4 行，也没有。这里只钉住「内容
-	// 到了之后行模型是对的」这个不变量。
 	a.rowsDirty = true
 	a.rebuildRows()
 	for _, r := range a.rows {
@@ -134,7 +122,6 @@ func TestTrailingGapAfterContentsLoad(t *testing.T) {
 	}
 }
 
-// 筛选会同时收窄侧栏和 diff —— 界面上下对不上会让人以为漏看了文件。
 func TestFilterNarrowsDiffView(t *testing.T) {
 	a := richApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
@@ -154,7 +141,6 @@ func TestFilterNarrowsDiffView(t *testing.T) {
 	}
 }
 
-// 勾上「已 review」要写进 viewed，再勾一次取消。
 func TestViewedCheckboxInDiffHeader(t *testing.T) {
 	a := richApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
@@ -189,7 +175,6 @@ func TestExpandTabs(t *testing.T) {
 }
 
 func TestExpandTabsKeepsPlainTextUntouched(t *testing.T) {
-	// 不含 tab 时不该重新拼接字符串（省一次分配，也避免意外改动内容）
 	const s = "line with 中文 and spaces"
 	if got := expandTabs(s); got != s {
 		t.Errorf("expandTabs 改动了不含 tab 的文本：%q", got)
@@ -197,9 +182,7 @@ func TestExpandTabsKeepsPlainTextUntouched(t *testing.T) {
 }
 
 func TestDisplayPath(t *testing.T) {
-	cases := []struct {
-		old, new, want string
-	}{
+	cases := []struct{ old, new, want string }{
 		{new: "a.go", want: "a.go"},
 		{old: "gone.go", want: "gone.go"},
 		{old: "old.go", new: "new.go", want: "old.go → new.go"},
@@ -213,8 +196,6 @@ func TestDisplayPath(t *testing.T) {
 	}
 }
 
-// bigApp 建一个改动量很大的仓库：一个两万行的文件全改了，外加一个
-// 大段未改动区间 —— 用来验证虚拟化真的在起作用。
 func bigApp(t *testing.T) *app {
 	t.Helper()
 	dir := t.TempDir()
@@ -238,8 +219,6 @@ func bigApp(t *testing.T) *app {
 	return loadApp(t, dir)
 }
 
-// 列表必须只构建可见的那些行。几万行的 diff 要是整份建出来，
-// 光是构建元素就会把界面卡死。
 func TestDiffViewOnlyBuildsVisibleRows(t *testing.T) {
 	a := bigApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
@@ -248,7 +227,6 @@ func TestDiffViewOnlyBuildsVisibleRows(t *testing.T) {
 	if len(a.rows) < 20000 {
 		t.Fatalf("行模型的规模不对：%d 行", len(a.rows))
 	}
-	// 860 高的窗口能放下的行数在 50 上下，加上列表的前后预取也就百来行
 	if a.built > 200 {
 		t.Errorf("一帧构建了 %d 行，虚拟化没生效", a.built)
 	}
@@ -260,7 +238,6 @@ func TestDiffViewOnlyBuildsVisibleRows(t *testing.T) {
 	}
 }
 
-// 滚动到别处时构建的行数不应该跟着涨 —— 那是虚拟化最容易退化的方式。
 func TestDiffViewScrollingKeepsRowCountFlat(t *testing.T) {
 	a := bigApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
@@ -274,7 +251,6 @@ func TestDiffViewScrollingKeepsRowCountFlat(t *testing.T) {
 	}
 }
 
-// 代码行带有 Tooltip，悬停可查看完整行内容。
 func TestDiffCodeTooltip(t *testing.T) {
 	a := richApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)

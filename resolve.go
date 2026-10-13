@@ -145,7 +145,10 @@ func (a *app) conflictRow(c *ui.Context, pal palette, r row) {
 			if conflictButton(c, pal, act.theirs, act.theirsTip, busy).Clicked() {
 				a.resolveFile(*f, gitrepo.SideTheirs, act.theirs)
 			}
-			if conflictButton(c, pal, "在编辑器打开", "在这个文件的外部编辑器里打开，手工改冲突", busy).Clicked() {
+			if conflictButton(c, pal, "内置编辑器", "在 Gloss 内置 Diff 编辑器中手工合并并保存", busy).Clicked() {
+				a.openConflictEditor(*f)
+			}
+			if conflictButton(c, pal, "在编辑器打开", "在系统默认编辑器中打开，手工改冲突", busy).Clicked() {
 				a.openInEditor(*f)
 			}
 		})
@@ -157,7 +160,7 @@ func (a *app) conflictRow(c *ui.Context, pal palette, r row) {
 // 只是给 secondaryAction 起个短名字：tip 和 busy 收进实参，那颗按钮自己
 // 保证 Tooltip 记在 Disabled 之前（框架的 Tooltip 构建时问一次 Hovered()，
 // 而禁用元素不报 hover —— 顺序反了那句解释就永远浮不出来）。
-func conflictButton(c *ui.Context, pal palette, label, tip string, busy bool) *ui.Element {
+func conflictButton(c *ui.Context, pal palette, label, tip string, busy bool) ui.Element {
 	return secondaryAction(c, pal, label, tip, busy).Shrink(0)
 }
 
@@ -180,8 +183,34 @@ func (a *app) resolveFile(f gitrepo.File, side gitrepo.ConflictSides, label stri
 	})
 }
 
-// 冲突文件在文件行上的右键菜单在 filemenu.go 里：那几项（挑一边、在编辑器
-// 打开、标记为已解决）和别的文件共用一份菜单，只是对冲突文件多摆最前面。
+// conflictMenu 是冲突文件在文件行上的右键菜单：diff 卡片上那几颗按钮在
+// 这里再摆一份，外加「标记为已解决」。
+//
+// 摆两份不是重复：卡片在 diff 里，用户对着文件列表数还剩几个冲突时，不该
+// 为了每个文件先滚到右边去。
+func (a *app) conflictMenu(m *ui.Menu, f gitrepo.File) {
+	act := a.conflictActionsFor(f)
+	busy := a.op != gitrepo.OpNone
+	if m.Item(act.ours).Disabled(busy).Chosen() {
+		a.resolveFile(f, gitrepo.SideOurs, act.ours)
+	}
+	if m.Item(act.theirs).Disabled(busy).Chosen() {
+		a.resolveFile(f, gitrepo.SideTheirs, act.theirs)
+	}
+	m.Separator()
+	if m.Item("内置编辑器").Disabled(busy).Chosen() {
+		a.openConflictEditor(f)
+	}
+	if m.Item("Diff 预览").Disabled(busy).Chosen() {
+		a.openNativeDiff(f)
+	}
+	if m.Item("在编辑器打开").Disabled(busy).Chosen() {
+		a.openInEditor(f)
+	}
+	if m.Item("标记为已解决").Disabled(busy).Chosen() {
+		a.toggleStageFile(f)
+	}
+}
 
 // openInEditor 让这个文件在外部编辑器里打开（冲突文件要手工改时用）。
 //

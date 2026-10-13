@@ -125,7 +125,7 @@ var (
 )
 
 // drawIcon 是绘制指定尺寸与颜色的矢量图标的通用控件。
-func drawIcon(c *ui.Context, svg *ui.SVG, size float32, color ui.Color) *ui.Element {
+func drawIcon(c *ui.Context, svg *ui.SVG, size float32, color ui.Color) ui.Element {
 	return ui.Box(c).Size(size, size).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
 		p.Icon(svg, r, color)
 	})

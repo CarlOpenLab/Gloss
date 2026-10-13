@@ -43,7 +43,7 @@ const (
 //
 // Label 是固定词、不带文件名（无障碍名字和测试找它的凭据都是它）；想知道
 // 是哪一行，Tooltip 里有完整的话。
-func stageBox(c *ui.Context, pal palette, s stageState, lock bool) *ui.Element {
+func stageBox(c *ui.Context, pal palette, s stageState, lock bool) ui.Element {
 	t := c.Theme()
 	btn := ui.ButtonBase(c).Size(stageBoxSize, stageBoxSize).Shrink(0).Radius(radiusXS).
 		Cursor(ui.CursorPointer).Disabled(lock)
@@ -189,7 +189,7 @@ func (a *app) hunkStageable(f gitrepo.File) bool {
 // 和 hunk 级的 stageHunkButton 风格一致：带文字标签，不是裸 checkbox。
 // 三态：未暂存（空框+「暂存文件」）、已暂存（填色+勾+「取消暂存」）、
 // 冲突（琥珀框+「解决冲突」）。
-func stageFileButton(c *ui.Context, pal palette, s stageState, lock bool) *ui.Element {
+func stageFileButton(c *ui.Context, pal palette, s stageState, lock bool) ui.Element {
 	t := c.Theme()
 	label, text, tip := T("暂存文件", "Stage File"), T("暂存文件", "Stage File"), T("将该文件加入暂存区", "Add this file to staging area")
 	switch s {
@@ -402,7 +402,7 @@ func (a *app) commitBox(c *ui.Context, pal palette) {
 		Background(pal.surface1).
 		BorderWidth(1, 0, 0, 0).BorderColor(pal.hairline).Children(func() {
 
-		var in *ui.Element
+		var in ui.Element
 
 		// 一体化 Composer 卡片容器（§4.4）：输入框底走 Surface 2，
 		// 卡片圆角 lg(12)；聚焦时换 1px 的焦点色描边，不再是 1.2px 的
@@ -472,7 +472,7 @@ func (a *app) commitBox(c *ui.Context, pal palette) {
 		// 草稿在「焦点刚离开」的那一帧落盘：每敲一个键存一次的话，store.Save
 		// 会把三个文件整体重写一遍，打字都在做无用功；而离开输入框是「这一
 		// 段写完了」的自然信号。
-		focused := in != nil && in.Focused()
+		focused := in.Valid() && in.Focused()
 		if a.commitFocused && !focused {
 			a.saveCommitDraft()
 		}

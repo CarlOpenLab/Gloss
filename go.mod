@@ -5,7 +5,7 @@ go 1.27.1
 require (
 	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/anthropics/anthropic-sdk-go v1.78.0
-	github.com/egoist/mygo v0.2.13
+	github.com/egoist/mygo v0.4.8
 )
 
 require (

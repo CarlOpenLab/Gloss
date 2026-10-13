@@ -376,7 +376,7 @@ func (a *app) compareDialog(c *ui.Context, pal palette) {
 	branches := a.comparableBranches()
 
 	open := true
-	ui.DialogBase(c, &open, func(back, panel *ui.Element) {
+	ui.DialogBase(c, &open, func(back, panel ui.Element) {
 		back.Background(ui.RGBA(0, 0, 0, 0.25))
 		panel.Width(460).Padding(20).Radius(radiusXL).
 			Background(pal.surface4).Border(1, pal.hairline).
