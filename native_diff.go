@@ -17,10 +17,14 @@ import (
 // diff, folding, keyboard navigation and optional editing without changing Git
 // state until the user explicitly saves.
 type nativeDiffState struct {
-	on       bool
-	loading  bool
-	path     string
-	err      string
+	on      bool
+	loading bool
+	path    string
+	err     string
+	// canEdit 说的是「这个文件在这个段里能不能写回磁盘」。只有未暂存段的
+	// 右侧是磁盘上那一份；已暂存段的右侧是 index 里的内容，写回去等于拿
+	// index 覆盖工作区，那不是「保存」。
+	canEdit  bool
 	editable bool
 	old, new *editor.Buffer
 	diff     *editor.DiffState
@@ -31,8 +35,11 @@ func (a *app) openNativeDiff(f gitrepo.File) {
 		return
 	}
 	path := pathOf(f)
-	a.nativeDiff = nativeDiffState{on: true, loading: true, path: path, editable: false}
 	section := f.Section
+	a.nativeDiff = nativeDiffState{
+		on: true, loading: true, path: path,
+		canEdit: section == gitrepo.SectionUnstaged,
+	}
 	root := a.repoPath
 	a.run(func() {
 		ctx := context.Background()
@@ -150,10 +157,33 @@ func (a *app) nativeDiffDialog(c *ui.Context, pal palette) {
 					s.diff.Font = ui.Font{Family: "monospace", Size: a.codeSizeValue()}
 					editor.DiffView(c, s.diff).Fill()
 				})
-				ui.Row(c).Height(44).Shrink(0).Padding(0, 12).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, "MyGo DiffView：行内变更高亮、折叠未改动区间、双栏联动滚动").
-						FontSize(textCaption).TextColor(pal.inkMuted)
-					ui.Spacer(c)
+				ui.Row(c).Height(44).Shrink(0).Padding(0, 12).Gap(8).AlignItems(ui.Center).Children(func() {
+					hint := "MyGo DiffView：行内变更高亮、折叠未改动区间、双栏联动滚动"
+					if s.editable {
+						hint = "可编辑：直接改右侧，保存后写入工作区（不动暂存区）"
+					} else if !s.canEdit {
+						hint = "已暂存段比的是 HEAD 与暂存区，两边都不是磁盘上那份文件，只读"
+					}
+					ui.Text(c, hint).FontSize(textCaption).TextColor(pal.inkMuted).
+						Grow(1).MinWidth(0)
+					busy := a.op != gitrepo.OpNone
+					if s.canEdit {
+						mode := "允许编辑"
+						if s.editable {
+							mode = "切回只读"
+						}
+						if secondaryAction(c, pal, mode, "在右侧直接改这个文件并写回磁盘", busy).
+							Clicked() {
+							s.editable = !s.editable
+							s.diff.Editable = s.editable
+						}
+						if s.editable && s.diff.New != nil && s.diff.New.Modified() {
+							if primaryAction(c, pal, "保存", "写入工作区，不自动暂存", busy).
+								Clicked() {
+								a.saveNativeDiff()
+							}
+						}
+					}
 					if secondaryAction(c, pal, "关闭", "", false).Clicked() {
 						a.closeNativeDiff()
 					}
@@ -164,4 +194,28 @@ func (a *app) nativeDiffDialog(c *ui.Context, pal palette) {
 	if !open {
 		a.closeNativeDiff()
 	}
+}
+
+// saveNativeDiff 把 Diff 预览里右侧改好的内容写回工作区。
+//
+// 只有未暂存段允许走到这里（canEdit），所以写回去的一定是「磁盘上这份的新
+// 版本」；照旧不 git add —— 暂存与否留给用户自己按。
+func (a *app) saveNativeDiff() {
+	s := &a.nativeDiff
+	if !s.on || !s.editable || s.diff == nil || s.diff.New == nil || a.op != gitrepo.OpNone {
+		return
+	}
+	path := s.path
+	text := s.diff.New.String()
+	a.startOp(gitrepo.OpWrite, "正在保存 "+path, func(ctx context.Context, repo *gitrepo.Repo) (string, error) {
+		if err := repo.WriteContents(path, []byte(text)); err != nil {
+			return "", err
+		}
+		return "已保存 " + path, nil
+	}, func(ok bool) {
+		if ok {
+			a.closeNativeDiff()
+		}
+		a.reloadAfterOp()
+	})
 }
