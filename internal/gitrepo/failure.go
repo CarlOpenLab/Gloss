@@ -45,6 +45,7 @@ const (
 	OpForcePush
 	OpAm // 用户自己在终端里跑的补丁序列停在半路（git am）
 	OpDiscard
+	OpWrite // 内置编辑器把文件写回工作区（不经过 git）
 )
 
 // Describe 把 git 的错误整理成人话。
@@ -390,6 +391,8 @@ func opTitle(op Op) string {
 		return "应用补丁没成功"
 	case OpDiscard:
 		return "丢弃改动没成功"
+	case OpWrite:
+		return "保存文件没成功"
 	}
 	return "这个操作没成功"
 }

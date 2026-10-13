@@ -36,6 +36,39 @@ func longFile() string {
 	return b.String()
 }
 
+// 保存一个可执行脚本时不该把权限位抹掉：那是没人要求的一次改动，而且
+// git status 也不会把它报出来 —— 用户要过很久才会发现脚本跑不起来了。
+func TestWriteContentsKeepsExistingMode(t *testing.T) {
+	r := tempRepo(t)
+	script := filepath.Join(r.Root, "run.sh")
+	write(t, script, "#!/bin/sh\necho old\n")
+	if err := os.Chmod(script, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.WriteContents("run.sh", []byte("#!/bin/sh\necho new\n")); err != nil {
+		t.Fatalf("WriteContents: %v", err)
+	}
+	info, err := os.Stat(script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o755 {
+		t.Errorf("权限位 = %o，want 755", got)
+	}
+
+	// 新文件才按 0644 建。
+	if err := r.WriteContents("fresh.txt", []byte("x\n")); err != nil {
+		t.Fatalf("WriteContents: %v", err)
+	}
+	info, err = os.Stat(filepath.Join(r.Root, "fresh.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o644 {
+		t.Errorf("新文件权限位 = %o，want 644", got)
+	}
+}
+
 // 只暂存点中的那一个 hunk：另一个必须原样留在未暂存段里。
 func TestStageHunkOnlyThatHunk(t *testing.T) {
 	r := tempRepo(t)

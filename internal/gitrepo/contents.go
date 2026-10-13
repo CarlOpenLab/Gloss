@@ -48,8 +48,17 @@ func (r *Repo) ConflictContents(ctx context.Context, path string) (base, ours, t
 
 // WriteContents replaces a worktree file without touching the index. The
 // embedded resolver stages it separately after the write has succeeded.
+//
+// 已存在的文件保留它原来的权限位：内置编辑器保存一个 0755 的脚本时，不该
+// 顺手把可执行位抹掉 —— 那是一次没人要求的改动，而且 git status 也不会报。
+// 新文件才按 0644 建。
 func (r *Repo) WriteContents(path string, data []byte) error {
-	return os.WriteFile(filepath.Join(r.Root, path), data, 0o644)
+	full := filepath.Join(r.Root, path)
+	mode := os.FileMode(0o644)
+	if info, err := os.Stat(full); err == nil {
+		mode = info.Mode().Perm()
+	}
+	return os.WriteFile(full, data, mode)
 }
 
 // NewLines 返回文件在「新的一侧」的内容按行切开的结果。
