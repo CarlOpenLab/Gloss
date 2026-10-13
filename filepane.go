@@ -354,7 +354,7 @@ func (a *app) treeRow(c *ui.Context, pal palette, r filetree.Row) {
 	// 勾选框要留到行构建完之后再判点击（见下面的 early return）。它在行里
 	// 是后建的子元素，指针事件会一路冒泡到整行 —— 不先问它，点一下既暂存
 	// 了文件又跳转了 diff。
-	var box *ui.Element
+	var box ui.Element
 
 	row, _ := treeRow(c, t, pal, treeRowOpts{Depth: r.Depth, Selected: n.FileIdx == a.fileSel}, func() {
 		// 历史提交和储藏的 diff 是只读的（SectionNone），那里不摆勾选框：
@@ -393,7 +393,7 @@ func (a *app) treeRow(c *ui.Context, pal palette, r filetree.Row) {
 	// 菜单里就只剩读的那几项）。
 	row.ContextMenu(func(m *ui.Menu) { a.fileMenu(m, f) })
 
-	if box != nil && box.Clicked() {
+	if box.Valid() && box.Clicked() {
 		a.toggleStageFile(f)
 		return
 	}

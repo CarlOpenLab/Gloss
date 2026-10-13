@@ -310,6 +310,10 @@ type app struct {
 	newBranch branchState
 	rename    renameState
 	stashDlg  stashState
+	// conflictEdit/nativeDiff are transient MyGo editor states; they are not
+	// persisted in repo tabs and are closed when the repository changes.
+	conflictEdit conflictEditorState
+	nativeDiff   nativeDiffState
 	// compare 是分支代码差异对比的状态（Fork 风格，见 compare.go）。
 	compare    compareState
 	compareSeq int
@@ -883,7 +887,7 @@ func (a *app) repoHeader(c *ui.Context, t *ui.Theme, pal palette) {
 			a.repoDropdownOpen = !a.repoDropdownOpen
 		}
 		if a.repoDropdownOpen {
-			ui.PopoverBase(c, repoBtn, &a.repoDropdownOpen, func(panel *ui.Element) {
+			ui.PopoverBase(c, repoBtn, &a.repoDropdownOpen, func(panel ui.Element) {
 				a.repoDropdownPanel(c, panel, pal)
 			})
 		}
@@ -897,7 +901,7 @@ func (a *app) repoHeader(c *ui.Context, t *ui.Theme, pal palette) {
 // 这是浮层，按 §2.1 的阶梯落在 Surface 3（比它下面的侧栏亮一档），
 // 分层交给这一档明度差和一道 hairline；投影只留一点收边，不再是原来那圈
 // 30px 的大模糊 —— 暗色模式里粗重投影糊在深色底上，只会显脏。
-func (a *app) repoDropdownPanel(c *ui.Context, panel *ui.Element, pal palette) {
+func (a *app) repoDropdownPanel(c *ui.Context, panel ui.Element, pal palette) {
 	panel.Radius(radiusLG).Background(pal.surface3).Border(1, pal.hairline).
 		Shadow(0, 4, 12, 0, ui.RGBA(0, 0, 0, 0.16)).
 		Margin(4, 0, 0, 0).Padding(6).MinWidth(340).MaxWidth(440).Gap(2)
@@ -1082,14 +1086,14 @@ func (a *app) branchChip(c *ui.Context, t *ui.Theme, pal palette) {
 		a.branchDropdownOpen = !a.branchDropdownOpen
 	}
 	if a.branchDropdownOpen {
-		ui.PopoverBase(c, chip, &a.branchDropdownOpen, func(panel *ui.Element) {
+		ui.PopoverBase(c, chip, &a.branchDropdownOpen, func(panel ui.Element) {
 			a.branchDropdownPanel(c, panel, pal)
 		})
 	}
 }
 
 // branchDropdownPanel 呈现本地分支快速切换卡片。
-func (a *app) branchDropdownPanel(c *ui.Context, panel *ui.Element, pal palette) {
+func (a *app) branchDropdownPanel(c *ui.Context, panel ui.Element, pal palette) {
 	panel.Radius(radiusLG).Background(pal.surface3).Border(1, pal.hairline).
 		Shadow(0, 4, 12, 0, ui.RGBA(0, 0, 0, 0.16)).
 		Margin(4, 0, 0, 0).Padding(6).MinWidth(220).MaxWidth(340).Gap(2)

@@ -316,7 +316,7 @@ func (a *app) settingsDialog(c *ui.Context, pal palette) {
 	panelH := clamp(winH-32, 320, 680)
 
 	open := true
-	ui.DialogBase(c, &open, func(back, panel *ui.Element) {
+	ui.DialogBase(c, &open, func(back, panel ui.Element) {
 		back.Background(ui.RGBA(0, 0, 0, 0.25))
 		// 设置窗口是最顶层的一块浮层，按 §2.1 落 Surface 4、圆角 xl(16)（§3）。
 		//
@@ -1478,7 +1478,7 @@ func (a *app) providerRow(c *ui.Context, pal palette, t *ui.Theme, i, next int) 
 	rowBtn.Background(bg).Border(1, border)
 	fadeColors(rowBtn)
 
-	var handle *ui.Element
+	var handle ui.Element
 	rowBtn.Children(func() {
 		ui.Row(c).AlignItems(ui.Center).Gap(8).Fill().Children(func() {
 			// 拖动手柄。六个点平时很淡，指着它才亮起来 —— 它是这一行唯一
@@ -1491,7 +1491,7 @@ func (a *app) providerRow(c *ui.Context, pal palette, t *ui.Theme, i, next int) 
 			if draggable {
 				handle.Drag(providerDrag{from: i})
 			}
-			if handle.Dragging() {
+			if handle.Valid() && handle.Dragging() {
 				handle.Cursor(ui.CursorGrabbing)
 			}
 			// 供应商图标
