@@ -104,6 +104,14 @@ func (a *app) handleKeys(c *ui.Context) {
 			a.setViewMode(viewModeTerm)
 		}
 	}
+	if c.Shortcut(ui.Cmd, ui.Key3) {
+		a.setViewMode(viewModeEditor)
+	}
+	// 「编辑器」视图里的 ⌘S 存回工作区。编辑器自身把 ⌘S 让了出来
+	// （State.Bindings 里绑成 NoCommand），所以这里能接住。
+	if a.viewMode == viewModeEditor && c.Shortcut(ui.Cmd, ui.KeyS) {
+		a.saveEditorPane()
+	}
 	// 字号从「当前生效的字号」上加减，而不是从 a.codeSize 上 ——
 	// 后者 0 表示「用默认值」，直接 +1 会被夹到下限，第一次按就跳到底。
 	//
@@ -168,7 +176,9 @@ func (a *app) handleKeys(c *ui.Context) {
 	//
 	// 查找输入框里另说：J / K 会被编辑框自己吃掉（打的是字），可裸 ↑ / ↓
 	// 单行编辑框不认，会漏到这儿来 —— 用上一帧的焦点状态挡一道。
-	if !a.modalOn() && !a.find.focused {
+	// 在模态对话框、输入框获取焦点、或「编辑器」视图时不响应 —— 后者的键位
+	// 归给编辑器里的光标。
+	if !a.modalOn() && !a.find.focused && a.viewMode == viewModeGit {
 		if a.tab == 1 && len(a.commits) > 0 {
 			if c.Shortcut(0, ui.KeyJ) || c.Shortcut(0, ui.KeyDown) {
 				a.navCommit(1)

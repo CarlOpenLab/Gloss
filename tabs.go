@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	viewModeGit  = 0
-	viewModeTerm = 1
+	viewModeGit    = 0
+	viewModeTerm   = 1
+	viewModeEditor = 2
 )
 
 // repoTab 是一个打开的项目标签页，维护该项目的独立工作区与内置终端。
@@ -248,6 +249,9 @@ func (a *app) restoreActiveTab() {
 
 	a.commitMsg = tab.commitMsg
 	a.draftFor = tab.draftFor
+
+	// 从别的标签页切回来时，编辑器要重新读一份（closeEmbeddedEditors 刚清过）。
+	a.syncEditorPane()
 }
 
 // switchTab 切换到指定下标的标签页。
@@ -372,7 +376,7 @@ func (a *app) toggleViewMode() {
 	}
 }
 
-// setViewMode 显式设置视图模式（0: Git GUI, 1: 终端）。
+// setViewMode 显式设置视图模式（0: Git GUI, 1: 终端, 2: 编辑器）。
 func (a *app) setViewMode(mode int) {
 	if a.viewMode == mode {
 		return
@@ -384,6 +388,11 @@ func (a *app) setViewMode(mode int) {
 		if mode == viewModeTerm && tab.term == nil {
 			a.initTabTerminal(tab)
 		}
+	}
+	if mode == viewModeEditor {
+		// 进编辑器视图时先把左边选中的那个文件读进来；之后换文件由
+		// filepane 的点击/导航接着调 syncEditorPane。
+		a.syncEditorPane()
 	}
 }
 

@@ -403,6 +403,7 @@ func (a *app) treeRow(c *ui.Context, pal palette, r filetree.Row) {
 		// （筛选/展开/切视图都会弄脏它），按旧的行下标滚过去会落到别的文件上。
 		// diffView 重建完行模型再消费这个请求。
 		a.pendingScrollFile = n.FileIdx
+		a.syncEditorPane()
 	}
 }
 
@@ -572,5 +573,6 @@ func (a *app) navFile(dir int) {
 	}
 	a.fileSel = idx
 	a.pendingScrollFile = idx
+	a.syncEditorPane()
 	a.filesList.ScrollIntoView(next)
 }

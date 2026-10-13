@@ -315,6 +315,9 @@ type app struct {
 	conflictEdit conflictEditorState
 	nativeDiff   nativeDiffState
 	codeEdit     codeEditorState
+	// editorPane 是「编辑器」视图里那个常驻整文件编辑器（editor_pane.go）。
+	// 它比上面三个活得久：跟着文件栏的选中共进退，切仓库才丢。
+	editorPane editorPaneState
 	// compare 是分支代码差异对比的状态（Fork 风格，见 compare.go）。
 	compare    compareState
 	compareSeq int
@@ -743,7 +746,7 @@ func (a *app) toolbarHeight(c *ui.Context) float32 {
 	return 46
 }
 
-// toolbar 是二级工具栏：提供 [Git 面板 | 终端] 模式切换及当前模式对应的操作。
+// toolbar 是二级工具栏：提供 [Git 面板 | 终端 | 编辑器] 模式切换及当前模式对应的操作。
 func (a *app) toolbar(c *ui.Context, pal palette) {
 	t := c.Theme()
 	bar := c.TitleBar()
@@ -751,11 +754,12 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 	padLeft := float32(12)
 
 	ui.Toolbar(c, func() {
-		// 视图模式切换：Git 面板 ⟷ 内置终端
+		// 视图模式切换：Git 面板 ⟷ 内置终端 ⟷ 代码编辑器
 		vm := a.viewMode
 		toolbarSegmentedIcons(c, pal, &vm, false,
 			segmentedIconItem{label: "Git", tip: Tf("Git 可视化面板 %s / Ctrl+~", "Git GUI Panel %s / Ctrl+~", K("⌘1")), icon: iconFileDiff},
 			segmentedIconItem{label: "Terminal", tip: Tf("内置终端 %s / Ctrl+~", "Built-in Terminal %s / Ctrl+~", K("⌘2")), icon: iconTerminal},
+			segmentedIconItem{label: "Editor", tip: Tf("代码编辑器 %s", "Code Editor %s", K("⌘3")), icon: iconCode},
 		)
 		if vm != a.viewMode {
 			a.setViewMode(vm)
@@ -807,6 +811,11 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 		}
 
 		ui.Spacer(c)
+
+		if a.viewMode == viewModeEditor {
+			a.editorToolbar(c, pal)
+			return
+		}
 
 		noRepo := !a.repoReady()
 
@@ -1243,6 +1252,10 @@ func (a *app) mainArea(c *ui.Context, pal palette) {
 	ui.Column(c).Grow(1).FillWidth().MinHeight(0).Children(func() {
 		a.opBanner(c, pal)
 		a.pendingBar(c, pal)
+		if a.viewMode == viewModeEditor {
+			a.editorArea(c, pal)
+			return
+		}
 		if a.compare.on {
 			a.compareBar(c, pal)
 			a.detailPane(c, pal)
@@ -1628,6 +1641,7 @@ func (a *app) applyModel(m *gitrepo.Model) {
 	// 这次加载完了，把自动刷新对齐到这份新状态上：外部改动了仓库才值得
 	// 再刷一次。裸 ⌘R、写操作后的重读也都走这里，baseline 跟着归位。
 	a.setAutoWatch(m.Repo.Root)
+	a.syncEditorPane()
 }
 
 // workBranch 是「改动」列表该认的分支名。
