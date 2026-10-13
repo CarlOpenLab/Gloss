@@ -83,7 +83,13 @@ func (a *app) openConflictEditor(f gitrepo.File) {
 				Indicators:   editor.DiffBars,
 				ContextLines: 3,
 			}
-			a.conflictEdit.code = &editor.State{Buffer: work, Label: "冲突解决编辑器"}
+			a.conflictEdit.code = &editor.State{
+				Buffer: work,
+				Label:  "冲突解决编辑器",
+				// 整文件模式没有左边那一栏，但基线还是同一份：行号槽里照样能
+				// 看出相对选中那一侧改了什么，切基线时两边一起跟着换。
+				DiffBase: a.conflictEdit.ours,
+			}
 			a.conflictEdit.loading = false
 		})
 	})
@@ -226,15 +232,34 @@ func (a *app) conflictSideButton(c *ui.Context, pal palette, label string, side 
 	}
 	btn.Children(func() { ui.Text(c, label).FontSize(textCaption).TextColor(pal.inkMuted) })
 	if btn.Clicked() && !selected {
-		a.conflictEdit.side = side
-		switch side {
-		case conflictSideTheirs:
-			a.conflictEdit.diff.Old = a.conflictEdit.theirs
-		case conflictSideBase:
-			a.conflictEdit.diff.Old = a.conflictEdit.base
-		default:
-			a.conflictEdit.diff.Old = a.conflictEdit.ours
-		}
+		a.setConflictSide(side)
+	}
+}
+
+// setConflictSide 换对比基线：Diff 的左侧和整文件编辑器的基线必须永远指同一
+// 份缓冲区 —— 两种模式说的是同一件事，切了基线只有一边变就是自相矛盾。
+func (a *app) setConflictSide(side conflictEditorSide) {
+	s := &a.conflictEdit
+	s.side = side
+	old := s.sideBuffer(side)
+	if s.diff != nil {
+		s.diff.Old = old
+	}
+	if s.code != nil {
+		s.code.DiffBase = old
+	}
+}
+
+// sideBuffer 返回某一边对应的缓冲区。三方版本都在这一个 state 里，散在几处
+// switch 里迟早会有一处漏改（Diff 的左侧和编辑器的基线必须永远指同一份）。
+func (s *conflictEditorState) sideBuffer(side conflictEditorSide) *editor.Buffer {
+	switch side {
+	case conflictSideTheirs:
+		return s.theirs
+	case conflictSideBase:
+		return s.base
+	default:
+		return s.ours
 	}
 }
 
