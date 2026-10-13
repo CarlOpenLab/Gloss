@@ -171,6 +171,7 @@ func TestRiskScanProceedToCommitFromUI(t *testing.T) {
 
 func TestRiskScanWithoutProviderOpensSettings(t *testing.T) {
 	a := richApp(t)
+	clearProviderEnv(t)
 	a.stageAll()
 	settle(t, a)
 

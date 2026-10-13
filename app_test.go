@@ -111,6 +111,19 @@ func runGit(t *testing.T, dir string, args ...string) {
 	}
 }
 
+// clearProviderEnv 把「从环境变量里捡来的凭证」清掉。测「一家供应商都没配」
+// 那几条用例要的是真的没有：在带 ANTHROPIC_API_KEY 的机器上（比如从
+// Claude Code 里跑测试），llm.Provider.Ready() 会凭空变真，用例就假失败。
+func clearProviderEnv(t *testing.T) {
+	t.Helper()
+	for _, env := range []string{
+		"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN",
+		"ANTHROPIC_PROFILE", "ANTHROPIC_FEDERATION_RULE_ID",
+	} {
+		t.Setenv(env, "")
+	}
+}
+
 // richApp 建一个内容够丰富的仓库：多个 hunk、能折的未改动区间、删除、
 // 新增文件、带 tab 和中文的行 —— diff 视图的各种排版情况都能覆盖到。
 func richApp(t *testing.T) *app {

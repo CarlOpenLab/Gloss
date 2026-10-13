@@ -76,6 +76,7 @@ func TestAICommitShortcut(t *testing.T) {
 
 func TestAICommitWithoutProviderOpensSettings(t *testing.T) {
 	a := richApp(t)
+	clearProviderEnv(t)
 	a.stageAll()
 	settle(t, a)
 
@@ -151,6 +152,7 @@ func TestAIBranchGenerationFromUI(t *testing.T) {
 
 func TestAIBranchWithoutProviderOpensSettings(t *testing.T) {
 	a := richApp(t)
+	clearProviderEnv(t)
 	a.openNewBranchDialog("", "HEAD")
 
 	a.startAIBranch()
