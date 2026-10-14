@@ -4,6 +4,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.3.3] - 2026-10-14
+
+### 修复
+- Windows 上不再有「一闪一闪的小窗口」：git / gh 子进程改用 `CREATE_NO_WINDOW` 启动。Gloss 的 Windows 包是 GUI 构建（`-H=windowsgui`），进程自己没有控制台，此前每起一个子进程 Windows 都会给它新建一个控制台窗口 —— 而自动刷新每 2 秒就要跑一次 `git status` / `git show-ref`，于是黑框一直闪
+
 ## [0.3.2] - 2026-10-14
 
 ### 新增
