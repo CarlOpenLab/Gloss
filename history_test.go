@@ -259,8 +259,8 @@ func TestParseRefBadges(t *testing.T) {
 		if len(got) != 2 {
 			t.Fatalf("want 2 badges, got %d: %+v", len(got), got)
 		}
-		if got[0].Label != "HEAD → beta" || got[0].Kind != refBadgeLocal {
-			t.Errorf("badge[0] = %+v, want HEAD → beta (local)", got[0])
+		if got[0].Label != "HEAD → beta" || got[0].Kind != refBadgeHead {
+			t.Errorf("badge[0] = %+v, want HEAD → beta (head)", got[0])
 		}
 		if got[1].Label != "origin/beta" || got[1].Kind != refBadgeRemote {
 			t.Errorf("badge[1] = %+v, want origin/beta (remote)", got[1])
@@ -298,7 +298,7 @@ func TestParseRefBadges(t *testing.T) {
 	// 场景 4：分离 HEAD
 	t.Run("detached HEAD", func(t *testing.T) {
 		got := parseRefBadges("HEAD", nil)
-		if len(got) != 1 || got[0].Label != "HEAD" || got[0].Kind != refBadgeLocal {
+		if len(got) != 1 || got[0].Label != "HEAD" || got[0].Kind != refBadgeHead {
 			t.Errorf("got %+v, want [HEAD]", got)
 		}
 	})
@@ -570,6 +570,58 @@ func TestHistoryGraphDrawsPixels(t *testing.T) {
 	}
 	if saturated < 200 {
 		t.Errorf("图形栏里只有 %d 个彩色像素，线没画出来", saturated)
+	}
+}
+
+// TestLabelAccentsAreDistinct 断言小标签亮色真的分得开（§2.5）。
+//
+// 这一组色只落在 10px 的状态字母和芯片上那颗 6px 的圆点上，而它存在的唯一理由
+// 就是「一眼能分开」：M 和 R 曾经一起落在 pal.ref 的灰上（改动列表于是得逐字读），
+// 本地分支的圆点曾经和 HEAD 一样是 Ink（一列芯片全是白点）。所以这里不看具体色值，
+// 只钉住「两两不同」+「该带色相的确实带」—— 谁再把这几个色统一成一支灰，这条就红。
+func TestLabelAccentsAreDistinct(t *testing.T) {
+	for _, dark := range []bool{false, true} {
+		pal := paletteFor(themeFor(dark, ui.Preferences{}))
+
+		letters := map[string]ui.Color{
+			"A": statusColor(gitrepo.StatusAdded, pal),
+			"D": statusColor(gitrepo.StatusDeleted, pal),
+			"M": statusColor(gitrepo.StatusModified, pal),
+			"R": statusColor(gitrepo.StatusRenamed, pal),
+		}
+		seen := map[ui.Color]string{}
+		for _, k := range []string{"A", "D", "M", "R"} {
+			if prev, dup := seen[letters[k]]; dup {
+				t.Errorf("dark=%v: 状态字母 %s 与 %s 同色 %v —— 状态字母得一眼分得开",
+					dark, k, prev, letters[k])
+			}
+			seen[letters[k]] = k
+		}
+		// M 与 R 是补上的那两支亮色，不许退化成灰。
+		for _, k := range []string{"M", "R"} {
+			if spread(letters[k]) <= 16 {
+				t.Errorf("dark=%v: 状态字母 %s 是灰的（RGB 极差 %d）—— 灰阶在 10px 的字上分不出层级",
+					dark, k, spread(letters[k]))
+			}
+		}
+
+		dots := map[string]ui.Color{
+			"HEAD": badgeDot(pal, refBadgeHead),
+			"本地分支": badgeDot(pal, refBadgeLocal),
+			"远程分支": badgeDot(pal, refBadgeRemote),
+			"标签":   badgeDot(pal, refBadgeTag),
+		}
+		seenDot := map[ui.Color]string{}
+		for _, k := range []string{"HEAD", "本地分支", "远程分支", "标签"} {
+			if prev, dup := seenDot[dots[k]]; dup {
+				t.Errorf("dark=%v: %s 与 %s 的圆点同色 %v —— 一列芯片上都是同色的点，谁也认不出谁",
+					dark, k, prev, dots[k])
+			}
+			seenDot[dots[k]] = k
+		}
+		if spread(dots["HEAD"]) > 16 {
+			t.Errorf("dark=%v: HEAD 的圆点 %v 带色相 —— 它跟主干、「我在哪」共用 Ink", dark, dots["HEAD"])
+		}
 	}
 }
 

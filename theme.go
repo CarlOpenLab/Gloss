@@ -47,6 +47,21 @@ type palette struct {
 	ref    ui.Color // 分支名、commit hash 的强调色
 	viewed ui.Color // 已 review 的勾与文字
 
+	// —— 小标签亮色（§2.5）——
+	//
+	// 界面整体是灰阶 + 黑白两极的强调，这一组是仅有的例外，而且只喂给界面上
+	// 最小的两处：文件列表里 10px 的状态字母（M/A/D/R/C）、引用芯片上那颗 6px
+	// 的点。这两处必须有颜色 —— 灰阶落在一个 10px 的字上分不出层级，
+	// 「M 和 D 都是灰的」等于让读的人把每个字母都读一遍。
+	//
+	// 取值不是新配的一套：三支全部借自拓扑图那 8 色谱系（§2.6），于是
+	// 「图里那条蓝线」和「列表里这个 R」「芯片上这个本地分支点」说的是同一件事、
+	// 同一种蓝。A/D 继续用 diff 的绿与红（addBar / delBar）——
+	// 一行里出现两个相近的绿比没有绿更糟。
+	accentAmber ui.Color // M / T 改动、标签芯片的点：暖琥珀
+	accentBlue  ui.Color // R / C 重命名与复制、本地分支芯片的点：钢青蓝
+	accentTeal  ui.Color // 远程跟踪分支芯片的点：暗青
+
 	// selection 是列表与树的选中底带。
 	//
 	// 取中性灰阶而不是拿 Accent 淡染：Accent 是「白」（见 glossTheme），
@@ -226,6 +241,11 @@ func paletteFor(t *ui.Theme) palette {
 			sideBg:    ui.Hex("#0f1011"), // Surface 1：侧栏是一块面，不是画布的影子
 			ref:       ui.Hex("#d0d6e0"), // 中性 Ink Muted
 			viewed:    ui.Hex("#27a644"),
+			// 小标签亮色（§2.5）：三支都取自下面那 8 色谱系，别单独调，
+			// 调了图里和图外的同一种颜色就对不上了。
+			accentAmber: ui.Hex("#e09f3e"), // = lanes[2]
+			accentBlue:  ui.Hex("#4c86e8"), // = lanes[3]
+			accentTeal:  ui.Hex("#38b2ac"), // = lanes[6]
 			// 拓扑图 8 色谱系，明度与彩度均衡，不含紫：
 			// 0 号留给主干，取中性 Ink —— 主线是整张图上最亮的一条，一眼就能
 			// 顺着它从顶读到底；彩色只落在其余 7 条支线上。
@@ -269,6 +289,10 @@ func paletteFor(t *ui.Theme) palette {
 		sideBg:           ui.Hex("#efeff0"), // 侧栏实色：比主区白底暗一档，是「窗口」不是「内容」
 		ref:              ui.Hex("#4b535d"),
 		viewed:           ui.Hex("#27a644"),
+		// 小标签亮色（§2.5）：与深色同源，压深一档对应下面 lanes 的浅色版。
+		accentAmber: ui.Hex("#c9822b"), // = lanes[2]
+		accentBlue:  ui.Hex("#2f6fd0"), // = lanes[3]
+		accentTeal:  ui.Hex("#288c87"), // = lanes[6]
 		// 浅色同一份色板压深一档（白底上要更重的色才站得住），同样是
 		// 「0 号中性 Ink + 只有一支蓝」。
 		lanes: [8]ui.Color{

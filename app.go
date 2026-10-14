@@ -140,6 +140,12 @@ type app struct {
 	viewMode  int        // 0 = Git GUI 面板, 1 = 内置终端
 	split     bool       // true = split（左右对照），false = unified
 	codeSize  float32    // 代码字号；0 表示用默认值
+	// termThemePushed / termThemeDark 记着上一次推给终端的明暗。终端的配色
+	// 是启动时给的一份快照，换主题它不会自己跟上 —— 比一眼，变了才推
+	// （见 syncTerminalThemes）。第一个字段是「推过没有」：默认（浅色）
+	// 那一次也得推。
+	termThemePushed bool
+	termThemeDark   bool
 	// menu 是菜单栏里那几个要跟着状态走的项目，见 menu.go。测试里没有
 	// 菜单，它是 nil —— syncMenu 因此什么都不做。
 	menu *appMenu
@@ -567,6 +573,9 @@ func (a *app) view(c *ui.Context) {
 	dark := a.isDark(c)
 	c.SetTheme(themeFor(dark, c.Preferences()))
 	pal := paletteFor(c.Theme())
+
+	// 终端自己留着一份配色，不像界面那样每帧从调色板取色 —— 明暗变了得推给它。
+	a.syncTerminalThemes(dark, pal)
 
 	// 晚一帧的剪贴板写入（「复制哈希」这类菜单命令，见 copyText 字段）。
 	// 放在最前面：这一帧的 Toast 就能把它报出来。

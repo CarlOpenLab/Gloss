@@ -457,16 +457,23 @@ func (a *app) viewedCount() int {
 	return n
 }
 
+// statusColor 是文件行尾那个状态字母的颜色（§2.5 的小标签亮色）。
+//
+// 字母只有 10px，A/D 沿用 diff 的绿与红（同一行里出现两种相近的绿比没有绿更糟），
+// M 和 R/C 各自拿一支亮色 —— 这两个原来一起落在 pal.ref 的灰上，
+// 「改了」「重命名了」在一列灰字母里得逐个读才分得出来。
 func statusColor(s gitrepo.Status, pal palette) ui.Color {
 	switch s {
 	case gitrepo.StatusAdded, gitrepo.StatusUntracked:
 		return pal.addBar
-	case gitrepo.StatusDeleted:
+	case gitrepo.StatusDeleted, gitrepo.StatusConflict:
 		return pal.delBar
-	case gitrepo.StatusConflict:
-		return pal.delBar
+	case gitrepo.StatusModified:
+		return pal.accentAmber
+	case gitrepo.StatusRenamed, gitrepo.StatusCopied:
+		return pal.accentBlue
 	}
-	return pal.ref
+	return pal.ref // 剩下的（理论上走不到）留中性，别硬塞一个色
 }
 
 // detailEmpty 是下半区没有 diff 可画时的几种情况。

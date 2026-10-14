@@ -7,6 +7,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -611,6 +612,70 @@ func TestDumpScreenshot(t *testing.T) {
 	writePNG(t, "/tmp/de-shot-conflict-narrow.png", mt.Image())
 	mt.SetSize(1280, 860)
 	mt.Frame()
+}
+
+// waitShellText 等一个会话的 shell 把提示符吐出来。
+//
+// 这里的 shell 是刚起的：提示符（以及它那份 rc 里的一堆东西）是异步吐出来
+// 的。不等就拍，拍到的是半屏空白 —— 而这条截图要看的正是「两个会话各自有
+// 内容」。等不到（比如这台机器上 shell 起不来）就返回空串，照样把图拍下来，
+// 芯片带那部分还是能看的。
+func waitShellText(t *testing.T, s *termSession) string {
+	t.Helper()
+	if s == nil || s.term == nil {
+		return ""
+	}
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		if txt := strings.TrimSpace(s.term.Text()); txt != "" {
+			return txt
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return ""
+}
+
+// TestDumpTerminalTabs 拍「一个项目开了两个终端会话」：芯片带上两枚芯片、
+// 一枚是激活态，明暗各一张。这一条不换替身 —— 截图要的就是真 shell 在真
+// 项目目录里的样子，顺带看一眼芯片的激活态在两种配色下站不站得住。
+func TestDumpTerminalTabs(t *testing.T) {
+	if os.Getenv("SHOT") == "" {
+		t.Skip("设置 SHOT=1 才跑")
+	}
+	a := richApp(t)
+	// 真起了 shell，拍完得放掉：用例跑完不该有一串进程留在人家机器上。
+	t.Cleanup(a.closeAllTerminals)
+	// richApp 是「直接 load 一个仓库」，没有标签页（真实启动时标签页来自
+	// store 里那串已打开项目，见 attachStore）。终端会话挂在标签页上，所以
+	// 这里补一个 —— 就是顶栏那条兜底标签说的同一件事。
+	a.tabs = []*repoTab{{path: a.repoPath, name: a.repoName, state: loadIdle}}
+	a.activeTab = 0
+	a.setViewMode(viewModeTerm)
+
+	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+	tt.Frame()
+	tt.SetTitleBar(realTitleBar)
+	tt.Frame()
+
+	// 第二个会话（就是 + / ⌘⇧T 那个动作），它会是激活的那一枚。
+	a.newTerminalSession(a.currentTab())
+	tt.Frame()
+	tab := a.currentTab()
+	if len(tab.terms) != 2 {
+		t.Fatalf("该有两个终端会话，实际 %d", len(tab.terms))
+	}
+
+	// 两个 shell 都吐完提示符再拍。
+	waitShellText(t, tab.terms[0])
+	waitShellText(t, tab.terms[1])
+	tt.Frame()
+	writePNG(t, "/tmp/de-shot-term-tabs-light.png", tt.Image())
+
+	tt.SetDark(true)
+	tt.Frame()
+	tt.Frame()
+	writePNG(t, "/tmp/de-shot-term-tabs-dark.png", tt.Image())
 }
 
 func TestDumpToolbarOpCollision(t *testing.T) {

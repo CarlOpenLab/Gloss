@@ -77,7 +77,9 @@ func (a *app) newBranchBody(c *ui.Context, pal palette) {
 		ui.Column(c).Gap(3).Children(func() {
 			ui.Text(c, "名称").FontSize(11).TextColor(t.TextMuted)
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				in := ui.TextInput(c, &bs.name).Placeholder("feature/login").Label("分支名称").Grow(1)
+				// placeholder 把两种用法都摆出来：这个框既是分支名，也是「意图」的输入位
+				// —— ✨ 会把框里写的内容当成需求描述喂给模型（见 startAIBranch）。
+				in := ui.TextInput(c, &bs.name).Placeholder("feature/login 或 修复登录超时").Label("分支名称").Grow(1)
 				if bs.focusName {
 					in.Focus()
 					bs.focusName = false
@@ -88,6 +90,11 @@ func (a *app) newBranchBody(c *ui.Context, pal palette) {
 				}
 				a.aiBranchButton(c, pal)
 			})
+			// 「输入一句意图 → AI 起名」这条用法原来只有按钮的 tooltip 里提了一句，
+			// 框上又只写着 feature/login，等于藏起来了：写得出一整句话的人，
+			// 恰恰是最需要这功能的人。
+			ui.Text(c, "想不出名字就写一句要做什么（如「修复登录超时」），再点 ✨ 让 AI 起名；自己填也行。").
+				FontSize(11).TextColor(t.TextMuted)
 		})
 
 		ui.Checkbox(c, &bs.switchTo, "建好就切过去").Label("建好就切过去")

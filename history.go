@@ -520,7 +520,7 @@ func (a *app) commitRow(c *ui.Context, pal palette, i int) {
 				// 四枚芯片共用同一副面孔，靠圆点分本地 / 远程 / 标签。
 				// 逐个染色的版本见 git 历史：一行里蓝、绿、灰三色并排，
 				// 扫过去只看见色块，认不出分支名。
-				specChip(c, pal, b.Label, badgeDot(t, pal, b.Kind), rowChipH, rowChipText)
+				specChip(c, pal, b.Label, badgeDot(pal, b.Kind), rowChipH, rowChipText)
 			}
 			if overflow > 0 {
 				ui.Text(c, fmt.Sprintf("+%d", overflow)).FontSize(rowChipText).
@@ -557,7 +557,8 @@ const maxVisibleBadges = 4
 type refBadgeKind int
 
 const (
-	refBadgeLocal  refBadgeKind = iota // 本地分支或 HEAD，如 "HEAD → beta"、"main"
+	refBadgeHead   refBadgeKind = iota // HEAD（当前检出的那条），如 "HEAD → beta"、"HEAD"
+	refBadgeLocal                      // 其他本地分支，如 "beta"
 	refBadgeRemote                     // 远程跟踪分支，如 "origin/beta"
 	refBadgeTag                        // 标签，如 "tag: v1.0"
 )
@@ -567,27 +568,30 @@ type refBadge struct {
 	Kind  refBadgeKind
 }
 
-// badgeDot 是芯片上那颗圆点的颜色。
+// badgeDot 是芯片上那颗圆点的颜色（§2.5 的小标签亮色）。
 //
-// 三种引用各给一个语义，但都只落在 6px 的点上：本地分支跟顶部那颗「当前分支」
-// 圆点同一色（读的人能把「这条分支」和「我在哪」对上），远程是安静的
-// 灰（跟踪分支是背景信息），标签用琥珀（发布标记是唯一带时间重量的一种）。
-func badgeDot(t *ui.Theme, pal palette, kind refBadgeKind) ui.Color {
+// 四种引用各一支色，而且只落在那颗 6px 的点上：HEAD 跟主干、跟侧栏「我在哪」
+// 那颗圆点共用 Ink —— 它是全屏少数几处实心强调之一，不能变成又一颗彩点；
+// 本地分支、远程、标签则各拿一支，颜色都借自拓扑图那套色板，
+// 于是「这条线是哪条分支」和「这枚芯片是哪类引用」是同一套颜色语言。
+// 这里原来本地分支与 HEAD 同色（都是 Ink），一列芯片上全是白点，谁也认不出谁。
+func badgeDot(pal palette, kind refBadgeKind) ui.Color {
 	switch kind {
-	case refBadgeRemote:
-		return pal.inkTertiary
-	case refBadgeTag:
-		return t.Warning
-	default: // refBadgeLocal
+	case refBadgeHead:
 		return pal.laneColor(0)
+	case refBadgeRemote:
+		return pal.accentTeal
+	case refBadgeTag:
+		return pal.accentAmber
+	default: // refBadgeLocal
+		return pal.accentBlue
 	}
 }
 
 func refPriority(b refBadge) int {
-	if strings.HasPrefix(b.Label, "HEAD") {
-		return 0 // HEAD 优先级最高
-	}
 	switch b.Kind {
+	case refBadgeHead:
+		return 0 // HEAD 优先级最高
 	case refBadgeLocal:
 		return 1 // 其他本地分支
 	case refBadgeRemote:
@@ -629,9 +633,9 @@ func parseRefBadges(refs string, remotes []string) []refBadge {
 		switch {
 		case strings.HasPrefix(p, "HEAD -> "):
 			branch := strings.TrimPrefix(p, "HEAD -> ")
-			b = refBadge{Label: "HEAD → " + branch, Kind: refBadgeLocal}
+			b = refBadge{Label: "HEAD → " + branch, Kind: refBadgeHead}
 		case p == "HEAD":
-			b = refBadge{Label: "HEAD", Kind: refBadgeLocal}
+			b = refBadge{Label: "HEAD", Kind: refBadgeHead}
 		case strings.HasPrefix(p, "tag: "):
 			b = refBadge{Label: p, Kind: refBadgeTag}
 		case isRemoteRef(p, remotes):

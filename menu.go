@@ -155,6 +155,7 @@ func buildAppMenu(a *app) *mygo.Menu {
 		{Label: appName, Submenu: a.appSubmenu()},
 		{Label: T("文件", "File"), Submenu: []*mygo.MenuItem{
 			a.menuCmd(T("新建项目标签页…", "New Project Tab…"), "CmdOrCtrl+T", a.chooseFolder),
+			a.menuCmd(T("新建终端标签页", "New Terminal Tab"), "CmdOrCtrl+Shift+T", a.newTerminalTab),
 			a.menuCmd(T("打开仓库…", "Open Repository…"), "CmdOrCtrl+O", a.chooseFolder),
 			a.recentReposMenuItem(),
 			mygo.Separator(),

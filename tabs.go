@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/egoist/mygo/plugins/terminal"
 	"github.com/egoist/mygo/ui"
@@ -26,9 +27,12 @@ type repoTab struct {
 	dirtyCount int
 	viewMode   int
 
-	// 内置终端会话（基于 Ghostty libghostty-vt）
-	term    *terminal.Terminal
-	termErr string
+	// 内置终端会话（基于 Ghostty libghostty-vt）。一个项目可以并排开好几个
+	// shell，termActive 是当前展示的那一个；termSeq 只增不减，给新会话发芯片
+	// 兜底标题的编号（见 termSession.ord）。
+	terms      []*termSession
+	termActive int
+	termSeq    int
 
 	// Git 状态快照
 	remotes    []string
@@ -242,9 +246,8 @@ func (a *app) switchTab(idx int) {
 		if tab.state == loadIdle && tab.path != "" {
 			a.openRepo(tab.path)
 		}
-		if a.viewMode == viewModeTerm && tab.term == nil {
-			a.initTabTerminal(tab)
-		}
+		// 终端不在这里起：起 shell 要一份当前配色，而配色只有视图那层有。
+		// 切到终端视图那一帧，terminalArea 自己会把缺的会话补上。
 	}
 	a.persistOpenRepos()
 }
@@ -291,10 +294,7 @@ func (a *app) closeTab(idx int) {
 		return
 	}
 	target := a.tabs[idx]
-	if target.term != nil {
-		_ = target.term.Close()
-		target.term = nil
-	}
+	releaseTermSessions(target)
 
 	a.tabs = append(a.tabs[:idx], a.tabs[idx+1:]...)
 	if len(a.tabs) == 0 {
@@ -355,9 +355,6 @@ func (a *app) setViewMode(mode int) {
 	tab := a.currentTab()
 	if tab != nil {
 		tab.viewMode = mode
-		if mode == viewModeTerm && tab.term == nil {
-			a.initTabTerminal(tab)
-		}
 	}
 	if mode == viewModeEditor {
 		// 进编辑器视图时先把左边选中的那个文件读进来；之后换文件由
@@ -381,86 +378,220 @@ func (a *app) persistOpenRepos() {
 	a.persist()
 }
 
-// closeAllTerminals 关窗或退出时释放所有标签页的终端进程。
-func (a *app) closeAllTerminals() {
-	for _, t := range a.tabs {
-		if t != nil && t.term != nil {
-			_ = t.term.Close()
-			t.term = nil
-		}
-	}
+// termSession 是一个终端会话 —— 芯片带上的一枚芯片对应一个 shell 进程。
+//
+// 进程之外还记着两样芯片要用的东西：
+//
+//	ord 是兜底标题的编号。shell 没报标题（OSC 0/2）时芯片写「终端 N」，
+//	    这个号按创建顺序发，不按数组下标现算：关掉中间一个之后，剩下的
+//	    会话不该集体改名，新开的也不该顶掉别人的号。
+//	started 记着「已经试着起过了」。term 为 nil 且没试过才是「还没起」：
+//	    失败过当然不自己重试（重试由界面上那一下决定）。
+type termSession struct {
+	term    *terminal.Terminal
+	err     string
+	ord     int
+	started bool
 }
 
-// terminalTheme 为 Ghostty 终端提供与 Gloss 契合的调色板。
-func terminalTheme(dark bool) *terminal.Theme {
-	if dark {
-		th := terminal.DarkTheme()
-		th.Background = ui.Hex("#010102") // Gloss 标志性 Canvas 底色
-		th.Foreground = ui.Hex("#f7f8f8") // Ink 字体
-		return th
+// terminalNew 建一个终端。抽成变量是为了测试能换上替身：会话列表的增删
+// 切换是纯逻辑，为它每次真起一个 shell，既慢，又要在退出时照顾一堆子进程。
+var terminalNew = terminal.New
+
+// activeSession 返回当前标签页里激活的会话（还没有就返回 nil）。
+func (a *app) activeSession() *termSession {
+	tab := a.currentTab()
+	if tab == nil || tab.termActive < 0 || tab.termActive >= len(tab.terms) {
+		return nil
 	}
-	th := terminal.LightTheme()
-	th.Background = ui.Hex("#ffffff")
-	th.Foreground = ui.Hex("#0f1115")
-	return th
+	return tab.terms[tab.termActive]
 }
 
-// initTabTerminal 启动当前标签页专属的 Ghostty 原生终端。
-func (a *app) initTabTerminal(tab *repoTab) {
-	if tab == nil || tab.term != nil {
+// newTerminalSession 在标签页里再挂一个终端会话，并切到它。
+//
+// 只登记、不起 shell：起一个 shell 要一份当前配色，而 palette 只有视图那
+// 层拿得到，这条命令却可能从菜单、快捷键进来。下一帧 terminalArea 会把它
+// 起起来 —— 那一帧就在眼前，用户看不到这中间的差别。
+func (a *app) newTerminalSession(tab *repoTab) {
+	if tab == nil {
 		return
 	}
-	dir := tab.path
-	if dir == "" {
-		dir, _ = os.UserHomeDir()
-	}
-	dark := true
-	if a.themeMode == "light" {
-		dark = false
-	}
-	th := terminalTheme(dark)
-
-	term, err := terminal.New(terminal.Options{
-		Dir:   dir,
-		Theme: th,
-		OnTitle: func(title string) {
-			if a.dispatch != nil {
-				a.dispatch(func() {})
-			}
-		},
-		OnExit: func(code int) {
-			if a.dispatch != nil {
-				a.dispatch(func() {})
-			}
-		},
-	})
-	if err != nil {
-		tab.termErr = err.Error()
-		return
-	}
-	tab.term = term
-	tab.termErr = ""
+	tab.termSeq++
+	tab.terms = append(tab.terms, &termSession{ord: tab.termSeq})
+	tab.termActive = len(tab.terms) - 1
 }
 
-// restartCurrentTerminal 重启当前激活标签页的终端。
-func (a *app) restartCurrentTerminal() {
+// newTerminalTab 是「新建终端标签页」那条命令（⌘⇧T 与菜单里的那一项）。
+func (a *app) newTerminalTab() {
 	tab := a.currentTab()
 	if tab == nil {
 		return
 	}
-	if tab.term != nil {
-		_ = tab.term.Close()
-		tab.term = nil
-	}
-	tab.termErr = ""
-	a.initTabTerminal(tab)
+	// 顺手切进终端视图：新会话开在看不见的地方，用户按完只看到「什么也没
+	// 发生」—— 而它其实已经起了个 shell。
+	a.setViewMode(viewModeTerm)
+	a.newTerminalSession(tab)
 }
 
-// clearCurrentTerminal 清屏。
+// closeTerminalSession 是芯片上那个 ×：关掉一个会话，并且保证这个标签页
+// 关完还剩至少一个。
+//
+// 关掉最后一个就立刻补一个空的，而不是留一块「没有终端」的空状态再摆个
+// 按钮：能点到这一步的人手上正在用终端，他要的是「这个 shell 不要了」，
+// 不是「关掉终端」这个功能 —— 再让他点一下 + 只是白走一步。窗口关闭、
+// 关闭项目标签页那些路径走的是 releaseTermSessions，只放进程，不补。
+func (a *app) closeTerminalSession(tab *repoTab, idx int) {
+	dropTerminalSession(tab, idx)
+	if tab != nil && len(tab.terms) == 0 {
+		a.newTerminalSession(tab)
+	}
+}
+
+// dropTerminalSession 放掉一个会话的进程并从列表里摘掉它，不做任何补偿。
+func dropTerminalSession(tab *repoTab, idx int) {
+	if tab == nil || idx < 0 || idx >= len(tab.terms) {
+		return
+	}
+	if s := tab.terms[idx]; s != nil && s.term != nil {
+		_ = s.term.Close()
+		s.term = nil
+	}
+	tab.terms = append(tab.terms[:idx], tab.terms[idx+1:]...)
+	// 激活的挪到相邻的一个。关掉当前会话时保持原下标即可 —— 那正是它的
+	// 后一个（关的是最后一个时落到前一个），视线不用跳回第一枚芯片。
+	if idx < tab.termActive {
+		tab.termActive--
+	}
+	if tab.termActive >= len(tab.terms) {
+		tab.termActive = len(tab.terms) - 1
+	}
+	if tab.termActive < 0 {
+		tab.termActive = 0
+	}
+}
+
+// releaseTermSessions 放掉一个标签页里所有会话的 shell 进程。
+//
+// 关窗、退出、关闭项目标签页这三条路走这里：它们要的只是「别把子进程留在
+// 系统里」，不需要任何界面补偿。
+func releaseTermSessions(tab *repoTab) {
+	if tab == nil {
+		return
+	}
+	for _, s := range tab.terms {
+		if s != nil && s.term != nil {
+			_ = s.term.Close()
+			s.term = nil
+		}
+	}
+	tab.terms = nil
+	tab.termActive = 0
+}
+
+// closeAllTerminals 关窗或退出时释放所有标签页的终端进程。
+func (a *app) closeAllTerminals() {
+	for _, t := range a.tabs {
+		releaseTermSessions(t)
+	}
+}
+
+// terminalTheme 给 Ghostty 终端一套和 Gloss 同源的配色。
+//
+// 背景取内容面 pal.codeBg（深色 #0f1011 = Surface 1，浅色下是白），不是画布
+// 色 #010102：终端和它周围那一片代码区（diff 正文、编辑器）本来就是同一个
+// 面，这里塌一档更黑，一进终端视图屏幕中间就出现一块不属于任何东西的洞。
+// 前景同理取 pal.ink。
+func terminalTheme(dark bool, pal palette) *terminal.Theme {
+	th := terminal.LightTheme()
+	if dark {
+		th = terminal.DarkTheme()
+	}
+	th.Background = pal.codeBg
+	th.Foreground = pal.ink
+	return th
+}
+
+// syncTerminalThemes 把这一帧的明暗推给所有活着的终端。
+//
+// 终端不像界面那样每帧从调色板取色：Ghostty 的 Theme 是启动时给的一份快照，
+// 换明暗（⌘主题 / 跟随系统）它不会自己跟上。所以在这儿比一眼，只有真的换了
+// 一套颜色才推 —— 否则每帧一次 SetTheme，每个终端每帧都要重刷一遍调色板。
+func (a *app) syncTerminalThemes(dark bool, pal palette) {
+	if a.termThemePushed && a.termThemeDark == dark {
+		return
+	}
+	a.termThemePushed = true
+	a.termThemeDark = dark
+	// 同一份 Theme 喂给 Theme 和 DarkTheme 两处：它已经是按当前明暗算好的
+	// 成品，插件挑哪一份都是它。指针同时也是插件判断「要不要重新上色」的
+	// 依据，所以宁可留着这一份，也别每帧新建。
+	th := terminalTheme(dark, pal)
+	for _, tab := range a.tabs {
+		if tab == nil {
+			continue
+		}
+		for _, s := range tab.terms {
+			if s != nil && s.term != nil {
+				s.term.SetTheme(th, th)
+			}
+		}
+	}
+}
+
+// startTerminal 给一个会话起 shell。
+//
+// Dir 用项目路径：终端标签页是「在这个仓库里再开一个 shell」，新会话落在
+// 同一个仓库，而不是回到 home 让用户自己 cd 一趟。
+func (a *app) startTerminal(tab *repoTab, s *termSession, dark bool, pal palette) {
+	if tab == nil || s == nil || s.started {
+		return
+	}
+	s.started = true
+	dir := tab.path
+	if dir == "" {
+		dir, _ = os.UserHomeDir()
+	}
+	// shell 改了标题就得重画一次，否则芯片上那句话要等到下一件别的事触发
+	// 重绘才换。Title() 本身是并发安全的读法，回调里只做「请重画」。
+	redraw := func() {
+		if a.dispatch != nil {
+			a.dispatch(func() {})
+		}
+	}
+	term, err := terminalNew(terminal.Options{
+		Dir:     dir,
+		Theme:   terminalTheme(dark, pal),
+		OnTitle: func(string) { redraw() },
+		OnExit:  func(int) { redraw() },
+	})
+	if err != nil {
+		s.err = err.Error()
+		return
+	}
+	s.term = term
+}
+
+// restartCurrentTerminal 重启当前会话的 shell，其余会话不动。
+func (a *app) restartCurrentTerminal() {
+	s := a.activeSession()
+	if s == nil {
+		return
+	}
+	if s.term != nil {
+		_ = s.term.Close()
+		s.term = nil
+	}
+	// 把「起过」那笔账和错误一起抹掉，下一帧的 terminalArea 会重新起一个
+	// （配色在它手上）。重来的仍是同一个会话、同一枚芯片，编号也不换 ——
+	// 看到的是这个 shell 换了，而不是「少了一个、多了一个」。
+	s.err = ""
+	s.started = false
+}
+
+// clearCurrentTerminal 清屏（只清当前会话）。
 func (a *app) clearCurrentTerminal() {
-	tab := a.currentTab()
-	if tab != nil && tab.term != nil {
-		tab.term.Send([]byte("\x0c"))
+	if s := a.activeSession(); s != nil && s.term != nil {
+		s.term.Send([]byte("\x0c"))
 	}
 }
 
@@ -751,7 +882,124 @@ func (a *app) renderProjectTab(c *ui.Context, idx int, tab *repoTab, pal palette
 	}
 }
 
-// terminalArea 呈现内置终端的主区全屏视图。
+// termBarHeight 是终端会话芯片带的高度。
+//
+// 比顶栏的项目标签（38）压一档：这条带子长在主区里面，下面紧跟着就是终端
+// 正文 —— 它每高一个像素，正文就少一个像素。28 高的芯片加两边各 3 的气口，
+// 够放下这一行，也不再多了。
+const termBarHeight = 34
+
+// terminalTabBar 是终端视图顶上那条会话芯片带：一枚芯片一个 shell，点一下
+// 切过去，右边那枚 + 再开一个。
+//
+// 底色取 pal.appBg（和它上面的工具栏同一块面），下面 1px 发丝线交代「正文
+// 从这里开始」：正文那一块是内容面 codeBg，两者深浅只差一档，没有这条线
+// 芯片带和终端就是糊在一起的一片。
+func (a *app) terminalTabBar(c *ui.Context, pal palette, tab *repoTab) {
+	ui.Row(c).Height(termBarHeight).FillWidth().Shrink(0).
+		Padding(0, 8).Gap(4).AlignItems(ui.Center).
+		Background(pal.appBg).
+		// 只画下沿那一条：Border(0, …) 是零宽，画不出线，得用 BorderWidth
+		// （连框架自己注释里推荐的都是这一种）。
+		BorderWidth(0, 0, 1, 0).BorderColor(pal.hairline).
+		Children(func() {
+			// 关会话等这一圈走完再落（见 renderTerminalChip 的返回值）：× 是
+			// 在画到一半时被点中的，就地删掉一个会让 append 把后面的会话整体
+			// 前移一格 —— 剩下那几枚芯片这一帧就画成别人了。
+			closeIdx := -1
+			for i, s := range tab.terms {
+				if a.renderTerminalChip(c, pal, tab, i, s) {
+					closeIdx = i
+				}
+			}
+			if closeIdx >= 0 {
+				a.closeTerminalSession(tab, closeIdx)
+			}
+			if toolIconButton(c, pal, T("新建终端标签页", "New Terminal Tab"),
+				Tf("在项目目录里再开一个 shell %s", "Open another shell in the project %s", K("⌘⇧T")),
+				false, false, drawPlusIcon) {
+				a.newTerminalSession(tab)
+			}
+		})
+}
+
+// renderTerminalChip 画一枚终端会话芯片，返回这一帧它的 × 有没有被点中
+// （关的动作由调用方在这一圈走完之后再做，理由见 terminalTabBar）。
+//
+// 芯片上写 shell 自己报的标题（OSC 0/2），它不报就用「终端 N」兜底 —— 一屏
+// 里两个 shell 都叫「终端」，认不出哪一个是刚在跑构建的那个。
+//
+// 激活态只换颜色（底 surface2、边 hairlineStrong、字 ink），几何一律不动：
+// 边框两态都是 1px，内边距、字号、字重也都一样。切一次会话整条芯片带跟着
+// 重排的话，第二下就点不准了。
+func (a *app) renderTerminalChip(c *ui.Context, pal palette, tab *repoTab, idx int, s *termSession) bool {
+	title := ""
+	if s != nil && s.term != nil {
+		title = strings.TrimSpace(s.term.Title())
+	}
+	if title == "" {
+		ord := 1
+		if s != nil {
+			ord = s.ord
+		}
+		title = Tf("终端 %d", "Terminal %d", ord)
+	}
+	// 提示给 shell 的当前目录（OSC 7）：连着几个 shell 时，「哪一个是那个
+	// 还没退出来的」靠名字看不出来，靠目录能。
+	tip := title
+	if s != nil && s.term != nil {
+		if dir := s.term.Dir(); dir != "" {
+			tip = dir
+		}
+	}
+
+	active := idx == tab.termActive
+	chip := ui.ButtonBase(c).Height(28).Shrink(0).Radius(radiusSM).
+		Padding(0, 6).Gap(5).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer).Label(title).Tooltip(tip)
+	bg, fg, bd := ui.Transparent, pal.inkSubtle, pal.hairline
+	if active {
+		bg, fg, bd = pal.surface2, pal.ink, pal.hairlineStrong
+	} else if chip.Hovered() {
+		// 悬停只提一档底（§5）：非激活芯片本来就是透明底，指上去得有点动静。
+		bg = pal.surface1
+	}
+	chip.Background(bg).Border(1, bd)
+	fadeColors(chip)
+
+	// × 的点击只记下来、不在这里动手：调用方要等这一圈芯片都画完再关
+	// （理由见 terminalTabBar）。
+	closeClicked := false
+	chip.Children(func() {
+		drawIcon(c, iconTerminal, 11, fg)
+		ui.Text(c, title).FontSize(textCaption).SingleLine().MaxWidth(140).TextColor(fg)
+
+		// 关闭 ×。一直挂在芯片上、不跟着悬停出现：一颗只在悬停时才长出来的
+		// ×，会让芯片宽度在指针扫过时变来变去，下一枚芯片跟着挪 —— 那正是
+		// §5 说的「布局不许跟着状态抖」。
+		closeBtn := ui.ButtonBase(c).Size(16, 16).Radius(radiusXS).
+			Cursor(ui.CursorPointer).Label(T("关闭终端标签页", "Close Terminal Tab"))
+		if closeBtn.Hovered() {
+			closeBtn.Background(pal.surface3)
+		}
+		fadeColors(closeBtn)
+		closeBtn.Children(func() {
+			ui.Row(c).AlignItems(ui.Center).Justify(ui.Center).Fill().Children(func() {
+				drawIcon(c, iconX, 10, pal.inkSubtle)
+			})
+		})
+		if closeBtn.Clicked() {
+			closeClicked = true
+		}
+	})
+
+	if chip.Clicked() {
+		tab.termActive = idx
+	}
+	return closeClicked
+}
+
+// terminalArea 呈现内置终端的主区全屏视图：顶上一条会话芯片，下面是当前会话。
 func (a *app) terminalArea(c *ui.Context, pal palette) {
 	tab := a.currentTab()
 	if tab == nil {
@@ -761,27 +1009,43 @@ func (a *app) terminalArea(c *ui.Context, pal palette) {
 		return
 	}
 
-	if tab.term == nil && tab.termErr == "" {
-		a.initTabTerminal(tab)
+	// shell 是进了终端视图才起的：在 Git 面板里点来点去，不该在背后悄悄
+	// 攒下一排 shell 进程。
+	if len(tab.terms) == 0 {
+		a.newTerminalSession(tab)
+	}
+	if tab.termActive < 0 || tab.termActive >= len(tab.terms) {
+		tab.termActive = 0
+	}
+	cur := tab.terms[tab.termActive]
+	// 明暗从这一帧的主题读（view 开头刚按 isDark 设过），和推给终端的
+	// 那一份是同一个判断。
+	dark := a.isDark(c)
+	if !cur.started {
+		a.startTerminal(tab, cur, dark, pal)
 	}
 
-	if tab.termErr != "" {
-		ui.Column(c).AlignItems(ui.Center).Justify(ui.Center).Fill().Children(func() {
-			ui.Column(c).Gap(12).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, T("终端启动失败", "Failed to start terminal")).FontWeight(weightSemibold).TextColor(pal.ink)
-				ui.Text(c, tab.termErr).FontSize(textCaption).TextColor(pal.inkSubtle)
-				if secondaryAction(c, pal, T("重试", "Retry"), "", false).Clicked() {
-					tab.termErr = ""
-					a.initTabTerminal(tab)
-				}
+	ui.Column(c).Fill().AlignItems(ui.Stretch).Children(func() {
+		a.terminalTabBar(c, pal, tab)
+
+		switch {
+		case cur.err != "":
+			ui.Column(c).Grow(1).MinHeight(0).AlignItems(ui.Center).Justify(ui.Center).Children(func() {
+				ui.Column(c).Gap(12).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, T("终端启动失败", "Failed to start terminal")).FontWeight(weightSemibold).TextColor(pal.ink)
+					ui.Text(c, cur.err).FontSize(textCaption).TextColor(pal.inkSubtle)
+					if secondaryAction(c, pal, T("重试", "Retry"), "", false).Clicked() {
+						// 重来一次：把「起过」那笔账抹掉，下一帧再走一遍
+						// startTerminal。
+						cur.err = ""
+						cur.started = false
+					}
+				})
 			})
-		})
-		return
-	}
-
-	if tab.term != nil {
-		ui.Box(c).Fill().Background(pal.codeBg).Padding(4, 6).Children(func() {
-			terminal.View(c, tab.term).Fill().AutoFocus()
-		})
-	}
+		case cur.term != nil:
+			ui.Box(c).Grow(1).MinHeight(0).Background(pal.codeBg).Padding(4, 6).Children(func() {
+				terminal.View(c, cur.term).Fill().AutoFocus()
+			})
+		}
+	})
 }

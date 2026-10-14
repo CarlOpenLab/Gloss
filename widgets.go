@@ -439,6 +439,11 @@ func drawZapIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
 	p.Icon(iconZap, r, col)
 }
 
+// drawPlusIcon 画「新建 / 加号」（Lucide plus）。
+func drawPlusIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
+	p.Icon(iconPlus, r, col)
+}
+
 // xButton 画一个方形叉号按钮，返回这一帧有没有被点中。
 //
 // 用 ButtonBase 而不是 Button：Button 自带底和描边，摆在列表行里像另一颗

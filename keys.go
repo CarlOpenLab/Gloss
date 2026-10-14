@@ -37,6 +37,13 @@ func (a *app) handleKeys(c *ui.Context) {
 	if c.Shortcut(ui.Cmd, ui.KeyW) {
 		a.closeTab(a.activeTab)
 	}
+	// 终端会话的 ⌘⇧T。⌘T 已经是「新建项目标签页」、⌘W 是「关闭标签页」、
+	// Ctrl+~ / ⌘J 是视图切换 —— 这几个都动不得（它们在别的应用里也是那个
+	// 意思）。⌘⇧T 是同一条规律的上一层：浏览器和 iTerm 里「⇧ 加在 T 上」
+	// 就是「再开一个（同类的）标签」，不用另学一套。
+	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyT) {
+		a.newTerminalTab()
+	}
 	if c.Shortcut(ui.Ctrl, ui.KeyBackquote) || c.Shortcut(ui.Cmd, ui.KeyJ) {
 		a.toggleViewMode()
 	}
