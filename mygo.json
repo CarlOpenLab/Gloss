@@ -1,7 +1,7 @@
 {
   "name": "Gloss",
   "identifier": "dev.carl.gloss",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "icon": "resources/icon.png",
   "out": "build",
   "updates": {
