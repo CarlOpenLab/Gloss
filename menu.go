@@ -64,7 +64,6 @@ type appMenu struct {
 	push        *mygo.MenuItem
 	forcePush   *mygo.MenuItem
 	prList      *mygo.MenuItem
-	find        *mygo.MenuItem
 	themeSystem *mygo.MenuItem
 	themeLight  *mygo.MenuItem
 	themeDark   *mygo.MenuItem
@@ -94,14 +93,13 @@ func buildAppMenu(a *app) *mygo.Menu {
 		}
 	})
 	m.newBranch = a.menuCmd(T("新建分支…", "New Branch…"), "CmdOrCtrl+Shift+N", a.newBranchAtHead)
-	m.find = a.menuCmd(T("在差异中查找", "Find in Diff"), "CmdOrCtrl+F", a.openFind)
 	m.newTag = a.menuCmd(T("新建标签…", "New Tag…"), "", a.newTagAtHead)
 	m.stash = a.menuCmd(T("储藏工作区改动…", "Stash Changes…"), "", a.openStashDialog)
 	m.prList = a.menuCmd(T("查看 GitHub Pull Requests…", "GitHub Pull Requests…"), "", a.openPRDialog)
 
 	// 抓取 / 拉取 / 推送的键是挑出来的：F 和 P 是 Fetch 和 Pull，U 是「上传」
-	// 那个 up（Push 的 P 被拉取占了）。三个都带 ⇧ —— 光键位的 ⌘F 和 ⌘P 都
-	// 有了主人（在差异中查找 / 筛选文件），单键轮不到它们。
+	// 那个 up（Push 的 P 被拉取占了）。三个都带 ⇧：⌘P 归「筛选文件」，
+	// 单键轮不到它们。
 	m.fetch = a.menuCmd(T("抓取", "Fetch"), "CmdOrCtrl+Shift+F", a.doFetch)
 	m.pull = a.menuCmd(T("拉取", "Pull"), "CmdOrCtrl+Shift+P", a.doPull)
 	m.push = a.menuCmd(T("推送", "Push"), "CmdOrCtrl+Shift+U", a.doPush)
@@ -145,9 +143,9 @@ func buildAppMenu(a *app) *mygo.Menu {
 		mygo.Separator(),
 		m.refresh,
 		a.menuCmd(T("命令栏…", "Command Palette…"), "CmdOrCtrl+K", a.openPalette),
-		m.find,
-		// 「筛选文件」本质是 quick-open（找的是路径），所以摆在 ⌘P 上；
-		// ⌘F 归「在差异中查找」—— 找内容和找文件是两件事。
+		// 「筛选文件」本质是 quick-open（找的是路径），所以摆在 ⌘P 上。
+		// ⌘F 留给改动区自己的查找（DiffView 里那一栏）：找内容和找文件是
+		// 两件事，而且内容查找的「当前哪一条」只有编辑器自己知道。
 		a.menuCmd(T("筛选文件", "Filter Files"), "CmdOrCtrl+P", func() { a.focusFilter = true }),
 		mygo.Separator(),
 		{Role: mygo.RoleToggleFullScreen, Label: T("进入全屏", "Toggle Full Screen")},
@@ -323,9 +321,6 @@ func (a *app) syncMenu() {
 	enableItem(m.newBranch, !noRepo && a.op == gitrepo.OpNone)
 	enableItem(m.newTag, !noRepo && a.op == gitrepo.OpNone)
 	enableItem(m.prList, !noRepo)
-	// 没有 diff 可搜的时候灰着：和 ⌘F 那条路一个判断（openFind 自己也再看
-	// 一眼），菜单只是先把话说在前面。
-	enableItem(m.find, a.hasDiff())
 
 	// 远程三条：没有远程就没得抓也没得推（`git fetch --all` 在这种情况下
 	// 静默成功，等错误等不到）；分离 HEAD 上拉取和推送没有落点，抓取照常。

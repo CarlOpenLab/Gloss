@@ -186,7 +186,7 @@ func (a *app) loadCommit(i int) {
 	}
 	a.commitSel = i
 	a.fileSel = -1
-	a.pendingScrollFile = -1
+	a.stashName = ""
 	// 看提交了，储藏那个视图就到此为止（和上面清 commitSel 是一回事）
 	a.stashRev = ""
 	a.histDiff = loadLoading
@@ -259,6 +259,7 @@ func (a *app) selectStash(ref gitrepo.Ref) {
 	a.commitSel = -1
 	a.fileSel = -1
 	a.stashRev = ref.Full
+	a.stashName = ref.Name
 	a.histDiff = loadLoading
 	a.histDiffErr = ""
 	a.tab = 1

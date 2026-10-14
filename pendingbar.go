@@ -103,7 +103,7 @@ func (a *app) pendingText(conflicts int) (title, hint string) {
 	p := a.pending
 	if !p.Active() {
 		return fmt.Sprintf("有 %d 个冲突文件要解决", conflicts),
-			"点开每个文件、在卡片上挑一边（或者手工改完「标记为已解决」），然后照常提交。储藏的改动撞上手头的文件时就是这样 —— 这一步没有「继续」也没有「中止」。"
+			"点开每个文件、在改动区里挑一边（每一处冲突都能单独选，也可以自己改完再「保存并标记已解决」），然后照常提交。储藏的改动撞上手头的文件时就是这样 —— 这一步没有「继续」也没有「中止」。"
 	}
 
 	noun := pendingNoun(p.Kind)
@@ -123,7 +123,7 @@ func (a *app) pendingText(conflicts int) (title, hint string) {
 	}
 
 	if conflicts > 0 {
-		return title, fmt.Sprintf("还有 %d 个冲突文件没解决（列表里标 ! 的）：点开文件、在卡片上挑一边（或者手工改完「标记为已解决」），再点「继续」。", conflicts)
+		return title, fmt.Sprintf("还有 %d 个冲突文件没解决（列表里标 ! 的）：点开文件、在改动区里挑一边（每一处都能单独选，也可以自己改完），再点「继续」。", conflicts)
 	}
 	switch p.Kind {
 	case gitrepo.PendingMerge:

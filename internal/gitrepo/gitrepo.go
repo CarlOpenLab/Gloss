@@ -11,7 +11,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -139,8 +138,14 @@ func diffArgs(extra ...string) []string {
 //     每条命令 -c core.editor=true：这是对整个进程的约束（我们永远不要
 //     编辑器），漏掉一处就是一次挂起。（cherry-pick/revert 的 --continue
 //     实测不拉编辑器，但按「永远不要」来要求自己更省心。）
+//   - PATH 用的是 shellPATHEnv() 算出来的那份（登录 shell 的 PATH + 进程
+//     自己的）：钩子是用户写的，钩子里调的 node/等工具只存在于用户终端
+//     的 PATH 里。从 Finder 启动的 GUI 进程只有 launchd 那几个系统目录，
+//     不加这一层，husky/lefthook 这类钩子会在「提交」（还有「继续合并」
+//     这种会真提交的操作）时报 `env: node: No such file or directory`。
 func gitEnv() []string {
-	return append(os.Environ(),
+	// PATH 由 shellPATHEnv 处理，其余变量按老办法追加。
+	return append(shellPATHEnv(),
 		"GIT_OPTIONAL_LOCKS=0",
 		"LC_ALL=C",
 		"GIT_PAGER=cat",

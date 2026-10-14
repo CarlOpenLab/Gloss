@@ -46,4 +46,8 @@ const (
 	weightRegular  = 400
 	weightMedium   = 500
 	weightSemibold = 600
+
+	// defSize 是代码的默认字号（diff 与编辑器共用）。⌘+ / ⌘− 在这基础上加减，
+	// 用户没调过时就是它。
+	defSize = 12.5
 )

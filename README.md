@@ -43,7 +43,7 @@ When reviewing large pull requests or AI-generated diffs, the biggest bottleneck
 - ⚡ **GPU Direct Rendering**: Pure Go native interface built with `mygo`, styled around GitHub's visual palette.
 - 🛡 **Pre-flight Risk Scan**: One click scans the staged diff for hardcoded secrets, injection risks, and other suspicious changes, grouped by severity and anchored to file and line.
 - 🤖 **AI Commit Messages & Branch Names**: Generate Conventional Commits messages from the staged diff (optionally steered by an intent hint), and name new branches from a one-line description.
-- 🌲 **Fork-Style Layout & Topology Graph**: Custom commit topology graph to visualize branching histories; split / unified diff toggle with chroma syntax highlighting.
+- 🌲 **Fork-Style Layout & Topology Graph**: Custom commit topology graph to visualize branching histories; the review pane shows one file at a time with split / unified layouts, word-level inline highlighting and syntax highlighting.
 - 🔍 **Viewed Tracking**: Mark files as reviewed to collapse them into clean headers; automatically resets when file contents change.
 - 🛠 **Full Git Workflow**:
   - **Staging & Commits**: Whole-file staging, **per-hunk staging**, persistent drafts, and Amend (`--amend`).
@@ -74,13 +74,14 @@ When reviewing large pull requests or AI-generated diffs, the biggest bottleneck
   - Inspect stash diffs directly; apply, pop, or drop stashes with confirmation dialogs.
   - Amend commits with pre-filled previous commit messages, supporting message-only adjustments or staged additions.
 - **Fetch, Pull & Push**: Dedicated toolbar actions with intelligent disable states for detached HEAD or repos without remotes. Provides plain-language translations for push rejections, divergences, and authentication requirements.
-- **GitHub-Style Diff View**: Red/green diff highlighting, dual-side line numbers, syntax highlighting (chroma), and file tree navigation.
+- **One File at a Time Diff View**: The left pane navigates, the right pane renders the selected file with MyGo's diff viewer — red/green highlighting, dual-side line numbers, word-level inline changes, collapsible unchanged regions, and syntax highlighting. The unstaged side is editable (saving writes the working tree only, never the index).
 - **Pre-flight Risk Scan**: The 🛡 Audit Changes button hands the full staged diff to your model and lists suspicious spots (hardcoded secrets, injection risks, …) grouped by severity—critical / high / medium / low—each anchored to a file and line. Provider failures are translated into plain language instead of raw HTTP errors.
 - **AI Commit Messages & Branch Names**: The AI button in the commit box drafts a Conventional Commits message from the staged diff, treating your notes in the message box as an intent hint; a zh/EN toggle picks the language. The new-branch dialog can generate a branch name from a one-line description.
-- **Fork-Style Commit Graph**: Top pane displays commits alongside a calculated topology graph; bottom pane displays file trees on the left and diffs on the right.
-- **File Tree & Viewed Folding**: Collapsible directory tree with single-child path flattening and fuzzy search (`⌘P`). Marking files as `Viewed` collapses them to fit reviews on a single screen; automatically invalidates on content changes.
-- **Find in Diff (`⌘F`)**: Search the diff as you type — every match is highlighted with live counting, and `↵` / `⌘G` walk through them. Matches inside unchanged regions or collapsed files are revealed automatically, so a hit is never somewhere you can't see it.
-- **Streamlined Conflict Resolution**: Amber status bar during merge/rebase/cherry-pick conflicts with step indicators (Continue / Skip / Abort). Interactive conflict cards allow two-way side picking and accept-deletion confirmations.
+- **Fork-Style Commit Graph**: Top pane displays commits alongside a calculated topology graph; bottom pane displays the file tree on the left and the selected file's diff on the right.
+- **File Tree & Viewed Marks**: Collapsible directory tree with single-child path flattening and fuzzy search (`⌘P`). Marking a file as `Reviewed` dims it in the file list and invalidates on content changes.
+- **Find in Diff (`⌘F`)**: The find bar belongs to the diff viewer — `⌘F` while the diff has focus, `⌘F` / `⇧⌘G` to walk matches. Finding content and finding files are separate: `⌘F` for content, `⌘P` for files.
+- **Stage by Hunk**: Hovering a change (or parking the caret on it) reveals `Stage` / `Unstage` for exactly that change — the blocks are the viewer's own, so one click stages that block only and leaves the other changes in the file alone.
+- **Conflict Resolution Inline**: Selecting a conflicted file shows the worktree text with its markers (the left side switches between current / theirs / merge base). Every conflict block has its own "keep X / keep Y / keep both / keep neither", the top bar resolves the whole file either way, and the right side is editable: "Save & Resolve" writes the file and runs `git add` in one step.
 - **Command Palette (`⌘K`)**: Quick access to all application actions with keyboard-first workflows.
 
 ---
@@ -92,11 +93,12 @@ When reviewing large pull requests or AI-generated diffs, the biggest bottleneck
 | `⌘K` | Open Command Palette |
 | `J` / `K` | Jump to Next / Previous hunk (Changes) or commit (History) |
 | `↓` / `↑` | Select Next / Previous commit (History) or file (Changes) |
-| `⌘F` | Find in diff (search the changed lines) |
+| `⌘F` | Find in the diff (opens the viewer's own find bar when it has focus) |
 | `↵` / `⇧↵` | Next / previous match (in the find box) |
 | `⌘G` / `⌘⇧G` | Next / previous match |
 | `Esc` | Close the find bar |
 | `⌘P` | Focus file filter input |
+| `⌘S` | Save the edited side of the diff / editor (a conflict also runs `git add`) |
 | `⌘⏎` | Commit staged changes |
 | `⌘O` | Open repository |
 | `⌘1` / `⌘2` | Switch between Changes / History |
@@ -166,7 +168,9 @@ main.go / app.go         Window, menus, app state, root frame layout
   filepane.go            Bottom pane left: file list & staging controls
   filemenu.go            File row context menu: stage / discard / copy / history / ignore
   filehist.go            "View File History…" dialog: this file's own commits, jump to one
-  diffview.go            Diff rendering, syntax highlighting, folding
+  review.go              Review pane: single-file diff viewer (both sides, hunk staging, conflict side picking)
+  conflict_region.go     Parsing and rewriting conflict markers in the worktree text
+  files.go               File list identity (fileKey / pathOf / displayPath)
   commitbox.go           Staging checkboxes, hunk staging buttons, commit box
   checkout.go            Checkout handlers, double-click, cleanup
   tagdialog.go           Tag creation dialog (lightweight & annotated)
@@ -177,7 +181,6 @@ main.go / app.go         Window, menus, app state, root frame layout
   resolve.go             Conflict resolution: two-way side picking & cards (menu lives in filemenu.go)
   treeview.go            Shared tree rows (indentation, arrows, selection capsules)
   refs.go                Git reference grouping & filtering
-  rows.go                Virtual list row models
   palette.go / keys.go   Command palette & shortcut bindings
   menu.go                macOS native menu bar commands
   settings.go            Model settings modal
@@ -195,7 +198,7 @@ internal/
     failure.go           Plain-language git error translator
   diff/                  Unified diff parser
     slice.go             Slice hunk patches for hunk-level staging
-  highlight/             Chroma syntax tokenization and line slicing
+    range.go             Build a patch for a line range (context only where both sides agree)
   explain/               Prompt construction for commit messages, branch names, PR review, and risk scans (pure functions)
   llm/                   Streaming client for Anthropic & OpenAI-compatible APIs
     failure.go           Plain-language provider error translator
@@ -224,7 +227,7 @@ internal/
 - [x] Pre-flight risk scan: Full-diff scan highlighting potential vulnerabilities
 - [x] File row context menu: stage / discard (delete for untracked) / reveal in Finder / copy path three ways / view file history / mark reviewed / add to `.gitignore`
 - [x] Drag-to-reorder providers, with presets moved into the Add Provider menu
-- [ ] Free cross-line text selection in a diff: render each hunk as one multi-line selectable text (chunk long hunks by N lines), with native drag-select and ⌘C
+- [x] Native text selection in the diff: the review pane is a real editor, so drag-select, `⌘C` and undo are its own behavior
 
 ---
 

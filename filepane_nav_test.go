@@ -38,10 +38,13 @@ func TestNavFileMovesSelection(t *testing.T) {
 		t.Errorf("第二次按 ↓ 还停在同一个文件 %d", first)
 	}
 
-	// 请 diff 跟着滚：pendingScrollFile 是点击走的那条通道，键盘也该用。
-	if a.pendingScrollFile != a.fileSel {
-		t.Errorf("导航后 diff 该滚到新文件：pendingScrollFile=%d fileSel=%d",
-			a.pendingScrollFile, a.fileSel)
+	// 改动区跟着选中走：键盘导航和点击走的是同一条路（都只改 fileSel，
+	// 改动区下一帧自己发现选中的文件变了）。
+	settle(t, a)
+	tt2 := ui.NewTester(a.view, 1280, 860)
+	tt2.Frame()
+	if want := fileKey(a.files[a.fileSel]); a.review.key != want {
+		t.Errorf("导航后改动区该换到 %s，实际 %s", want, a.review.key)
 	}
 
 	// 按回 ↑：回到刚才那个文件。

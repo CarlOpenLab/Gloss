@@ -58,29 +58,19 @@ func (a *app) handleKeys(c *ui.Context) {
 	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyN) {
 		a.newBranchAtHead()
 	}
-	// ⌘F 和 ⌘P 只在 Git 面板里认。终端模式下 diff 根本不在屏幕上，认了
-	// 要么白开一条搜不到东西的栏，要么把 focusFilter 挂在那儿 —— 等用户
-	// 切回 Git 面板，一个不知道什么时候按下的 ⌘P 会突然把焦点抢走。
-	// ⌘G 跟着 ⌘F 走：栏是那里开的，两个「上/下一条」也不该跑到终端里去认。
+	// ⌘P 只在 Git 面板里认：终端模式下 diff 根本不在屏幕上，把 focusFilter
+	// 挂在那儿，等用户切回 Git 面板，一个不知道什么时候按下的 ⌘P 会突然把
+	// 焦点抢走。（⌘F/⌘G 归 DiffView 自己的查找：焦点在它里面时由编辑器
+	// 先收键，那份查找跟着这一栏活着。）
 	if a.viewMode == viewModeGit {
-		if c.Shortcut(ui.Cmd, ui.KeyF) {
-			a.openFind()
-		}
 		if c.Shortcut(ui.Cmd, ui.KeyP) {
 			// 焦点给主区那个文件筛选框，不是侧栏的分支筛选框 —— review 时
 			// 想找的是文件。也不再把侧栏拽开：那个框现在筛的是分支，开不开
 			// 和「找文件」没关系。
 			//
-			// 这个键本来是 ⌘F，让给了「在差异中查找」：⌘F = 找内容、
-			// ⌘P = 找文件，是编辑器和 Git 客户端的通行分法。
+			// ⌘F = 找内容（改动区自己的查找栏）、⌘P = 找文件，是编辑器和
+			// Git 客户端的通行分法。
 			a.focusFilter = true
-		}
-		// 查找栏的两个「上/下一条」。⌘G 是「再找一次」的老键位，⇧ 反向。
-		if c.Shortcut(ui.Cmd, ui.KeyG) {
-			a.findNext(1)
-		}
-		if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyG) {
-			a.findNext(-1)
 		}
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyK) {
@@ -111,6 +101,13 @@ func (a *app) handleKeys(c *ui.Context) {
 	// （State.Bindings 里绑成 NoCommand），所以这里能接住。
 	if a.viewMode == viewModeEditor && c.Shortcut(ui.Cmd, ui.KeyS) {
 		a.saveEditorPane()
+	}
+	// 改动区里的 ⌘S：右侧改过就存下来（冲突文件顺手 git add）。同样是因为
+	// DiffView 把 ⌘S 让给了应用（见 review.go 里那份 Bindings）。
+	if a.viewMode == viewModeGit && c.Shortcut(ui.Cmd, ui.KeyS) {
+		if a.review.editable && a.review.new != nil && a.review.new.Modified() {
+			a.saveReview()
+		}
 	}
 	// 字号从「当前生效的字号」上加减，而不是从 a.codeSize 上 ——
 	// 后者 0 表示「用默认值」，直接 +1 会被夹到下限，第一次按就跳到底。
@@ -174,11 +171,9 @@ func (a *app) handleKeys(c *ui.Context) {
 	// 列表里上下移 —— 一层管 diff 正文、一层管文件栏，两个键不冲突。
 	// 在模态对话框或输入框获取焦点时不响应。
 	//
-	// 查找输入框里另说：J / K 会被编辑框自己吃掉（打的是字），可裸 ↑ / ↓
-	// 单行编辑框不认，会漏到这儿来 —— 用上一帧的焦点状态挡一道。
 	// 在模态对话框、输入框获取焦点、或「编辑器」视图时不响应 —— 后者的键位
-	// 归给编辑器里的光标。
-	if !a.modalOn() && !a.find.focused && a.viewMode == viewModeGit {
+	// 归给编辑器里的光标（DiffView 里的光标也算：它有自己的一套键）。
+	if !a.modalOn() && a.viewMode == viewModeGit {
 		if a.tab == 1 && len(a.commits) > 0 {
 			if c.Shortcut(0, ui.KeyJ) || c.Shortcut(0, ui.KeyDown) {
 				a.navCommit(1)
@@ -186,8 +181,8 @@ func (a *app) handleKeys(c *ui.Context) {
 				a.navCommit(-1)
 			}
 		} else if a.tab == 0 && a.state == loadReady && len(a.files) > 0 {
-			// 方向键先给文件栏：没有选中过任何文件时这一下就是「选中第一个」，
-			// 有了选中就在列表里上下移。J / K 与它分开，仍然跳 hunk。
+			// 方向键给文件栏：没有选中过任何文件时这一下就是「选中第一个」，
+			// 有了选中就在列表里上下移。J / K 与它分开，在这一个文件里跳段。
 			if c.Shortcut(0, ui.KeyDown) {
 				a.navFile(1)
 			} else if c.Shortcut(0, ui.KeyUp) {
@@ -222,105 +217,36 @@ func (a *app) codeSizeValue() float32 {
 	return a.codeSize
 }
 
-// jumpHunk 把列表滚到上一段/下一段改动。
+// jumpHunk 跳到下一个/上一个改动块，走到头绕到另一端。
 //
-// 出发点优先取上一次跳到的那一段，它看不见了就退回视口顶行 ——
-// 用户手动滚动、展开未改动区间、切视图都会让「我记得跳到哪了」过期，
-// 而滚动位置永远是真的。细节见 hunkAnchor。
+// 段是 DiffView 自己算出来的（它按两侧原文切，和 git 的 -U3 段不保证一样），
+// 所以这里问它要一份清单，再让它把光标和视口挪过去 —— Gloss 不再自己维护
+// 一份行模型，也就没有「行号对不上」这件事。
+//
+// 还没跳过的时候（hunkIdx < 0）往下落到第一段、往上落到最后一段：
+// 「下一段」从头开始数是第一段，不是第二段。
 func (a *app) jumpHunk(dir int) {
-	if a.rowsDirty {
-		a.rebuildRows()
-	}
-	if len(a.rows) == 0 {
+	s := &a.review
+	if s.diff == nil {
 		return
 	}
-
-	target := hunkRowNear(a.rows, a.hunkAnchor(), dir)
-	if target < 0 {
+	n := len(s.diff.Hunks())
+	if n == 0 {
 		return
 	}
-	a.hunkCur = a.rows[target].key
-	a.diffList.ScrollTo(target, ui.Start)
-}
-
-// hunkAnchor 是这次跳转的出发点。
-//
-// 默认取上一次跳到的那一段（它还看得见的话），否则取视口顶行。
-//
-// 为什么不单纯用视口顶行：视口不一定跟得上。文件头钉在列表顶上时顶行
-// 一直是它；diff 滚到底之后视口也不再动。这两种情况都会让「下一段」
-// 每次都算出同一个目标，连按 J 就卡在原地，所以要记着跳到哪了。
-//
-// 反过来，用户要是滚到了别处，那一段就滚出屏幕了（滑出去的会被列表
-// 扔掉，下标对不上），于是自然回到「以视口为准」。
-func (a *app) hunkAnchor() int {
-	first, last := a.diffList.Visible()
-	if i := a.rowIndexOf(a.hunkCur); i >= first && i <= last {
-		return i
-	}
-	a.hunkCur = ""
-	return a.topRow()
-}
-
-// rowIndexOf 找某一行 key 的下标，没有返回 -1。
-func (a *app) rowIndexOf(key string) int {
-	if key == "" {
-		return -1
-	}
-	for i := range a.rows {
-		if a.rows[i].key == key {
-			return i
+	i := s.hunkIdx
+	switch {
+	case i < 0 || i >= n:
+		if dir > 0 {
+			i = 0
+		} else {
+			i = n - 1
 		}
+	case dir > 0:
+		i = (i + 1) % n
+	default:
+		i = (i - 1 + n) % n
 	}
-	return -1
-}
-
-// topRow 是视口顶上的那一行。
-//
-// 钉在列表顶部的文件头不算 —— 它下面那一行才是真正顶在眼前的内容。
-func (a *app) topRow() int {
-	first, last := a.diffList.Visible()
-	if first >= 0 && first < last && a.rows[first].kind == rowFileHeader {
-		return first + 1
-	}
-	return first
-}
-
-// hunkRowNear 找 from 之后（dir > 0）或之前（dir < 0）最近的一段改动。
-// 到头了就绕到另一端：一路按 J 会循环，手不用离开键盘。
-func hunkRowNear(rows []row, from, dir int) int {
-	if dir > 0 {
-		for i := from + 1; i < len(rows); i++ {
-			if rows[i].kind == rowHunkHeader {
-				return i
-			}
-		}
-		return firstHunkRow(rows, from)
-	}
-	for i := min(from, len(rows)-1) - 1; i >= 0; i-- {
-		if rows[i].kind == rowHunkHeader {
-			return i
-		}
-	}
-	return lastHunkRow(rows)
-}
-
-// firstHunkRow 是 from 之前的第一段改动。到头了绕回开头时用。
-func firstHunkRow(rows []row, before int) int {
-	for i := 0; i < len(rows) && i < before; i++ {
-		if rows[i].kind == rowHunkHeader {
-			return i
-		}
-	}
-	return -1
-}
-
-// lastHunkRow 是最后一段改动。
-func lastHunkRow(rows []row) int {
-	for i := len(rows) - 1; i >= 0; i-- {
-		if rows[i].kind == rowHunkHeader {
-			return i
-		}
-	}
-	return -1
+	s.hunkIdx = i
+	s.diff.GoToHunk(i)
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -20,8 +21,12 @@ func TestHistoryNavJK(t *testing.T) {
 	if a.commitSel != 0 {
 		t.Fatalf("初始应该选中最新提交，实际 commitSel = %d", a.commitSel)
 	}
+	waitReview(t, a, tt)
 	if !tt.HasText("b.txt") {
 		t.Errorf("初始应该显示第 0 个提交（第三条）的 diff: %q", tt.Texts())
+	}
+	if got := reviewText(a); !strings.Contains(got, "hello") {
+		t.Errorf("初始该显示第三条提交的内容：\n%s", got)
 	}
 
 	// J 移动到下一个（较旧的）提交
@@ -32,8 +37,12 @@ func TestHistoryNavJK(t *testing.T) {
 	if a.commitSel != 1 {
 		t.Fatalf("按 J 之后 commitSel = %d, want 1", a.commitSel)
 	}
-	if !tt.HasText("two") {
-		t.Errorf("主区应该显示第 1 个提交（第二条）的 diff: %q", tt.Texts())
+	waitReview(t, a, tt)
+	if got := reviewText(a); !strings.Contains(got, "two") {
+		t.Errorf("主区应该显示第 1 个提交（第二条）的 diff：\n%s", got)
+	}
+	if got := reviewText(a); strings.Contains(got, "hello") {
+		t.Errorf("不该还留着第三条的内容：\n%s", got)
 	}
 
 	// 再次按 J 移动到第 2 个提交（第一条）
@@ -44,8 +53,9 @@ func TestHistoryNavJK(t *testing.T) {
 	if a.commitSel != 2 {
 		t.Fatalf("再次按 J 之后 commitSel = %d, want 2", a.commitSel)
 	}
-	if !tt.HasText("one") {
-		t.Errorf("主区应该显示第 2 个提交（第一条）的 diff: %q", tt.Texts())
+	waitReview(t, a, tt)
+	if got := reviewText(a); !strings.Contains(got, "one") {
+		t.Errorf("主区应该显示第 2 个提交（第一条）的 diff：\n%s", got)
 	}
 
 	// 到底部后再按 J 应该被夹住，不超出范围
@@ -65,8 +75,12 @@ func TestHistoryNavJK(t *testing.T) {
 	if a.commitSel != 1 {
 		t.Fatalf("按 K 之后 commitSel = %d, want 1", a.commitSel)
 	}
-	if !tt.HasText("two") {
-		t.Errorf("主区应该显示第 1 个提交（第二条）的 diff: %q", tt.Texts())
+	waitReview(t, a, tt)
+	if got := reviewText(a); !strings.Contains(got, "two") {
+		t.Errorf("主区应该显示第 1 个提交（第二条）的 diff：\n%s", got)
+	}
+	if got := reviewText(a); strings.Contains(got, "hello") {
+		t.Errorf("不该还留着第三条的内容：\n%s", got)
 	}
 
 	// 再次按 K 移动回最新提交
@@ -77,8 +91,9 @@ func TestHistoryNavJK(t *testing.T) {
 	if a.commitSel != 0 {
 		t.Fatalf("再次按 K 之后 commitSel = %d, want 0", a.commitSel)
 	}
-	if !tt.HasText("b.txt") {
-		t.Errorf("主区应该恢复显示第 0 个提交（第三条）的 diff: %q", tt.Texts())
+	waitReview(t, a, tt)
+	if got := reviewText(a); !strings.Contains(got, "hello") {
+		t.Errorf("主区应该恢复显示第 0 个提交（第三条）的 diff：\n%s", got)
 	}
 
 	// 到顶后再按 K 应该被夹在 0
@@ -112,8 +127,9 @@ func TestHistoryNavArrows(t *testing.T) {
 	if a.commitSel != 1 {
 		t.Fatalf("按 Down 之后 commitSel = %d, want 1", a.commitSel)
 	}
-	if !tt.HasText("two") {
-		t.Errorf("按 Down 之后应该加载第 1 个提交的内容: %q", tt.Texts())
+	waitReview(t, a, tt)
+	if got := reviewText(a); !strings.Contains(got, "two") {
+		t.Errorf("按 Down 之后应该加载第 1 个提交的内容：\n%s", got)
 	}
 
 	// 再次 Down
@@ -349,4 +365,3 @@ func TestHistoryNavScrollsIntoView(t *testing.T) {
 		t.Errorf("当前选中提交 %d 不在可视区 [%d, %d] 内", a.commitSel, first, last)
 	}
 }
-

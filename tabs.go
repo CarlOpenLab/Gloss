@@ -45,17 +45,10 @@ type repoTab struct {
 	workFiles  []gitrepo.File
 	histFiles  []gitrepo.File
 	histListID string
-	contents   map[string]*fileContent
-	contentFP  map[string]string
-
-	rows      []row
-	rowsDirty bool
-	diffList  ui.ListState
-	built     int
-
-	expanded map[string]int
-	listID   string
-	hunkCur  string
+	listID     string
+	// review 是改动区那一栏的状态（review.go）。它进快照：切回一个标签页
+	// 时看的还是那一个文件，滚动位置、展开过的未改动区间都在原来的地方。
+	review reviewState
 
 	tree             []*filetree.Node
 	filesList        ui.ListState
@@ -127,17 +120,8 @@ func (a *app) saveActiveTab() {
 	tab.workFiles = a.workFiles
 	tab.histFiles = a.histFiles
 	tab.histListID = a.histListID
-	tab.contents = a.contents
-	tab.contentFP = a.contentFP
-
-	tab.rows = a.rows
-	tab.rowsDirty = a.rowsDirty
-	tab.diffList = a.diffList
-	tab.built = a.built
-
-	tab.expanded = a.expanded
 	tab.listID = a.listID
-	tab.hunkCur = a.hunkCur
+	tab.review = a.review
 
 	tab.tree = a.tree
 	tab.filesList = a.filesList
@@ -179,9 +163,6 @@ func (a *app) restoreActiveTab() {
 	if a.activeTab < 0 || a.activeTab >= len(a.tabs) {
 		return
 	}
-	// 查找索引整个作废：它的 key 里有 a.files 的下标，而下面几行就把
-	// a.files 换成另一个仓库的了。这里不走 applyFilter，所以得自己说一声。
-	a.invalidate()
 	a.closeEmbeddedEditors()
 	tab := a.tabs[a.activeTab]
 	a.repoPath = tab.path
@@ -204,17 +185,8 @@ func (a *app) restoreActiveTab() {
 	a.workFiles = tab.workFiles
 	a.histFiles = tab.histFiles
 	a.histListID = tab.histListID
-	a.contents = tab.contents
-	a.contentFP = tab.contentFP
-
-	a.rows = tab.rows
-	a.rowsDirty = tab.rowsDirty
-	a.diffList = tab.diffList
-	a.built = tab.built
-
-	a.expanded = tab.expanded
 	a.listID = tab.listID
-	a.hunkCur = tab.hunkCur
+	a.review = tab.review
 
 	a.tree = tab.tree
 	a.filesList = tab.filesList
@@ -334,8 +306,6 @@ func (a *app) closeTab(idx int) {
 		a.workFiles = nil
 		a.files = nil
 		a.state = loadIdle
-		// 同上：下面不走 restoreActiveTab，这里把列表清空了也得让查找知道。
-		a.invalidate()
 	} else {
 		if a.activeTab >= len(a.tabs) {
 			a.activeTab = len(a.tabs) - 1
@@ -533,7 +503,9 @@ func (a *app) projectTabBar(c *ui.Context, pal palette) {
 		Padding(3, padRight, 3, padLeft).
 		Gap(4).
 		AlignItems(ui.Center).
-		Background(pal.sideBg.Alpha(0.6)).
+		// 顶栏和侧栏同色同材质：一并从半透明改回实色，理由见 sidebar 里那段
+		// —— 两个面的明度差本来就小，再各乘一个 α 就是两片糊在一起的白/黑。
+		Background(pal.sideBg).
 		Border(0, pal.hairline).
 		DragWindow().
 		Children(func() {

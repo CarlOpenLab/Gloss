@@ -119,12 +119,7 @@ func (a *app) detailPane(c *ui.Context, pal palette) {
 		a.filePaneSplitter(c, pal)
 		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
 			if a.hasDiff() {
-				// 查找栏停在 diff 顶上。停在同一列里而不是浮在它上面：
-				// 它会占掉几十像素的高度，diff 跟着缩，两者永不重叠。
-				if a.find.on {
-					a.findBar(c, pal)
-				}
-				a.diffView(c, pal)
+				a.reviewPane(c, pal)
 				return
 			}
 			ui.Box(c).Grow(1).FillWidth().Children(func() {
@@ -399,10 +394,7 @@ func (a *app) treeRow(c *ui.Context, pal palette, r filetree.Row) {
 	}
 	if row.Clicked() {
 		a.fileSel = n.FileIdx
-		// 只记下「该滚到哪」，不在这帧直接 ScrollTo：行模型现在可能还是脏的
-		// （筛选/展开/切视图都会弄脏它），按旧的行下标滚过去会落到别的文件上。
-		// diffView 重建完行模型再消费这个请求。
-		a.pendingScrollFile = n.FileIdx
+		// 改动区跟着选中走（它在下一帧自己发现选中的文件变了）。
 		a.syncEditorPane()
 	}
 }
@@ -522,9 +514,9 @@ func (a *app) detailEmpty(c *ui.Context, t *ui.Theme, pal palette) {
 
 // navFile 用方向键在「改动」文件列表里移动选中（dir：+1 下一个，-1 上一个）。
 //
-// 走的是和点击同一套状态：fileSel 记选中的文件，pendingScrollFile 请 diff
-// 滚到它。列表是树形扁平化出来的，中间夹着目录行（FileIdx 为 -1），所以
-// 要跳过它们 —— 方向键一下跳过一个目录，落到下一个真正的文件上。
+// 走的是和点击同一套状态：只改 fileSel，右边那一栏下一帧自己发现选中的文件
+// 变了。列表是树形扁平化出来的，中间夹着目录行（FileIdx 为 -1），所以要
+// 跳过它们 —— 方向键一下跳过一个目录，落到下一个真正的文件上。
 //
 // 没选中过任何文件时（fileSel < 0）从第一个文件开始，不至于按下去没反应。
 func (a *app) navFile(dir int) {
@@ -572,7 +564,6 @@ func (a *app) navFile(dir int) {
 		return
 	}
 	a.fileSel = idx
-	a.pendingScrollFile = idx
 	a.syncEditorPane()
 	a.filesList.ScrollIntoView(next)
 }

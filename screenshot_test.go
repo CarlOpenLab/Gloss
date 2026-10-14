@@ -50,20 +50,28 @@ func TestDumpScreenshot(t *testing.T) {
 	tt.SetTitleBar(realTitleBar)
 	tt.Frame()
 
-	writePNG(t, "/tmp/de-shot-light.png", tt.Image())
+	// shot 拍之前先把这一趟异步读盘跑完、再重画一帧：改动区的两侧原文是
+	// 异步读进来的，直接拍会拍到「正在读取这个文件…」。
+	shot := func(path string) {
+		settle(t, a)
+		tt.Frame()
+		writePNG(t, path, tt.Image())
+	}
+
+	shot("/tmp/de-shot-light.png")
 	tt.SetDark(true)
 	tt.Frame()
-	writePNG(t, "/tmp/de-shot-dark.png", tt.Image())
+	shot("/tmp/de-shot-dark.png")
 
 	// 全部暂存后的状态截图（展示 masterStageBox 勾选、全部取消按钮、已暂存状态胶囊）
 	a.stageAll()
 	settle(t, a)
 	tt.SetDark(false)
 	tt.Frame()
-	writePNG(t, "/tmp/de-shot-staged-light.png", tt.Image())
+	shot("/tmp/de-shot-staged-light.png")
 	tt.SetDark(true)
 	tt.Frame()
-	writePNG(t, "/tmp/de-shot-staged-dark.png", tt.Image())
+	shot("/tmp/de-shot-staged-dark.png")
 	a.unstageAll()
 	settle(t, a)
 	tt.SetDark(false)
@@ -75,10 +83,10 @@ func TestDumpScreenshot(t *testing.T) {
 	a.repoDropdownOpen = true
 	tt.SetDark(false)
 	tt.Frame()
-	writePNG(t, "/tmp/de-shot-dropdown-light.png", tt.Image())
+	shot("/tmp/de-shot-dropdown-light.png")
 	tt.SetDark(true)
 	tt.Frame()
-	writePNG(t, "/tmp/de-shot-dropdown-dark.png", tt.Image())
+	shot("/tmp/de-shot-dropdown-dark.png")
 	a.repoDropdownOpen = false
 	a.sidebarOn = true
 	tt.SetDark(false)
@@ -88,17 +96,17 @@ func TestDumpScreenshot(t *testing.T) {
 	a.fileFilter = "router"
 	tt.SetDark(false)
 	tt.Frame()
-	writePNG(t, "/tmp/de-shot-code-light.png", tt.Image())
+	shot("/tmp/de-shot-code-light.png")
 	tt.SetDark(true)
 	tt.Frame()
-	writePNG(t, "/tmp/de-shot-code-dark.png", tt.Image())
+	shot("/tmp/de-shot-code-dark.png")
 
 	// split 视图：左侧旧、右侧新，配不上的那一侧留白
 	a.fileFilter = ""
 	a.split = true
 	tt.SetDark(false)
 	tt.Frame()
-	writePNG(t, "/tmp/de-shot-split.png", tt.Image())
+	shot("/tmp/de-shot-split.png")
 
 	// 分支对比视图（Fork 风格）：两分支比对栏、差异文件、diff
 	a.startCompare("main", "feature", true)
@@ -109,10 +117,10 @@ func TestDumpScreenshot(t *testing.T) {
 	}
 	tt.SetDark(false)
 	tt.Frame()
-	writePNG(t, "/tmp/de-shot-compare.png", tt.Image())
+	shot("/tmp/de-shot-compare.png")
 	tt.SetDark(true)
 	tt.Frame()
-	writePNG(t, "/tmp/de-shot-compare-dark.png", tt.Image())
+	shot("/tmp/de-shot-compare-dark.png")
 	a.exitCompare()
 	tt.SetDark(false)
 
@@ -120,10 +128,10 @@ func TestDumpScreenshot(t *testing.T) {
 	a.openSettings()
 	a.editCfg.Providers[0].APIKey = "sk-ant-xxxxxxxxxxxxxxxx"
 	tt.Frame()
-	writePNG(t, "/tmp/de-shot-settings.png", tt.Image())
+	shot("/tmp/de-shot-settings.png")
 	tt.SetDark(true)
 	tt.Frame()
-	writePNG(t, "/tmp/de-shot-settings-dark.png", tt.Image())
+	shot("/tmp/de-shot-settings-dark.png")
 	tt.SetDark(false)
 
 	// 展示 Magpie 本地网关接入状态
@@ -131,7 +139,7 @@ func TestDumpScreenshot(t *testing.T) {
 	a.magpieModels = []string{"opencode-go/deepseek-v4.1-flash", "opencode-go/claude-haiku-5-5", "codex-2/gpt-6-sol"}
 	a.connectMagpie()
 	tt.Frame()
-	writePNG(t, "/tmp/de-shot-settings-magpie.png", tt.Image())
+	shot("/tmp/de-shot-settings-magpie.png")
 	a.settingsOn = false
 
 	// 设置里的「更新」页。无头环境里 updater 插件没注册（mygo.Updater.Enabled()
@@ -148,21 +156,19 @@ func TestDumpScreenshot(t *testing.T) {
 	a.openSettings()
 	a.settingsTab = settingsTabUpdates
 	tt.Frame()
-	writePNG(t, "/tmp/de-shot-settings-updates.png", tt.Image())
+	shot("/tmp/de-shot-settings-updates.png")
 	tt.SetDark(true)
 	tt.Frame()
-	writePNG(t, "/tmp/de-shot-settings-updates-dark.png", tt.Image())
+	shot("/tmp/de-shot-settings-updates-dark.png")
 	tt.SetDark(false)
 	loadUpdatePrefs = origLoadPrefs
 	a.settingsOn = false
 
-	// 折叠：第一个文件标成已 review，它就在 diff 里折起来了。
-	// 前面试筛选的时候列表滚下去过，这里先滚回顶上。
+	// 已 review：第一个文件标上，文件栏里它的名字变淡、勾亮起来。
 	a.toggleViewed(a.files[0])
-	a.diffList.ScrollTo(0, ui.Start)
 	tt.Frame()
 	tt.Frame()
-	writePNG(t, "/tmp/de-shot-folded.png", tt.Image())
+	shot("/tmp/de-shot-viewed.png")
 	a.toggleViewed(a.files[0])
 
 	// 文件行右键菜单截不进图：菜单是系统的原生菜单，不在这一帧的画面里
@@ -182,10 +188,10 @@ func TestDumpScreenshot(t *testing.T) {
 				Author: "mika", When: now.AddDate(0, 0, -9)},
 		}
 		tt.Frame()
-		writePNG(t, "/tmp/de-shot-filehist.png", tt.Image())
+		shot("/tmp/de-shot-filehist.png")
 		tt.SetDark(true)
 		tt.Frame()
-		writePNG(t, "/tmp/de-shot-filehist-dark.png", tt.Image())
+		shot("/tmp/de-shot-filehist-dark.png")
 		tt.SetDark(false)
 		a.closeFileHistory()
 		tt.Frame()
@@ -194,20 +200,8 @@ func TestDumpScreenshot(t *testing.T) {
 	// ⌘K 命令栏
 	a.openPalette()
 	tt.Frame()
-	writePNG(t, "/tmp/de-shot-palette.png", tt.Image())
+	shot("/tmp/de-shot-palette.png")
 	a.closePalette()
-
-	// 查找：栏开着、有命中，一眼看出「当前那条」和「其余的」深浅不同
-	a.find.on = true
-	a.find.query = "CHANGED"
-	tt.Frame()
-	tt.Frame()
-	writePNG(t, "/tmp/de-shot-find.png", tt.Image())
-	tt.SetDark(true)
-	tt.Frame()
-	writePNG(t, "/tmp/de-shot-find-dark.png", tt.Image())
-	tt.SetDark(false)
-	a.closeFind()
 
 	// 空状态：没打开仓库时第一眼看到的东西
 	empty := newApp()
@@ -237,7 +231,7 @@ func TestDumpScreenshot(t *testing.T) {
 	// 右边的动作按钮该收进「»」菜单，而不是被裁掉或者把这一行挤折。
 	tt.SetSize(720, 620)
 	tt.Frame()
-	writePNG(t, "/tmp/de-shot-narrow.png", tt.Image())
+	shot("/tmp/de-shot-narrow.png")
 	tt.SetSize(1280, 860)
 	tt.Frame()
 

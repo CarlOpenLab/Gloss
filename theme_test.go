@@ -181,6 +181,32 @@ func TestGraphLanesHaveNoPurple(t *testing.T) {
 	}
 }
 
+// TestGraphMainLaneIsInk 断言 0 号色（主干 / HEAD）是中性 Ink，且是整张图上
+// 最亮（浅色下最重）的一条。
+//
+// 主干同时是「我在哪条分支」那颗圆点、提交行里本地分支芯片上那颗 6px 点、
+// 提交栏状态胶囊的颜色（见 history.go 的 badgeDot、sidebar.go 的 refRow）。
+// 它一旦换成某个彩色 —— 上一版是 `#58a6ff` 经典亮蓝 —— 主线立刻降级成「又一
+// 条支线」，跟着那几处圆点一起变色，整屏就多出一串蓝点。这条闸是按那次回退加的。
+func TestGraphMainLaneIsInk(t *testing.T) {
+	for _, dark := range []bool{false, true} {
+		pal := paletteFor(themeFor(dark, ui.Preferences{}))
+		main := pal.lanes[0]
+		if spread(main) > 16 {
+			t.Errorf("dark=%v: 主干色 %v 带色相（RGB 极差 %d）—— 主干走中性 Ink", dark, main, spread(main))
+		}
+		for i := 1; i < len(pal.lanes); i++ {
+			lm, li := luma(main), luma(pal.lanes[i])
+			if dark && lm <= li {
+				t.Errorf("深色下主干 %.2f 不比 %d 号线 %.2f 亮 —— 主线要一眼认得出来", lm, i, li)
+			}
+			if !dark && lm >= li {
+				t.Errorf("浅色下主干 %.2f 不比 %d 号线 %.2f 暗 —— 主线要一眼认得出来", lm, i, li)
+			}
+		}
+	}
+}
+
 // spread 是 RGB 三通道的极差，用作「有没有色相」的粗判据。
 func spread(c ui.Color) int {
 	lo, hi := int(c.R), int(c.R)

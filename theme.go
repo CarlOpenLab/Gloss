@@ -2,8 +2,6 @@ package main
 
 import (
 	"github.com/egoist/mygo/ui"
-
-	"github.com/CarlOpenLab/Gloss/internal/highlight"
 )
 
 // palette 是 diff 视图专用的语义色。
@@ -35,39 +33,19 @@ type palette struct {
 	inkSubtle   ui.Color // 行号、辅助元信息、未激活图标
 	inkTertiary ui.Color // 快捷键提示、占位符、禁用态
 
-	appBg     ui.Color // 窗口底色
-	codeBg    ui.Color // 普通代码行背景
-	code      ui.Color // 代码文字
-	lineNo    ui.Color // 行号文字
-	gutterBg  ui.Color // 行号栏背景（上下文行）
-	addBg     ui.Color // 新增行背景
-	addGutter ui.Color // 新增行号栏背景
-	addBar    ui.Color // 新增行左侧色条
-	delBg     ui.Color // 删除行背景
-	delGutter ui.Color // 删除行号栏背景
-	delBar    ui.Color // 删除行左侧色条
-	gapBg     ui.Color // 未改动区间条的背景
-	gapHover  ui.Color // 未改动区间条悬停时的背景
-	gapText   ui.Color // 未改动区间条的文字
-	fileBg    ui.Color // 文件头的背景
-	hunkBg    ui.Color // @@ 行背景
-	hunkText  ui.Color // @@ 行文字
+	appBg  ui.Color // 窗口底色
+	codeBg ui.Color // 普通代码行背景
+	code   ui.Color // 代码文字
+	addBar ui.Color // 新增行左侧色条
+	delBar ui.Color // 删除行左侧色条
+	gapBg  ui.Color // 未改动区间条的背景
+	fileBg ui.Color // 文件头的背景
 	// hunkHover 是 hunk 行上那颗幽灵按钮悬停时的底色。它落在 hunk 带上，
 	// 所以不能直接用 codeBg：深色下那是比带子更暗的一档，鼠标一指上去
 	// 按钮反而沉下去。浅色下要的是提亮（白），深色下要的是抬高一档的蓝灰。
-	hunkHover ui.Color
-	sideBg    ui.Color // 删除侧留白（split 模式下对面没有对应行）
-	ref       ui.Color // 分支名、commit hash 的强调色
-	viewed    ui.Color // 已 review 的勾与文字
-
-	// —— 查找（find.go）——
-	// 命中底色用半透明琥珀：它要叠在 codeBg / 新增行 / 删除行三种底上，
-	// 半透明才能混出「这一行还是绿的，但这段字被框住了」——不透明的色块会把
-	// 增删信息整个盖掉。当前命中更重一档，另加一道下划线（只靠深浅不够快，
-	// 连按「下一个」时视线得能立刻钉住新落点）。
-	findBg        ui.Color // 全部命中的底色
-	findBgActive  ui.Color // 当前命中的底色
-	findUnderline ui.Color // 当前命中的下划线
+	sideBg ui.Color // 删除侧留白（split 模式下对面没有对应行）
+	ref    ui.Color // 分支名、commit hash 的强调色
+	viewed ui.Color // 已 review 的勾与文字
 
 	// selection 是列表与树的选中底带。
 	//
@@ -84,9 +62,6 @@ type palette struct {
 	// 色号由 buildGraph 指给「线」（graphSeg.Color），不是泳道号 —— 一条线
 	// 会换泳道，按泳道号定色的话主线走一半就变色了。
 	lanes [laneCount]ui.Color
-
-	// hl 是代码上色用的配色，按明暗共享同一份缓存。
-	hl *highlight.Palette
 }
 
 // selAlpha 是「选中行」底色的不透明度 —— 现在只剩高对比度模式下叠一层用。
@@ -102,23 +77,6 @@ const laneCount = 8
 // laneColor 是第 i 号色。
 func (p palette) laneColor(i int) ui.Color {
 	return p.lanes[i%len(p.lanes)]
-}
-
-// hlPalettes 按明暗缓存两套高亮配色。
-//
-// 解析样式表（样式继承、token 类别合并）不便宜，而配色只跟主题有关，
-// 缓存一份就够。只有渲染线程会碰它，所以不加锁。
-var hlPalettes [2]*highlight.Palette
-
-func hlPalette(dark bool) *highlight.Palette {
-	i := 0
-	if dark {
-		i = 1
-	}
-	if hlPalettes[i] == nil {
-		hlPalettes[i] = highlight.NewPalette(dark)
-	}
-	return hlPalettes[i]
 }
 
 // glossTheme 把 mygo 的通用控件配色换成 Gloss 对齐 Linear 设计体系的那一套。
@@ -240,10 +198,8 @@ func themeFor(dark bool, p ui.Preferences) *ui.Theme {
 }
 
 func paletteFor(t *ui.Theme) palette {
-	hl := hlPalette(t.Dark)
 	if t.Dark {
 		return palette{
-			hl: hl,
 			// 表面阶梯（§2.1）
 			surface1: ui.Hex("#0f1011"),
 			surface2: ui.Hex("#141516"),
@@ -262,48 +218,35 @@ func paletteFor(t *ui.Theme) palette {
 			// 重一档，才压得住「选中的是这一行」。
 			selection: ui.Hex("#1f2023"),
 			appBg:     ui.Hex("#010102"), // Linear Canvas: 极致纯净深黑
-			codeBg:    ui.Hex("#010102"),
+			codeBg:    ui.Hex("#0f1011"), // Surface 1：代码主区从画布上抬一档
 			code:      ui.Hex("#f7f8f8"), // Linear Ink
-			lineNo:    ui.Hex("#62666d"), // Linear Ink Tertiary
-			gutterBg:  ui.Hex("#010102"),
-			addBg:     ui.RGBA(39, 166, 68, 0.09), // 极淡半透明暗苔绿
-			addGutter: ui.RGBA(39, 166, 68, 0.14),
-			addBar:    ui.Hex("#27a644"),          // Linear 语义绿发丝条
-			delBg:     ui.RGBA(229, 72, 77, 0.09), // 极淡半透明暗绯红
-			delGutter: ui.RGBA(229, 72, 77, 0.14),
+			addBar:    ui.Hex("#27a644"), // Linear 语义绿发丝条
 			delBar:    ui.Hex("#e5484d"), // 校准红发丝条
 			gapBg:     ui.Hex("#0f1011"), // Surface 1
-			gapHover:  ui.Hex("#141516"), // Surface 2
-			gapText:   ui.Hex("#8a8f98"), // Ink Subtle
-			fileBg:    ui.Hex("#0f1011"), // Surface 1
-			hunkBg:    ui.Hex("#141516"), // Surface 2: 告别旧版刺眼亮蓝！
-			hunkText:  ui.Hex("#8a8f98"), // Ink Subtle 等宽中性文字
-			hunkHover: ui.Hex("#18191a"), // Surface 3
-			sideBg:    ui.Hex("#08090a"), // 介于 Canvas 与 Surface 1 之间
+			sideBg:    ui.Hex("#0f1011"), // Surface 1：侧栏是一块面，不是画布的影子
 			ref:       ui.Hex("#d0d6e0"), // 中性 Ink Muted
 			viewed:    ui.Hex("#27a644"),
-			// 查找命中：深色下取拓扑图那颗暖琥珀（#e09f3e），压在近黑底上
-			// 读得清，又和增删的绿/红拉开色相。透明度比浅色下高一档 ——
-			// 白底上 0.20 已经很明显，同样的比例压在 #010102 上几乎看不见。
-			findBg:        ui.RGBA(224, 159, 62, 0.40),
-			findBgActive:  ui.RGBA(224, 159, 62, 0.78),
-			findUnderline: ui.Hex("#e09f3e"),
-			// 拓扑图精密仪器 8 色谱系（明度与彩度均衡）：
-			// 0 号为主干，多颜色色彩方案，其余 7 条为支线，不含紫。
+			// 拓扑图 8 色谱系，明度与彩度均衡，不含紫：
+			// 0 号留给主干，取中性 Ink —— 主线是整张图上最亮的一条，一眼就能
+			// 顺着它从顶读到底；彩色只落在其余 7 条支线上。
+			//
+			// 这里同样要「全图只有一支蓝」。原来三条泳道各占一支蓝
+			// （#58a6ff / #4c86e8 / #45b6fe），并排出现在一屏里，整张图会被读成
+			// 「一条蓝色渐变 + 几个别的色」，而不是「一条线一个颜色」—— 支线之间
+			// 分不出彼此，图就白画了。
 			lanes: [8]ui.Color{
-				ui.Hex("#58a6ff"), // 主干/HEAD: 经典亮蓝
-				ui.Hex("#3eb489"), // 鼠尾草绿
-				ui.Hex("#e09f3e"), // 暖琥珀
-				ui.Hex("#4c86e8"), // 钢青蓝
-				ui.Hex("#e5484d"), // 珊瑚红
-				ui.Hex("#45b6fe"), // 天青蓝
-				ui.Hex("#d977a8"), // 暮灰粉
-				ui.Hex("#38b2ac"), // 暗青
+				ui.Hex("#e6e6e6"), // 0 主干 / HEAD：中性 Ink
+				ui.Hex("#3eb489"), // 1 鼠尾草绿
+				ui.Hex("#e09f3e"), // 2 暖琥珀
+				ui.Hex("#4c86e8"), // 3 钢青蓝（全图唯一的蓝）
+				ui.Hex("#e5484d"), // 4 珊瑚红
+				ui.Hex("#d977a8"), // 5 暮灰粉
+				ui.Hex("#38b2ac"), // 6 暗青
+				ui.Hex("#9aab45"), // 7 苔绿
 			},
 		}
 	}
 	return palette{
-		hl: hl,
 		// 浅色下的表面阶梯：容器用灰、浮层往白走（理由见 glossTheme 里那段）。
 		surface1:         ui.Hex("#f7f8f9"),
 		surface2:         ui.Hex("#f0f2f5"),
@@ -320,37 +263,23 @@ func paletteFor(t *ui.Theme) palette {
 		appBg:            ui.Hex("#ffffff"),
 		codeBg:           ui.Hex("#ffffff"),
 		code:             ui.Hex("#0f1115"),
-		lineNo:           ui.Hex("#8c959f"),
-		gutterBg:         ui.Hex("#ffffff"),
-		addBg:            ui.RGBA(39, 166, 68, 0.10),
-		addGutter:        ui.RGBA(39, 166, 68, 0.16),
 		addBar:           ui.Hex("#27a644"),
-		delBg:            ui.RGBA(229, 72, 77, 0.10),
-		delGutter:        ui.RGBA(229, 72, 77, 0.16),
 		delBar:           ui.Hex("#e5484d"),
 		gapBg:            ui.Hex("#f7f8f9"),
-		gapHover:         ui.Hex("#f0f2f5"),
-		gapText:          ui.Hex("#6e7781"),
-		fileBg:           ui.Hex("#f7f8f9"),
-		hunkBg:           ui.Hex("#f0f2f5"),
-		hunkText:         ui.Hex("#4b535d"),
-		hunkHover:        ui.Hex("#ffffff"),
-		sideBg:           ui.Hex("#f7f8f9"),
+		sideBg:           ui.Hex("#efeff0"), // 侧栏实色：比主区白底暗一档，是「窗口」不是「内容」
 		ref:              ui.Hex("#4b535d"),
 		viewed:           ui.Hex("#27a644"),
-		// 查找命中：浅色下压深一档到琥珀棕（#d97706），白底上才有足够对比度。
-		findBg:        ui.RGBA(217, 119, 6, 0.20),
-		findBgActive:  ui.RGBA(217, 119, 6, 0.42),
-		findUnderline: ui.Hex("#b45309"),
+		// 浅色同一份色板压深一档（白底上要更重的色才站得住），同样是
+		// 「0 号中性 Ink + 只有一支蓝」。
 		lanes: [8]ui.Color{
-			ui.Hex("#0969da"), // 主干/HEAD: 经典亮蓝
-			ui.Hex("#2d9d74"),
-			ui.Hex("#c9822b"),
-			ui.Hex("#2f6fd0"),
-			ui.Hex("#cf3b40"),
-			ui.Hex("#2693db"),
-			ui.Hex("#b85487"),
-			ui.Hex("#288c87"),
+			ui.Hex("#0f1115"), // 0 主干 / HEAD：中性 Ink
+			ui.Hex("#2d9d74"), // 1 鼠尾草绿
+			ui.Hex("#c9822b"), // 2 暖琥珀
+			ui.Hex("#2f6fd0"), // 3 钢青蓝（全图唯一的蓝）
+			ui.Hex("#cf3b40"), // 4 珊瑚红
+			ui.Hex("#b85487"), // 5 暮灰粉
+			ui.Hex("#288c87"), // 6 暗青
+			ui.Hex("#6f7a1f"), // 7 苔绿
 		},
 	}
 }

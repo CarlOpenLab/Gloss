@@ -68,7 +68,8 @@ func fileText(t *testing.T, dir, name string) string {
 func TestConflictCardResolvesTheirsInRebase(t *testing.T) {
 	a, dir := rebaseConflictApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
-	tt.Frame()
+	// 挑边那几颗按钮在改动区顶上那条（review.go）：先等它把冲突读出来。
+	waitReview(t, a, tt)
 
 	if !tt.HasText("用变基目标的") || !tt.HasText("用重放中的") {
 		t.Fatalf("变基里的按钮该按变基的两边说话：%q", tt.Texts())
@@ -103,7 +104,8 @@ func TestConflictCardResolvesTheirsInRebase(t *testing.T) {
 func TestConflictCardLabelsFollowKind(t *testing.T) {
 	a, _ := mergeConflictApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
-	tt.Frame()
+	// 挑边那几颗按钮在改动区顶上那条（review.go）：先等它把冲突读出来。
+	waitReview(t, a, tt)
 
 	if !tt.HasText("用当前分支的") || !tt.HasText("用被并入的") {
 		t.Errorf("合并里的按钮该按合并的两边说话：%q", tt.Texts())
@@ -130,7 +132,8 @@ func TestConflictCardLabelsFollowKind(t *testing.T) {
 func TestConflictCardResolvesMergeOurs(t *testing.T) {
 	a, dir := mergeConflictApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
-	tt.Frame()
+	// 挑边那几颗按钮在改动区顶上那条（review.go）：先等它把冲突读出来。
+	waitReview(t, a, tt)
 
 	if err := tt.Click("用当前分支的"); err != nil {
 		t.Fatal(err)
@@ -159,7 +162,8 @@ func TestConflictCardResolvesMergeOurs(t *testing.T) {
 func TestDeleteConflictSaysWhatTheButtonDoes(t *testing.T) {
 	a, dir := deleteConflictApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
-	tt.Frame()
+	// 挑边那几颗按钮在改动区顶上那条（review.go）：先等它把冲突读出来。
+	waitReview(t, a, tt)
 
 	if !tt.HasText("接受删除") {
 		t.Fatalf("对方删了文件时，卡片该说清「用被并入的」= 接受删除：%q", tt.Texts())
@@ -187,12 +191,13 @@ func TestDeleteConflictSaysWhatTheButtonDoes(t *testing.T) {
 func TestConflictMenuOnFileRow(t *testing.T) {
 	a, dir := mergeConflictApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
-	tt.Frame()
+	// 挑边那几颗按钮在改动区顶上那条（review.go）：先等它把冲突读出来。
+	waitReview(t, a, tt)
 
 	items := rightClick(t, tt, "a.txt")
 	// 条目标签带路径（「标记为已解决 a.txt」）：菜单是通用的那一份（见
 	// fileMenu），暂存/解决这类动作一律把是谁说清楚。
-	for _, want := range []string{"用当前分支的", "用被并入的", "内置编辑器", "Diff 预览", "在编辑器打开", "标记为已解决 a.txt"} {
+	for _, want := range []string{"用当前分支的", "用被并入的", "在编辑器打开", "标记为已解决 a.txt"} {
 		if !menuHas(items, want) {
 			t.Fatalf("冲突文件的右键菜单里该有 %q，实际 %v", want, items)
 		}
@@ -215,7 +220,8 @@ func TestOpenInEditorReceivesAbsPath(t *testing.T) {
 	a.openPath = func(p string) { got = p }
 
 	tt := ui.NewTester(a.view, 1280, 860)
-	tt.Frame()
+	// 挑边那几颗按钮在改动区顶上那条（review.go）：先等它把冲突读出来。
+	waitReview(t, a, tt)
 	if err := tt.Click("在编辑器打开"); err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +238,8 @@ func TestOpenInEditorReceivesAbsPath(t *testing.T) {
 func TestStashConflictCardPicksStashedSide(t *testing.T) {
 	a, dir := stashConflictApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
-	tt.Frame()
+	// 挑边那几颗按钮在改动区顶上那条（review.go）：先等它把冲突读出来。
+	waitReview(t, a, tt)
 
 	if !tt.HasText("用对方的") {
 		t.Fatalf("储藏撞的冲突也该能挑一边：%q", tt.Texts())
@@ -255,7 +262,8 @@ func TestStashConflictCardPicksStashedSide(t *testing.T) {
 func TestFooterShowsConflictCount(t *testing.T) {
 	a, _ := mergeConflictApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
-	tt.Frame()
+	// 挑边那几颗按钮在改动区顶上那条（review.go）：先等它把冲突读出来。
+	waitReview(t, a, tt)
 
 	if !tt.HasText("1 个冲突待解决") {
 		t.Fatalf("栏脚该数出冲突：%q", tt.Texts())
@@ -276,7 +284,8 @@ func TestFooterShowsConflictCount(t *testing.T) {
 func TestResolveWhenAlreadyResolvedExplains(t *testing.T) {
 	a, dir := mergeConflictApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
-	tt.Frame()
+	// 挑边那几颗按钮在改动区顶上那条（review.go）：先等它把冲突读出来。
+	waitReview(t, a, tt)
 
 	// 界面之外（终端里）把冲突解决掉了，界面还拿着旧卡片
 	writeFile(t, filepath.Join(dir, "a.txt"), "外面解好的\n")

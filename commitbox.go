@@ -186,7 +186,8 @@ func (a *app) hunkStageable(f gitrepo.File) bool {
 
 // stageFileButton 是文件头行上的整文件暂存按钮。
 //
-// 和 hunk 级的 stageHunkButton 风格一致：带文字标签，不是裸 checkbox。
+// 是一颗带文字的按钮，不是裸 checkbox：裸勾选框在 diff 里没有上下文，
+// 用户不知道它是干嘛的。
 // 三态：未暂存（空框+「暂存文件」）、已暂存（填色+勾+「取消暂存」）、
 // 冲突（琥珀框+「解决冲突」）。
 func stageFileButton(c *ui.Context, pal palette, s stageState, lock bool) ui.Element {
@@ -198,7 +199,7 @@ func stageFileButton(c *ui.Context, pal palette, s stageState, lock bool) ui.Ele
 	case stageConflict:
 		label, text, tip = T("标记为已解决", "Mark as Resolved"), T("标记为已解决", "Mark as Resolved"), T("将文件冲突标记为已解决", "Mark conflict as resolved")
 	}
-	btn := ui.ButtonBase(c).Height(hunkBtnH).Shrink(0).Radius(radiusSM).
+	btn := ui.ButtonBase(c).Height(20).Shrink(0).Radius(radiusSM).
 		Padding(0, 7).Gap(5).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).Disabled(lock).
 		Label(label).Tooltip(tip)

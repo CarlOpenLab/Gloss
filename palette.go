@@ -49,7 +49,6 @@ func (a *app) commands() []command {
 		{T("推送", "Push"), K("⌘⇧U"), func(a *app) { a.doPush() }},
 		{T("查看改动", "Show Changes"), K("⌘1"), func(a *app) { a.setTab(0) }},
 		{T("查看历史", "Show History"), K("⌘2"), func(a *app) { a.setTab(1) }},
-		{T("在差异中查找", "Find in Diff"), K("⌘F"), func(a *app) { a.openFind() }},
 		{T("筛选文件", "Filter Files"), K("⌘P"), func(a *app) { a.focusFilter = true }},
 		{T("统一视图（Unified）", "Unified View"), K("⌘U"), func(a *app) { a.setSplit(false) }},
 		{T("左右对照（Split）", "Split View"), "", func(a *app) { a.setSplit(true) }},
@@ -104,7 +103,6 @@ func (a *app) setSplit(on bool) {
 		return
 	}
 	a.split = on
-	a.rowsDirty = true
 	a.saveViewSettings()
 }
 

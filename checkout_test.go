@@ -116,9 +116,6 @@ func TestDoubleClickBranchChecksOut(t *testing.T) {
 	if a.tab != 1 {
 		t.Fatalf("点了分支该在历史 tab，实际 %d", a.tab)
 	}
-	// 展开状态也放一份：换分支之后它必须清掉（行号对不上）
-	a.expanded = map[string]int{"g:u:a.txt:1": 20}
-
 	doubleClick(t, tt, "topic")
 	settle(t, a)
 	tt.Frame()
@@ -135,9 +132,6 @@ func TestDoubleClickBranchChecksOut(t *testing.T) {
 	if a.histRev != "" || a.commitSel != -1 || a.refSel != "" || a.stashRev != "" {
 		t.Errorf("换完分支「在看哪条历史」该全部作废：histRev=%q commitSel=%d refSel=%q stashRev=%q",
 			a.histRev, a.commitSel, a.refSel, a.stashRev)
-	}
-	if a.expanded != nil {
-		t.Errorf("换分支后展开状态该作废（行号对不上），实际还留着 %v", a.expanded)
 	}
 	if a.opErr != nil {
 		t.Errorf("这次检出该成功，却报错：%v", a.opErr)

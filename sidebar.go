@@ -25,8 +25,16 @@ func (a *app) sidebar(c *ui.Context, pal palette) {
 	t := c.Theme()
 	sw := a.sidebarWidth(c)
 
+	// 侧栏底色是**不透明**的。
+	//
+	// 这里原来铺的是 pal.sideBg.Alpha(0.55)：窗口开了 VibrancySidebar，想让
+	// 系统毛玻璃透上来。代价是侧栏的明度交给了壁纸 —— 侧栏和画布本来就只差
+	// 7~8 个灰阶（#0f1011 对 #010102、#efeff0 对 #ffffff），乘 0.55 之后只剩
+	// 4 个，深色下和近黑画布、浅色下和白画布都糊成一片，换张壁纸又是另一副样子。
+	// Linear 的侧栏是一块实色的面（深色 #0f1011，浅色 #efeff0），层次交给明度
+	// 阶梯和 1px 发丝线，不交给半透明。
 	ui.Column(c).Width(sw).Shrink(0).
-		Background(pal.sideBg.Alpha(0.55)).
+		Background(pal.sideBg).
 		Children(func() {
 			// 侧栏顶部只有工作区导航（Fork 风格：改动与历史）
 			a.sidebarHeader(c, t, pal)

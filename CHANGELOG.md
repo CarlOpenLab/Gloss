@@ -4,6 +4,19 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [未发布]
+
+### 变更
+- 改动区换成「一次看一个文件」：左边文件列表导航，右边是 mygo 的 DiffView —— 词级内联高亮、未改动区间折叠、语法高亮都归它，未暂存段的右侧还能直接改（保存只写工作区）
+- 按段暂存改成「DiffView 划出的那一段」：和 git 自己的 -U3 段不保证一一对应，所以改为按行区间现造补丁（`internal/diff` 的 RangePatch），上下文只取两侧真的一模一样的行
+- 冲突不再是一张只有按钮的卡片：改动区直接显示带标记的正文，每一处冲突各有「留下 X / 留下 Y / 两个都留 / 都不要」，顶上那条给整文件的出路，右侧可编辑，保存即写盘 + `git add`
+- `⌘F` / `⌘G` 归改动区自己的查找栏；`⌘P` 仍旧筛文件
+- 自研的多文件 diff 渲染器（diffview.go / rows.go / contents.go）、跨文件查找（find.go）、冲突编辑器与「Diff 预览」两个模态、chroma 高亮（改用编辑器自带的词法高亮）一并移除
+
+### 修复
+- 从 Finder/Dock 打开的 .app 里，子进程的 PATH 是 launchd 给的极简路径，git 跑的 pre-commit 钩子因此找不到 nvm / Homebrew 装的 node（`env: node: No such file or directory`、`… pre-commit script failed (code 127)`），而同一个仓库在终端里一切正常。现在会向用户的登录 shell 问一次 PATH（带超时与降级，结果按进程缓存）并交给所有 git / gh 子进程，`gh` 的查找也走同一份 PATH
+- 按段暂存的上下文不再跨界：相邻的另一处改动不再被当成上下文写进补丁（那会让「取消暂存这一段」报 `patch does not apply`）
+
 ## [0.3.3] - 2026-10-14
 
 ### 修复

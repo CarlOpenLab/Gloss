@@ -34,19 +34,11 @@ func (a *app) fileMenu(m *ui.Menu, f gitrepo.File) {
 		if m.Item(act.theirs).Disabled(busy).Chosen() {
 			a.resolveFile(f, gitrepo.SideTheirs, act.theirs)
 		}
-		if m.Item("内置编辑器").Disabled(busy).Chosen() {
-			a.openConflictEditor(f)
-		}
-		if m.Item("Diff 预览").Disabled(busy).Chosen() {
-			a.openNativeDiff(f)
-		}
 		m.Separator()
 	} else if live && !conflict {
-		if m.Item("Diff 预览").Disabled(busy).Chosen() {
-			a.openNativeDiff(f)
-		}
-		// 整文件编辑和 Diff 预览并排：一个看改了什么，一个直接改。冲突文件
-		// 不走这里 —— 它的「内置编辑器」要的基线是三方版本，收尾还要 git add。
+		// 整文件编辑：改动区看的是 diff，这里直接改盘上那一份。冲突文件
+		// 不走这里 —— 它的出入口在改动区顶上那条（挑边 / 标记已解决），
+		// 收尾还要 git add。
 		if m.Item("编辑代码").Disabled(busy).Chosen() {
 			a.openCodeEditor(f)
 		}

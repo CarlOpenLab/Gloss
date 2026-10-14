@@ -101,14 +101,13 @@ type app struct {
 	// 分开是必须的：早期只有一个 loadSeq，于是「读提交列表」和「读这个提交
 	// 的 diff」会互相撞掉 —— 第二次进历史 tab 时，后发的那个把先发的序号
 	// 顶掉，提交列表就永远停在旧数据上（新提交看不见）。
-	repoSeq    int // openRepo：整个仓库
-	logSeq     int // loadCommits：提交列表
-	diffSeq    int // loadCommit：选中提交的 diff
-	contentSeq int // showFiles/loadContents：文件内容与语法高亮
+	repoSeq int // openRepo：整个仓库
+	logSeq  int // loadCommits：提交列表
+	diffSeq int // loadCommit：选中提交的 diff
 
 	// —— 模型 ——
 	// allFiles 是当前显示的完整文件列表（工作区改动，或某个提交的 diff）；
-	// files 是过了筛选词之后、界面真正显示的那一份。侧栏树、diff 行模型、
+	// files 是过了筛选词之后、界面真正显示的那一份。文件树、改动区、
 	// 统计都只看 files，三者才对得上。
 	allFiles []gitrepo.File
 	files    []gitrepo.File
@@ -119,42 +118,21 @@ type app struct {
 	// 切回历史时立即恢复，避免两区同时清空、白屏闪烁。
 	histFiles  []gitrepo.File
 	histListID string
-	// contents 按路径缓存文件在新侧的内容，用于展开未改动区间和语法高亮。
-	// 用路径而不是下标索引：筛选会让文件列表变短，下标会错位。
-	// contentFP 记录已缓存内容对应的文件指纹，指纹没变的内容跨刷新复用。
-	contents  map[string]*fileContent
-	contentFP map[string]string
 
-	// —— 派生的行模型 ——
-	// rows 是喂给虚拟化列表的扁平行数组。它只在 rowsDirty 时重建 ——
-	// 每帧重建一个大 diff 的几万行会白白烧 CPU。
-	rows      []row
-	rowsDirty bool
-	diffList  ui.ListState
-	// built 是上一帧构建了多少行。列表是虚拟化的，这个数只跟窗口高度有关，
-	// 和 diff 有多长无关 —— 测试靠它钉住这一点（万一哪天不小心把整份 diff
-	// 都建了出来，几万行的仓库会立刻卡死）。
-	built int
-
-	// —— 查找（find.go）——
-	find findState
-	// findGen 是「仓库内容」的版本号：文件列表换了、或者文件内容分批读回来，
-	// 都自增一下，查找据此重扫。刻意放在 findState 外面 —— 它记的是内容版本，
-	// 切标签页、关查找栏都不该动它。
-	findGen int
-
-	// —— 展开状态 ——
-	// expanded 记录每个未改动区间展开了多少行，key 见 rows.go 的 gapKey。
-	// 跨帧保留，所以刷新后展开状态还在（文件内容变了才会对不上）。
-	expanded map[string]int
+	// —— 改动区（review.go）——
+	// review 是右边那一栏的状态：一次一个文件的 DiffView。
+	review reviewState
+	// reviewDrafts 记着「改了还没存」的缓冲区，key 是 fileKey。
+	//
+	// 在改动区里改字是很容易顺手做的一件事（那本来就是个编辑器），而切到
+	// 另一个文件会换掉缓冲区 —— 没有这份草稿，切走就等于把刚打的字扔掉，
+	// 而且一句提示都没有。草稿只在「同一个文件、同一份内容」时接回来
+	// （指纹对不上说明磁盘上那份已经变了，旧草稿再摆出来就是骗人）。
+	reviewDrafts map[string]reviewDraft
 	// listID 是「现在这份文件列表是谁的」，见 showFiles。同一个对象刷新
-	// （暂存之后重读、⌘R）ID 不变，展开状态因此保得住；换了对象就作废 ——
-	// 历史提交之间、储藏之间的路径完全一样，光看 key 分不出这是谁的区间。
+	// （暂存之后重读、⌘R）ID 不变，选中的文件因此跟得住；换了对象就作废
+	// —— 历史提交之间、储藏之间的路径完全一样，光看 key 分不出这是谁的。
 	listID string
-
-	// —— J/K 跳 hunk ——
-	// hunkCur 是上一次跳到的那一段的 key，见 keys.go 的 hunkAnchor。
-	hunkCur string
 
 	// —— 视图 ——
 	tabs      []*repoTab // 打开的多项目标签页
@@ -202,18 +180,10 @@ type app struct {
 	filesClosed map[string]bool
 	// fileSel 是文件栏里选中的文件下标（不是行下标 —— 行下标一筛选就指错）。
 	fileSel int
-	// pendingScrollFile 是「点了文件栏，diff 该滚到哪个文件」的一次性请求。
-	// 存文件下标而不是行下标：发起点击时行模型可能还是脏的，行下标会指错。
-	pendingScrollFile int
 
 	// —— 已 review：文件路径 -> 当时的内容指纹 ——
 	// 指纹对不上就说明文件又变了，标记自动失效。
 	viewed map[string]string
-
-	// folded 是「折叠/展开」的手动覆盖：没记过的文件跟着 viewed 走
-	// （标了已 review 就折起来），点过文件头的按点的来。
-	// 用 map 的存在性区分「没手动设过」和「手动设成 false」。
-	folded map[string]bool
 
 	// —— 历史 ——
 	tab        int // 0 = 改动，1 = 历史
@@ -234,6 +204,9 @@ type app struct {
 	// 单独立一个字段，是因为 loadCommits 拿到结果时会「顺手选中最近那个
 	// 提交」—— 那一下会把下半区顶掉。用户点的是储藏，不该被自动选中抢走。
 	stashRev string
+	// stashName 是同一个储藏给 git 的名字（stash@{n}）。改动区要拿它比
+	// 「储藏里的样子 vs 它的父提交」，而 Full 那种 refs/… 形态 git show 不认。
+	stashName string
 	// histSplit 是提交列表那一栏的高度，SplitVertical 拖的就是它。
 	// splitH 是上一帧量到的可用高度，用来在窗口变矮时把 split 收敛回来。
 	histSplit float32
@@ -314,13 +287,10 @@ type app struct {
 	newBranch branchState
 	rename    renameState
 	stashDlg  stashState
-	// conflictEdit/nativeDiff/codeEdit are transient MyGo editor states; they
-	// are not persisted in repo tabs and are closed when the repository changes.
-	conflictEdit conflictEditorState
-	nativeDiff   nativeDiffState
-	codeEdit     codeEditorState
-	// editorPane 是「编辑器」视图里那个常驻整文件编辑器（editor_pane.go）。
-	// 它比上面三个活得久：跟着文件栏的选中共进退，切仓库才丢。
+	// codeEdit 是「编辑代码」那个一次性对话框的编辑器状态；editorPane 是
+	// 「编辑器」视图里那个常驻整文件编辑器（editor_pane.go）。两者都不进
+	// 标签页快照，换仓库时一起收掉。
+	codeEdit   codeEditorState
 	editorPane editorPaneState
 	// compare 是分支代码差异对比的状态（Fork 风格，见 compare.go）。
 	compare    compareState
@@ -375,15 +345,13 @@ type app struct {
 func newApp() *app {
 	SetLocale("zh")
 	a := &app{
-		split:             true,
-		sidebarOn:         true,
-		themeMode:         "system",
-		locale:            "zh",
-		viewed:            map[string]string{},
-		folded:            map[string]bool{},
-		commitSel:         -1,
-		fileSel:           -1,
-		pendingScrollFile: -1,
+		split:     true,
+		sidebarOn: true,
+		themeMode: "system",
+		locale:    "zh",
+		viewed:    map[string]string{},
+		commitSel: -1,
+		fileSel:   -1,
 		// 没接上真实目录之前先用一个空 store，这样 newApp 之后随时可以
 		// 直接跑（测试就是这么用的）；main 里再换成真正的数据目录。
 		store: store.Open(""),
@@ -574,7 +542,6 @@ func (a *app) setLocale(loc string) {
 	a.saveViewSettings()
 	a.rebuildRefTree()
 	a.rebuildTree()
-	a.rowsDirty = true
 	if a.menu != nil {
 		mygo.App.SetMenu(buildAppMenu(a))
 	}
@@ -626,14 +593,13 @@ func (a *app) view(c *ui.Context) {
 	// 越先拿到键。
 	a.handleKeys(c)
 
-	// 查找对账。放在快捷键之后、建控件之前：⌘F/⌘G 这一帧刚改过状态，
-	// 打字也已经在输入阶段写进 a.find.query 了，早一步算出来的命中
-	// 这一帧就能涂上。
-	a.syncFind()
-
 	// 跟上这一帧的状态：菜单里的勾要在被拉开之前就是对的，而状态这一帧
 	// 刚被快捷键改过。
 	a.syncMenu()
+
+	// 改动区跟着文件栏的选中 / 段落 / 仓库状态走：选中换了就换缓冲区，
+	// 指纹变了就重读两侧（这一帧先看到旧的，读盘回来自己刷新）。
+	a.syncReview()
 
 	// 窗口开了 vibrancy：根节点不铺底色，让系统的毛玻璃材质透上来；
 	// 只有主区不透明，保证代码区域的对比度稳定、不受壁纸颜色影响。
@@ -665,8 +631,6 @@ func (a *app) view(c *ui.Context) {
 	a.prReviewModal(c, pal)
 	a.riskScanDialog(c, pal)
 	a.fileHistDialog(c, pal)
-	a.conflictEditor(c, pal)
-	a.nativeDiffDialog(c, pal)
 	a.codeEditorDialog(c, pal)
 
 	// Esc 退出分支对比/PR 检视。放在最后，让对话框里正在编辑的输入框先有机会处理它。
@@ -675,14 +639,6 @@ func (a *app) view(c *ui.Context) {
 	}
 	if a.prReview.on && !a.modalOn() && c.Shortcut(0, ui.KeyEscape) {
 		a.exitPRReview()
-	}
-	// Esc 收查找栏。同样是放在最后 —— 焦点在查找框里时 Esc 会被它自己在
-	// 元素那一层认走，走不到这里；这条是「焦点不在框里」（比如刚点过
-	// 「下一个」）时的兜底。
-	//
-	// 终端模式不认：那时候 Esc 是发给 shell 的。
-	if a.find.on && a.viewMode == viewModeGit && !a.modalOn() && c.Shortcut(0, ui.KeyEscape) {
-		a.closeFind()
 	}
 }
 
@@ -1418,8 +1374,6 @@ func (a *app) openRepo(path string) {
 		a.ahead = 0
 		a.behind = 0
 		a.upstream = ""
-		a.contents = map[string]*fileContent{}
-		a.contentFP = map[string]string{}
 	}
 
 	a.run(func() {
@@ -1667,7 +1621,7 @@ func (a *app) workBranch() string {
 // 菜单在系统层拦键、视图在自己那一帧拦，各写各的判断迟早漏掉一处
 // （新加一个对话框，忘了改其中一个，⌘R 就会在对话框背后偷偷刷新）。
 func (a *app) modalOn() bool {
-	return a.conflictEdit.on || a.nativeDiff.on || a.codeEdit.on || a.palette.on || a.settingsOn || a.tag.on || a.reset.on || a.newBranch.on || a.rename.on || a.confirm.on || a.stashDlg.on || a.compare.dialog || a.prDlg.on || a.prReview.reviewModal || a.riskScan.dialog || a.fileHist.on
+	return a.codeEdit.on || a.palette.on || a.settingsOn || a.tag.on || a.reset.on || a.newBranch.on || a.rename.on || a.confirm.on || a.stashDlg.on || a.compare.dialog || a.prDlg.on || a.prReview.reviewModal || a.riskScan.dialog || a.fileHist.on
 }
 
 // toggleAmend 切换修改上次提交状态。勾选时预填最近一次提交的说明。
@@ -1750,78 +1704,58 @@ func (a *app) setRefs(refs []gitrepo.Ref) {
 	a.rebuildRefTree()
 }
 
-// showFiles 把一份文件列表换成当前显示的内容：重新筛选、重新读内容。
+// showFiles 把一份文件列表换成当前显示的内容：重新筛选、重新建树。
 // 工作区和历史提交共用这一条路。
 //
-// id 说明这份列表是谁的（"w:仓库路径" / "c:提交" / "k:储藏"）。同一个 id
-// 就是同一个对象的刷新 —— 展开着的未改动区间留着：hunk 级暂存点一下就把
-// 刚摊开的上下文收回去，是最让人不想再用第二次的那类反馈。换了 id 则是
-// 换了个对象，展开状态跟着作废。
+// id 说明这份列表是谁的（"w:仓库路径" / "c:提交" / "k:储藏"）。换了 id 就是
+// 换了个对象：筛选词和选中的文件都作废。同一个 id 是同一个对象的刷新，选中
+// 的文件跟着留下 —— 暂存一段改动之后，光标不该跳回第一个文件。
 func (a *app) showFiles(files []gitrepo.File, id string) {
-	// 上一个列表的异步结果（内容加载）从此作废
-	a.contentSeq++
-	if a.listID == id {
-		a.pruneExpanded(files)
-		// 跨刷新只让真正变了的文件作废：指纹相同的文件（未动过的那些）保留已读内容，
-		// 彻底避免每次暂存导致所有未修改文件的语法高亮和末尾未改动区间瞬间闪烁。
-		liveKeys := make(map[string]string, len(files))
-		for _, f := range files {
-			liveKeys[fileKey(f)] = f.Fingerprint
-		}
-		for k, fp := range a.contentFP {
-			if liveFP, ok := liveKeys[k]; !ok || liveFP != fp {
-				delete(a.contents, k)
-				delete(a.contentFP, k)
-			}
-		}
-	} else {
-		a.contents = map[string]*fileContent{}
-		a.contentFP = map[string]string{}
-		a.expanded = nil
+	if a.listID != id {
+		a.fileFilter = ""
+		a.fileTreeFilter = ""
+		a.fileSel = -1
 		a.listID = id
 	}
-	// 记下的跳转位置同样作废：同样的 key 可能落在完全不同的行上
-	a.hunkCur = ""
-	// 选中的文件和「该滚到哪」都是下标，换一份列表就指到别的文件上了
-	a.fileSel = -1
-	a.pendingScrollFile = -1
-
 	a.allFiles = files
 	a.applyFilter()
-	a.loadContents(a.contentSeq)
+	a.pruneReviewDrafts(files)
 }
 
-// pruneExpanded 丢掉已经没有主了的展开状态：文件整份提交/暂存走之后，
-// 它那一份就不再出现在列表里了，留着只是让 map 慢慢长大。
+// selectedFileKey 是文件栏当前选中那个文件的 key，没选中给空串。
+func (a *app) selectedFileKey() string {
+	if a.fileSel < 0 || a.fileSel >= len(a.files) {
+		return ""
+	}
+	return fileKey(a.files[a.fileSel])
+}
+
+// selectFileKey 把文件栏的选中挪到某个 key 上（找不到就退到第一个）。
 //
-// key 的形状是 g:<fileKey>:<起始行号>，而 fileKey 自己带冒号（"s:path"），
-// 所以从**最后**一个冒号切。路径里真带冒号的场合（macOS 允许）会被切错，
-// 结果是少留一次展开 —— 丢掉用户状态总比留着一份对不上的强。
-func (a *app) pruneExpanded(files []gitrepo.File) {
-	if len(a.expanded) == 0 {
+// 筛选、刷新、暂存都会挪动下标，而 key 不会 —— 所以「还是看这个文件」
+// 这件事只能用 key 表达。
+func (a *app) selectFileKey(key string) {
+	a.fileSel = -1
+	if key == "" {
 		return
 	}
-	live := make(map[string]bool, len(files))
-	for _, f := range files {
-		live[fileKey(f)] = true
-	}
-	for k := range a.expanded {
-		body := strings.TrimPrefix(k, "g:")
-		if i := strings.LastIndex(body, ":"); i < 0 || !live[body[:i]] {
-			delete(a.expanded, k)
+	for i := range a.files {
+		if fileKey(a.files[i]) == key {
+			a.fileSel = i
+			return
 		}
 	}
 }
 
-// applyFilter 依据筛选词算出要显示的文件，并同步树和 diff 行模型。
+// applyFilter 依据筛选词算出要显示的文件，并同步文件树和选中的文件。
+//
+// 筛掉的文件连 diff 一起不显示，而不是只从文件列表里藏起来 —— 筛选的
+// 用途是「只看这块子系统」，右边还画着别的文件会让人对不上。
 func (a *app) applyFilter() {
+	prev := a.selectedFileKey()
 	a.files = filterFiles(a.allFiles, a.fileFilter)
 	a.rebuildTree()
-	a.rowsDirty = true
-	// 换了一份文件列表 = 查找索引整个作废。所有换 a.files 的路径（工作区/
-	// 提交/储藏/对比/PR 的读取、切 tab、改筛选词、内容缓存被剪）最终都过
-	// 这里，所以这一处就够，别处不用再各自记得自增。
-	a.findGen++
+	a.selectFileKey(prev)
 }
 
 // filterFiles 按筛选词挑出要显示的文件。
@@ -1900,28 +1834,6 @@ func (a *app) toggleViewed(f gitrepo.File) {
 	} else {
 		a.viewed[fileKey(f)] = f.Fingerprint
 	}
-	// 标记变了，之前手动折叠/展开的覆盖就不作数了 ——
-	// 「勾上已 review 就折起来」这条规则要立刻生效。
-	delete(a.folded, fileKey(f))
-	a.rowsDirty = true
 	a.store.SetViewed(a.viewed)
 	a.persist()
-}
-
-// isFolded 判断一个文件在 diff 里是不是折着的。默认跟着「已 review」走，
-// 点过文件头的以手动设置为准。
-func (a *app) isFolded(f gitrepo.File) bool {
-	if v, ok := a.folded[fileKey(f)]; ok {
-		return v
-	}
-	return a.isViewed(f)
-}
-
-// toggleFold 是点文件头时调用的：折起来 / 展开。
-func (a *app) toggleFold(f gitrepo.File) {
-	if a.folded == nil {
-		a.folded = map[string]bool{}
-	}
-	a.folded[fileKey(f)] = !a.isFolded(f)
-	a.rowsDirty = true
 }

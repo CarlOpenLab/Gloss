@@ -73,7 +73,6 @@ func TestMenuAccelerators(t *testing.T) {
 		"缩小代码字号": "CmdOrCtrl+-",
 		"恢复默认字号": "CmdOrCtrl+0",
 		"命令栏…":   "CmdOrCtrl+K",
-		"在差异中查找": "CmdOrCtrl+F",
 		"筛选文件":   "CmdOrCtrl+P",
 		"新建分支…":  "CmdOrCtrl+Shift+N",
 		"抓取":     "CmdOrCtrl+Shift+F",

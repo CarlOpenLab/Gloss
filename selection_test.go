@@ -1,20 +1,19 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
 )
 
-// Diff 文本用原生可选文本：代码行可以自由拖动选中并 ⌘C 复制；
-// 不再有 Notion 风格的选区浮层与复制按钮。
+// 改动区里是原生可选文本：DiffView 是一个真的编辑器，拖动选中、⌘C 复制、
+// 撤销都是它自己的行为 —— Gloss 不再画 Notion 风格的选区浮层和复制按钮。
 func TestDiffHasNoSelectionOverlay(t *testing.T) {
 	srv, _ := fakeLLM(t, "选区解释结果")
 	a := richApp(t)
 	withProvider(t, a, srv)
-	a.rebuildRows()
-	tt := ui.NewTester(a.view, 1280, 860)
-	tt.Frame()
+	tt := settleReview(t, a)
 
 	for _, s := range []string{
 		"复制所选代码", "Copy Selected Code",
@@ -27,28 +26,29 @@ func TestDiffHasNoSelectionOverlay(t *testing.T) {
 	}
 }
 
-// 代码行是原生可选择的文本：拖动选中后 Cmd+C 能把选中的字复制出去。
+// 代码行是原生可选择的文本：全选之后 ⌘C 能把内容复制出去。
+//
+// 代码是 DiffView 自己画的（不是 ui.Text 元素），所以这里按位置点进去、用
+// 键盘全选，而不是去找某一段文字的元素。
 func TestDiffCodeTextIsNativelySelectable(t *testing.T) {
 	a := richApp(t)
-	a.rebuildRows()
-	tt := ui.NewTester(a.view, 1280, 860)
-	tt.Frame()
+	a.selectFileKey(fileKey(listedFile(t, a, "README.md")))
+	tt := settleReview(t, a)
 
-	const probe = "line 1: some code here"
-	r, ok := tt.Find(probe)
-	if !ok {
-		t.Fatalf("找不到代码行 %q：%q", probe, tt.Texts())
+	// 点进正文（右侧那一栏的中段），焦点归 DiffView 里的编辑器。
+	tt.ClickAt(900, 200)
+	tt.Frame()
+	tt.Type("x")
+	tt.Frame()
+	if !a.review.new.Modified() {
+		t.Fatal("点进正文之后打字该进到这个文件的缓冲区里")
 	}
 
-	// 在行内从左往右拖一段，选中开头几个字符。
-	tt.Press(r.X+2, r.Y+r.H/2)
-	tt.Move(r.X+40, r.Y+r.H/2)
-	tt.Release(r.X+40, r.Y+r.H/2)
+	tt.Key(ui.Cmd, ui.KeyA)
 	tt.Frame()
-
 	tt.Command("copy")
 	tt.Frame()
-	if got := tt.Clipboard(); got == "" {
-		t.Fatal("原生选中代码后 Cmd+C 应该能复制")
+	if got := tt.Clipboard(); !strings.Contains(got, "diff explainer") {
+		t.Errorf("全选之后 ⌘C 该把内容复制出来，实际 %q", got)
 	}
 }

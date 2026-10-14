@@ -6,109 +6,65 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// J/K 找的是下一段/上一段改动，走到头绕到另一端。
-func TestHunkRowNear(t *testing.T) {
-	// H@L@L@：文件头 + 三段改动
-	rows := []row{
-		{kind: rowFileHeader},
-		{kind: rowHunkHeader},
-		{kind: rowLine},
-		{kind: rowHunkHeader},
-		{kind: rowLine},
-		{kind: rowHunkHeader},
-	}
-	cases := []struct {
-		from, dir, want int
-		why             string
-	}{
-		{0, 1, 1, "从文件头往下是第一段"},
-		{1, 1, 3, "从第一段往下是第二段"},
-		{3, 1, 5, "从第二段往下是第三段"},
-		{5, 1, 1, "最后一段再往下绕回第一段"},
-		{0, -1, 5, "在最上面往上绕到最后一段"},
-		{5, -1, 3, "从第三段往上是第二段"},
-		{1, -1, 5, "第一段往上到头了，绕回最后一段"},
-	}
-	for _, c := range cases {
-		if got := hunkRowNear(rows, c.from, c.dir); got != c.want {
-			t.Errorf("hunkRowNear(rows, %d, %d) = %d, want %d（%s）",
-				c.from, c.dir, got, c.want, c.why)
-		}
-	}
-
-	// 没有改动时返回 -1，不能崩
-	if got := hunkRowNear([]row{{kind: rowFileHeader}}, 0, 1); got != -1 {
-		t.Errorf("没有 hunk 时 = %d, want -1", got)
-	}
-	if got := hunkRowNear(nil, 0, -1); got != -1 {
-		t.Errorf("空列表 = %d, want -1", got)
-	}
-}
-
-// J 真的会把列表滚下去：按一下之后，原本在屏幕外的改动看得见了。
-func TestJumpHunkScrolls(t *testing.T) {
-	a := richApp(t)
-	tt := ui.NewTester(a.view, 1280, 860)
-	tt.Frame()
-
-	// 30 行的小窗口，后面几段改动一开始肯定在屏幕外
-	tt.SetSize(1280, 320)
-	tt.Frame()
-
-	const last = "line 60: some code here"
-	if tt.HasText(last) {
-		t.Skip("窗口里能看到最后一段，滚动的效果测不出来")
-	}
-
-	a.diffList.ScrollTo(0, ui.Start)
-	tt.Frame()
-	for i := 0; i < 8 && !tt.HasText(last); i++ {
-		a.jumpHunk(1)
-		tt.Frame()
-	}
-	if !tt.HasText(last) {
-		t.Errorf("一路 J 应该能走到最后一段改动：%q", tt.Texts())
-	}
-}
-
-// 连着按 J 要一段一段往前走，走到头绕回第一段。
+// J / K 在这一个文件里一段一段走，走到头绕回另一端。
 //
-// 回归测试：视口不一定跟得上跳转 —— 文件头钉在列表顶上时可见区第一行
-// 永远是它，diff 滚到底之后视口干脆不动。只看 Visible() 的话每次都算出
-// 同一个目标，J 就卡在原地了。
-func TestJumpHunkAdvances(t *testing.T) {
+// 段是 DiffView 算的，Gloss 只记「上次跳到第几段」—— 所以这里盯的是下标
+// 的推进和绕回，渲染位置由 mygo 管。
+func TestJumpHunkCycles(t *testing.T) {
 	a := richApp(t)
-	tt := ui.NewTester(a.view, 1280, 860)
-	tt.Frame()
+	a.selectFileKey(fileKey(listedFile(t, a, "internal/server/handler.go")))
+	settleReview(t, a)
 
-	var visited []string
-	for i := 0; i < 5; i++ {
+	n := len(a.review.diff.Hunks())
+	if n < 3 {
+		t.Fatalf("夹具该有三段以上改动，实际 %d", n)
+	}
+	if a.review.hunkIdx != -1 {
+		t.Fatalf("刚装上时该是「还没跳过」，实际 %d", a.review.hunkIdx)
+	}
+
+	// 还没跳过时往下：落到第一段（不是第二段）。
+	a.jumpHunk(1)
+	if a.review.hunkIdx != 0 {
+		t.Errorf("第一次按 J 该到第一段，实际 %d", a.review.hunkIdx)
+	}
+	// 一段一段往前走，走到头绕回第一段。
+	var visited []int
+	for i := 0; i < n; i++ {
 		a.jumpHunk(1)
-		tt.Frame()
-		visited = append(visited, a.hunkCur)
+		visited = append(visited, a.review.hunkIdx)
 	}
-
-	seen := map[string]bool{}
-	for _, k := range visited {
-		if k == "" {
-			t.Fatal("跳转之后应该记下跳到了哪一段")
-		}
-		seen[k] = true
+	if visited[n-1] != 0 {
+		t.Errorf("走完一圈该绕回第一段，实际路径 %v", visited)
 	}
-	if len(seen) < 3 {
-		t.Errorf("连按五次 J 只到过 %d 段，应该一段一段往前走：%v", len(seen), visited)
-	}
-	// 这个仓库有四段改动（含开头那一段），第五次应该已经绕回来了
-	if visited[4] != visited[0] {
-		t.Errorf("走到头应该绕回来，实际 %v", visited)
+	// 往回走一段：从上一步的 0 退到最后一段。
+	a.jumpHunk(-1)
+	if a.review.hunkIdx != n-1 {
+		t.Errorf("在第一段往上该绕到最后一段（%d），实际 %d", n-1, a.review.hunkIdx)
 	}
 }
 
-// 没有改动时跳转不能崩。
+// 还没跳过时往上：落到最后一段。
+func TestJumpHunkBackwardsFromTop(t *testing.T) {
+	a := richApp(t)
+	a.selectFileKey(fileKey(listedFile(t, a, "internal/server/handler.go")))
+	settleReview(t, a)
+
+	n := len(a.review.diff.Hunks())
+	a.jumpHunk(-1)
+	if a.review.hunkIdx != n-1 {
+		t.Errorf("还没跳过时按 K 该落到最后一段（%d），实际 %d", n-1, a.review.hunkIdx)
+	}
+}
+
+// 没有改动、没有仓库、没有选中文件时跳转不能崩。
 func TestJumpHunkEmpty(t *testing.T) {
 	a := newApp()
 	a.jumpHunk(1)
 	a.jumpHunk(-1)
+	if a.review.key != "" || a.review.diff != nil {
+		t.Errorf("没有仓库时改动区该是空的：key=%q diff=%v", a.review.key, a.review.diff)
+	}
 }
 
 // 字号：⌘+/⌘−/⌘0，并且夹在上下限内。
@@ -231,61 +187,32 @@ func TestFilterFocusesFilter(t *testing.T) {
 	if a.refFilter != "" {
 		t.Errorf("侧栏的筛选框不该收到这些字，refFilter = %q", a.refFilter)
 	}
-	// 找文件和找内容是两条路：筛文件不该顺手把查找栏也开出来。
-	if a.find.on || a.find.query != "" {
-		t.Errorf("⌘P 不该碰查找：on = %v, query = %q", a.find.on, a.find.query)
+	// 筛的是文件，不是改动区本身：⌘P 只改 fileFilter，别的不动。
+	if a.fileSel != -1 {
+		t.Errorf("筛文件不该顺手动选中，fileSel = %d", a.fileSel)
 	}
 }
 
-// ⌘F 开的是「在差异中查找」，打进去的字进的是查找框而不是文件筛选框。
-func TestFindShortcutOpensFind(t *testing.T) {
-	a := richApp(t)
-	tt := ui.NewTester(a.view, 1280, 860)
-	tt.Frame()
-
-	if len(a.files) == 0 {
-		t.Fatal("这条测试的前提是有 diff 可搜")
-	}
-
-	tt.Key(ui.Cmd, ui.KeyF)
-	tt.Frame()
-	if !a.find.on {
-		t.Fatal("⌘F 该打开查找栏")
-	}
-	if !tt.HasText("在差异中查找") {
-		t.Errorf("查找栏没画出来：%q", tt.Texts())
-	}
-
-	tt.Type("handler")
-	tt.Frame()
-	if a.find.query != "handler" {
-		t.Errorf("输入没进查找框，query = %q", a.find.query)
-	}
-	// ⌘F 打开的是查找，不是文件筛选 —— 这两个框不共享输入。
-	if a.fileFilter != "" {
-		t.Errorf("⌘F 不该碰文件筛选，fileFilter = %q", a.fileFilter)
-	}
-}
-
-// 焦点在查找框里时打 J 只是打了一个字母，不该跳 hunk。
+// 焦点在文件筛选框里时打 J 只是打了一个字母，不该跳改动段。
+//
+// 跳段的键在窗口这一层（c.Shortcut），而输入框会先把键吃掉 —— 这条盯着
+// 「打字不会被当成快捷键」这件事没被改坏。
 func TestJumpHunkIgnoredWhileTyping(t *testing.T) {
 	a := richApp(t)
-	tt := ui.NewTester(a.view, 1280, 860)
-	tt.Frame()
+	a.selectFileKey(fileKey(listedFile(t, a, "internal/server/handler.go")))
+	tt := settleReview(t, a)
 
-	tt.Key(ui.Cmd, ui.KeyF)
+	tt.Key(ui.Cmd, ui.KeyP) // 焦点给文件筛选框
 	tt.Frame()
+	a.review.hunkIdx = 0
 
-	a.diffList.ScrollTo(0, ui.Start)
 	tt.TypeKey(0, ui.KeyJ, "j")
 	tt.Frame()
-
-	first, _ := a.diffList.Visible()
-	if first > 0 {
-		t.Errorf("在筛选框里打 j 不该跳 hunk，可视区从第 %d 行开始了", first)
+	if a.review.hunkIdx != 0 {
+		t.Errorf("在筛选框里打 j 不该跳段，hunkIdx = %d", a.review.hunkIdx)
 	}
-	if a.find.query != "j" {
-		t.Errorf("j 应该打进了查找框，query = %q", a.find.query)
+	if a.fileFilter != "j" {
+		t.Errorf("j 该打进筛选框，fileFilter = %q", a.fileFilter)
 	}
 }
 
@@ -365,10 +292,9 @@ func TestShortcutsWithoutRepo(t *testing.T) {
 		tt.Frame()
 	}
 
-	// 没有 diff 可搜：⌘F 不该开出一条搜不到东西的栏，⌘G / Esc 也不该
-	// 把状态搅乱。
-	if a.find.on || a.find.query != "" || len(a.find.matches) > 0 {
-		t.Errorf("没有仓库时查找不该动：on = %v, query = %q, %d 条命中",
-			a.find.on, a.find.query, len(a.find.matches))
+	// 没有仓库、没有文件：这些键都不该把状态搅乱。
+	if len(a.files) != 0 || a.review.key != "" {
+		t.Errorf("没有仓库时不该有文件和改动区状态：files=%d review=%q",
+			len(a.files), a.review.key)
 	}
 }

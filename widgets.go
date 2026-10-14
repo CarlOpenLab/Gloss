@@ -126,55 +126,6 @@ func shieldIcon(c *ui.Context, size float32, color ui.Color) {
 	drawIcon(c, iconShield, size, color)
 }
 
-// hunkBtnH 是 hunk 行上那颗小按钮的高度。比 hunk 行（26）矮一圈：上下
-// 各留 3px。填满整行的按钮看着是「贴」在色带上的，四周留出缝才像放上去的
-// 控件。
-const hunkBtnH = 20
-
-// hunkButton 起一颗 hunk 行上的幽灵按钮。
-//
-// 不用 ui.Button：它自带的面 + 描边在 hunk 带上是一块突兀的白板，而
-// 这类按钮每条 hunk 都有，是界面上出现次数最多的控件，值得按它所在的底色
-// 单独调。
-//
-// 两态：常态是描边幽灵键（清楚可点，但不和代码抢视线）；悬停时底色提亮。
-// content 拿到的是这一档该用的前景色。
-//
-// 圆角取 sm(6) 而不是通用按钮的 md(8)：§4.1 把幽灵键单列一档，它比按钮轻，
-// 圆角也跟着收一点。字号 11 同样比通用按钮小 —— 这几个字夹在代码行之间，
-// 和行号一个量级，不该比代码还抢眼。
-func hunkButton(c *ui.Context, pal palette, label, tip string, content func(fg ui.Color)) ui.Element {
-	btn := ui.ButtonBase(c).Height(hunkBtnH).Shrink(0).Radius(radiusSM).
-		Padding(0, 7).Gap(5).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).Label(label).Tooltip(tip)
-
-	bg, border, fg := ui.Transparent, pal.hunkText.Alpha(0.38), pal.hunkText
-	if btn.Hovered() {
-		bg, border, fg = pal.hunkHover, pal.hunkText.Alpha(0.7), pal.hunkText
-	}
-	btn.Background(bg).Border(1, border)
-	fadeColors(btn)
-
-	btn.Children(func() { content(fg) })
-	return btn
-}
-
-// stageHunkButton 是「暂存 / 取消暂存这一段」。
-//
-// 按下的方向和文件行那颗勾选框一致：填色 = 已经在暂存区里，点它拿出来。
-// 可见的字只有「暂存」两个字，而 Label 写成「暂存这一段」—— 无障碍名字和
-// 测试找它的凭据都得说清「这一段的」，屏幕上的字则要短。
-func stageHunkButton(c *ui.Context, pal palette, staged, lock bool) ui.Element {
-	label, text, tip := T("暂存这一段", "Stage hunk"), T("暂存", "Stage"), T("把这一段改动放进暂存区", "Stage this hunk in index")
-	if staged {
-		label, text, tip = T("取消暂存这一段", "Unstage hunk"), T("取消暂存", "Unstage"), T("把这一段改动移出暂存区", "Unstage this hunk from index")
-	}
-	btn := hunkButton(c, pal, label, tip, func(fg ui.Color) {
-		ui.Text(c, text).FontSize(11).SingleLine().TextColor(fg)
-	})
-	return btn.Disabled(lock)
-}
-
 // checkSize 是状态栏里那个小勾的边长。
 const checkSize = 11
 

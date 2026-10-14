@@ -180,79 +180,6 @@ func TestStageBoxStagesDeletedFile(t *testing.T) {
 	}
 }
 
-// 点 hunk 上的「暂存这一段」只把那一段放进 index，同一个文件别的段留在
-// 工作区 —— 这是 hunk 级暂存的全部意义。
-func TestStageHunkStagesOnlyThatHunk(t *testing.T) {
-	a := richApp(t)
-	tt := ui.NewTester(a.view, 1280, 860)
-	// 只看 handler.go：它是唯一有两段改动的文件，第一颗「暂存这一段」
-	// 就落在它的第一段上。
-	a.fileFilter = "handler"
-	tt.Frame()
-
-	if err := tt.Click("暂存这一段"); err != nil {
-		t.Fatalf("hunk 头上该有暂存按钮：%v", err)
-	}
-	settle(t, a)
-	tt.Frame()
-
-	cached := gitOut(t, a.repoPath, "diff", "--cached")
-	if n := strings.Count(cached, "@@ "); n != 1 {
-		t.Errorf("index 里该只有一段改动，实际 %d 段：\n%s", n, cached)
-	}
-	if !strings.Contains(cached, "line 3: CHANGED AGAIN") {
-		t.Errorf("第一段该进 index 了：\n%s", cached)
-	}
-	if strings.Contains(cached, "line 52: 也改了") {
-		t.Errorf("第二段不该跟着进 index：\n%s", cached)
-	}
-
-	work := gitOut(t, a.repoPath, "diff")
-	if !strings.Contains(work, "line 52: 也改了") {
-		t.Errorf("第二段该还在工作区：\n%s", work)
-	}
-	if strings.Contains(work, "line 3: CHANGED AGAIN") {
-		t.Errorf("第一段已经在 index 里了，工作区不该再有：\n%s", work)
-	}
-
-	// 界面：同一个文件现在两段里各有一份，各剩一段
-	if f := fileIn(t, a, gitrepo.SectionStaged, "internal/server/handler.go"); len(f.Hunks) != 1 {
-		t.Errorf("已暂存那份该只剩一段，实际 %d 段", len(f.Hunks))
-	}
-	if f := fileIn(t, a, gitrepo.SectionUnstaged, "internal/server/handler.go"); len(f.Hunks) != 1 {
-		t.Errorf("未暂存那份该只剩一段，实际 %d 段", len(f.Hunks))
-	}
-}
-
-// 取消暂存一个 hunk：反向把 index 里那一段拿回工作区。
-func TestUnstageHunkFromSectionButton(t *testing.T) {
-	a := richApp(t)
-	runGit(t, a.repoPath, "add", "internal/server/handler.go")
-	a.reload()
-	settle(t, a)
-	tt := ui.NewTester(a.view, 1280, 860)
-	a.fileFilter = "handler"
-	tt.Frame()
-
-	// 两段都在 index 里，第一颗按钮是「取消暂存这一段」
-	if err := tt.Click("取消暂存这一段"); err != nil {
-		t.Fatalf("已暂存段的 hunk 头上该有取消暂存按钮：%v", err)
-	}
-	settle(t, a)
-	tt.Frame()
-
-	cached := gitOut(t, a.repoPath, "diff", "--cached")
-	if strings.Contains(cached, "line 3: CHANGED AGAIN") {
-		t.Errorf("第一段该撤出 index 了：\n%s", cached)
-	}
-	if !strings.Contains(cached, "line 52: 也改了") {
-		t.Errorf("第二段还在 index 里，不该被连坐：\n%s", cached)
-	}
-	if work := gitOut(t, a.repoPath, "diff"); !strings.Contains(work, "line 3: CHANGED AGAIN") {
-		t.Errorf("撤出来的那一段该回到工作区：\n%s", work)
-	}
-}
-
 // 提交按钮：把 index 里的东西提交成一次提交，消息从输入框来。
 func TestCommitButtonCommitsStagedFiles(t *testing.T) {
 	a := richApp(t)
@@ -468,71 +395,6 @@ func TestCommitDraftSavedOnFocusLoss(t *testing.T) {
 	}
 }
 
-// 暂存之后 diff 会整份重读，但用户刚摊开的那段上下文不该跟着收回去 ——
-// 动不动就把眼前的东西全折起来，是最劝退的那类反馈。
-//
-// 保住的只有「行号没动」的那些区间：key 是区间起始行号，暂存了它**上面**
-// 的一段，行号就挪了，那时收回去是对的（内容本来也换了一批）。
-func TestExpansionSurvivesStageReload(t *testing.T) {
-	a := richApp(t)
-	tt := ui.NewTester(a.view, 1280, 860)
-	a.fileFilter = "handler"
-	tt.Frame()
-
-	const bar = "⋯  展开 39 行未改动"
-	if !tt.HasText(bar) {
-		t.Fatalf("没有折叠条：%q", tt.Texts())
-	}
-	if err := tt.Click(bar); err != nil {
-		t.Fatal(err)
-	}
-	tt.Frame()
-	if !tt.HasText("line 20: some code here") {
-		t.Fatal("点了折叠条却没摊开")
-	}
-
-	// 暂存另一个文件：handler.go 一个字节没动，摊开的那段该还在
-	a.fileFilter = ""
-	tt.Frame()
-	clickStageBox(t, tt, "router.go")
-	settle(t, a)
-	tt.Frame()
-
-	if got := gitOut(t, a.repoPath, "diff", "--cached", "--name-only"); got != "internal/server/router.go" {
-		t.Fatalf("该暂存的是 router.go，index 里却是 %q", got)
-	}
-	if !tt.HasText("line 20: some code here") {
-		t.Errorf("暂存别的文件之后，这边摊开的区间被收回去了：%q", tt.Texts())
-	}
-}
-
-// 换了个对象（另一个提交、另一份储藏）就不能把上一个的展开状态带过去 ——
-// 它们和改动列表的路径可能一模一样，光看 key 分不出是谁的区间。
-func TestExpansionDroppedWhenListChanges(t *testing.T) {
-	a := richApp(t)
-	key := gapKeyOf("u:internal/server/handler.go", 10)
-	a.expanded = map[string]int{key: expandStep}
-
-	// 同一个对象的刷新：留着
-	a.showFiles(a.allFiles, workListID(a.repoPath, a.branch))
-	if _, ok := a.expanded[key]; !ok {
-		t.Fatal("同一个列表刷新一次，展开状态不该丢")
-	}
-	// 换了个对象：清掉
-	a.showFiles(a.allFiles, "c:别处")
-	if len(a.expanded) != 0 {
-		t.Errorf("换了对象之后展开状态该清空，实际 %v", a.expanded)
-	}
-
-	// 同一个仓库、换了一条分支也是换了对象：路径一样，行号却对不上
-	//（同一个文件在另一条分支上是另一段历史），展开状态必须跟着作废。
-	a.expanded = map[string]int{key: expandStep}
-	a.showFiles(a.allFiles, workListID(a.repoPath, "另一条分支"))
-	if len(a.expanded) != 0 {
-		t.Errorf("换了分支之后展开状态该清空，实际 %v", a.expanded)
-	}
-}
-
 // 筛选词只对着路径，不对着内部的段落前缀 —— 搜「s:」不该把暂存段整个捞出来。
 func TestFilterIgnoresSectionKey(t *testing.T) {
 	a := halfApp(t)
@@ -622,27 +484,6 @@ func TestCommitGateIgnoresSecondClick(t *testing.T) {
 	}
 }
 
-// 刷新同一份列表时，未变更文件的已读内容和高亮缓存保留，不被整体清空导致重读闪烁。
-func TestContentPreservedAcrossReloads(t *testing.T) {
-	a := richApp(t)
-	tt := ui.NewTester(a.view, 1280, 860)
-	settle(t, a)
-	tt.Frame()
-
-	key := fileKey(a.files[0])
-	if a.contents[key] == nil {
-		t.Fatal("richApp 应该已经读过文件内容")
-	}
-	oldContent := a.contents[key]
-
-	// 重新读取同一个仓库
-	a.showFiles(a.allFiles, workListID(a.repoPath, a.branch))
-
-	if a.contents[key] == nil || a.contents[key] != oldContent {
-		t.Errorf("同一个仓库刷新，文件指纹未变的内容应该保留，实际: %v", a.contents[key])
-	}
-}
-
 // 全部暂存与全部取消暂存：验证顶部药丸、全选勾选框、提交栏快捷药丸及 ⌘⇧A 快捷键。
 func TestStageAllAndUnstageAll(t *testing.T) {
 	a := richApp(t)
@@ -706,4 +547,3 @@ func TestStageAllAndUnstageAll(t *testing.T) {
 		t.Errorf("快捷键 ⌘⇧A 取消暂存后 stagedCount = %d, want 0", a.stagedCount())
 	}
 }
-

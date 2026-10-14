@@ -10,7 +10,7 @@ import (
 	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
 )
 
-// 冲突文件的逐个解决：diff 里那张卡片上的三颗按钮、文件行的右键菜单、
+// 冲突文件的逐个解决：改动区顶上那条的挑边按钮、文件行的右键菜单、
 // 「在编辑器打开」。
 //
 // 全部的重点在一句话上：**ours/theirs 是 git 的词，不是用户的词**。
@@ -22,13 +22,13 @@ import (
 
 // conflictActions 是一个冲突文件此刻能做的动作和它们的说法。
 //
-// 集中在一处算：diff 卡片、文件行右键菜单用的是同一份 —— 两处各写各的，
+// 集中在一处算：改动区顶上那条、文件行右键菜单用的是同一份 —— 两处各写各的，
 // 迟早一处改了另一处没改，而按钮上的词就是用户判断「点下去会发生什么」
 // 的全部依据。
 type conflictActions struct {
 	ours, theirs       string // 按钮上的词
 	oursTip, theirsTip string // 悬停说明：含 git 的 --ours/--theirs 和真实引用名
-	note               string // 卡片上那句白话：处境 + 怎么挑
+	note               string // 顶上那条说处境的白话：卡在哪一步、怎么挑
 }
 
 // conflictActionsFor 按「卡在哪一步」算出按钮文案。
@@ -112,58 +112,6 @@ func (a *app) conflictActionsFor(f gitrepo.File) conflictActions {
 	return act
 }
 
-// conflictH 是冲突卡片的高度：说明最多两行 + 一排按钮。
-//
-// 两行不是富余：变基那张卡片的白话最长（「…注意变基里两边是反的：ours 是
-// 变基目标，theirs 是正在重放的提交。」），单行放不下，被省略号吃掉的正
-// 好是那句最要命的解释。文字让它折行，卡片按两行留高。
-const conflictH = 88
-
-// conflictRow 是冲突文件的卡片（原来是条「文件有冲突：手动解决后…」的
-// 说明行）：说清处境，把三条出路摆在脸上。
-//
-// 它不画 diff：冲突文件的 patch 是合并格式（diff --cc、@@@ 头），解析器
-// 不认，工作区里那份带着 <<<<<<< 的文本也没什么好看的 —— 要看就去编辑器。
-func (a *app) conflictRow(c *ui.Context, pal palette, r row) {
-	f := a.fileAt(r.file)
-	if f == nil {
-		return
-	}
-	t := c.Theme()
-	act := a.conflictActionsFor(*f)
-	busy := a.op != gitrepo.OpNone
-
-	ui.Column(c).Height(conflictH).Shrink(0).FillWidth().
-		Padding(10, codeGap+barW).Gap(8).Justify(ui.Center).Children(func() {
-		ui.Text(c, act.note).FontSize(11).TextColor(t.TextMuted)
-		// Wrap：最小宽度（720）下三颗按钮一行摆不下，与其让第三颗被
-		// 窗沿切掉半个，不如让它整颗折到第二行。
-		ui.Row(c).Wrap().Gap(6).AlignItems(ui.Center).Children(func() {
-			if conflictButton(c, pal, act.ours, act.oursTip, busy).Clicked() {
-				a.resolveFile(*f, gitrepo.SideOurs, act.ours)
-			}
-			if conflictButton(c, pal, act.theirs, act.theirsTip, busy).Clicked() {
-				a.resolveFile(*f, gitrepo.SideTheirs, act.theirs)
-			}
-			if conflictButton(c, pal, "内置编辑器", "在 Gloss 内置 Diff 编辑器中手工合并并保存", busy).Clicked() {
-				a.openConflictEditor(*f)
-			}
-			if conflictButton(c, pal, "在编辑器打开", "在系统默认编辑器中打开，手工改冲突", busy).Clicked() {
-				a.openInEditor(*f)
-			}
-		})
-	})
-}
-
-// conflictButton 是冲突卡片上的一颗按钮。
-//
-// 只是给 secondaryAction 起个短名字：tip 和 busy 收进实参，那颗按钮自己
-// 保证 Tooltip 记在 Disabled 之前（框架的 Tooltip 构建时问一次 Hovered()，
-// 而禁用元素不报 hover —— 顺序反了那句解释就永远浮不出来）。
-func conflictButton(c *ui.Context, pal palette, label, tip string, busy bool) ui.Element {
-	return secondaryAction(c, pal, label, tip, busy).Shrink(0)
-}
-
 // resolveFile 用某一边解决一个冲突文件。
 //
 // 走 startOp 这唯一的写闸门；失败（包括「这个文件已经没有冲突了」这种
@@ -183,11 +131,11 @@ func (a *app) resolveFile(f gitrepo.File, side gitrepo.ConflictSides, label stri
 	})
 }
 
-// conflictMenu 是冲突文件在文件行上的右键菜单：diff 卡片上那几颗按钮在
-// 这里再摆一份，外加「标记为已解决」。
+// conflictMenu 是冲突文件在文件行上的右键菜单：改动区顶上那几颗按钮在这里
+// 再摆一份，外加「标记为已解决」。
 //
-// 摆两份不是重复：卡片在 diff 里，用户对着文件列表数还剩几个冲突时，不该
-// 为了每个文件先滚到右边去。
+// 摆两份不是重复：挑边在改动区里，用户对着文件列表数还剩几个冲突时，不该
+// 为了每个文件先把右边那个文件点开。
 func (a *app) conflictMenu(m *ui.Menu, f gitrepo.File) {
 	act := a.conflictActionsFor(f)
 	busy := a.op != gitrepo.OpNone
@@ -198,12 +146,6 @@ func (a *app) conflictMenu(m *ui.Menu, f gitrepo.File) {
 		a.resolveFile(f, gitrepo.SideTheirs, act.theirs)
 	}
 	m.Separator()
-	if m.Item("内置编辑器").Disabled(busy).Chosen() {
-		a.openConflictEditor(f)
-	}
-	if m.Item("Diff 预览").Disabled(busy).Chosen() {
-		a.openNativeDiff(f)
-	}
 	if m.Item("在编辑器打开").Disabled(busy).Chosen() {
 		a.openInEditor(f)
 	}

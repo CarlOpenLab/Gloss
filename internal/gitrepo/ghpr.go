@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"runtime"
 	"strconv"
@@ -43,7 +42,10 @@ func ghInstallHint() string {
 
 // 可被测试替换的函数钩子
 var (
-	lookPath           = exec.LookPath
+	// lookPath 走的必须是「子进程该用的 PATH」（shellPATHEnv 里那份），不能是
+	// exec.LookPath 默认那套：从 Finder 启动的 GUI 进程 PATH 里没有
+	// /opt/homebrew/bin 之类的目录，用户装了 gh 也会被判成「未检测到」。
+	lookPath           = lookPathInShellPATH
 	execCommandContext = exec.CommandContext
 )
 
@@ -89,13 +91,21 @@ func parseAuthor(raw json.RawMessage) string {
 	return ""
 }
 
+// ghEnv 是给 gh 子进程设的环境。PATH 走 shellPATHEnv() 算出来的那份：
+// Homebrew/mise 装的 gh 在 GUI 进程自己的 PATH 里根本不存在（见
+// shellpath_unix.go 里为什么），而 gh 自己还会调 git、甚至调钩子。
 func ghEnv() []string {
-	return append(os.Environ(),
+	return append(shellPATHEnv(),
 		"GH_PROMPT_DISABLED=1",
 		"NO_COLOR=1",
 	)
 }
 
+// checkGh 判断 gh 能不能用。
+//
+// lookPath 搜的同样是 shellPATHEnv 那份 PATH（非 Windows 上是
+// lookPathInShellPATH）：用户在终端里 gh 好用、GUI 里却「未检测到 gh」，
+// 根因就是这两处的 PATH 不是一个。
 func checkGh() error {
 	if _, err := lookPath("gh"); err != nil {
 		return ErrGhNotFound

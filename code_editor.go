@@ -102,15 +102,18 @@ func codeEditorBaseline(ctx context.Context, repo *gitrepo.Repo, path string, se
 
 func (a *app) closeCodeEditor() { a.codeEdit = codeEditorState{} }
 
-// closeEmbeddedEditors 收掉四个内置编辑器（冲突 / Diff 预览 / 整文件代码 / 编辑器视图）。
+// closeEmbeddedEditors 收掉内置编辑器（整文件代码对话框 / 编辑器视图 /
+// 改动区的 DiffView）。
 //
 // 换仓库时必须调：它们的缓冲区属于上一个仓库，而「保存」写的是 a.repoPath
 // 底下的相对路径 —— 留着它，下一次保存就会把 A 仓的内容写进 B 仓。
 func (a *app) closeEmbeddedEditors() {
-	a.conflictEdit = conflictEditorState{}
-	a.nativeDiff = nativeDiffState{}
 	a.codeEdit = codeEditorState{}
 	a.editorPane = editorPaneState{}
+	a.review = reviewState{}
+	// 草稿里的缓冲区属于上一个仓库，而「保存」写的是 a.repoPath 底下的
+	// 相对路径 —— 留着它，下一次保存就会把 A 仓的内容写进 B 仓。
+	a.reviewDrafts = nil
 }
 
 // codeEditorDialog 画整文件编辑器。和冲突编辑器同一副骨架（标题条 / 正文 /

@@ -122,19 +122,15 @@ func TestCodeEditorSaveWritesWorktreeOnly(t *testing.T) {
 	}
 }
 
-// 只有未暂存段能写回磁盘：已暂存段的右侧是 index 里的内容，保存它等于拿
-// index 覆盖工作区。
-func TestNativeDiffEditGateFollowsSection(t *testing.T) {
+// 只有未暂存段的右侧能写回磁盘：已暂存段的右侧是 index 里的内容，保存它
+// 等于拿 index 覆盖工作区；历史、储藏、对比、PR 检视更是一份都不许改。
+func TestReviewEditableGateFollowsSection(t *testing.T) {
 	a := richApp(t)
-	a.openNativeDiff(listedFile(t, a, "internal/server/handler.go"))
-	settle(t, a)
-	if !a.nativeDiff.canEdit {
+	a.selectFileKey(fileKey(listedFile(t, a, "internal/server/handler.go")))
+	settleReview(t, a)
+	if !a.review.editable || a.review.diff == nil || !a.review.diff.Editable {
 		t.Error("未暂存段该允许编辑")
 	}
-	if a.nativeDiff.editable || a.nativeDiff.diff.Editable {
-		t.Error("默认还是只读预览，编辑要用户自己开")
-	}
-	a.closeNativeDiff()
 
 	runGit(t, a.repoPath, "add", "-A")
 	a.reload()
@@ -143,58 +139,82 @@ func TestNativeDiffEditGateFollowsSection(t *testing.T) {
 	if staged.Section != gitrepo.SectionStaged {
 		t.Fatalf("夹具该把文件挪进已暂存段，实际 %v", staged.Section)
 	}
-	a.openNativeDiff(staged)
-	settle(t, a)
-	if a.nativeDiff.canEdit {
+	a.selectFileKey(fileKey(staged))
+	settleReview(t, a)
+	if a.review.editable || a.review.diff.Editable {
 		t.Error("已暂存段不该允许编辑")
 	}
 }
 
-func TestNativeDiffSaveWritesWorktree(t *testing.T) {
+// 保存只写工作区：磁盘变了，index 一个字节没动。
+func TestReviewSaveWritesWorktree(t *testing.T) {
 	a := richApp(t)
 	path := filepath.Join(a.repoPath, "README.md")
-	a.openNativeDiff(listedFile(t, a, "README.md"))
-	settle(t, a)
-	if !a.nativeDiff.canEdit {
-		t.Fatal("未暂存段该允许编辑")
+	a.selectFileKey(fileKey(listedFile(t, a, "README.md")))
+	settleReview(t, a)
+	if !a.review.editable {
+		t.Fatalf("未暂存段该允许编辑：%q", a.review.err)
 	}
 
-	a.nativeDiff.editable = true
-	a.nativeDiff.diff.Editable = true
-	a.nativeDiff.diff.New.Set("从 Diff 视图改的\n")
-	a.saveNativeDiff()
+	a.review.new.Set("从改动区改的\n")
+	a.saveReview()
 	settle(t, a)
 
-	if got := readDisk(t, path); got != "从 Diff 视图改的\n" {
+	if got := readDisk(t, path); got != "从改动区改的\n" {
 		t.Errorf("磁盘上是 %q", got)
 	}
-	if a.nativeDiff.on {
-		t.Error("保存成功后预览该自己关掉")
+	if got := indexContents(t, a.repoPath, "README.md"); strings.Contains(got, "从改动区改的") {
+		t.Errorf("保存不该动 index，实际 %q", got)
 	}
 }
 
-// 冲突编辑器的整文件模式也要有基线，而且换基线时两种模式必须一起换 —— 它
-// 们说的得是同一件事。
-func TestConflictPlainModeBaselineFollowsSide(t *testing.T) {
+// 冲突文件的左侧基线跟着点走：三份内容都在手上，换的是「跟谁比」。
+func TestReviewConflictBaselineSwitch(t *testing.T) {
 	a, _ := mergeConflictApp(t)
-	a.openConflictEditor(listedFile(t, a, "a.txt"))
-	settle(t, a)
+	a.selectFileKey(fileKey(listedFile(t, a, "a.txt")))
+	settleReview(t, a)
 
-	s := &a.conflictEdit
-	if s.code == nil {
-		t.Fatalf("冲突编辑器没打开：%q", s.err)
+	s := &a.review
+	if !s.conflict {
+		t.Fatalf("夹具该有冲突文件：%q", s.err)
 	}
-	if s.code.DiffBase != s.ours {
-		t.Error("整文件模式默认该以「当前分支」为基线")
+	if s.diff.Old != s.ours {
+		t.Error("默认该以「当前分支」为左侧基线")
+	}
+	// 夹具里在 main 上合并 topic：ours 就是 main 那一份。
+	if got := s.ours.String(); !strings.Contains(got, "main") {
+		t.Errorf("当前分支那份内容不对：\n%s", got)
+	}
+	if got := s.theirs.String(); !strings.Contains(got, "topic") {
+		t.Errorf("对方那份内容不对：\n%s", got)
 	}
 
-	a.setConflictSide(conflictSideBase)
-	if s.code.DiffBase != s.base || s.diff.Old != s.base {
-		t.Error("换基线后，编辑器的基线和 Diff 的左侧该指同一份缓冲区")
+	a.setReviewBaseline(baselineTheirs)
+	if s.diff.Old != s.theirs {
+		t.Error("换到「对方」之后左侧该跟着换")
 	}
-	a.setConflictSide(conflictSideTheirs)
-	if s.code.DiffBase != s.theirs || s.diff.Old != s.theirs {
-		t.Error("换到「对方分支」时没跟上")
+	a.setReviewBaseline(baselineBase)
+	if s.diff.Old != s.base {
+		t.Error("换到「共同祖先」之后左侧该跟着换")
+	}
+}
+
+// 冲突区里每一处都能单独挑边：点一下「留下 X」，那一块就被换成 X 的正文，
+// 别的块原样留着（还带着标记）。
+func TestReviewConflictRegionChoice(t *testing.T) {
+	a, _ := mergeConflictApp(t)
+	a.selectFileKey(fileKey(listedFile(t, a, "a.txt")))
+	settleReview(t, a)
+
+	if len(a.review.regions) == 0 {
+		t.Fatalf("工作区那份该有冲突标记：\n%s", a.review.new.String())
+	}
+	a.applyRegionChoice(0, conflictTakeTheirs)
+	if got := a.review.new.String(); strings.Contains(got, "<<<<<<<") {
+		t.Errorf("挑完之后标记该没了：\n%s", got)
+	}
+	if !a.review.new.Modified() {
+		t.Error("挑边改的是缓冲区，该显示成「已编辑」")
 	}
 }
 
@@ -208,9 +228,6 @@ func TestFileMenuOpensCodeEditor(t *testing.T) {
 	if !menuHas(items, "编辑代码") {
 		t.Fatalf("未暂存文件的菜单里该有「编辑代码」，实际 %v", items)
 	}
-	if !menuHas(items, "Diff 预览") {
-		t.Errorf("「编辑代码」和「Diff 预览」该并排摆着，实际 %v", items)
-	}
 	if err := tt.ChooseMenuItem("编辑代码"); err != nil {
 		t.Fatalf("「编辑代码」不该是灰的：%v", err)
 	}
@@ -223,18 +240,25 @@ func TestFileMenuOpensCodeEditor(t *testing.T) {
 	}
 }
 
-// 冲突文件不该再摆一个「编辑代码」：它走「内置编辑器」—— 那边要的是三方
-// 基线和 git add 收尾，两个入口并存只会让人两边各改一半。
+// 冲突文件不该再摆一个「编辑代码」：它在改动区里直接改（右边那一份就是
+// 结果），收尾要的是三方基线和 git add，两个入口并存只会让人两边各改一半。
 func TestConflictFileMenuHasNoSecondEditor(t *testing.T) {
 	a, _ := mergeConflictApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
 	tt.Frame()
 
 	items := rightClick(t, tt, "a.txt")
-	if !menuHas(items, "内置编辑器") {
-		t.Fatalf("冲突文件的菜单里该有「内置编辑器」，实际 %v", items)
+	// 这一项带路径（「标记为已解决 a.txt」），所以按前缀找。
+	resolved := false
+	for _, it := range items {
+		if strings.HasPrefix(it, "标记为已解决") {
+			resolved = true
+		}
 	}
-	if menuHas(items, "编辑代码") {
+	if !resolved {
+		t.Fatalf("冲突文件的菜单里该有「标记为已解决」，实际 %v", items)
+	}
+	if menuHas(items, "编辑代码") || menuHas(items, "内置编辑器") {
 		t.Errorf("冲突文件不该有第二个编辑器入口：%v", items)
 	}
 }
@@ -244,10 +268,9 @@ func TestConflictFileMenuHasNoSecondEditor(t *testing.T) {
 func TestSwitchRepoClosesEditors(t *testing.T) {
 	a := richApp(t)
 	a.openCodeEditor(listedFile(t, a, "README.md"))
-	a.openNativeDiff(listedFile(t, a, "README.md"))
-	settle(t, a)
-	if !a.codeEdit.on || !a.nativeDiff.on {
-		t.Fatalf("两个编辑器该都开着：%q", a.codeEdit.err)
+	settleReview(t, a)
+	if !a.codeEdit.on || a.review.diff == nil {
+		t.Fatalf("编辑器和改动区该都开着：%q", a.codeEdit.err)
 	}
 
 	a.openRepo(newRepoDir(t))
@@ -256,7 +279,7 @@ func TestSwitchRepoClosesEditors(t *testing.T) {
 	if a.codeEdit.on {
 		t.Error("切仓库后整文件编辑器该收掉")
 	}
-	if a.nativeDiff.on {
-		t.Error("切仓库后 Diff 预览该收掉")
+	if a.review.key != "" {
+		t.Errorf("切仓库后改动区该丢掉上一个仓库的状态，实际还记着 %s", a.review.key)
 	}
 }

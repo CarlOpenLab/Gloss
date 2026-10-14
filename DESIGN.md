@@ -16,6 +16,7 @@ colors:
 
   # Dark Canvas & Surface Ladder
   canvas: "#010102"
+  sidebar-dark: "#0f1011" # 侧栏实色（= Surface 1，不透明）
   surface-1: "#0f1011"
   surface-2: "#141516"
   surface-3: "#18191a"
@@ -40,6 +41,7 @@ colors:
 
   # Light Mode Equivalents (macOS Native Support)
   inverse-canvas: "#ffffff"
+  sidebar-light: "#efeff0" # 侧栏实色：比主区白底暗一档，是「窗口」不是「内容」
   inverse-surface-1: "#f7f8f9"
   inverse-surface-2: "#f0f2f5"
   inverse-surface-3: "#e4e7eb"
@@ -60,15 +62,15 @@ colors:
   semantic-warning: "#e09f3e"
   semantic-danger: "#e5484d"
 
-  # Commit Graph Lanes (Craft / Harmonized Palette)
+  # Commit Graph Lanes (Craft / Harmonized Palette) —— 8 条里只有 1 支蓝
   graph-lane-0: "#e6e6e6" # Ink (Main) —— 深色；浅色下取 #0f1115
   graph-lane-1: "#3eb489" # Sage Green
   graph-lane-2: "#e09f3e" # Warm Amber
-  graph-lane-3: "#4c86e8" # Steel Blue
+  graph-lane-3: "#4c86e8" # Steel Blue —— 全图唯一的蓝
   graph-lane-4: "#e5484d" # Coral
-  graph-lane-5: "#45b6fe" # Sky
-  graph-lane-6: "#d977a8" # Dusty Rose
-  graph-lane-7: "#38b2ac" # Muted Teal
+  graph-lane-5: "#d977a8" # Dusty Rose
+  graph-lane-6: "#38b2ac" # Muted Teal
+  graph-lane-7: "#9aab45" # Moss —— 替掉原来的第二支蓝（#45b6fe）
 
 rounded:
   xs: 4px
@@ -142,6 +144,7 @@ Gloss 是一个面向工程师的现代 Git GUI 客户端。本项目的设计�
 - **Surface 2 (`#141516`)**：二级提升面，用于卡片容器、Diff Hunk 栏（`@@`）、列表项悬停态、徽章底色。
 - **Surface 3 (`#18191a`)**：三级提升面，用于浮层、下拉菜单（Dropdown Popovers）、右键菜单。
 - **Surface 4 (`#191a1b`)**：四级提升面，用于模态对话框（Dialog Modal Cards）、设置窗口顶层面板。
+- **侧栏与代码主区都落在 Surface 1**：两者同色、同材质、**不透明**，中间用 1px Hairline 分界，Canvas 只从窗口边缘和面板缝隙里露出来。层次交给明度阶梯，不交给半透明 —— 侧栏曾经铺的是 `#08090a` 再乘 `α(0.55)`（配合窗口 Vibrant 毛玻璃），明度差被那个 α 吃掉一多半，深色下糊进近黑画布、浅色下糊进白画布，而且最终颜色由桌面壁纸决定：同一套配色在不同机器上是两个样子。
 
 ### 2.2 发丝边框 (Hairline Borders)
 - **Hairline (`#23252a`)**：基础 1px 细线，用于面板分割、卡片边框、表格横线、不抢视线。
@@ -192,11 +195,16 @@ Gloss 是一个面向工程师的现代 Git GUI 客户端。本项目的设计�
 1. **Lane 0 (主干 / 主分支)**: `#e6e6e6` (Ink，浅色下 `#0f1115`)
 2. **Lane 1**: `#3eb489` (鼠尾草绿)
 3. **Lane 2**: `#e09f3e` (暖琥珀沙)
-4. **Lane 3**: `#4c86e8` (钢青蓝)
+4. **Lane 3**: `#4c86e8` (钢青蓝) —— **全图唯一的蓝**
 5. **Lane 4**: `#e5484d` (暗珊瑚红)
-6. **Lane 5**: `#45b6fe` (静谧天青)
-7. **Lane 6**: `#d977a8` (暮灰粉)
-8. **Lane 7**: `#38b2ac` (暗松石绿)
+6. **Lane 5**: `#d977a8` (暮灰粉)
+7. **Lane 6**: `#38b2ac` (暗松石绿)
+8. **Lane 7**: `#9aab45` (苔绿)
+
+两条硬约束（`theme_test.go` 各有一条断言守着）：
+
+- **主干必须是中性 Ink**，且是整张图上最亮（浅色下最重）的一条。主干色同时是「我在哪条分支」的圆点、提交行里本地分支芯片上那颗 6px 点、提交栏状态胶囊 —— 它一变色，这几处会跟着一起变。
+- **全图只有一支蓝**。三支蓝并排在屏上时，整张图会被读成「一条蓝色渐变 + 几个别的色」，支线之间分不出彼此，图就白画了；`#58a6ff` / `#45b6fe` 那一系正是这么被换掉的。
 
 ---
 
@@ -239,7 +247,8 @@ Gloss 是一个面向工程师的现代 Git GUI 客户端。本项目的设计�
   - 异常状态（如 Rebase 中或 Detached HEAD）仅使用微弱的 Warning 色文字做点缀提示。
 
 ### 4.3 侧边栏 (Sidebar Navigation)
-- 底色：`#08090a`（介于 Canvas 与 Surface 1 之间）或半透明 Vibrant 材质。
+- 底色：深色 `#0f1011`（Surface 1）、浅色 `#efeff0`；**实色不透明**（顶栏项目标签栏同色同材质）。
+  半透明材质已废弃：`Alpha(0.55)` 会把侧栏与画布的明度差（本就只有 7~8 阶）再乘掉一多半，深色下糊进 `#010102` 画布、浅色下糊进白画布，且最终颜色由桌面壁纸决定。
 - 分割线：1px `#23252a`。
 - 导航激活态（如“改动”/“历史”）：
   - 摒弃大面积刺眼蓝色块，采用 `Surface 2` 底色搭配左侧 2px 强调白指示条（深色 `#f7f8f8` / 浅色 `#0f1115`），文字提亮到 `Ink` 并加粗。
@@ -276,3 +285,4 @@ Gloss 是一个面向工程师的现代 Git GUI 客户端。本项目的设计�
 - ❌ **禁止品牌紫 / 薰衣草蓝**：`#5e6ad2` 那一系（以及任何紫、鸢尾、靛）不再出现在界面与拓扑图里 —— 强调靠明度，不靠色相。
 - ❌ **禁止非语义彩色修饰**：不要给卡片、侧栏条目增加花哨的环境渐变或外发光。
 - ❌ **禁止用几何表达状态**：悬停 / 激活 / 选中只许改颜色，不许改字重、字号、内边距或边框宽度 —— 状态每变一次，布局就跟着抖一下（标签页那条 semibold 就是这么抖的）。
+- ❌ **禁止给侧栏 / 顶栏铺半透明材质**：`Color.Alpha(0.3~0.6)` 这类「让系统毛玻璃透上来」的写法，等于把这两块面的最终颜色交给桌面壁纸。侧栏与画布的明度差只有 7~8 阶，乘一次 α 就只剩 3~4 阶 —— 深色下糊进近黑画布、浅色下糊进白画布，同一套配色在不同机器上不是一个样子。层次用明度阶梯和发丝线表达。
