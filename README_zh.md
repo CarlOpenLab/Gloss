@@ -137,6 +137,19 @@ go tool mygo build           # 出 .app 和 .dmg（build/darwin-arm64/）
 go test ./...                # 界面是无头的，测试不需要物理开窗口
 ```
 
+### Windows：Defender 报安装包是误报
+
+Windows Defender 的 ML 启发式（通常显示为 `Trojan:Script/Wacatac.C!ml`）会报 `Gloss.Setup.<版本>.amd64.exe`。这是**误报**：构建不压缩、不混淆，安装时也不下载执行任何东西；未签名、每个版本又是全新哈希的安装包，恰好是这套启发式打分最低的画像。
+
+**被拦住时两条路：**
+
+1. **不用安装**。下 `gloss-<版本>-windows-amd64-portable.zip`，解压后直接跑 `Gloss.exe`。它和安装包装下去的那份是同一个构建（同一个 `Gloss.exe` 和 `ghostty-vt.dll`），不需要管理员权限，也不在自身目录之外写东西。
+2. **放行**。Defender →「保护历史记录」→ 找到这条 →「操作」→「允许在设备上」，或把下载目录加进排除项。
+
+**提交误报**：检测是按文件哈希记的，所以每个新版本都会被重新报一次 —— 每发一版交一次，通常几小时内清掉：<https://www.microsoft.com/en-us/wdsi/filesubmission> →「软件开发者」→ 上传被拦的 `Gloss.Setup.<版本>.amd64.exe` →「被错误检测为恶意软件」。微软清掉这个哈希，并把结果回灌给模型。
+
+根治靠代码签名：签过名的包带发行者身份，同样的字节就不再按「匿名二进制」被打分。
+
 ---
 
 ## 配置模型

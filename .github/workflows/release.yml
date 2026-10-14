@@ -81,6 +81,26 @@ jobs:
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
         run: go tool mygo build -platform "${{ matrix.platform }}" -upload
 
+      # Defender 的 ML 误报（Trojan:Script/Wacatac.C!ml 那类）咬的是**安装包**：
+      # 未签名 + 每次发版全新哈希 + NSIS 单文件，正是它最先咬的画像。被拦住的
+      # Windows 用户需要一条免安装的路，这份 zip 就是 —— 解压直接双击
+      # Gloss.exe，不写注册表、不加开始菜单。
+      #
+      # 只加 zip、不动 gloss-<版本>-windows-amd64.tar.gz：客户端更新只按
+      # update-windows-amd64.json 里的 URL 下载（还带 ed25519 签名校验），
+      # 不会去 release 资产里按名字找包，多一个 zip 影响不到自动更新。
+      - name: Upload the portable Windows ZIP
+        if: matrix.platform == 'windows/amd64'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="$(jq -r .version mygo.json)"
+          zip="$RUNNER_TEMP/gloss-${version}-windows-amd64-portable.zip"
+          (cd build/windows-amd64 && zip -qr "$zip" .)
+          gh release upload "$GITHUB_REF_NAME" "$zip" \
+            --repo "$GITHUB_REPOSITORY" --clobber
+          echo "::notice::便携包已上传：$(basename "$zip")（Defender 误报时的免安装绕过路径）"
+
       # 老版本 arm64 安装的更新 feed 是 update-darwin-arm64.json，通用包只产出
       # update-darwin-universal.json，所以补一次按架构构建（-skip-dmg 避免 DMG 同名冲突）。
       - name: Keep per-arch macOS update feeds

@@ -133,6 +133,19 @@ go tool mygo build           # Builds .app and .dmg into build/darwin-arm64/
 go test ./...                # Headless rendering tests, no display required
 ```
 
+### Windows: Defender flags the installer (false positive)
+
+Microsoft Defender's ML heuristics — usually as `Trojan:Script/Wacatac.C!ml` — report `Gloss.Setup.<version>.amd64.exe`. It is a false positive: nothing here is packed, obfuscated, or downloaded at install time. An unsigned installer with a brand-new hash every release is simply the profile those heuristics score worst.
+
+**Two ways through while it is flagged:**
+
+1. **Install nothing.** Download `gloss-<version>-windows-amd64-portable.zip`, extract it, run `Gloss.exe`. It is the same build as the archive the installer puts down (same `Gloss.exe` and `ghostty-vt.dll`), needs no admin rights and writes nothing outside its own folder.
+2. **Allow it.** Defender → *Protection history* → the detection → *Actions* → *Allow on device*, or add your download folder to the exclusions.
+
+**Report it.** Detections are per file hash, so a fresh release starts flagged again — report the file once per release (takes a few hours): <https://www.microsoft.com/en-us/wdsi/filesubmission> → *Software developer* → upload the flagged `Gloss.Setup.<version>.amd64.exe` → *Incorrectly detected as malware*. Microsoft clears that hash and feeds the result back into the model.
+
+The durable fix is code signing: a signed build carries a publisher, so the same bytes stop being scored as an anonymous binary.
+
 ---
 
 ## LLM Configuration
