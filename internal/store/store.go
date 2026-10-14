@@ -48,6 +48,21 @@ type Config struct {
 	CommitPrompt string `json:"commitPrompt,omitempty"`
 	// BranchPrompt 是自定义 Git 分支名生成提示词，留空使用内置预设。
 	BranchPrompt string `json:"branchPrompt,omitempty"`
+	// GraphPreset 是提交拓扑图的配色方案名，留空使用内置默认那一套。
+	GraphPreset string `json:"graphPreset,omitempty"`
+	// GraphLanesDark / GraphLanesLight 是拓扑图 8 个色号的自定义覆盖
+	// （"#rgb" / "#rrggbb" 这样的写法），按明暗各存一份：同一支色落在
+	// 深色底和浅色底上的可读性差得很远，用户调的是他当时看的那个外观。
+	// 留空、条数不够或写错的条目都表示「这一号还用方案自带的颜色」。
+	GraphLanesDark  []string `json:"graphLanesDark,omitempty"`
+	GraphLanesLight []string `json:"graphLanesLight,omitempty"`
+	// TermFontFamily 是内置终端的字体族，界面上是从一列常见等宽字体里下拉选一个。
+	// 手写逗号分隔的候选表也认（用的是 ui.Element.Font 那套写法），用的时候还会
+	// 再补一个 monospace 兜底：选了台机器上没装的字体时退到系统等宽，而不是让
+	// 引擎换一支比例字体、把终端搞错行。留空表示系统等宽。
+	TermFontFamily string `json:"termFontFamily,omitempty"`
+	// TermFontSize 是内置终端的字号（DIP），0 表示默认值。
+	TermFontSize float32 `json:"termFontSize,omitempty"`
 }
 
 // EffectiveCommitPrompt 返回生效的 Git 提交信息生成系统提示词。

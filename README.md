@@ -43,7 +43,7 @@ When reviewing large pull requests or AI-generated diffs, the biggest bottleneck
 - ⚡ **GPU Direct Rendering**: Pure Go native interface built with `mygo`, styled around GitHub's visual palette.
 - 🛡 **Pre-flight Risk Scan**: One click scans the staged diff for hardcoded secrets, injection risks, and other suspicious changes, grouped by severity and anchored to file and line.
 - 🤖 **AI Commit Messages & Branch Names**: Generate Conventional Commits messages from the staged diff (optionally steered by an intent hint), and name new branches from a one-line description.
-- 🌲 **Fork-Style Layout & Topology Graph**: Custom commit topology graph to visualize branching histories; the review pane shows one file at a time with split / unified layouts, word-level inline highlighting and syntax highlighting.
+- 🌲 **Fork-Style Layout & Topology Graph**: Custom commit topology graph to visualize branching histories, with three built-in lane palettes (Classic / Vivid / Grayscale) and per-lane color overrides for dark and light; the review pane shows one file at a time with split / unified layouts, word-level inline highlighting and syntax highlighting.
 - 🔍 **Viewed Tracking**: Mark files as reviewed to collapse them into clean headers; automatically resets when file contents change.
 - 🛠 **Full Git Workflow**:
   - **Staging & Commits**: Whole-file staging, **per-hunk staging**, persistent drafts, and Amend (`--amend`).

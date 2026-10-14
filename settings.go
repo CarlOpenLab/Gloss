@@ -397,12 +397,15 @@ func (a *app) settingsBody(c *ui.Context, pal palette) {
 			ui.Text(c, T("设置", "Settings")).FontSize(textCaption).FontWeight(weightSemibold).TextColor(pal.inkSubtle).
 				Padding(6, 8, 2, 8)
 
-			settingsSidebarItem(c, t, T("模型设置", "Model Settings"), iconSparkles, a.settingsTab == settingsTabModels, func() {
-				a.settingsTab = settingsTabModels
-			})
-
+			// 通用偏好在模型设置前头：这一页改的是界面本身（外观、语言、拓扑图
+			// 配色、终端字体），打开设置的人十次里有九次是来找它的；模型与密钥
+			// 配完一次就很少再动。
 			settingsSidebarItem(c, t, T("通用偏好", "Preferences"), iconPalette, a.settingsTab == settingsTabGeneral, func() {
 				a.settingsTab = settingsTabGeneral
+			})
+
+			settingsSidebarItem(c, t, T("模型设置", "Model Settings"), iconSparkles, a.settingsTab == settingsTabModels, func() {
+				a.settingsTab = settingsTabModels
 			})
 
 			settingsSidebarItem(c, t, T("提示词设置", "Prompts"), iconSliders, a.settingsTab == settingsTabPrompts, func() {
@@ -747,6 +750,191 @@ func (a *app) generalSettingsPane(c *ui.Context, pal palette) {
 						})
 						if resetBtn.Clicked() {
 							a.setCodeSize(0)
+						}
+					})
+				})
+			})
+
+			ui.Box(c).Height(1).FillWidth().Background(pal.hairline)
+
+			// 5. 提交拓扑图配色：先选方案，再按号微调。
+			//
+			// 覆盖按明暗各存一份，两排色井都摆出来 —— 同一支色落在深色底和
+			// 浅色底上的可读性差得很远，而「随系统」的人两个外观都会看到，
+			// 只显示当前那一排的话，另一份就得切一次外观才能调。
+			ui.Column(c).Gap(10).FillWidth().Children(func() {
+				ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
+					drawIcon(c, iconPalette, 15, t.Accent)
+					ui.Text(c, T("拓扑图配色", "Commit Graph Colors")).FontSize(textBody).FontWeight(weightSemibold).TextColor(pal.ink)
+				})
+				ui.Text(c, T("提交列表左边那几条泳道线的颜色。0 号是主干，也用在「当前分支」的圆点上；自定义只改拓扑图，状态字母和分支芯片的亮色不动。", "Colors of the lane lines in the commit list. Lane 0 is the mainline, shared with the current-branch dot; overrides apply to the graph only, never to status letters or ref chips.")).
+					FontSize(11).TextColor(t.TextMuted)
+
+				ui.Row(c).Gap(12).FillWidth().Children(func() {
+					for _, lp := range lanePresets {
+						lp := lp
+						name, desc := lanePresetLabel(lp.id)
+						selected := a.graphPreset == lp.id || (a.graphPreset == "" && lp.id == lanePresets[0].id)
+						card := ui.ButtonBase(c).Grow(1).Height(60).Radius(radiusMD).Padding(8, 12).
+							Cursor(ui.CursorPointer).Label(Tf("%s配色", "%s colors", name))
+
+						border := pal.hairlineStrong
+						bg := pal.surface1
+						if selected {
+							border = t.Accent
+							bg = pal.selection
+						} else if card.Hovered() {
+							bg = pal.surface3
+						}
+						card.Border(1, border).Background(bg)
+						fadeColors(card)
+
+						card.Children(func() {
+							ui.Column(c).Gap(4).Grow(1).Children(func() {
+								ui.Text(c, name).FontSize(textBodySM).
+									FontWeight(weightSemibold).TextColor(pal.ink)
+								ui.Text(c, desc).FontSize(textCaption).TextColor(pal.inkSubtle).SingleLine()
+								// 一排色点：这套方案长什么样扫一眼就知道，不用先选上再去看图。
+								ui.Row(c).Gap(3).Children(func() {
+									for _, col := range lp.lanes(a.isDark(c)) {
+										ui.Box(c).Size(9, 9).Radius(radiusPill).Background(col)
+									}
+								})
+							})
+						})
+
+						if card.Clicked() {
+							a.setGraphPreset(lp.id)
+						}
+					}
+				})
+
+				for _, row := range []struct {
+					dark  bool
+					label string
+				}{
+					{true, T("深色外观", "Dark appearance")},
+					{false, T("浅色外观", "Light appearance")},
+				} {
+					row := row
+					ui.Row(c).AlignItems(ui.Center).Gap(10).FillWidth().Children(func() {
+						ui.Text(c, row.label).FontSize(textCaption).Width(76).Shrink(0).TextColor(pal.inkMuted)
+						laneCols := a.laneSet().lanes(row.dark)
+						ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+							for i := 0; i < laneCount; i++ {
+								i := i
+								col := laneCols[i]
+								tip := Tf("第 %d 号泳道线的颜色", "Color of lane %d", i)
+								if i == 0 {
+									tip = T("主干（0 号）的颜色", "Mainline (lane 0) color")
+								}
+								ui.Column(c).Gap(2).AlignItems(ui.Center).Children(func() {
+									ui.Text(c, Tf("%d", "%d", i)).FontSize(9).TextColor(pal.inkTertiary)
+									if ui.ColorWell(c, &col).Label(tip).Tooltip(tip).Changed() {
+										a.setLaneOverride(row.dark, i, hexOf(col))
+									}
+								})
+							}
+						})
+					})
+				}
+
+				if clearBtn := secondaryAction(c, pal,
+					T("清除自定义颜色", "Clear Custom Colors"),
+					T("回到方案自带的 8 色", "Back to the preset's 8 colors"),
+					!a.hasLaneOverrides()); clearBtn.Clicked() {
+					a.clearLaneOverrides()
+				}
+			})
+
+			ui.Box(c).Height(1).FillWidth().Background(pal.hairline)
+
+			// 6. 内置终端：字体族与字号。
+			//
+			// 这两项都推给已经开着的 shell（见 syncTerminalFont），所以改完
+			// 不用重启终端 —— 重启会把屏幕上的输出和正在跑的命令一起丢掉。
+			ui.Column(c).Gap(10).FillWidth().Children(func() {
+				ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
+					drawIcon(c, iconTerminal, 15, t.Accent)
+					ui.Text(c, T("内置终端", "Built-in Terminal")).FontSize(textBody).FontWeight(weightSemibold).TextColor(pal.ink)
+				})
+				ui.Text(c, T("字体族从下拉里挑一个等宽字体：这台机器上装着的排在前面（Nerd Font 最前），没装的留在后面当候选，选了会退到系统等宽。改动对已经开着的会话立即生效。", "Pick a monospace family: what this machine has installed comes first (Nerd Fonts on top), uninstalled ones stay below as candidates and fall back to the system monospace. Changes reach open sessions at once.")).
+					FontSize(11).TextColor(t.TextMuted)
+
+				// 要用的那一帧才去扫已装字体（见 ensureFontScan）。
+				a.ensureFontScan()
+
+				ui.Row(c).AlignItems(ui.Center).Gap(12).FillWidth().Children(func() {
+					ui.Column(c).Gap(4).Grow(1).MinWidth(0).Children(func() {
+						ui.Text(c, T("字体族", "Font Family")).FontSize(textBodySM).
+							FontWeight(weightMedium).TextColor(pal.ink)
+						// 存的是单一字族；空串（手改配置文件留下的）在下拉里按
+						// 「系统等宽」显示 —— 两者本来就是同一件事。
+						family := a.termFontFamily
+						if family == "" {
+							family = termFontGenericMono
+						}
+						if ui.Combobox(c, &family, a.termFontOptions()).
+							FillWidth().Label(T("终端字体族", "Terminal font family")).Changed() {
+							a.setTermFontFamily(family)
+						}
+						if !a.fontScanDone {
+							ui.Text(c, T("正在读取已装字体…", "Reading installed fonts…")).
+								FontSize(textCaption).TextColor(pal.inkTertiary)
+						}
+					})
+					reset := secondaryAction(c, pal, T("默认字体", "Default font"), T("用系统等宽字体", "Use the system monospace"), a.termFontFamily == "" || a.termFontFamily == termFontGenericMono)
+					if reset.Clicked() {
+						a.setTermFontFamily("")
+					}
+				})
+
+				ui.Row(c).AlignItems(ui.Center).Gap(12).FillWidth().Children(func() {
+					ui.Column(c).Gap(2).Grow(1).Children(func() {
+						ui.Text(c, T("字号", "Font Size")).FontSize(textBodySM).
+							FontWeight(weightMedium).TextColor(pal.ink)
+						sizeVal := a.termFontSizeValue()
+						sizeLabel := Tf("%.0f px", "%.0f px", sizeVal)
+						if a.termFontSize == 0 {
+							sizeLabel = Tf("%.0f px (默认)", "%.0f px (Default)", sizeVal)
+						}
+						ui.Text(c, sizeLabel).FontSize(textCaption).TextColor(pal.inkSubtle)
+					})
+
+					ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+						minusBtn := ui.ButtonBase(c).Size(28, 28).Radius(radiusSM).Background(pal.surface2).Border(1, pal.hairlineStrong).
+							AlignItems(ui.Center).Justify(ui.Center).Cursor(ui.CursorPointer).Label(T("缩小终端字号", "Smaller terminal font")).Tooltip(T("缩小终端字号", "Smaller terminal font"))
+						if minusBtn.Hovered() {
+							minusBtn.Background(pal.surface3)
+						}
+						fadeColors(minusBtn)
+						minusBtn.Children(func() { ui.Text(c, "−").FontSize(textBody).TextColor(pal.ink) })
+						if minusBtn.Clicked() {
+							a.setTermFontSize(a.termFontSizeValue() - termFontStep)
+						}
+
+						plusBtn := ui.ButtonBase(c).Size(28, 28).Radius(radiusSM).Background(pal.surface2).Border(1, pal.hairlineStrong).
+							AlignItems(ui.Center).Justify(ui.Center).Cursor(ui.CursorPointer).Label(T("放大终端字号", "Larger terminal font")).Tooltip(T("放大终端字号", "Larger terminal font"))
+						if plusBtn.Hovered() {
+							plusBtn.Background(pal.surface3)
+						}
+						fadeColors(plusBtn)
+						plusBtn.Children(func() { ui.Text(c, "+").FontSize(textBody).TextColor(pal.ink) })
+						if plusBtn.Clicked() {
+							a.setTermFontSize(a.termFontSizeValue() + termFontStep)
+						}
+
+						resetBtn := ui.ButtonBase(c).Height(28).Padding(0, 10).Radius(radiusSM).Background(pal.surface2).Border(1, pal.hairlineStrong).
+							AlignItems(ui.Center).Justify(ui.Center).Cursor(ui.CursorPointer).Label(T("重置字号", "Reset size")).Tooltip(T("恢复默认字号", "Back to the default size"))
+						if resetBtn.Hovered() {
+							resetBtn.Background(pal.surface3)
+						}
+						fadeColors(resetBtn)
+						resetBtn.Children(func() {
+							ui.Text(c, T("重置字号", "Reset size")).FontSize(textButton).FontWeight(weightMedium).TextColor(pal.inkMuted)
+						})
+						if resetBtn.Clicked() {
+							a.setTermFontSize(0)
 						}
 					})
 				})

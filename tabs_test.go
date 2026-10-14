@@ -1,8 +1,11 @@
 package main
 
 import (
+	"io"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/plugins/terminal"
 	"github.com/egoist/mygo/ui"
@@ -251,5 +254,163 @@ func TestTerminalSessions(t *testing.T) {
 	a.closeAllTerminals()
 	if len(tab.terms) != 0 {
 		t.Errorf("closeAllTerminals 后不该有会话，实际 %d", len(tab.terms))
+	}
+}
+
+// fontFamilyWithFallback 只补一个尾巴，且不重复补。
+func TestFontFamilyWithFallback(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"", ""},                                 // 空交给插件自己（它就是系统等宽）
+		{"   ", ""},                              // 只有空格同理
+		{"Menlo", "Menlo, monospace"},            // 补一个
+		{"Menlo, monospace", "Menlo, monospace"}, // 已经有了
+		{"Menlo, MONOSPACE", "Menlo, MONOSPACE"}, // 大小写不敏感
+		{" Menlo ", "Menlo, monospace"},          // 顺带去掉两头的空格
+		{"monospace", "monospace"},               // 整串就是它
+	}
+	for _, c := range cases {
+		if got := fontFamilyWithFallback(c.in); got != c.want {
+			t.Errorf("fontFamilyWithFallback(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// 选了个这台机器没装的字体族，终端不能变成比例字体。
+//
+// 上一条用例拿「列数」当插件字体度量的探针，这条接着用它验兜底：不存在的字族
+// 配上 monospace 尾巴，一屏列数必须和系统等宽**一模一样**。实测过没有兜底时的
+// 样子 —— 同样的窗口掉到 53 列（引擎换了一支比例字体），终端会错行，所以这个
+// 尾巴不是装饰。
+func TestTerminalFontFallsBackToMonospace(t *testing.T) {
+	colsFor := func(family string) int {
+		t.Helper()
+		conn := newRecordingConn()
+		old := terminalNew
+		terminalNew = func(o terminal.Options) (*terminal.Terminal, error) {
+			o.Conn = conn
+			return terminal.New(o)
+		}
+		defer func() {
+			terminalNew = old
+			conn.Close()
+		}()
+
+		a := newApp()
+		a.openInNewTab(t.TempDir())
+		a.termFontFamily = family
+		tt := ui.NewTester(a.view, 1000, 700)
+		a.setViewMode(viewModeTerm)
+		tt.Frame()
+		tt.Frame()
+		return waitCols(t, conn, 0)
+	}
+
+	base := colsFor("")
+	if got := colsFor("NoSuchFontFamilyZZZ"); got != base {
+		t.Errorf("没装的字体族该退到系统等宽（%d 列），实际 %d 列 —— 兜底没生效，终端会错行", base, got)
+	}
+}
+
+// recordingConn 冒充终端对端：它不跑任何程序，只记下插件告诉它的屏幕尺寸。
+//
+// 字号变了，插件的字体度量跟着变，格子尺寸就得重算 —— 而 SetFont 没有返回值
+// 可以断言，列数就是「字体真的推到了活着的会话」能看得见的那一面。
+type recordingConn struct {
+	mu    sync.Mutex
+	cols  int
+	rows  int
+	calls int
+	done  chan struct{}
+	once  sync.Once
+}
+
+func newRecordingConn() *recordingConn { return &recordingConn{done: make(chan struct{})} }
+
+func (c *recordingConn) Read([]byte) (int, error) { <-c.done; return 0, io.EOF }
+
+func (c *recordingConn) Write(p []byte) (int, error) { return len(p), nil }
+
+func (c *recordingConn) Close() error {
+	c.once.Do(func() { close(c.done) })
+	return nil
+}
+
+func (c *recordingConn) Resize(cols, rows int) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cols, c.rows, c.calls = cols, rows, c.calls+1
+	return nil
+}
+
+func (c *recordingConn) size() (int, int, int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.cols, c.rows, c.calls
+}
+
+// waitCols 等插件报出一个和 prev 不同的列数。
+//
+// 列数是插件在自己的布局里算出来、再交给对端的，中间跨一条 goroutine，
+// 所以这里只能等，不能「拍一帧就断言」。
+func waitCols(t *testing.T, c *recordingConn, prev int) int {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if cols, _, _ := c.size(); cols > 0 && cols != prev {
+			return cols
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cols, _, _ := c.size()
+	t.Fatalf("等不到新的列数（还是 %d）", cols)
+	return 0
+}
+
+// 内置终端的字体：起会话时交给插件，改了之后推给活着的会话。
+//
+// 这比「Options.Font 传对了」远一截：pty 换成假连接，插件本体是真的，
+// 于是字号的变化会一路走到格子尺寸 —— 那是终端真正拿字号干的事。
+func TestTerminalFontReachesLiveSession(t *testing.T) {
+	conn := newRecordingConn()
+	t.Cleanup(func() { conn.Close() })
+
+	old := terminalNew
+	terminalNew = func(o terminal.Options) (*terminal.Terminal, error) {
+		o.Conn = conn
+		return terminal.New(o)
+	}
+	t.Cleanup(func() { terminalNew = old })
+
+	a := newApp()
+	a.openInNewTab(t.TempDir())
+	a.setTermFontSize(termFontDefault)
+	tt := ui.NewTester(a.view, 1000, 700)
+
+	a.setViewMode(viewModeTerm)
+	tt.Frame()
+	tt.Frame()
+
+	at13 := waitCols(t, conn, 0)
+
+	// 改字号：不重启 shell，也不该丢会话。
+	cur := a.activeSession()
+	a.setTermFontSize(24)
+	tt.Frame()
+	tt.Frame()
+
+	at24 := waitCols(t, conn, at13)
+	if at24 >= at13 {
+		t.Errorf("字号 %d → 24 之后一屏该少放几列：%d → %d", termFontDefault, at13, at24)
+	}
+	if a.activeSession() != cur || cur.started != true {
+		t.Errorf("改字号不该换会话或重启 shell")
+	}
+
+	// 字体没变时不该反复推：多渲染几帧，列数与推送次数都不动。
+	_, _, calls := conn.size()
+	tt.Frame()
+	tt.Frame()
+	if cols, _, after := conn.size(); cols != at24 || after != calls {
+		t.Errorf("字体没变却又推了一次：列数 %d → %d，推送 %d → %d", at24, cols, calls, after)
 	}
 }

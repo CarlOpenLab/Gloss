@@ -538,6 +538,177 @@ func (a *app) syncTerminalThemes(dark bool, pal palette) {
 	}
 }
 
+// termFontKey 是「上一次推给终端的那份字体」。
+//
+// terminal.Font 里有一个切片字段（连字特性 Features），两份值不能直接比，
+// 所以账本上只记我们真正会改的这两项 —— 也正是「要不要重推」的判据。
+type termFontKey struct {
+	family string
+	size   float32
+}
+
+// 内置终端的字号范围。小于 9 等宽字就开始糊笔画，大于 28 一屏剩不下几行 ——
+// 终端是拿来看输出的，不是放大镜。
+const (
+	termFontMin  = 9
+	termFontMax  = 28
+	termFontStep = 1
+	// termFontDefault 是插件在字号为 0 时用的那一档（见 mygo 的
+	// plugins/terminal/font.go）：界面上要把这个数写给用户看，所以得跟它一致。
+	termFontDefault = 13
+	// termFontGenericMono 是「系统等宽」那个通用关键字：mygo 三边都认得它
+	// （macOS 走 CoreText、Windows 映射到 Cascadia Mono / Consolas / Courier New、
+	// Linux 交给 pango），拿到的是系统自己的等宽字体。
+	termFontGenericMono = "monospace"
+)
+
+// curatedTermFonts 是下拉里那份固定的常见等宽字体表。
+//
+// 它管的是「没扫到也算数」的那一半：系统自带的 SF Mono / Menlo / Monaco /
+// Consolas 不进用户字体目录，装了但不在用户目录下的字体也可能扫漏。排在扫出来
+// 的已装字体后面 —— 你手上真有的（尤其是 Nerd Font）先出现。
+var curatedTermFonts = []string{
+	"SF Mono",
+	"Menlo",
+	"Monaco",
+	"JetBrains Mono",
+	"Fira Code",
+	"Cascadia Mono",
+	"Consolas",
+	"Hack",
+	"IBM Plex Mono",
+	"Source Code Pro",
+	"Roboto Mono",
+	"Ubuntu Mono",
+	"Noto Sans Mono",
+	"DejaVu Sans Mono",
+	"Liberation Mono",
+	"Courier New",
+	"Inconsolata",
+	"Anonymous Pro",
+	"MesloLGS NF",
+	"Victor Mono",
+}
+
+// termFontOptions 是字体下拉里的选项，顺序就是「排序优先」的答案：
+//
+//	系统等宽 → 装着的 Nerd Font（按名字） → 装着的其他等宽字体 → 固定表
+//
+// 装了 Nerd Font 的人多半就是要在终端里用它的图标字形（powerline、devicons
+// 那一套），所以它们排在最前面；挑了个这台机器没有的也不怕 —— 用的时候会补上
+// monospace 兜底（见 fontFamilyWithFallback）。
+func (a *app) termFontOptions() []string {
+	out := make([]string, 0, len(a.fonts)+len(curatedTermFonts)+1)
+	seen := map[string]bool{}
+	add := func(family string) {
+		family = strings.TrimSpace(family)
+		if family == "" || seen[family] {
+			return
+		}
+		seen[family] = true
+		out = append(out, family)
+	}
+	add(termFontGenericMono)
+	for _, f := range a.fonts {
+		if f.Nerd {
+			add(f.Family)
+		}
+	}
+	for _, f := range a.fonts {
+		if !f.Nerd {
+			add(f.Family)
+		}
+	}
+	for _, family := range curatedTermFonts {
+		add(family)
+	}
+	return out
+}
+
+// ensureFontScan 起一次后台字体扫描，一个进程只起一次。
+//
+// 放在设置页第一次画到这一行的时候叫，而不是启动时：不开设置的人不该为它付
+// 一次磁盘扫描（实测用户字体目录一两百毫秒）。扫完在主线程上换上新的一份，
+// 下一帧下拉里就有它们了。
+func (a *app) ensureFontScan() {
+	if a.fontScanStarted {
+		return
+	}
+	a.fontScanStarted = true
+	dirs := userFontDirs()
+	a.run(func() {
+		fonts := scanFonts(dirs)
+		a.dispatch(func() {
+			a.fonts = fonts
+			a.fontScanDone = true
+		})
+	})
+}
+
+// fontFamilyWithFallback 在字体族后面补一个 monospace 兜底。
+//
+// 这一个尾巴是量出来的，不是想当然：本机 1000px 宽的终端里，family 为空、
+// "monospace"、"Menlo" 都是 87 列，而一个不存在的字体族 **没有兜底时只有
+// 53 列** —— 引擎替你换了一支比例字体，字号没变、格子宽度变了，终端就错行。
+// 所以下拉里那些「这台机器可能没装」的字族，靠它退到系统等宽。
+func fontFamilyWithFallback(family string) string {
+	f := strings.TrimSpace(family)
+	if f == "" {
+		return f // 空交给插件自己：它的默认就是系统等宽
+	}
+	for _, part := range strings.Split(f, ",") {
+		if strings.EqualFold(strings.TrimSpace(part), termFontGenericMono) {
+			return f // 已经带着兜底了
+		}
+	}
+	return f + ", " + termFontGenericMono
+}
+
+// terminalFont 是内置终端当前该用的字体。
+//
+// 只交 Family 和 Size：字重、连字（calt / liga）、行高、加粗描边那几档留在
+// 插件的默认值上 —— 每一档摆出来都得配一个界面和一条存储字段，而它们对
+// 「终端读起来顺不顺」的影响远不如字号和字体族这两个。
+func (a *app) terminalFont() terminal.Font {
+	return terminal.Font{Family: fontFamilyWithFallback(a.termFontFamily), Size: a.termFontSize}
+}
+
+// termFontSizeValue 是当前生效的终端字号。0（没设过）交给插件默认，
+// 界面上显示的那一档得是这个数，不是 0。
+func (a *app) termFontSizeValue() float32 {
+	if a.termFontSize <= 0 {
+		return termFontDefault
+	}
+	return a.termFontSize
+}
+
+// syncTerminalFont 把字体推给所有活着的终端。
+//
+// 和配色一样：终端手里那份是起 shell 时交出去的快照，设置里改了要推给它才
+// 看得见。SetFont 是运行时的，不用重启 shell —— 重启会把屏幕上的输出和正在
+// 跑的命令一起丢掉，为了换个字号不值当。新会话在 startTerminal 里直接带上
+// 当前字体，不走这条。
+func (a *app) syncTerminalFont() {
+	f := a.terminalFont()
+	key := termFontKey{family: f.Family, size: f.Size}
+	if a.termFontPushed && a.termFontSent == key {
+		return
+	}
+	a.termFontPushed = true
+	a.termFontSent = key
+	for _, tab := range a.tabs {
+		if tab == nil {
+			continue
+		}
+		for _, s := range tab.terms {
+			// 起失败的会话 term 是 nil（测试里的替身也是），跳过。
+			if s != nil && s.term != nil {
+				s.term.SetFont(f)
+			}
+		}
+	}
+}
+
 // startTerminal 给一个会话起 shell。
 //
 // Dir 用项目路径：终端标签页是「在这个仓库里再开一个 shell」，新会话落在
@@ -560,6 +731,7 @@ func (a *app) startTerminal(tab *repoTab, s *termSession, dark bool, pal palette
 	}
 	term, err := terminalNew(terminal.Options{
 		Dir:     dir,
+		Font:    a.terminalFont(),
 		Theme:   terminalTheme(dark, pal),
 		OnTitle: func(string) { redraw() },
 		OnExit:  func(int) { redraw() },

@@ -33,6 +33,13 @@ func TestSaveAndReopen(t *testing.T) {
 		Active:    0,
 		CodeSize:  14,
 		Split:     true,
+		// 拓扑图配色与终端字体：三份切片/字符串都得原样回来，
+		// 空位（"" 那一格）尤其不能丢 —— 丢了就变成「第 5 号」跑到第 0 号去。
+		GraphPreset:     "vivid",
+		GraphLanesDark:  []string{"", "#ff00ff", "", "", "", "", "", "#00ff00"},
+		GraphLanesLight: []string{"#0000ff"},
+		TermFontFamily:  "JetBrains Mono, Menlo",
+		TermFontSize:    16,
 	})
 	s.SetViewed(map[string]string{"a.go": "fp1"})
 	s.SetLastRepo("/tmp/repo")
@@ -46,6 +53,16 @@ func TestSaveAndReopen(t *testing.T) {
 	}
 	if got := again.Config(); got.CodeSize != 14 || !got.Split {
 		t.Errorf("设置没读回来：%+v", got)
+	}
+	cfg := again.Config()
+	if cfg.GraphPreset != "vivid" || cfg.TermFontFamily != "JetBrains Mono, Menlo" || cfg.TermFontSize != 16 {
+		t.Errorf("配色方案与终端字体没读回来：%+v", cfg)
+	}
+	if len(cfg.GraphLanesDark) != 8 || cfg.GraphLanesDark[1] != "#ff00ff" || cfg.GraphLanesDark[7] != "#00ff00" {
+		t.Errorf("深色覆盖没读回来：%q", cfg.GraphLanesDark)
+	}
+	if len(cfg.GraphLanesLight) != 1 || cfg.GraphLanesLight[0] != "#0000ff" {
+		t.Errorf("浅色覆盖没读回来：%q", cfg.GraphLanesLight)
 	}
 	if got := again.State(); got.Viewed["a.go"] != "fp1" || got.LastRepo != "/tmp/repo" {
 		t.Errorf("状态没读回来：%+v", got)

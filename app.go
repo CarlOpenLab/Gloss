@@ -146,6 +146,26 @@ type app struct {
 	// 那一次也得推。
 	termThemePushed bool
 	termThemeDark   bool
+	// graphPreset / graphLanesDark / graphLanesLight 是拓扑图配色的三个设置
+	// （见 laneSet）。存一份在 app 上而不是每帧去 store 里读：调色板每帧都要
+	// 重建，而 store 每次读都要拿锁；更要紧的是 Config() 交出来的切片和 store
+	// 里那份共用底层数组，改覆盖时很容易顺手把 store 里那份也改了。
+	graphPreset     string
+	graphLanesDark  []string
+	graphLanesLight []string
+	// termFontFamily / termFontSize 是内置终端的字体，0 字号表示用插件默认值。
+	// termFontPushed / termFontSent 和上面那对一样，是「推过没有」的账本：
+	// 终端自己留着一份字体，设置改了要推给它才看得见（见 syncTerminalFont）。
+	termFontFamily string
+	termFontSize   float32
+	termFontPushed bool
+	termFontSent   termFontKey
+	// fontScanStarted / fontScanDone / fonts 是「已装字体」那次后台扫描的账本与
+	// 结果（见 ensureFontScan）。fonts 只在主线程上换，下拉每帧读它；scanFonts
+	// 交出来时已经排好序（Nerd 在前、再按名字），termFontOptions 依赖这个顺序。
+	fontScanStarted bool
+	fontScanDone    bool
+	fonts           []installedFont
 	// menu 是菜单栏里那几个要跟着状态走的项目，见 menu.go。测试里没有
 	// 菜单，它是 nil —— syncMenu 因此什么都不做。
 	menu *appMenu
@@ -434,6 +454,16 @@ func (a *app) attachStore(s *store.Store) {
 		a.viewed = map[string]string{}
 	}
 	a.editIdx = cfg.Active
+	// 拓扑图配色与终端字体：拷贝一份到 app 上（切片要拷，别和 store 共用
+	// 底层数组 —— 设置页改一格就会改动 store 里那份配置）。
+	a.graphPreset = cfg.GraphPreset
+	a.graphLanesDark = append([]string(nil), cfg.GraphLanesDark...)
+	a.graphLanesLight = append([]string(nil), cfg.GraphLanesLight...)
+	a.termFontFamily = cfg.TermFontFamily
+	a.termFontSize = cfg.TermFontSize
+	if a.termFontSize > 0 {
+		a.termFontSize = clamp(a.termFontSize, termFontMin, termFontMax)
+	}
 
 	// 恢复已打开的多项目标签页
 	a.tabs = nil
@@ -483,8 +513,25 @@ func (a *app) saveViewSettings() {
 	cfg.ThemeMode = a.themeMode
 	cfg.Locale = a.locale
 	cfg.AppIcon = a.appIcon
+	cfg.GraphPreset = a.graphPreset
+	// 空覆盖写回成 nil 而不是空切片：omitempty 对空切片不生效，留一个
+	// "graphLanesDark": [] 在文件里没有意义。
+	cfg.GraphLanesDark = nonEmpty(a.graphLanesDark)
+	cfg.GraphLanesLight = nonEmpty(a.graphLanesLight)
+	cfg.TermFontFamily = a.termFontFamily
+	cfg.TermFontSize = a.termFontSize
 	a.store.SetConfig(cfg)
 	a.persist()
+}
+
+// nonEmpty 把全空的切片换成 nil，其余原样返回。
+func nonEmpty(s []string) []string {
+	for _, v := range s {
+		if v != "" {
+			return s
+		}
+	}
+	return nil
 }
 
 // syncAppIcon 同步当前选中的图标至 macOS Dock。
@@ -554,6 +601,80 @@ func (a *app) setLocale(loc string) {
 	a.syncMenu()
 }
 
+// laneSet 把拓扑图配色的三个字段打包给 paletteFor。
+func (a *app) laneSet() laneSet {
+	return laneSet{preset: a.graphPreset, dark: a.graphLanesDark, light: a.graphLanesLight}
+}
+
+// setGraphPreset 切换拓扑图配色方案。未知名字落到出厂那一套。
+func (a *app) setGraphPreset(id string) {
+	if lanePresetByID(id).id != id {
+		id = ""
+	}
+	if a.graphPreset == id {
+		return
+	}
+	a.graphPreset = id
+	a.saveViewSettings()
+}
+
+// setLaneOverride 把某一号色改成 hex。dark 指定改的是哪一份（深色 / 浅色）。
+//
+// 覆盖列表按需补齐到 laneCount 格：只改了第 5 号时前面也得有空格子占着位，
+// 否则「第 5 号」到了磁盘上就变成「第 0 号」。
+func (a *app) setLaneOverride(dark bool, lane int, hex string) {
+	if lane < 0 || lane >= laneCount {
+		return
+	}
+	c, ok := hexColor(hex)
+	if !ok {
+		return
+	}
+	ov := &a.graphLanesLight
+	if dark {
+		ov = &a.graphLanesDark
+	}
+	for len(*ov) < laneCount {
+		*ov = append(*ov, "")
+	}
+	(*ov)[lane] = hexOf(c)
+	a.saveViewSettings()
+}
+
+// clearLaneOverrides 清掉两套覆盖，回到方案自带的颜色。
+func (a *app) clearLaneOverrides() {
+	if len(a.graphLanesDark) == 0 && len(a.graphLanesLight) == 0 {
+		return
+	}
+	a.graphLanesDark, a.graphLanesLight = nil, nil
+	a.saveViewSettings()
+}
+
+// hasLaneOverrides 报告当前有没有自定义色号（设置页按它决定「清除」是否可点）。
+func (a *app) hasLaneOverrides() bool {
+	return nonEmpty(a.graphLanesDark) != nil || nonEmpty(a.graphLanesLight) != nil
+}
+
+// setTermFontSize 调整内置终端字号。传 0 表示回到默认值。
+func (a *app) setTermFontSize(size float32) {
+	if size == 0 {
+		a.termFontSize = 0
+	} else {
+		a.termFontSize = clamp(size, termFontMin, termFontMax)
+	}
+	a.saveViewSettings()
+}
+
+// setTermFontFamily 设置内置终端字体族（逗号分隔的候选表，空串回默认）。
+func (a *app) setTermFontFamily(family string) {
+	family = strings.TrimSpace(family)
+	if a.termFontFamily == family {
+		return
+	}
+	a.termFontFamily = family
+	a.saveViewSettings()
+}
+
 // isDark 根据用户外观偏好和当前环境计算生效的暗黑状态。
 func (a *app) isDark(c *ui.Context) bool {
 	switch a.themeMode {
@@ -572,10 +693,12 @@ func (a *app) view(c *ui.Context) {
 	// 明暗由 isDark 综合系统外观与用户偏好计算。
 	dark := a.isDark(c)
 	c.SetTheme(themeFor(dark, c.Preferences()))
-	pal := paletteFor(c.Theme())
+	pal := paletteFor(c.Theme(), a.laneSet())
 
 	// 终端自己留着一份配色，不像界面那样每帧从调色板取色 —— 明暗变了得推给它。
 	a.syncTerminalThemes(dark, pal)
+	// 字体同理：终端手里那份是起 shell 时给的，设置改了也得推。
+	a.syncTerminalFont()
 
 	// 晚一帧的剪贴板写入（「复制哈希」这类菜单命令，见 copyText 字段）。
 	// 放在最前面：这一帧的 Toast 就能把它报出来。

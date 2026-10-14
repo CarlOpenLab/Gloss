@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -71,8 +72,8 @@ func TestThemeForAppliesPrefs(t *testing.T) {
 func TestDesignTokensArePreferenceIndependent(t *testing.T) {
 	prefs := ui.Preferences{TextScale: 2, HighContrast: true}
 	for _, dark := range []bool{false, true} {
-		base := paletteFor(themeFor(dark, ui.Preferences{}))
-		got := paletteFor(themeFor(dark, prefs))
+		base := paletteFor(themeFor(dark, ui.Preferences{}), laneSet{})
+		got := paletteFor(themeFor(dark, prefs), laneSet{})
 		for _, tc := range []struct {
 			name     string
 			a, b     ui.Color
@@ -130,7 +131,7 @@ func TestAccentIsAchromatic(t *testing.T) {
 
 	for _, dark := range []bool{false, true} {
 		th := themeFor(dark, ui.Preferences{})
-		pal := paletteFor(th)
+		pal := paletteFor(th, laneSet{})
 
 		for _, tc := range []struct {
 			name string
@@ -171,7 +172,7 @@ func TestAccentIsAchromatic(t *testing.T) {
 // 主干已经改走中性 Ink，剩下的七条也必须是明确的非紫。
 func TestGraphLanesHaveNoPurple(t *testing.T) {
 	for _, dark := range []bool{false, true} {
-		pal := paletteFor(themeFor(dark, ui.Preferences{}))
+		pal := paletteFor(themeFor(dark, ui.Preferences{}), laneSet{})
 		for i, c := range pal.lanes {
 			if isViolet(c) {
 				t.Errorf("dark=%v: 第 %d 条泳道 %v 是紫/靛（彩度 %.2f）—— 拓扑图整份色板不含紫",
@@ -190,7 +191,7 @@ func TestGraphLanesHaveNoPurple(t *testing.T) {
 // 条支线」，跟着那几处圆点一起变色，整屏就多出一串蓝点。这条闸是按那次回退加的。
 func TestGraphMainLaneIsInk(t *testing.T) {
 	for _, dark := range []bool{false, true} {
-		pal := paletteFor(themeFor(dark, ui.Preferences{}))
+		pal := paletteFor(themeFor(dark, ui.Preferences{}), laneSet{})
 		main := pal.lanes[0]
 		if spread(main) > 16 {
 			t.Errorf("dark=%v: 主干色 %v 带色相（RGB 极差 %d）—— 主干走中性 Ink", dark, main, spread(main))
@@ -243,4 +244,175 @@ func abs(f float64) float64 {
 		return -f
 	}
 	return f
+}
+
+// 内置的拓扑图方案都得守住 §2.6 那三条：0 号中性 Ink、8 支两两不同、
+// 全图只有一支蓝。方案是给用户挑的，挑完照样得能读图 —— 这条就是那道闸。
+func TestLanePresetsKeepDesignRules(t *testing.T) {
+	for _, p := range lanePresets {
+		for _, dark := range []bool{false, true} {
+			cols := p.lanes(dark)
+			if got := spread(cols[0]); got > 16 {
+				t.Errorf("%s(dark=%v)：0 号是主干，得是中性 Ink，实际 %v（极差 %d）",
+					p.id, dark, cols[0], got)
+			}
+			seen := map[ui.Color]int{}
+			blues := 0
+			for i, c := range cols {
+				if prev, dup := seen[c]; dup {
+					t.Errorf("%s(dark=%v)：第 %d 号与第 %d 号同色 %v —— 两条线同色就分不出彼此",
+						p.id, dark, i, prev, c)
+				}
+				seen[c] = i
+				if isBlueFamily(c) {
+					blues++
+				}
+				// Don'ts 里那条「禁止品牌紫 / 薰衣草蓝」：紫、鸢尾那一带
+				// （色相 260°~320°）不许出现在拓扑图上。再往蓝偏的靛
+				// （#5e6ad2 那一系，色相 230° 上下）由上面那条「只有一支蓝」
+				// 顺手挡掉 —— 它本来就判成蓝。
+				if h := hue(c); h >= 260 && h <= 320 {
+					t.Errorf("%s(dark=%v)：第 %d 号 %v 的色相 %.0f° 落在紫 / 鸢尾 / 靛那一带",
+						p.id, dark, i, c, h)
+				}
+			}
+			if blues > 1 {
+				t.Errorf("%s(dark=%v)：有 %d 支蓝 —— 并排出现会被读成一条蓝渐变（§2.6）",
+					p.id, dark, blues)
+			}
+		}
+	}
+}
+
+// hue 是 HSL 定义下的色相角（0~360）。灰阶没有色相，返回 -1。
+func hue(c ui.Color) float64 {
+	r, g, b := float64(c.R)/255, float64(c.G)/255, float64(c.B)/255
+	hi, lo := math.Max(r, math.Max(g, b)), math.Min(r, math.Min(g, b))
+	d := hi - lo
+	if d < 0.02 {
+		return -1
+	}
+	var h float64
+	switch hi {
+	case r:
+		h = math.Mod((g-b)/d, 6)
+	case g:
+		h = (b-r)/d + 2
+	default:
+		h = (r-g)/d + 4
+	}
+	h *= 60
+	if h < 0 {
+		h += 360
+	}
+	return h
+}
+
+// isBlueFamily 粗判一支色是不是「蓝」：蓝通道最大、且明显压过次大的那个。
+//
+// 不引色彩科学 —— 这条闸要挡的是「三支蓝并排」，判据只需要像不像蓝。
+func isBlueFamily(c ui.Color) bool {
+	blue := int(c.B)
+	rest := max(int(c.R), int(c.G))
+	return blue > rest && blue-rest >= 40
+}
+
+// 出厂那一套就是 DESIGN.md §2.6 写死的 8 色。它现在是「可自定义」的默认值，
+// 谁改掉它等于改了规范，所以在这里钉一遍：深色、浅色各 8 个。
+func TestClassicLanesMatchDesignSpec(t *testing.T) {
+	want := map[bool][]string{
+		true: {
+			"#e6e6e6", "#3eb489", "#e09f3e", "#4c86e8",
+			"#e5484d", "#d977a8", "#38b2ac", "#9aab45",
+		},
+		false: {
+			"#0f1115", "#2d9d74", "#c9822b", "#2f6fd0",
+			"#cf3b40", "#b85487", "#288c87", "#6f7a1f",
+		},
+	}
+	got := lanePresetByID("classic").lanes(true)
+	for _, dark := range []bool{true, false} {
+		got = lanePresetByID("classic").lanes(dark)
+		for i, hex := range want[dark] {
+			if got[i] != ui.Hex(hex) {
+				t.Errorf("classic(dark=%v) 第 %d 号 = %v，规范里是 %s", dark, i, got[i], hex)
+			}
+		}
+	}
+}
+
+// 覆盖按号生效：第 N 号的覆盖只动第 N 号，其余仍是方案自带的颜色。
+//
+// 顺带钉住「色号是线的身份」这件事：覆盖是落在色号上的，不是落在泳道上的
+// —— 一条线换了泳道还得是同一个颜色（见 buildGraph 那段注释）。
+func TestLaneOverridesApplyPerLane(t *testing.T) {
+	ls := laneSet{preset: "", dark: []string{"", "#ff00ff"}, light: []string{"#0000ff"}}
+	dark := ls.lanes(true)
+	if dark[0] != lanePresets[0].dark[0] {
+		t.Errorf("没被覆盖的 0 号不该变：%v", dark[0])
+	}
+	if dark[1] != ui.Hex("#ff00ff") {
+		t.Errorf("1 号该是覆盖的品红，实际 %v", dark[1])
+	}
+	for i := 2; i < laneCount; i++ {
+		if dark[i] != lanePresets[0].dark[i] {
+			t.Errorf("第 %d 号没被覆盖，不该变：%v", i, dark[i])
+		}
+	}
+	// 同一份 laneSet 的另一半走浅色方案，深色的覆盖不该串过去。
+	light := ls.lanes(false)
+	if light[0] != ui.Hex("#0000ff") || light[1] != lanePresets[0].light[1] {
+		t.Errorf("浅色只覆盖了 0 号：%v", light)
+	}
+	if dark[0] == light[0] {
+		t.Errorf("深浅两份被串成了一份：%v", dark[0])
+	}
+}
+
+// 写错的覆盖条目跳过、多出来的条目忽略、不越界 —— 配置是能手改的文件，
+// 一条坏值只能影响它自己那一号（ui.Hex 对非法输入是 panic，这层必须拦住）。
+func TestLaneOverridesSkipBadValues(t *testing.T) {
+	bad := []string{"", "nothex", "#12345", "zzz", "", "", "", "", "#ff0000"}
+	ls := laneSet{dark: bad, light: bad}
+	for _, dark := range []bool{false, true} {
+		got := ls.lanes(dark)
+		base := lanePresets[0].lanes(dark)
+		if got != base {
+			t.Errorf("dark=%v：坏值应该整份跳过，实际 %v，want %v", dark, got, base)
+		}
+	}
+}
+
+// 方案名不认识（旧配置、手写错、空串）时回落到出厂那一套。
+func TestUnknownGraphPresetFallsBackToClassic(t *testing.T) {
+	for _, id := range []string{"", "nope", "Classic", "vivid "} {
+		if got := lanePresetByID(id).id; got != "classic" {
+			t.Errorf("方案 %q 落到 %q，该落到 classic", id, got)
+		}
+	}
+	if got := lanePresetByID("vivid").id; got != "vivid" {
+		t.Errorf("vivid 该认得出来，实际 %q", got)
+	}
+}
+
+// hexColor 是配置里的颜色值走进调色板之前的那道门。
+func TestHexColorValidationAndRoundTrip(t *testing.T) {
+	good := []string{"#ff00ff", "#FF00FF", "ff00ff", " #ff00ff ", "#abc", "#abcd", "#ff00ff80"}
+	for _, s := range good {
+		if _, ok := hexColor(s); !ok {
+			t.Errorf("%q 该解析得出来", s)
+		}
+	}
+	bad := []string{"", "#", "nothex", "#12345", "#1234567", "#gggggg", "red", "rgb(1,2,3)"}
+	for _, s := range bad {
+		if _, ok := hexColor(s); ok {
+			t.Errorf("%q 是非法颜色，不该通过", s)
+		}
+	}
+	for _, c := range []ui.Color{ui.Hex("#4c86e8"), ui.Hex("#000000"), ui.Hex("#ffffff"), ui.RGB(1, 2, 3)} {
+		got, ok := hexColor(hexOf(c))
+		if !ok || got != c {
+			t.Errorf("hexOf → hexColor 往返丢了颜色：%v → %q → %v", c, hexOf(c), got)
+		}
+	}
 }

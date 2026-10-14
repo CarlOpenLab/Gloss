@@ -582,7 +582,7 @@ func TestHistoryGraphDrawsPixels(t *testing.T) {
 func TestLabelAccentsAreDistinct(t *testing.T) {
 	for _, dark := range []bool{false, true} {
 		th := themeFor(dark, ui.Preferences{})
-		pal := paletteFor(th)
+		pal := paletteFor(th, laneSet{})
 
 		letters := map[string]ui.Color{
 			"A": statusColor(gitrepo.StatusAdded, pal),

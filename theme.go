@@ -1,6 +1,9 @@
 package main
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/egoist/mygo/ui"
 )
 
@@ -102,6 +105,186 @@ const laneCount = 8
 // laneColor 是第 i 号色。
 func (p palette) laneColor(i int) ui.Color {
 	return p.lanes[i%len(p.lanes)]
+}
+
+// lanePreset 是一套内置的拓扑图配色：深浅两份，各 laneCount 个色号。
+//
+// 色号是「线的身份」，不是泳道号 —— 见 buildGraph 那段注释：一条线会换泳道，
+// 按泳道号定色的话主线走一半就变色了。所以一份色板就是一份身份表。
+type lanePreset struct {
+	id    string
+	dark  [laneCount]ui.Color
+	light [laneCount]ui.Color
+}
+
+// lanePresets 是设置里可选的几套方案，第一套是出厂默认。
+//
+// 每套都守着 §2.6 那三条：0 号中性 Ink 留给主干、全图只有一支蓝、不含紫。
+// 方案之间的差别是彩度与明度策略，不是「多给几种颜色」—— 颜色本身不是目的，
+// 让并排的线一眼分得开才是；三支蓝并排会把图读成一条蓝渐变，那正是 §2.6
+// 当初要拆掉的东西。
+var lanePresets = []lanePreset{
+	{
+		// classic 就是 §2.6 写死的那一份：明度与彩度均衡的莫兰迪 8 色。
+		id: "classic",
+		dark: [laneCount]ui.Color{
+			ui.Hex("#e6e6e6"), // 0 主干 / HEAD：中性 Ink
+			ui.Hex("#3eb489"), // 1 鼠尾草绿
+			ui.Hex("#e09f3e"), // 2 暖琥珀
+			ui.Hex("#4c86e8"), // 3 钢青蓝（全图唯一的蓝）
+			ui.Hex("#e5484d"), // 4 珊瑚红
+			ui.Hex("#d977a8"), // 5 暮灰粉
+			ui.Hex("#38b2ac"), // 6 暗青
+			ui.Hex("#9aab45"), // 7 苔绿
+		},
+		light: [laneCount]ui.Color{
+			ui.Hex("#0f1115"), // 0 主干 / HEAD：中性 Ink
+			ui.Hex("#2d9d74"), // 1 鼠尾草绿
+			ui.Hex("#c9822b"), // 2 暖琥珀
+			ui.Hex("#2f6fd0"), // 3 钢青蓝（全图唯一的蓝）
+			ui.Hex("#cf3b40"), // 4 珊瑚红
+			ui.Hex("#b85487"), // 5 暮灰粉
+			ui.Hex("#288c87"), // 6 暗青
+			ui.Hex("#6f7a1f"), // 7 苔绿
+		},
+	},
+	{
+		// vivid 是同一套色相、彩度拉高一档的一版：投影、外接屏、或者
+		// 反光的房间里更容易看清是哪条线。
+		id: "vivid",
+		dark: [laneCount]ui.Color{
+			ui.Hex("#e6e6e6"), // 0 主干 / HEAD
+			ui.Hex("#17c964"), // 1 绿
+			ui.Hex("#f5a524"), // 2 琥珀
+			ui.Hex("#4c86e8"), // 3 钢青蓝（唯一的蓝）
+			ui.Hex("#f31260"), // 4 洋红
+			ui.Hex("#ff8fb1"), // 5 粉
+			ui.Hex("#14b8a6"), // 6 青
+			ui.Hex("#a3e635"), // 7 黄绿
+		},
+		light: [laneCount]ui.Color{
+			ui.Hex("#0f1115"), // 0 主干 / HEAD
+			ui.Hex("#0f9d58"), // 1 绿
+			ui.Hex("#c47a12"), // 2 琥珀
+			ui.Hex("#2f6fd0"), // 3 钢青蓝（唯一的蓝）
+			ui.Hex("#d62b5b"), // 4 洋红
+			ui.Hex("#c2618b"), // 5 粉
+			ui.Hex("#0e8f8a"), // 6 青
+			ui.Hex("#5f8f1f"), // 7 黄绿
+		},
+	},
+	{
+		// mono 是灰阶：不靠色相分辨，打印、色觉辅助、以及「只想看结构」时用。
+		// 八阶明度顺着排，相邻两阶在各自底色上都拉得开。
+		id: "mono",
+		dark: [laneCount]ui.Color{
+			ui.Hex("#e6e6e6"), // 0 主干 / HEAD：最亮的一阶 = 主线
+			ui.Hex("#d2d6da"),
+			ui.Hex("#b9bfc5"),
+			ui.Hex("#a1a8af"),
+			ui.Hex("#8a9199"),
+			ui.Hex("#737a83"),
+			ui.Hex("#5d646d"),
+			ui.Hex("#4a5158"),
+		},
+		light: [laneCount]ui.Color{
+			ui.Hex("#0f1115"), // 0 主干 / HEAD：最重的一阶 = 主线
+			ui.Hex("#262b31"),
+			ui.Hex("#3d434a"),
+			ui.Hex("#545b63"),
+			ui.Hex("#6b737c"),
+			ui.Hex("#828b95"),
+			ui.Hex("#99a3ad"),
+			ui.Hex("#b0bac5"),
+		},
+	},
+}
+
+// lanes 按明暗取这套方案自带的一份色号（不含用户覆盖）。
+func (p lanePreset) lanes(dark bool) [laneCount]ui.Color {
+	if dark {
+		return p.dark
+	}
+	return p.light
+}
+
+// lanePresetLabel 是方案在界面上的名字与说明。id 存进配置，名字只给人看，
+// 所以它跟着界面语言走（见 T）。
+func lanePresetLabel(id string) (name, desc string) {
+	switch id {
+	case "vivid":
+		return T("鲜艳", "Vivid"), T("彩度更高 · 投影与强光环境", "Higher chroma · Projectors and glare")
+	case "mono":
+		return T("灰阶", "Grayscale"), T("不靠色相 · 打印与色觉辅助", "No hue · Print and color-vision friendly")
+	default:
+		return T("经典", "Classic"), T("莫兰迪 8 色 · 出厂默认", "Morandi 8 · Shipped default")
+	}
+}
+
+// laneSet 是设置里选出来的「方案 + 覆盖」，和 store.Config 的三个字段一一对应。
+type laneSet struct {
+	preset string
+	dark   []string
+	light  []string
+}
+
+// lanes 算出这一帧要用的 8 个色号：先取方案的底，再逐号套覆盖。
+//
+// 解析不出来的覆盖条目（空串、写错的 hex、多出来的第 9 号）一律跳过，保留
+// 方案自带的颜色 —— 配置是用户能手改的文件，一条坏值该只影响它自己那一号，
+// 而不是让整张图失色；ui.Hex 对非法输入是 panic，所以这层必须拦在前面。
+func (ls laneSet) lanes(dark bool) [laneCount]ui.Color {
+	p := lanePresetByID(ls.preset)
+	out, ov := p.lanes(false), ls.light
+	if dark {
+		out, ov = p.lanes(true), ls.dark
+	}
+	for i, s := range ov {
+		if i >= laneCount {
+			break
+		}
+		if c, ok := hexColor(s); ok {
+			out[i] = c
+		}
+	}
+	return out
+}
+
+// lanePresetByID 找方案。名字空着、拼错，或者配置文件来自更老的版本，都回落到
+// 第一套 —— 这里的失败模式必须是「长得像出厂设置」，而不是「图没有颜色」。
+func lanePresetByID(id string) lanePreset {
+	for _, p := range lanePresets {
+		if p.id == id {
+			return p
+		}
+	}
+	return lanePresets[0]
+}
+
+// hexColor 解析 "#rgb" / "#rgba" / "#rrggbb" / "#rrggbbaa"，其余一律 false。
+//
+// 自己先挡一道，而不是直接交给 ui.Hex：ui.Hex 的契约是「非法输入 panic，
+// 那是程序写错了」，而这里的输入来自磁盘上可以手改的 JSON。
+func hexColor(s string) (ui.Color, bool) {
+	h := strings.TrimPrefix(strings.TrimSpace(s), "#")
+	switch len(h) {
+	case 3, 4, 6, 8:
+	default:
+		return ui.Color{}, false
+	}
+	for i := 0; i < len(h); i++ {
+		c := h[i]
+		if (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') {
+			continue
+		}
+		return ui.Color{}, false
+	}
+	return ui.Hex("#" + h), true
+}
+
+// hexOf 把颜色写成 "#rrggbb"：存配置、给取色控件当初始值都用它。
+func hexOf(c ui.Color) string {
+	return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B)
 }
 
 // glossTheme 把 mygo 的通用控件配色换成 Gloss 对齐 Linear 设计体系的那一套。
@@ -222,7 +405,10 @@ func themeFor(dark bool, p ui.Preferences) *ui.Theme {
 	return t
 }
 
-func paletteFor(t *ui.Theme) palette {
+// paletteFor 把主题算成调色板。ls 是拓扑图配色那三个设置字段 —— 传零值
+// 就是出厂的那一套（见 lanePresets）。
+func paletteFor(t *ui.Theme, ls laneSet) palette {
+	lanes := ls.lanes(t.Dark)
 	if t.Dark {
 		return palette{
 			// 表面阶梯（§2.1）
@@ -260,24 +446,11 @@ func paletteFor(t *ui.Theme) palette {
 			success: t.Success,
 			warning: t.Warning,
 			danger:  t.Danger,
-			// 拓扑图 8 色谱系，明度与彩度均衡，不含紫：
-			// 0 号留给主干，取中性 Ink —— 主线是整张图上最亮的一条，一眼就能
-			// 顺着它从顶读到底；彩色只落在其余 7 条支线上。
-			//
-			// 这里同样要「全图只有一支蓝」。原来三条泳道各占一支蓝
-			// （#58a6ff / #4c86e8 / #45b6fe），并排出现在一屏里，整张图会被读成
-			// 「一条蓝色渐变 + 几个别的色」，而不是「一条线一个颜色」—— 支线之间
-			// 分不出彼此，图就白画了。
-			lanes: [8]ui.Color{
-				ui.Hex("#e6e6e6"), // 0 主干 / HEAD：中性 Ink
-				ui.Hex("#3eb489"), // 1 鼠尾草绿
-				ui.Hex("#e09f3e"), // 2 暖琥珀
-				ui.Hex("#4c86e8"), // 3 钢青蓝（全图唯一的蓝）
-				ui.Hex("#e5484d"), // 4 珊瑚红
-				ui.Hex("#d977a8"), // 5 暮灰粉
-				ui.Hex("#38b2ac"), // 6 暗青
-				ui.Hex("#9aab45"), // 7 苔绿
-			},
+			// 拓扑图色号：由「方案 + 覆盖」算出来的那一份（见 laneSet.lanes）。
+			// 出厂方案就是 §2.6 那一套：0 号中性 Ink 留给主干，全图只有一支蓝。
+			// 自定义只动这里；下面三支小标签亮色（accentAmber/Blue/Teal）
+			// 不跟着走 —— 它们是状态字母和芯片圆点的固定语义色，见 §2.5。
+			lanes: lanes,
 		}
 	}
 	return palette{
@@ -314,17 +487,8 @@ func paletteFor(t *ui.Theme) palette {
 		success: t.Success,
 		warning: t.Warning,
 		danger:  t.Danger,
-		// 浅色同一份色板压深一档（白底上要更重的色才站得住），同样是
-		// 「0 号中性 Ink + 只有一支蓝」。
-		lanes: [8]ui.Color{
-			ui.Hex("#0f1115"), // 0 主干 / HEAD：中性 Ink
-			ui.Hex("#2d9d74"), // 1 鼠尾草绿
-			ui.Hex("#c9822b"), // 2 暖琥珀
-			ui.Hex("#2f6fd0"), // 3 钢青蓝（全图唯一的蓝）
-			ui.Hex("#cf3b40"), // 4 珊瑚红
-			ui.Hex("#b85487"), // 5 暮灰粉
-			ui.Hex("#288c87"), // 6 暗青
-			ui.Hex("#6f7a1f"), // 7 苔绿
-		},
+		// 浅色下方案自带的那一份压深一档（白底上要更重的色才站得住），
+		// 同样是「0 号中性 Ink + 只有一支蓝」。
+		lanes: lanes,
 	}
 }
