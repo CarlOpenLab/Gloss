@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/plugins/updater"
 	"github.com/egoist/mygo/ui"
 
 	"github.com/CarlOpenLab/Gloss/internal/explain"
@@ -41,6 +43,7 @@ const (
 	settingsTabGeneral settingsTab = 1
 	settingsTabAbout   settingsTab = 2
 	settingsTabPrompts settingsTab = 3
+	settingsTabUpdates settingsTab = 4
 )
 
 // modelTagInfo 表示模型及其特性标签（如：视觉、推理、代码）。
@@ -410,6 +413,10 @@ func (a *app) settingsBody(c *ui.Context, pal palette) {
 			ui.Text(c, T("系统", "System")).FontSize(textCaption).FontWeight(weightSemibold).TextColor(pal.inkSubtle).
 				Padding(12, 8, 2, 8)
 
+			settingsSidebarItem(c, t, T("更新", "Updates"), iconRefresh, a.settingsTab == settingsTabUpdates, func() {
+				a.settingsTab = settingsTabUpdates
+			})
+
 			settingsSidebarItem(c, t, T("关于 Gloss", "About Gloss"), iconEye, a.settingsTab == settingsTabAbout, func() {
 				a.settingsTab = settingsTabAbout
 			})
@@ -418,7 +425,7 @@ func (a *app) settingsBody(c *ui.Context, pal palette) {
 
 			// 底部版本信息
 			ui.Row(c).Padding(8, 8).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "Gloss v1.0.0").FontSize(textCaption).TextColor(pal.inkTertiary)
+				ui.Text(c, "Gloss "+appVersionLabel()).FontSize(textCaption).TextColor(pal.inkTertiary)
 			})
 		})
 
@@ -442,6 +449,8 @@ func (a *app) settingsBody(c *ui.Context, pal palette) {
 					a.promptsSettingsPane(c, pal)
 				} else if a.settingsTab == settingsTabAbout {
 					a.aboutSettingsPane(c, pal)
+				} else if a.settingsTab == settingsTabUpdates {
+					a.updatesSettingsPane(c, pal)
 				} else {
 					a.modelsSettingsPane(c, pal)
 				}
@@ -770,7 +779,7 @@ func (a *app) aboutSettingsPane(c *ui.Context, pal palette) {
 						ui.Text(c, "Gloss").FontSize(textDisplay).FontWeight(weightSemibold).TextColor(pal.ink)
 						ui.Box(c).Padding(2, 8).Radius(radiusPill).Background(pal.surface2).
 							Border(1, pal.hairline).Children(func() {
-							ui.Text(c, "v1.0.0").FontSize(textCaption).FontWeight(weightMedium).
+							ui.Text(c, appVersionLabel()).FontSize(textCaption).FontWeight(weightMedium).
 								TextColor(pal.inkSubtle)
 						})
 					})
@@ -831,6 +840,144 @@ func (a *app) aboutSettingsPane(c *ui.Context, pal palette) {
 			ui.Row(c).AlignItems(ui.Center).FillWidth().Children(func() {
 				ui.Text(c, "Copyright © 2026 CarlOpenLab. Released under the MIT License.").
 					FontSize(textCaption).TextColor(pal.inkTertiary)
+			})
+		})
+	})
+}
+
+// updatePrefs 是「更新」设置页需要的自动更新状态快照。
+type updatePrefs struct {
+	// available 表示当前构建是否支持自动更新；打包发行版为 true，开发构建为 false。
+	available bool
+	// automaticChecks / automaticDownloads 对应「自动检查更新 / 自动下载更新」两个开关。
+	automaticChecks    bool
+	automaticDownloads bool
+	// lastCheck 是最近一次检查更新的时间，零值表示还没检查过。
+	lastCheck time.Time
+}
+
+// 自动更新的读写都收在这几个变量里，而不是直接调 updater 包，理由与 menu.go 里的
+// updaterMenuItem 相同：updater 插件在 main.go 通过 mygo.Use 注册，并要求存在事件
+// 循环；设置面板的单元测试两样都没有，直接调用会 panic（未注册）或卡住主线程。
+var (
+	loadUpdatePrefs = func() updatePrefs {
+		if !mygo.Updater.Enabled() {
+			return updatePrefs{}
+		}
+		return updatePrefs{
+			available:          true,
+			automaticChecks:    updater.AutomaticChecks(),
+			automaticDownloads: updater.AutomaticDownloads(),
+			lastCheck:          updater.LastCheck(),
+		}
+	}
+	saveUpdatePrefs = func(automaticChecks, automaticDownloads bool) {
+		updater.SetAutomaticChecks(automaticChecks)
+		updater.SetAutomaticDownloads(automaticDownloads)
+	}
+	checkForUpdatesNow = func() { updater.CheckForUpdates() }
+)
+
+// appVersion 返回当前构建的版本号；开发构建（未打包）拿不到版本信息时回退为 dev。
+func appVersion() string {
+	if v := strings.TrimSpace(mygo.App.Version()); v != "" {
+		return v
+	}
+	return "dev"
+}
+
+// appVersionLabel 是展示用的版本号，统一带 v 前缀（v0.3.2 / vdev）。
+func appVersionLabel() string {
+	return "v" + appVersion()
+}
+
+// applyAutomaticChecks 处理「自动检查更新」开关：不可用时忽略，值没变时也不写回。
+func applyAutomaticChecks(prefs updatePrefs, on bool) {
+	if !prefs.available || on == prefs.automaticChecks {
+		return
+	}
+	saveUpdatePrefs(on, prefs.automaticDownloads)
+}
+
+// applyAutomaticDownloads 处理「自动下载更新」开关，规则同 applyAutomaticChecks。
+func applyAutomaticDownloads(prefs updatePrefs, on bool) {
+	if !prefs.available || on == prefs.automaticDownloads {
+		return
+	}
+	saveUpdatePrefs(prefs.automaticChecks, on)
+}
+
+// lastCheckLabel 把最近一次检查时间格式化成设置面板里的展示文案。
+func lastCheckLabel(when time.Time) string {
+	if when.IsZero() {
+		return T("尚未检查", "Not checked yet")
+	}
+	return when.Local().Format("2006-01-02 15:04")
+}
+
+// updatesSettingsPane 呈现自动更新设置：当前版本与检查时间、自动检查/下载开关、手动检查入口。
+// 状态全部来自 mygo 的 updater 插件；未启用更新的构建只展示说明，不给出可点的控件效果。
+func (a *app) updatesSettingsPane(c *ui.Context, pal palette) {
+	prefs := loadUpdatePrefs()
+
+	ui.Scroll(c).FillWidth().FillHeight().Padding(28, 36).Children(func() {
+		ui.Column(c).Gap(18).FillWidth().Children(func() {
+			ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
+				drawIcon(c, iconRefresh, 16, pal.ink)
+				ui.Text(c, T("软件更新", "Software Update")).FontSize(textDisplay).FontWeight(weightSemibold).TextColor(pal.ink)
+			})
+
+			settingSection(c, pal, T("版本", "Version"),
+				T("更新源：github.com/CarlOpenLab/Gloss 的正式发布版。", "Update channel: official releases from github.com/CarlOpenLab/Gloss."),
+				func() {
+					settingRow(c, pal, T("当前版本", "Current Version"), "", func() {
+						ui.Text(c, appVersionLabel()).FontSize(textBodySM).FontWeight(weightMedium).TextColor(pal.inkMuted)
+					})
+					settingDivider(c, pal)
+					settingRow(c, pal, T("上次检查", "Last Checked"), "", func() {
+						ui.Text(c, lastCheckLabel(prefs.lastCheck)).FontSize(textBodySM).TextColor(pal.inkMuted)
+					})
+				})
+
+			checksDesc := T("启动时及后台定期检查新版本。", "Check for new versions at launch and periodically in the background.")
+			if !prefs.available {
+				checksDesc = T("当前构建未启用自动更新（开发构建，或由包管理器安装）。", "Automatic updates are unavailable in this build.")
+			}
+			settingSection(c, pal, T("自动更新", "Automatic Updates"), checksDesc, func() {
+				if !prefs.available {
+					settingRow(c, pal, T("自动检查更新", "Check for Updates Automatically"), "", func() {
+						ui.Text(c, T("不可用", "Unavailable")).FontSize(textBodySM).TextColor(pal.inkTertiary)
+					})
+					settingDivider(c, pal)
+					settingRow(c, pal, T("自动下载更新", "Download Updates Automatically"), "", func() {
+						ui.Text(c, T("不可用", "Unavailable")).FontSize(textBodySM).TextColor(pal.inkTertiary)
+					})
+					return
+				}
+				autoCheck := prefs.automaticChecks
+				settingRow(c, pal, T("自动检查更新", "Check for Updates Automatically"), "", func() {
+					sw := ui.Switch(c, &autoCheck)
+					if sw.Clicked() {
+						applyAutomaticChecks(prefs, autoCheck)
+					}
+				})
+				settingDivider(c, pal)
+				autoDownload := prefs.automaticDownloads
+				settingRow(c, pal, T("自动下载更新", "Download Updates Automatically"),
+					T("发现新版本后后台下载，下次启动时安装。", "Download new versions in the background and install them on the next launch."), func() {
+						sw := ui.Switch(c, &autoDownload)
+						if sw.Clicked() {
+							applyAutomaticDownloads(prefs, autoDownload)
+						}
+					})
+			})
+
+			ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
+				btn := secondaryAction(c, pal, T("检查更新…", "Check for Updates…"),
+					T("立即向更新源查询是否有新版本。", "Query the update channel for a new version now."), !prefs.available)
+				if btn.Clicked() && prefs.available {
+					checkForUpdatesNow()
+				}
 			})
 		})
 	})

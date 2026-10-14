@@ -134,6 +134,28 @@ func TestDumpScreenshot(t *testing.T) {
 	writePNG(t, "/tmp/de-shot-settings-magpie.png", tt.Image())
 	a.settingsOn = false
 
+	// 设置里的「更新」页。无头环境里 updater 插件没注册（mygo.Updater.Enabled()
+	// 为 false），所以这里伪造一份可用状态，看的是打包发行版里真正会出现的排版。
+	origLoadPrefs := loadUpdatePrefs
+	loadUpdatePrefs = func() updatePrefs {
+		return updatePrefs{
+			available:          true,
+			automaticChecks:    true,
+			automaticDownloads: false,
+			lastCheck:          time.Date(2026, 10, 14, 9, 30, 0, 0, time.Local),
+		}
+	}
+	a.openSettings()
+	a.settingsTab = settingsTabUpdates
+	tt.Frame()
+	writePNG(t, "/tmp/de-shot-settings-updates.png", tt.Image())
+	tt.SetDark(true)
+	tt.Frame()
+	writePNG(t, "/tmp/de-shot-settings-updates-dark.png", tt.Image())
+	tt.SetDark(false)
+	loadUpdatePrefs = origLoadPrefs
+	a.settingsOn = false
+
 	// 折叠：第一个文件标成已 review，它就在 diff 里折起来了。
 	// 前面试筛选的时候列表滚下去过，这里先滚回顶上。
 	a.toggleViewed(a.files[0])

@@ -5,6 +5,7 @@ import (
 	"image/png"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -524,8 +525,8 @@ func TestThemeAndLocaleSettings(t *testing.T) {
 	if a.settingsTab != settingsTabAbout {
 		t.Errorf("settingsTab 应为 settingsTabAbout (%d)，实际为 %d", settingsTabAbout, a.settingsTab)
 	}
-	if !tt.HasText("v1.0.0") {
-		t.Error("关于面板应渲染版本号 v1.0.0")
+	if !tt.HasText(appVersionLabel()) {
+		t.Errorf("关于面板应渲染版本号 %s", appVersionLabel())
 	}
 
 	// 取消关闭
@@ -661,5 +662,100 @@ func TestSplitSettingDefault(t *testing.T) {
 	settle(t, a)
 	if !a.split {
 		t.Error("默认应该开启 split 模式")
+	}
+}
+
+// 设置里的「更新」页签：版本、上次检查时间、自动检查/下载开关与手动检查入口都要接上。
+func TestUpdatesSettingsPane(t *testing.T) {
+	origLoad, origSave, origCheck := loadUpdatePrefs, saveUpdatePrefs, checkForUpdatesNow
+	defer func() {
+		loadUpdatePrefs, saveUpdatePrefs, checkForUpdatesNow = origLoad, origSave, origCheck
+	}()
+
+	checkedAt := time.Date(2026, 10, 14, 9, 30, 0, 0, time.Local)
+	prefs := updatePrefs{available: true, automaticChecks: true, automaticDownloads: false, lastCheck: checkedAt}
+	loadUpdatePrefs = func() updatePrefs { return prefs }
+
+	var saved [][2]bool
+	saveUpdatePrefs = func(automaticChecks, automaticDownloads bool) {
+		saved = append(saved, [2]bool{automaticChecks, automaticDownloads})
+	}
+	checkCalls := 0
+	checkForUpdatesNow = func() { checkCalls++ }
+
+	a := richApp(t)
+	settle(t, a)
+	a.setLocale("zh")
+
+	s := store.Open(t.TempDir())
+	a.attachStore(s)
+	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+
+	if err := tt.Click("模型设置…"); err != nil {
+		t.Fatalf("打开设置面板失败: %v", err)
+	}
+	tt.Frame()
+	if err := tt.Click(T("更新", "Updates")); err != nil {
+		t.Fatalf("点击「更新」分栏失败: %v", err)
+	}
+	tt.Frame()
+
+	if a.settingsTab != settingsTabUpdates {
+		t.Fatalf("设置页签应切到更新页，实际 %d", a.settingsTab)
+	}
+	if !tt.HasText(appVersionLabel()) {
+		t.Errorf("更新页应显示当前版本 %s", appVersionLabel())
+	}
+	if !tt.HasText(lastCheckLabel(checkedAt)) {
+		t.Errorf("更新页应显示上次检查时间 %s", lastCheckLabel(checkedAt))
+	}
+	if !tt.HasText("自动检查更新") || !tt.HasText("自动下载更新") {
+		t.Error("更新页应显示两个自动更新开关")
+	}
+
+	if err := tt.Click("检查更新…"); err != nil {
+		t.Fatalf("点击「检查更新…」失败: %v", err)
+	}
+	tt.Frame()
+	if checkCalls != 1 {
+		t.Errorf("点击「检查更新…」应触发一次检查，实际 %d 次", checkCalls)
+	}
+
+	// 开关回写：变化时按当前另一个开关的值一起写回。
+	saved = nil
+	applyAutomaticChecks(prefs, false)
+	applyAutomaticDownloads(prefs, true)
+	if len(saved) != 2 || saved[0] != [2]bool{false, false} || saved[1] != [2]bool{true, true} {
+		t.Fatalf("开关写回不符合预期: %v", saved)
+	}
+
+	// 值没变、或当前构建不支持自动更新时不写回。
+	saved = nil
+	applyAutomaticChecks(prefs, true)
+	applyAutomaticDownloads(updatePrefs{available: false, automaticChecks: false}, true)
+	if len(saved) != 0 {
+		t.Fatalf("不该发生写回: %v", saved)
+	}
+
+	// 未启用更新的构建：只说明不可用，不给开关。
+	prefs = updatePrefs{}
+	tt.Frame()
+	if !tt.HasText("当前构建未启用自动更新（开发构建，或由包管理器安装）。") {
+		t.Error("未启用更新的构建应显示说明")
+	}
+}
+
+// 默认的 loadUpdatePrefs 在没注册 updater 插件的测试进程里也必须安全返回。
+func TestUpdatePrefsWithoutPlugin(t *testing.T) {
+	prefs := loadUpdatePrefs()
+	if prefs.available {
+		t.Error("未打包的测试进程不应报告自动更新可用")
+	}
+	if prefs.automaticChecks || prefs.automaticDownloads || !prefs.lastCheck.IsZero() {
+		t.Error("不可用时其余字段应为零值")
+	}
+	if got := lastCheckLabel(time.Time{}); got == "" {
+		t.Error("未检查时应给出占位文案")
 	}
 }
