@@ -62,6 +62,16 @@ type palette struct {
 	accentBlue  ui.Color // R / C 重命名与复制、本地分支芯片的点：钢青蓝
 	accentTeal  ui.Color // 远程跟踪分支芯片的点：暗青
 
+	// —— 语义三色 ——
+	//
+	// 成功 / 告警 / 危险：值仍然由 glossTheme 定义（框架自绘的控件、toast、
+	// 工具提示也读那一份），这里只是把同一份搬进调色板，让主包里所有语义着色
+	// 都从这一个入口拿 —— 以前是「有的地方写 t.Danger，有的地方写 pal.delBar」，
+	// 同一种红在两个名字底下，谁也没法一眼看出它们是不是同一支。
+	success ui.Color
+	warning ui.Color
+	danger  ui.Color
+
 	// selection 是列表与树的选中底带。
 	//
 	// 取中性灰阶而不是拿 Accent 淡染：Accent 是「白」（见 glossTheme），
@@ -243,9 +253,13 @@ func paletteFor(t *ui.Theme) palette {
 			viewed:    ui.Hex("#27a644"),
 			// 小标签亮色（§2.5）：三支都取自下面那 8 色谱系，别单独调，
 			// 调了图里和图外的同一种颜色就对不上了。
-			accentAmber: ui.Hex("#e09f3e"), // = lanes[2]
+			accentAmber: ui.Hex("#e09f3e"), // = lanes[2]，也是 t.Warning 那一支
 			accentBlue:  ui.Hex("#4c86e8"), // = lanes[3]
 			accentTeal:  ui.Hex("#38b2ac"), // = lanes[6]
+			// 语义三色从主题取：glossTheme 是唯一定义处，别在这里另写一遍 hex。
+			success: t.Success,
+			warning: t.Warning,
+			danger:  t.Danger,
 			// 拓扑图 8 色谱系，明度与彩度均衡，不含紫：
 			// 0 号留给主干，取中性 Ink —— 主线是整张图上最亮的一条，一眼就能
 			// 顺着它从顶读到底；彩色只落在其余 7 条支线上。
@@ -290,9 +304,16 @@ func paletteFor(t *ui.Theme) palette {
 		ref:              ui.Hex("#4b535d"),
 		viewed:           ui.Hex("#27a644"),
 		// 小标签亮色（§2.5）：与深色同源，压深一档对应下面 lanes 的浅色版。
-		accentAmber: ui.Hex("#c9822b"), // = lanes[2]
+		// 琥珀取的是**告警琥珀**（#d97706，和 t.Warning 同一支），不是下面
+		// lanes[2] 那支暖琥珀沙（#c9822b）：标签、改动标记与告警说的是同一件
+		// 「留神看一眼」的事，一屏里出现两种琥珀比一种更糟。
+		accentAmber: ui.Hex("#d97706"), // = t.Warning
 		accentBlue:  ui.Hex("#2f6fd0"), // = lanes[3]
 		accentTeal:  ui.Hex("#288c87"), // = lanes[6]
+		// 语义三色从主题取，理由见深色那段。
+		success: t.Success,
+		warning: t.Warning,
+		danger:  t.Danger,
 		// 浅色同一份色板压深一档（白底上要更重的色才站得住），同样是
 		// 「0 号中性 Ink + 只有一支蓝」。
 		lanes: [8]ui.Color{

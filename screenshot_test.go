@@ -78,6 +78,25 @@ func TestDumpScreenshot(t *testing.T) {
 	tt.SetDark(false)
 	tt.Frame()
 
+	// 变更预检对话框：整体徽标、每条发现的严重度都只靠一颗语义圆点带出来，
+	// 卡片与芯片保持中性灰阶。这三种语义色现在从调色板取（pal.success /
+	// warning / danger），定义处仍是 glossTheme —— 这张图是「同一种红只有
+	// 一个名字」的样子，也是 §2.5 那张表的对照。
+	srv, _ := fakeLLM(t, fakeVulnerableReportJSON)
+	withProvider(t, a, srv)
+	a.stageAll()
+	settle(t, a)
+	a.startRiskScan()
+	settle(t, a)
+	shot("/tmp/de-shot-riskscan.png")
+	tt.SetDark(true)
+	tt.Frame()
+	shot("/tmp/de-shot-riskscan-dark.png")
+	a.riskScan = riskScanState{}
+	a.unstageAll()
+	settle(t, a)
+	tt.SetDark(false)
+
 	// 最近项目下拉弹窗（HeroUI 风格）。它挂在工具栏那块仓库名上，
 	// 而那块只在侧栏收起时才摆出来（开着的时候项目名归顶栏的标签）。
 	a.sidebarOn = false

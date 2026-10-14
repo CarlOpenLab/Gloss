@@ -270,7 +270,6 @@ func (a *app) prDialog(c *ui.Context, pal palette) {
 }
 
 func (a *app) prDialogBody(c *ui.Context, pal palette) {
-	t := c.Theme()
 	s := &a.prDlg
 
 	ui.Column(c).Width(580).Gap(14).Children(func() {
@@ -293,10 +292,10 @@ func (a *app) prDialogBody(c *ui.Context, pal palette) {
 			})
 		case s.err != "":
 			ui.Column(c).Gap(10).Children(func() {
-				ui.Box(c).Padding(10, 12).Radius(radiusMD).Background(t.Danger.Alpha(0.08)).
-					Border(1, t.Danger.Alpha(0.25)).Children(func() {
+				ui.Box(c).Padding(10, 12).Radius(radiusMD).Background(pal.danger.Alpha(0.08)).
+					Border(1, pal.danger.Alpha(0.25)).Children(func() {
 					ui.Text(c, "获取 PR 列表失败").FontSize(textBodySM).
-						FontWeight(weightSemibold).TextColor(t.Danger)
+						FontWeight(weightSemibold).TextColor(pal.danger)
 					ui.Text(c, s.err).FontSize(textCaption).TextColor(pal.inkSubtle).Margin(4, 0, 0, 0)
 				})
 				ui.Row(c).Justify(ui.End).Children(func() {
@@ -326,7 +325,7 @@ func (a *app) prDialogBody(c *ui.Context, pal palette) {
 						row.Children(func() {
 							ui.Row(c).AlignItems(ui.Center).Gap(8).FillWidth().Children(func() {
 								// PR 编号是一枚引用芯片，走 §2.5 的配方。
-								specChip(c, pal, fmt.Sprintf("#%d", pr.Number), pal.laneColor(0), statusChipH, statusChipText)
+								specChip(c, pal, fmt.Sprintf("#%d", pr.Number), pal.accentBlue, statusChipH, statusChipText)
 								ui.Text(c, pr.Title).FontSize(textBodySM).
 									FontWeight(weightMedium).TextColor(pal.ink).Grow(1).SingleLine()
 								ui.Text(c, "检视 Diff →").FontSize(textCaption).TextColor(pal.inkSubtle)
@@ -359,7 +358,6 @@ func (a *app) prDialogBody(c *ui.Context, pal palette) {
 
 // prReviewBar 渲染在 PR 检视模式下主区顶部的状态及操作条。
 func (a *app) prReviewBar(c *ui.Context, pal palette) {
-	t := c.Theme()
 	pr := a.prReview.pr
 
 	ui.Row(c).Height(38).Shrink(0).FillWidth().
@@ -372,7 +370,10 @@ func (a *app) prReviewBar(c *ui.Context, pal palette) {
 		ui.Text(c, "PR 检视").FontSize(textCaption).
 			FontWeight(weightSemibold).TextColor(pal.inkSubtle)
 
-		specChip(c, pal, fmt.Sprintf("#%d", pr.Number), pal.laneColor(0), statusChipH, statusChipText)
+		// PR 编号也是「引用类」微件：点和本地分支同一支蓝，不用 Ink ——
+		// Ink 是「我在哪」和主干的颜色（§2.4），一枚 PR 号占用它，全屏的
+		// 实心强调预算就多花一处。
+		specChip(c, pal, fmt.Sprintf("#%d", pr.Number), pal.accentBlue, statusChipH, statusChipText)
 
 		ui.Text(c, pr.Title).FontSize(textBodySM).FontWeight(weightMedium).TextColor(pal.ink).
 			Tooltip(fmt.Sprintf("#%d: %s (%s → %s)", pr.Number, pr.Title, pr.HeadBranch, pr.BaseBranch))
@@ -396,7 +397,7 @@ func (a *app) prReviewBar(c *ui.Context, pal palette) {
 			ui.Spinner(c)
 			ui.Text(c, "正在读取 PR Diff…").FontSize(textCaption).TextColor(pal.inkSubtle)
 		case loadFailed:
-			ui.Text(c, "Diff 读取失败: "+a.prReview.err).FontSize(textCaption).TextColor(t.Danger)
+			ui.Text(c, "Diff 读取失败: "+a.prReview.err).FontSize(textCaption).TextColor(pal.danger)
 			if ui.ButtonBase(c).Height(22).Padding(0, 6).Radius(radiusSM).Cursor(ui.CursorPointer).Label("重试").
 				Children(func() {
 					ui.Text(c, "重试").FontSize(textCaption).TextColor(pal.inkMuted)
@@ -494,19 +495,19 @@ func (a *app) prReviewModalBody(c *ui.Context, pal palette) {
 		if r.postSuccess {
 			// 结果是横幅：语义底色留着（§5 允许语义色），因为这一整条说的
 			// 就是「成了」这件事。
-			ui.Box(c).Padding(8, 12).Radius(radiusMD).Background(t.Success.Alpha(0.1)).
-				Border(1, t.Success.Alpha(0.3)).Children(func() {
+			ui.Box(c).Padding(8, 12).Radius(radiusMD).Background(pal.success.Alpha(0.1)).
+				Border(1, pal.success.Alpha(0.3)).Children(func() {
 				ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
-					ui.Text(c, "✓").FontWeight(weightSemibold).TextColor(t.Success)
+					ui.Text(c, "✓").FontWeight(weightSemibold).TextColor(pal.success)
 					ui.Textf(c, "已成功将 Review 评论发布至 GitHub PR #%d！", pr.Number).
-						FontSize(textBodySM).TextColor(t.Success)
+						FontSize(textBodySM).TextColor(pal.success)
 				})
 			})
 		}
 		if r.postErr != "" {
-			ui.Box(c).Padding(8, 12).Radius(radiusMD).Background(t.Danger.Alpha(0.08)).
-				Border(1, t.Danger.Alpha(0.25)).Children(func() {
-				ui.Text(c, r.postErr).FontSize(textBodySM).TextColor(t.Danger)
+			ui.Box(c).Padding(8, 12).Radius(radiusMD).Background(pal.danger.Alpha(0.08)).
+				Border(1, pal.danger.Alpha(0.25)).Children(func() {
+				ui.Text(c, r.postErr).FontSize(textBodySM).TextColor(pal.danger)
 			})
 		}
 

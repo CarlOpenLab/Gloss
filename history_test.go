@@ -581,7 +581,8 @@ func TestHistoryGraphDrawsPixels(t *testing.T) {
 // 只钉住「两两不同」+「该带色相的确实带」—— 谁再把这几个色统一成一支灰，这条就红。
 func TestLabelAccentsAreDistinct(t *testing.T) {
 	for _, dark := range []bool{false, true} {
-		pal := paletteFor(themeFor(dark, ui.Preferences{}))
+		th := themeFor(dark, ui.Preferences{})
+		pal := paletteFor(th)
 
 		letters := map[string]ui.Color{
 			"A": statusColor(gitrepo.StatusAdded, pal),
@@ -621,6 +622,18 @@ func TestLabelAccentsAreDistinct(t *testing.T) {
 		}
 		if spread(dots["HEAD"]) > 16 {
 			t.Errorf("dark=%v: HEAD 的圆点 %v 带色相 —— 它跟主干、「我在哪」共用 Ink", dark, dots["HEAD"])
+		}
+
+		// 语义三色只有 glossTheme 一处定义，调色板只是把同一份搬过来：
+		// 两边一旦分家，对话框里的红和框架自绘控件的红就会是两种红。
+		if pal.success != th.Success || pal.warning != th.Warning || pal.danger != th.Danger {
+			t.Errorf("dark=%v: 调色板的语义三色与主题不一致（%v/%v/%v vs %v/%v/%v）",
+				dark, pal.success, pal.warning, pal.danger, th.Success, th.Warning, th.Danger)
+		}
+		// 标签琥珀就是告警琥珀：M 的字母、标签芯片的点、告警圆点说的是
+		// 同一件「留神看一眼」的事，一支色就够了。
+		if pal.accentAmber != pal.warning {
+			t.Errorf("dark=%v: 标签琥珀 %v 与告警琥珀 %v 不是同一支", dark, pal.accentAmber, pal.warning)
 		}
 	}
 }

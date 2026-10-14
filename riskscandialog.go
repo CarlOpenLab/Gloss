@@ -177,11 +177,11 @@ func (a *app) riskScanBody(c *ui.Context, pal palette) {
 		var badgeDot ui.Color
 		switch badgeText {
 		case "安全通过":
-			badgeDot = t.Success
+			badgeDot = pal.success
 		case "需注意":
-			badgeDot = t.Warning
+			badgeDot = pal.warning
 		default: // "高危发现"
-			badgeDot = t.Danger
+			badgeDot = pal.danger
 		}
 
 		ui.Row(c).Padding(10, 14).Radius(radiusMD).
@@ -210,7 +210,7 @@ func (a *app) riskScanBody(c *ui.Context, pal palette) {
 			ui.Scroll(c).TrackScroll(&rs.scroll).MaxHeight(280).Grow(1).Children(func() {
 				ui.Column(c).Gap(8).Children(func() {
 					for _, f := range rs.report.Findings {
-						riskFindingCard(c, t, pal, f)
+						riskFindingCard(c, pal, f)
 					}
 				})
 			})
@@ -235,15 +235,18 @@ func (a *app) riskScanBody(c *ui.Context, pal palette) {
 }
 
 // riskFindingCard 渲染单条安全或代码风险卡片。
-func riskFindingCard(c *ui.Context, t *ui.Theme, pal palette, f explain.RiskFinding) {
+func riskFindingCard(c *ui.Context, pal palette, f explain.RiskFinding) {
 	// 严重度是「这一条有多要紧」，正落在 §2.5 那张表上：语义靠 6px 圆点，
 	// 整块芯片保持中性。低危不再借用强调色 —— 它既不重要也不该抢眼。
+	//
+	// 三色走 pal 而不是 t：调色板里的 success/warning/danger 就是从主题搬
+	// 过来的同一份值，主包统一从这一个入口拿，省得同一种红有两个名字。
 	var dot ui.Color
 	switch f.Severity {
 	case explain.RiskCritical, explain.RiskHigh:
-		dot = t.Danger
+		dot = pal.danger
 	case explain.RiskMedium:
-		dot = t.Warning
+		dot = pal.warning
 	default:
 		dot = pal.inkTertiary
 	}
