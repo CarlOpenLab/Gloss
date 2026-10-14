@@ -169,10 +169,21 @@ func run(ctx context.Context, dir string, args ...string) ([]byte, error) {
 // "Automatic merge failed" 都在 stdout，stderr 只有抓取的那两行进度。以前
 // 只看 stderr，等于把「为什么失败」丢了，界面上翻出来的是一句光秃秃的
 // 「拉取没成功」，Detail 里挂着抓取摘要，谁也看不出是冲突。
-func runIn(ctx context.Context, dir string, stdin []byte, args ...string) ([]byte, error) {
+// newGitCmd 建好一条 git 子进程：工作目录、环境，以及在 Windows 上藏掉那个
+// 会一闪一闪的控制台窗口（hideConsole）。仓库里所有 git 调用都从这里出发，
+// 所以「子进程不带窗口」这件事只有这一个维护点 —— 见 console_windows.go 里
+// 为什么这件事非做不可（Gloss 是 -H=windowsgui 构建，autorefresh 每 2 秒跑
+// 一次 status/show-ref）。
+func newGitCmd(ctx context.Context, dir string, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
 	cmd.Env = gitEnv()
+	hideConsole(cmd)
+	return cmd
+}
+
+func runIn(ctx context.Context, dir string, stdin []byte, args ...string) ([]byte, error) {
+	cmd := newGitCmd(ctx, dir, args...)
 	if stdin != nil {
 		cmd.Stdin = bytes.NewReader(stdin)
 	}

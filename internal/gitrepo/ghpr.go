@@ -103,13 +103,21 @@ func checkGh() error {
 	return nil
 }
 
+// newGhCmd 和 newGitCmd 是同一套路：gh 也是控制台程序，在 Windows 上同样要
+// 藏窗口，否则后台调 gh 也会闪黑框。
+func newGhCmd(ctx context.Context, repoDir string, args ...string) *exec.Cmd {
+	cmd := execCommandContext(ctx, "gh", args...)
+	cmd.Dir = repoDir
+	cmd.Env = ghEnv()
+	hideConsole(cmd)
+	return cmd
+}
+
 func runGh(ctx context.Context, repoDir string, args ...string) ([]byte, error) {
 	if err := checkGh(); err != nil {
 		return nil, err
 	}
-	cmd := execCommandContext(ctx, "gh", args...)
-	cmd.Dir = repoDir
-	cmd.Env = ghEnv()
+	cmd := newGhCmd(ctx, repoDir, args...)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
