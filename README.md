@@ -66,6 +66,7 @@ When reviewing large pull requests or AI-generated diffs, the biggest bottleneck
 - **Branch Switching, Checkout & Tags**: Double-click branches or tags in the sidebar to check them out. Checking out remote branches automatically sets up local tracking branches. Detached HEAD states trigger warning badges in the toolbar.
 - **Branch Integration & Remote Management**:
   - Right-click local branches to merge or rebase onto target branches (with safety confirmations and conflict assistance).
+  - Deleting a branch is always two separate actions: **Delete Branch** removes the local branch (with a confirmation, and a second one if it isn't merged), **Delete Remote Branch** deletes the remote copy and leaves the local branch alone. Local branches that track an upstream offer both, right where you right-clicked.
   - Right-click remote branches to checkout or safely delete them with confirmation.
   - Push tags to `origin` with a single click.
   - Protected force pushing via `--force-with-lease` prevents overwriting teammates' work.
@@ -75,6 +76,7 @@ When reviewing large pull requests or AI-generated diffs, the biggest bottleneck
   - Amend commits with pre-filled previous commit messages, supporting message-only adjustments or staged additions.
 - **Fetch, Pull & Push**: Dedicated toolbar actions with intelligent disable states for detached HEAD or repos without remotes. Provides plain-language translations for push rejections, divergences, and authentication requirements.
 - **One File at a Time Diff View**: The left pane navigates, the right pane renders the selected file with MyGo's diff viewer — red/green highlighting, dual-side line numbers, word-level inline changes, collapsible unchanged regions, and syntax highlighting. The unstaged side is editable (saving writes the working tree only, never the index).
+- **Built-in Editor Lists the Whole Workspace**: The editor view's file pane lists every file in the working tree (`git ls-files`), not just the ones you changed — files you did change keep their status letter, staging box and change markers, unchanged files open with a clean gutter. That pane has its own filter box and selection, so moving between views never carries one pane's filter into the other; its footer tells you how many files are dirty.
 - **Pre-flight Risk Scan**: The 🛡 Audit Changes button hands the full staged diff to your model and lists suspicious spots (hardcoded secrets, injection risks, …) grouped by severity—critical / high / medium / low—each anchored to a file and line. Provider failures are translated into plain language instead of raw HTTP errors.
 - **AI Commit Messages & Branch Names**: The AI button in the commit box drafts a Conventional Commits message from the staged diff, treating your notes in the message box as an intent hint; a zh/EN toggle picks the language. The new-branch dialog can generate a branch name from a one-line description.
 - **Fork-Style Commit Graph**: Top pane displays commits alongside a calculated topology graph; bottom pane displays the file tree on the left and the selected file's diff on the right.
@@ -164,7 +166,9 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ## Git Configuration
 
-**Settings → Git Config** shows all three layers of git's own configuration in one page: **global** (`~/.gitconfig`, every repository on this machine), **local** (`.git/config`, this repository only), and **system** (`/etc/gitconfig` and vendor files, shown read-only). Edit values, add entries, remove entries — an entry that exists multiple times (`url.*.insteadof` and friends) is flagged as "multiple entries; merged into one on save".
+**Settings → Git Config** shows all three layers of git's own configuration in one page: **global** (`~/.gitconfig`, every repository on this machine), **local** (`.git/config`, this repository only), and **system** (`/etc/gitconfig` and vendor files, shown read-only).
+
+The page covers one question — **who git says you are when you commit** — so it lists exactly `user.name` and `user.email`. Structural settings (`branch.*`, `remote.*`, `core.*`) are deliberately absent: they have proper homes in the branch and remote panes, and turning them into editable rows is how a repository gets broken by a typo. At the local layer you pick whether this repository **inherits the global identity** or **sets its own**; inheriting means the local keys are dropped on save so the global ones apply. Clearing a field means "this layer no longer sets it" (the key is removed rather than written as an empty value), and the placeholder shows the value that would apply instead.
 
 **Only the rows you changed are written.** Comments, `include` ordering, and anything Gloss does not understand are left exactly as they are — no full rewrite. Reads and writes both go through the `git` CLI, so `includeIf` conditions and subsections behave here exactly as they do on the command line.
 
@@ -187,6 +191,7 @@ main.go / app.go         Window, menus, app state, root frame layout
   newbranchdialog.go     Create branch from selected commit
   graph.go               Topology graph: layout computation & line drawing
   filepane.go            Bottom pane left: file list & staging controls
+  workspace.go           Editor view's file pane: the whole working tree, not just the changes
   filemenu.go            File row context menu: stage / discard / copy / history / ignore
   filehist.go            "View File History…" dialog: this file's own commits, jump to one
   review.go              Review pane: single-file diff viewer (both sides, hunk staging, conflict side picking)
