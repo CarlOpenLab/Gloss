@@ -28,15 +28,22 @@ type editorPaneState struct {
 }
 
 // editorTarget 取编辑器该显示哪个文件：左栏当前选中的那个，没选就退到第一个。
+//
+// 编辑器视图的左栏是整个工作区（wsFiles），别的视图里那份是改动（files）——
+// 跟着视图走，两边各自记着自己的选中下标。
 func (a *app) editorTarget() *gitrepo.File {
-	if len(a.files) == 0 {
+	list, sel := a.files, a.fileSel
+	if a.viewMode == viewModeEditor {
+		list, sel = a.wsFiles, a.wsSel
+	}
+	if len(list) == 0 {
 		return nil
 	}
-	i := a.fileSel
-	if i < 0 || i >= len(a.files) {
+	i := sel
+	if i < 0 || i >= len(list) {
 		i = 0
 	}
-	return &a.files[i]
+	return &list[i]
 }
 
 // syncEditorPane 让编辑器对齐到左栏当前选中的文件。
@@ -153,7 +160,7 @@ func (a *app) revertEditorPane() {
 func (a *app) editorArea(c *ui.Context, pal palette) {
 	t := c.Theme()
 
-	if !a.hasDiff() && (a.state == loadIdle || a.state == loadFailed) {
+	if a.viewMode != viewModeEditor && !a.hasDiff() && (a.state == loadIdle || a.state == loadFailed) {
 		ui.Box(c).Grow(1).FillWidth().Children(func() {
 			ui.Column(c).Fill().Center().Gap(10).Padding(24).Children(func() {
 				a.detailEmpty(c, t, pal)
@@ -163,7 +170,13 @@ func (a *app) editorArea(c *ui.Context, pal palette) {
 	}
 
 	ui.Row(c).Grow(1).FillWidth().AlignItems(ui.Stretch).Children(func() {
-		a.fileListPane(c, pal, t)
+		// 编辑器视图左边列整个工作区：工作区没改动也照列 —— 「改了什么」是
+		// 改动视图要回答的问题，这里回答的是「仓库里有什么」。
+		if a.viewMode == viewModeEditor {
+			a.workspaceFilePane(c, pal, t)
+		} else {
+			a.fileListPane(c, pal, t)
+		}
 		a.filePaneSplitter(c, pal)
 		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
 			a.editorPaneView(c, pal)

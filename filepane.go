@@ -316,12 +316,21 @@ func (a *app) emptyTreeMsg() string {
 	return T("工作区无改动", "Working tree clean")
 }
 
-// treeRow 画文件树的一行。目录只画名字；文件画名字 + 增删行数 + 状态字母。
+// treeRow 画改动栏（左侧文件列表）里的一行。见 treeRowIn。
+func (a *app) treeRow(c *ui.Context, pal palette, r filetree.Row) {
+	a.treeRowIn(c, pal, r, a.files, &a.fileSel, a.syncEditorPane)
+}
+
+// treeRowIn 画文件树的一行。目录只画名字；文件画名字 + 增删行数 + 状态字母。
 //
 // 行本身可点：目录行点了收起/展开，文件行点了让 diff 滚到那个文件的头上。
 // 选中态按**文件下标**记，不用 ui.List 的 Selected —— 那是扁平行下标，树一
 // 重建（筛选、折叠目录、刷新）就指到别的行去了，记文件下标怎么动都不会错。
-func (a *app) treeRow(c *ui.Context, pal palette, r filetree.Row) {
+//
+// 文件从 list 里取、下标记在 sel 上，所以同一套画法能画两份列表：「改动」
+// 那份（a.files）和「编辑器」视图里整个工作区那份（a.wsFiles）。文件行点中
+// 之后再调 onClick，让那一栏自己把内容同步过去。
+func (a *app) treeRowIn(c *ui.Context, pal palette, r filetree.Row, list []gitrepo.File, sel *int, onClick func()) {
 	t := c.Theme()
 	n := r.Node
 
@@ -337,21 +346,21 @@ func (a *app) treeRow(c *ui.Context, pal palette, r filetree.Row) {
 		return
 	}
 
-	if n.FileIdx < 0 || n.FileIdx >= len(a.files) {
+	if n.FileIdx < 0 || n.FileIdx >= len(list) {
 		treeRow(c, t, pal, treeRowOpts{Depth: r.Depth}, func() {
 			ui.Text(c, n.Label).FontSize(12).SingleLine()
 		})
 		return
 	}
 
-	f := a.files[n.FileIdx]
+	f := list[n.FileIdx]
 
 	// 勾选框要留到行构建完之后再判点击（见下面的 early return）。它在行里
 	// 是后建的子元素，指针事件会一路冒泡到整行 —— 不先问它，点一下既暂存
 	// 了文件又跳转了 diff。
 	var box ui.Element
 
-	row, _ := treeRow(c, t, pal, treeRowOpts{Depth: r.Depth, Selected: n.FileIdx == a.fileSel}, func() {
+	row, _ := treeRow(c, t, pal, treeRowOpts{Depth: r.Depth, Selected: n.FileIdx == *sel}, func() {
 		// 历史提交和储藏的 diff 是只读的（SectionNone），那里不摆勾选框：
 		// 一个点了会对别的仓库状态动手的方框，比没有方框更糟。
 		if f.Section != gitrepo.SectionNone {
@@ -393,9 +402,11 @@ func (a *app) treeRow(c *ui.Context, pal palette, r filetree.Row) {
 		return
 	}
 	if row.Clicked() {
-		a.fileSel = n.FileIdx
+		*sel = n.FileIdx
 		// 改动区跟着选中走（它在下一帧自己发现选中的文件变了）。
-		a.syncEditorPane()
+		if onClick != nil {
+			onClick()
+		}
 	}
 }
 
@@ -527,6 +538,12 @@ func (a *app) detailEmpty(c *ui.Context, t *ui.Theme, pal palette) {
 //
 // 没选中过任何文件时（fileSel < 0）从第一个文件开始，不至于按下去没反应。
 func (a *app) navFile(dir int) {
+	// 编辑器视图的左栏列的是整个工作区，方向键该在那份列表里走 ——
+	// 两个视图各记各的选中下标。
+	if a.viewMode == viewModeEditor {
+		a.navWorkspaceFile(dir)
+		return
+	}
 	if len(a.files) == 0 {
 		return
 	}

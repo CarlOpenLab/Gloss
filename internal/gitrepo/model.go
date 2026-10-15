@@ -93,6 +93,11 @@ type Model struct {
 
 	// Upstream 是当前分支跟踪的远程分支名（如 origin/main）。若无上游则为空。
 	Upstream string
+
+	// Worktree 是工作区里的全部文件（已跟踪 + 未跟踪但未被忽略），
+	// 供「编辑器」视图的文件栏列举整个仓库。读不到时为空 ——
+	// 它只影响那一栏的完整性，不该把整次加载判失败。
+	Worktree []WorktreeFile
 }
 
 // Load 读取工作区相对 HEAD 的全部变更，按「已暂存」「未暂存」分成两段。
@@ -120,6 +125,10 @@ func (r *Repo) Load(ctx context.Context) (*Model, error) {
 	if err != nil {
 		remotes = nil // 远程读不到不算加载失败，只是远程操作点不了
 	}
+	worktree, err := r.WorktreeFiles(ctx)
+	if err != nil {
+		worktree = nil // 同上：编辑器那一栏少点文件，不影响仓库状态本身
+	}
 
 	base := r.baseRev(ctx)
 	rawStaged, err := run(ctx, r.Root, diffArgs("--cached", base)...)
@@ -143,6 +152,7 @@ func (r *Repo) Load(ctx context.Context) (*Model, error) {
 		Ahead:    ahead,
 		Behind:   behind,
 		Upstream: upstream,
+		Worktree: worktree,
 	}
 	appendFile := func(f File) {
 		m.Files = append(m.Files, f)

@@ -207,6 +207,18 @@ type app struct {
 	// fileSel 是文件栏里选中的文件下标（不是行下标 —— 行下标一筛选就指错）。
 	fileSel int
 
+	// —— 编辑器视图的文件栏：整个工作区，而不是只有改动 ——
+	// 编辑器要的是「仓库里有哪些代码」，所以这一栏列的是 wsAll（git ls-files
+	// 那份，改动过的文件沿用状态里的信息）。筛选与选中各记一份：两个视图的
+	// 列表本来就不是一套东西，共用一套筛选词和选中下标必然串味。
+	wsAll        []gitrepo.File
+	wsFiles      []gitrepo.File
+	wsTree       []*filetree.Node
+	wsList       ui.ListState
+	wsFilter     string
+	wsTreeFilter string
+	wsSel        int
+
 	// —— 已 review：文件路径 -> 当时的内容指纹 ——
 	// 指纹对不上就说明文件又变了，标记自动失效。
 	viewed map[string]string
@@ -383,6 +395,7 @@ func newApp() *app {
 		viewed:    map[string]string{},
 		commitSel: -1,
 		fileSel:   -1,
+		wsSel:     -1,
 		// 没接上真实目录之前先用一个空 store，这样 newApp 之后随时可以
 		// 直接跑（测试就是这么用的）；main 里再换成真正的数据目录。
 		store: store.Open(""),
@@ -1738,6 +1751,7 @@ func (a *app) applyModel(m *gitrepo.Model) {
 	// 这次加载完了，把自动刷新对齐到这份新状态上：外部改动了仓库才值得
 	// 再刷一次。裸 ⌘R、写操作后的重读也都走这里，baseline 跟着归位。
 	a.setAutoWatch(m.Repo.Root)
+	a.setWorktree(m)
 	a.syncEditorPane()
 }
 

@@ -11,12 +11,18 @@ import (
 )
 
 // selectEditorFile 把文件栏选中挪到某个文件上，并让编辑器跟上 —— 复刻用户在
-// 左栏点一下的那条路（treeRow 的点击处理里就是这么调的）。
+// 左栏点一下的那条路（treeRowIn 的点击处理里就是这么调的：改选中、再同步编辑器）。
+//
+// 编辑器视图的左栏列的是整个工作区，别的视图里是改动 —— 跟着视图挑那份列表。
 func selectEditorFile(t *testing.T, a *app, path string) {
 	t.Helper()
-	for i := range a.files {
-		if pathOf(a.files[i]) == path {
-			a.fileSel = i
+	list, sel := &a.files, &a.fileSel
+	if a.viewMode == viewModeEditor {
+		list, sel = &a.wsFiles, &a.wsSel
+	}
+	for i := range *list {
+		if pathOf((*list)[i]) == path {
+			*sel = i
 			a.syncEditorPane()
 			return
 		}

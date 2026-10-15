@@ -62,6 +62,15 @@ type repoTab struct {
 	filesClosed      map[string]bool
 	fileSel          int
 
+	// 「编辑器」视图那一栏列的是整个工作区，与上面那份改动列表并行存在。
+	wsAll        []gitrepo.File
+	wsFiles      []gitrepo.File
+	wsTree       []*filetree.Node
+	wsList       ui.ListState
+	wsFilter     string
+	wsTreeFilter string
+	wsSel        int
+
 	tab         int // 0 = 改动, 1 = 历史
 	commits     []gitrepo.Commit
 	graph       []graphRow
@@ -135,6 +144,14 @@ func (a *app) saveActiveTab() {
 	tab.filesClosed = a.filesClosed
 	tab.fileSel = a.fileSel
 
+	tab.wsAll = a.wsAll
+	tab.wsFiles = a.wsFiles
+	tab.wsTree = a.wsTree
+	tab.wsList = a.wsList
+	tab.wsFilter = a.wsFilter
+	tab.wsTreeFilter = a.wsTreeFilter
+	tab.wsSel = a.wsSel
+
 	tab.tab = a.tab
 	tab.commits = a.commits
 	tab.graph = a.graph
@@ -199,6 +216,14 @@ func (a *app) restoreActiveTab() {
 	a.fileTreeFilter = tab.fileTreeFilter
 	a.filesClosed = tab.filesClosed
 	a.fileSel = tab.fileSel
+
+	a.wsAll = tab.wsAll
+	a.wsFiles = tab.wsFiles
+	a.wsTree = tab.wsTree
+	a.wsList = tab.wsList
+	a.wsFilter = tab.wsFilter
+	a.wsTreeFilter = tab.wsTreeFilter
+	a.wsSel = tab.wsSel
 
 	a.tab = tab.tab
 	a.commits = tab.commits
@@ -358,7 +383,14 @@ func (a *app) setViewMode(mode int) {
 	}
 	if mode == viewModeEditor {
 		// 进编辑器视图时先把左边选中的那个文件读进来；之后换文件由
-		// filepane 的点击/导航接着调 syncEditorPane。
+		// filepane / workspace 的点击与导航接着调 syncEditorPane。
+		//
+		// 编辑器栏列的是整个工作区，与改动栏不是同一份列表：刚从改动栏切过来
+		// 时把那边的选中顺势带进来 —— 在改动列表里点开一个文件、再切过来细看，
+		// 想看的就是它。
+		if a.wsSel < 0 && a.fileSel >= 0 && a.fileSel < len(a.files) {
+			a.selectWorkspaceKey(pathOf(a.files[a.fileSel]))
+		}
 		a.syncEditorPane()
 	}
 }
