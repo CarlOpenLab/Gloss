@@ -13,16 +13,22 @@ import (
 
 // —— Git 配置（设置里的「Git 配置」页）——
 //
-// 这一页管的是 **git 自己的配置**，不是 Gloss 的设置：全局那份（一般是
-// ~/.gitconfig）跟着用户走，这台机器上每个仓库都吃它；项目级那份
-// （.git/config）只认一个仓库；系统级那份（/etc/gitconfig 之类）是整台
-// 机器的，只读摆出来。
+// 这一页只回答一个问题：**提交时 git 认为你是谁**。所以它管的就是
+// user.name / user.email 这两项，别的键一概不碰 —— 分支、远程那些结构性
+// 配置在别的面板里有正经入口，core.* 之类跟着具体操作走，摆在这里当普通
+// 键值改，改错了不容易看出来，改对了也看不出效果。
 //
-// 三层同名时后面的盖前面的（项目级 > 全局 > 系统级），所以三栏摆在一页里 ——
-// 只看一层说不清「我这条到底生效了没有」。
+// 三层里同名项的生效次序是 项目级 > 全局 > 系统级：
+//
+//   - 全局那份（一般是 ~/.gitconfig）跟着用户走，这台机器上每个仓库都吃它；
+//   - 项目级那份（.git/config）只认一个仓库，可以「跟随全局」，也可以单独设；
+//   - 系统级那份（/etc/gitconfig 之类）是整台机器的，只读摆出来。
+//
+// 只读的那层摆出来是有用的：全局没设、系统级设了的话，那一项照样生效，不看
+// 系统级就说不清「这个名字到底哪儿来的」。
 //
 // 写盘交给命令行 git（`git config --global/--local`），和这个项目里所有别的
-// git 操作一个路子：配置文件里那些 include、条件、注释怎么写，就还是怎么写，
+// git 操作一个路子：配置文件里的 include、条件、注释怎么写，就还是怎么写，
 // 不由 Gloss 另造一份自己的解释。
 
 // gitConfigRow 是表格里的一行。
@@ -47,11 +53,22 @@ type gitConfigRow struct {
 
 // changed 说明这一行要不要写回文件。
 func (r *gitConfigRow) changed() bool {
-	if r.Deleted {
+	if r.Deleted || r.cleared() {
+		// 文件里本来没有这一项，那就没什么可写也没什么可删。
 		return !r.Fresh
 	}
 	return r.Value != r.Original
 }
+
+// removes 说明保存时该把这一项从文件里删掉，而不是写进去。
+func (r *gitConfigRow) removes() bool { return r.Deleted || r.cleared() }
+
+// cleared 说明这个框被清空了。
+//
+// 清空 = 这一层不再设它，而不是设成空字符串：`user.name = ""` 会让 git 拿空
+// 名字去提交，不会有人想要这个结果。所以清空既有的项等于删掉它（下面的层
+// 接着生效），清空一个本来就没有的项等于什么也不做。
+func (r *gitConfigRow) cleared() bool { return strings.TrimSpace(r.Value) == "" }
 
 // gitConfigGroup 是表格里的一栏（全局 / 当前项目 / 系统级）。
 type gitConfigGroup struct {
@@ -67,11 +84,39 @@ type gitConfigGroup struct {
 	// ReadOnly 的栏只展示：系统级配置改它要管理员权限，而且那是别人的东西，
 	// 一个仓库客户端不该顺手替人动。
 	ReadOnly bool
-	// New 是栏底「新增一行」那两个输入框的内容。
-	New newGitConfigInput
+	// InheritGlobal 只对项目级那栏有意义：这个仓库跟随全局身份，还是自己单独
+	// 设一份。跟随的意思就是 .git/config 里不写 user.name / user.email ——
+	// 保存时把本来有的删掉，让全局那份生效。
+	InheritGlobal bool
+	// identityBackup 是切到「跟随全局」那一刻两行的样子，切回来按它恢复：
+	// 用户敲了一半再切走切回，不该把敲的东西弄丢。
+	identityBackup []*gitConfigRow
+	// scopeSel 是「身份来源」那个分段控件的选中下标（0 跟随全局、1 单独设置）。
+	//
+	// 它必须存在这上面而不是渲染时的局部变量里：分段控件是在**下一帧**的输入
+	// 阶段往这个指针里写选中的，指针要是每帧新建的局部变量，写进去的就是上一
+	// 帧那个已经没人看的变量 —— 表现为「点得中、没反应」。
+	scopeSel int
 }
 
-type newGitConfigInput struct{ Key, Value string }
+// gitIdentityKeys 是这一页管的两项：提交时署的身份。
+//
+// 只有这两项。git 的配置有几百个键，把整份配置文件摊在一个列表里改，最容易
+// 出事的恰恰是那些结构性的（branch.*、remote.*）—— 它们有专门的入口，
+// 在这里改等于绕开所有校验。这一页的职责窄一点，但每一条都改得明白。
+var gitIdentityKeys = []string{"user.name", "user.email"}
+
+func isIdentityKey(key string) bool {
+	return key == "user.name" || key == "user.email"
+}
+
+// gitIdentityFieldLabel 是身份项在界面上的名字。
+func gitIdentityFieldLabel(key string) string {
+	if key == "user.email" {
+		return T("邮箱", "Email")
+	}
+	return T("姓名", "Name")
+}
 
 // gitConfigState 是这一页的全部状态。
 type gitConfigState struct {
@@ -185,8 +230,15 @@ func buildGitConfigGroups(entries []gitrepo.ConfigEntry) []*gitConfigGroup {
 				continue
 			}
 		}
+		// 文件路径照收（不管这一项是不是身份项）：它要回答的是「这一层是从
+		// 哪些文件读出来的」，用户得知道保存会落到哪个文件上。
 		if e.File != "" && !containsString(g.Files, e.File) {
 			g.Files = append(g.Files, e.File)
+		}
+		// 不是身份项的一律不上界面。它们仍然好好待在配置文件里，只是这一页
+		// 不碰 —— 分支、远程这些结构性配置在别的面板里有正经入口。
+		if !isIdentityKey(e.Key) {
+			continue
 		}
 		if seen[g] == nil {
 			seen[g] = map[string]*gitConfigRow{}
@@ -202,6 +254,30 @@ func buildGitConfigGroups(entries []gitrepo.ConfigEntry) []*gitConfigGroup {
 		row := &gitConfigRow{Key: e.Key, Value: e.Value, Original: e.Value}
 		seen[g][e.Key] = row
 		g.Rows = append(g.Rows, row)
+	}
+	// 能改的两栏固定摆出姓名与邮箱两项：文件里没有也摆，用户才有地方填。
+	// 系统级只读，只摆文件里真有的 —— 只读的地方摆两个空框没意义。
+	for _, scope := range []string{gitrepo.ScopeGlobal, gitrepo.ScopeLocal} {
+		g := byScope[scope]
+		for _, key := range gitIdentityKeys {
+			if seen[g][key] != nil {
+				continue
+			}
+			g.Rows = append(g.Rows, &gitConfigRow{Key: key, Fresh: true})
+		}
+	}
+	// 项目级默认跟不跟随全局：.git/config 里本来没这两项，那就是跟随。
+	local := byScope[gitrepo.ScopeLocal]
+	local.InheritGlobal = true
+	for _, r := range local.Rows {
+		if !r.Fresh {
+			local.InheritGlobal = false
+			break
+		}
+	}
+	local.scopeSel = 1
+	if local.InheritGlobal {
+		local.scopeSel = 0
 	}
 	for _, g := range groups {
 		sortRowsByKey(g.Rows)
@@ -235,8 +311,8 @@ func (a *app) gitSettingsPane(c *ui.Context, pal palette) {
 				ui.Spacer(c)
 				a.gitConfigReloadButton(c, pal)
 			})
-			ui.Text(c, T("改的是 git 自己的配置文件，不是 Gloss 的设置。同名项按 项目级 > 全局 > 系统级 生效；保存时只写动过的行，配置文件里的注释和顺序都不动。",
-				"These are git's own config files, not Gloss preferences. For duplicate keys, local beats global beats system; saving touches only the rows you changed, leaving comments and ordering intact.")).
+			ui.Text(c, T("改的是 git 自己的配置文件，不是 Gloss 的设置。这里只管提交时署的身份（姓名与邮箱）—— 分支、远程那些在各自的面板里改。同名项按 项目级 > 全局 > 系统级 生效；保存时只写动过的那几项，配置文件里的注释和顺序都不动。",
+				"These are git's own config files, not Gloss preferences. This page covers only the identity commits are signed with (name and email) — branches and remotes live in their own panes. For duplicate keys, local beats global beats system; saving touches only what you changed, leaving comments and ordering intact.")).
 				FontSize(11).TextColor(t.TextMuted)
 
 			if a.gitCfg.loading && len(a.gitCfg.groups) == 0 {
@@ -284,8 +360,11 @@ func gitConfigErrorCard(c *ui.Context, pal palette, title, detail string) {
 	})
 }
 
-// gitConfigGroupCard 画一栏：标题、说明、来源文件，然后是条目表。
+// gitConfigGroupCard 画一栏：标题、说明、来源文件，然后是身份那两项。
 func (a *app) gitConfigGroupCard(c *ui.Context, pal palette, g *gitConfigGroup) {
+	// 项目级这栏多一句「身份从哪儿来」：跟随全局，还是这个仓库单独设一份。
+	// 另外两栏没得选 —— 全局本来就是「全局那份」，系统级只读。
+	local := g.Scope == gitrepo.ScopeLocal
 	t := c.Theme()
 	ui.Column(c).Gap(6).FillWidth().Children(func() {
 		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
@@ -305,10 +384,26 @@ func (a *app) gitConfigGroupCard(c *ui.Context, pal palette, g *gitConfigGroup) 
 
 		ui.Column(c).Radius(radiusMD).Background(pal.surface2).Border(1, pal.hairline).
 			FillWidth().Children(func() {
+			// 没打开仓库时项目级没什么可改的：摆出两个空框、点保存也不知道往
+			// 哪儿写。
+			if local && a.gitConfigDir() == "" {
+				gitConfigEmptyRow(c, pal, a.gitConfigEmptyNote(g))
+				return
+			}
+			// 系统级那一栏可能一项身份都没有（很常见）：说明白没读到，比摆两个
+			// 空框强。
 			if len(g.Rows) == 0 {
-				ui.Box(c).Padding(10, 14).FillWidth().Children(func() {
-					ui.Text(c, a.gitConfigEmptyNote(g)).FontSize(textCaption).TextColor(pal.inkSubtle)
-				})
+				gitConfigEmptyRow(c, pal, a.gitConfigEmptyNote(g))
+				return
+			}
+			if local {
+				a.gitIdentityScopeRow(c, pal, g)
+				settingDivider(c, pal)
+			}
+			// 跟随全局：这一层什么都不写，摆出生效的那份让人看明白提交时署谁。
+			if local && g.InheritGlobal {
+				a.gitIdentityInheritedRow(c, pal)
+				return
 			}
 			for i, row := range g.Rows {
 				if i > 0 {
@@ -317,127 +412,200 @@ func (a *app) gitConfigGroupCard(c *ui.Context, pal palette, g *gitConfigGroup) 
 				if g.ReadOnly {
 					gitConfigReadOnlyRow(c, pal, row)
 				} else {
-					a.gitConfigEditorRow(c, pal, row)
+					a.gitConfigEditorRow(c, pal, g, row)
 				}
-			}
-			if !g.ReadOnly {
-				settingDivider(c, pal)
-				a.gitConfigNewRow(c, pal, g)
 			}
 		})
 	})
 }
 
-// gitConfigEmptyNote 说清这一栏为什么是空的。
-func (a *app) gitConfigEmptyNote(g *gitConfigGroup) string {
-	switch g.Scope {
-	case gitrepo.ScopeLocal:
-		if a.gitConfigDir() == "" {
-			return T("先打开一个仓库，才能在这里改项目级配置。", "Open a repository first to edit its local config.")
-		}
-		return T("这个仓库还没有自己的配置。在这里加一项，只影响它自己。", "This repository has no local config yet. Anything added here affects only it.")
-	case gitrepo.ScopeGlobal:
-		return T("还没读到全局配置。加一项再保存，就会写进 git 的全局配置文件（一般是 ~/.gitconfig）。",
-			"No global config yet. Adding an entry writes to git's global config file (usually ~/.gitconfig).")
-	default:
-		return T("没有读到系统级配置。", "No system-level config found.")
+// gitIdentityScopeRow 画项目级那栏的「身份从哪儿来」。
+//
+// 这不是一个摆了就完了的开关：选「跟随全局」意味着保存时要把 .git/config 里
+// 的 user.name / user.email 删掉（让全局那份生效），所以切换时改的是两行的
+// 状态，见 setIdentityInherit；保存路径只认行的状态。
+func (a *app) gitIdentityScopeRow(c *ui.Context, pal palette, g *gitConfigGroup) {
+	note := T("这个仓库用下面填的值；留空就直接用全局那份。",
+		"This repository uses the values below; leave a field empty to fall back to the global one.")
+	if g.InheritGlobal {
+		note = T("提交时用全局那份身份，这个仓库的 .git/config 里不写 user.name / user.email。",
+			"Commits use the global identity; this repository keeps no user.name / user.email of its own.")
+	}
+	ui.Column(c).Gap(5).Padding(9, 14).FillWidth().Children(func() {
+		ui.Row(c).AlignItems(ui.Center).Gap(10).FillWidth().Children(func() {
+			ui.Text(c, T("身份来源", "Identity")).Width(210).Shrink(0).
+				FontSize(textBodySM).TextColor(pal.ink)
+			ui.Segmented(c, &g.scopeSel,
+				T("跟随全局", "Inherit global"), T("单独设置", "Set here")).Label(T("身份来源", "Identity"))
+		})
+		ui.Text(c, note).FontSize(textCaption).TextColor(pal.inkSubtle)
+	})
+	// 分段控件往 g.scopeSel 里写选中：这一帧看到的就是用户刚点的那一下。
+	if (g.scopeSel == 0) != g.InheritGlobal {
+		a.setIdentityInherit(g, g.scopeSel == 0)
 	}
 }
 
-// gitConfigEditorRow 是可编辑的一行：键名、值、删掉。
-func (a *app) gitConfigEditorRow(c *ui.Context, pal palette, r *gitConfigRow) {
+// setIdentityInherit 把项目级身份切到「跟随全局」或「这个仓库单独设」。
+//
+// 跟随全局的意思就是 .git/config 里不写这两项：所以这里不是记一个布尔值就完
+// 事，得把两行改到对应状态 —— 文件里本来有的标记成待删（保存时删掉），用户
+// 刚敲进来的清空（等于没填）。切回来按切换前的样子原样恢复，免得敲了一半切
+// 走再切回来，敲的东西没了。
+func (a *app) setIdentityInherit(g *gitConfigGroup, inherit bool) {
+	if g.InheritGlobal == inherit {
+		return
+	}
+	if inherit {
+		g.identityBackup = nil
+		for _, r := range g.Rows {
+			backup := *r
+			g.identityBackup = append(g.identityBackup, &backup)
+			if r.Fresh {
+				r.Value = ""
+				r.Deleted = false
+				continue
+			}
+			r.Deleted = true
+		}
+	} else if len(g.identityBackup) == len(g.Rows) {
+		for i, r := range g.Rows {
+			*r = *g.identityBackup[i]
+		}
+		g.identityBackup = nil
+	}
+	g.InheritGlobal = inherit
+}
+
+// gitIdentityInheritedRow 画「跟随全局」时的两行：值来自最终生效的那一层
+// （项目级没设就看全局、再看系统级），只读 —— 这一层现在什么都不写。
+func (a *app) gitIdentityInheritedRow(c *ui.Context, pal palette) {
+	for i, key := range gitIdentityKeys {
+		if i > 0 {
+			settingDivider(c, pal)
+		}
+		val := a.gitIdentityFrom(key, gitrepo.ScopeGlobal, gitrepo.ScopeSystem)
+		if val == "" {
+			val = T("未设置 —— 提交时 git 会用主机名与邮箱兜底", "Not set — git falls back to hostname and email")
+		}
+		ui.Row(c).Padding(7, 14).AlignItems(ui.Center).Gap(10).FillWidth().Children(func() {
+			gitIdentityKeyCell(c, pal, key, false, false)
+			ui.Text(c, val).FontSize(textBodySM).TextColor(pal.inkMuted).Grow(1).SingleLine()
+		})
+	}
+}
+
+// gitIdentityFrom 依次在给定几层里找某一项的值，先找到的先用。
+//
+// 看的是草稿里的值（不是文件里的原始值）：用户刚在全局那栏改完名字、还没保存，
+// 项目级输入框的提示就该是改完的那个 —— 眼睛看见的和将要用上的是同一份。
+func (a *app) gitIdentityFrom(key string, scopes ...string) string {
+	for _, scope := range scopes {
+		for _, g := range a.gitCfg.groups {
+			if g.Scope != scope {
+				continue
+			}
+			for _, r := range g.Rows {
+				if r.Key == key && !r.cleared() && !r.Deleted {
+					return r.Value
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// gitIdentityInherited 是「这一层不设时」会生效的值：项目级看全局与系统级，
+// 全局看系统级。用作输入框的提示 —— 清空它就是要回到这个值。
+func (a *app) gitIdentityInherited(key, scope string) string {
+	if scope == gitrepo.ScopeGlobal {
+		return a.gitIdentityFrom(key, gitrepo.ScopeSystem)
+	}
+	return a.gitIdentityFrom(key, gitrepo.ScopeGlobal, gitrepo.ScopeSystem)
+}
+
+// gitConfigEmptyRow 是一栏里没有内容时那句说明。
+func gitConfigEmptyRow(c *ui.Context, pal palette, note string) {
+	ui.Box(c).Padding(10, 14).FillWidth().Children(func() {
+		ui.Text(c, note).FontSize(textCaption).TextColor(pal.inkSubtle)
+	})
+}
+
+// gitConfigEmptyNote 说清这一栏为什么是空的。
+func (a *app) gitConfigEmptyNote(g *gitConfigGroup) string {
+	if g.Scope == gitrepo.ScopeLocal {
+		if a.gitConfigDir() == "" {
+			return T("先打开一个仓库，才能在这里改这个仓库的身份。",
+				"Open a repository first to edit the identity it commits with.")
+		}
+		return T("这个仓库没有自己的身份设置。跟随全局就行 —— 选「单独设置」才需要填。",
+			"This repository sets no identity of its own; the global one applies.")
+	}
+	return T("这一层没有设 user.name / user.email。",
+		"This level sets neither user.name nor user.email.")
+}
+
+// gitConfigEditorRow 是可编辑的一行：姓名（user.name）或邮箱（user.email）。
+//
+// 清空 = 这一层不再设它（见 gitConfigRow.cleared）：本来就有的会被删掉，本来
+// 没有的就什么也不写。提示文字给的是「下面几层现在生效的值」，清空之后会用
+// 哪个名字，眼睛直接看得见。
+func (a *app) gitConfigEditorRow(c *ui.Context, pal palette, g *gitConfigGroup, r *gitConfigRow) {
 	ui.Row(c).Padding(7, 14).AlignItems(ui.Center).Gap(10).FillWidth().Children(func() {
-		gitConfigKeyCell(c, pal, r)
+		gitIdentityKeyCell(c, pal, r.Key, r.cleared(), r.Multi)
 		if r.Deleted {
-			// 删掉的行不给编辑：那颗「恢复」才是这一行现在唯一有意义的事。
-			ui.Text(c, T("保存时删除", "Removed on save")).FontSize(textCaption).
+			// 待删的行不给编辑：这一行现在唯一有意义的事是「恢复」。
+			ui.Text(c, T("保存时从这一层删掉", "Removed from this level on save")).FontSize(textCaption).
 				TextColor(pal.inkSubtle).Grow(1)
 			if secondaryAction(c, pal, T("恢复", "Restore"), "", false).Clicked() {
 				r.Deleted = false
 			}
 			return
 		}
-		// 输入框自带一个名字：它里面的字是画出来的，不进无障碍标签表 ——
-		// 不写这一行，读屏软件念的是一串「编辑框」，说不出这是哪个键的值。
-		ui.TextInput(c, &r.Value).FillWidth().Grow(1).
-			Label(Tf("%s 的值", "%s value", r.Key))
-		if removeButton(c, pal) {
-			r.Deleted = true
+		// 输入框自带一个名字：里面的字是画出来的，不进无障碍标签表 —— 不写这
+		// 一行，读屏软件念的是一串「编辑框」，说不出这是给哪个仓库、哪一项填的。
+		input := ui.TextInput(c, &r.Value).FillWidth().Grow(1).
+			Label(gitIdentityInputLabel(g.Scope, r.Key))
+		if inherited := a.gitIdentityInherited(r.Key, g.Scope); inherited != "" {
+			input.Placeholder(Tf("留空则用 %s", "Empty uses %s", inherited))
 		}
 	})
 }
 
-// gitConfigKeyCell 是行左那个键名格（固定宽度，键名长短不一时值输入框才对得齐）。
-func gitConfigKeyCell(c *ui.Context, pal palette, r *gitConfigRow) {
+// gitIdentityInputLabel 给身份输入框一个能认出来的名字。
+//
+// 一页里有四个（全局/项目 × 姓名/邮箱），框里没字的时候长得一模一样，读屏
+// 软件和自动化测试只能靠这个名字分辨谁是谁。
+func gitIdentityInputLabel(scope, key string) string {
+	if scope == gitrepo.ScopeGlobal {
+		return Tf("全局配置 %s", "Global %s", key)
+	}
+	return Tf("项目配置 %s", "Project %s", key)
+}
+
+// gitIdentityKeyCell 是行左那个名字格：界面上叫什么（姓名/邮箱），下面小字
+// 是它落的键名 —— 写进文件的就是后者，两个都摆出来省得猜。
+func gitIdentityKeyCell(c *ui.Context, pal palette, key string, dim, multi bool) {
 	ui.Column(c).Width(210).Shrink(0).Gap(2).Children(func() {
 		col := pal.ink
-		if r.Deleted {
+		if dim {
 			col = pal.inkTertiary
 		}
-		ui.Text(c, r.Key).FontSize(textBodySM).TextColor(col).SingleLine()
-		if r.Multi {
-			ui.Text(c, T("原有多条，保存后合并为一条", "Multiple entries; merged into one on save")).
-				FontSize(textCaption).TextColor(pal.inkSubtle).SingleLine()
+		ui.Text(c, gitIdentityFieldLabel(key)).FontSize(textBodySM).TextColor(col).SingleLine()
+		caption := key
+		if multi {
+			caption += "　" + T("原有多条，保存后合并为一条", "Multiple entries; merged into one on save")
 		}
+		ui.Text(c, caption).FontSize(textCaption).TextColor(pal.inkSubtle).SingleLine()
 	})
 }
 
-// gitConfigReadOnlyRow 是只读的一行：值排在键名右边，只看得见改不了。
+// gitConfigReadOnlyRow 是只读的一行：值排在名字右边，只看得见改不了。
 func gitConfigReadOnlyRow(c *ui.Context, pal palette, r *gitConfigRow) {
 	ui.Row(c).Padding(7, 14).AlignItems(ui.Center).Gap(10).FillWidth().Children(func() {
-		ui.Text(c, r.Key).Width(210).Shrink(0).FontSize(textBodySM).TextColor(pal.ink).SingleLine()
+		gitIdentityKeyCell(c, pal, r.Key, false, r.Multi)
 		ui.Text(c, r.Value).FontSize(textBodySM).TextColor(pal.inkMuted).Grow(1).SingleLine()
 	})
-}
-
-// gitConfigNewRow 是栏底那一行「新增」：填键名和值，回车前先点「添加」。
-//
-// 两栏（全局 / 当前项目）的提示文字故意写得不一样：这两个输入框长得一模
-// 一样，只认「值」两个字的话，摆在一页里就分不出往哪一栏写。提示里带一句
-// 作用范围，正好也是填之前该想一下的事。
-func (a *app) gitConfigNewRow(c *ui.Context, pal palette, g *gitConfigGroup) {
-	keyHint := T("键名，如 core.autocrlf", "Key, e.g. core.autocrlf")
-	valueHint := T("值，作用于所有仓库", "Value, applies to all repositories")
-	// 两栏的输入框名字也得分开：它们是同一页上同一种控件，名字一样的话
-	// 读屏软件报的是两句一样的话，用键盘切过去也不知道自己站在哪一栏。
-	keyLabel := T("全局配置项名", "Global config key")
-	valueLabel := T("全局配置项值", "Global config value")
-	if g.Scope == gitrepo.ScopeLocal {
-		keyHint = T("键名，如 user.email", "Key, e.g. user.email")
-		valueHint = T("值，只作用于这个仓库", "Value, applies to this repository only")
-		keyLabel = T("项目配置项名", "Project config key")
-		valueLabel = T("项目配置项值", "Project config value")
-	}
-	ui.Row(c).Padding(7, 14).AlignItems(ui.Center).Gap(10).FillWidth().Children(func() {
-		ui.TextInput(c, &g.New.Key).Width(210).Placeholder(keyHint).Label(keyLabel)
-		ui.TextInput(c, &g.New.Value).FillWidth().Grow(1).Placeholder(valueHint).Label(valueLabel)
-		if secondaryAction(c, pal, T("添加", "Add"), "", strings.TrimSpace(g.New.Key) == "").Clicked() {
-			a.addGitConfigRow(g)
-		}
-	})
-}
-
-// addGitConfigRow 把栏底那两格填的内容加成一行。
-//
-// 键名已经有一行时不另起一行，而是把值写进那一行 —— 否则一保存就是
-// 「同名两条」，而界面上一个键只能占一行。
-func (a *app) addGitConfigRow(g *gitConfigGroup) {
-	key := strings.TrimSpace(g.New.Key)
-	if key == "" {
-		return
-	}
-	value := g.New.Value
-	for _, r := range g.Rows {
-		if r.Key == key {
-			r.Deleted = false
-			r.Value = value
-			g.New = newGitConfigInput{}
-			return
-		}
-	}
-	g.Rows = append(g.Rows, &gitConfigRow{Key: key, Value: value, Original: "", Fresh: true})
-	sortRowsByKey(g.Rows)
-	g.New = newGitConfigInput{}
 }
 
 // gitConfigChange 是一条要落到文件上的改动。
@@ -463,7 +631,7 @@ func (a *app) pendingGitConfigChanges() []gitConfigChange {
 				scope:  g.Scope,
 				key:    r.Key,
 				value:  r.Value,
-				remove: r.Deleted,
+				remove: r.removes(),
 			})
 		}
 	}
