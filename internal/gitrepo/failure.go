@@ -45,7 +45,8 @@ const (
 	OpForcePush
 	OpAm // 用户自己在终端里跑的补丁序列停在半路（git am）
 	OpDiscard
-	OpWrite // 内置编辑器把文件写回工作区（不经过 git）
+	OpWrite     // 内置编辑器把文件写回工作区（不经过 git）
+	OpGitConfig // 设置里的「Git 配置」页把改动写回配置文件
 )
 
 // Describe 把 git 的错误整理成人话。
@@ -297,7 +298,7 @@ func Describe(op Op, err error) Failure {
 		strings.Contains(low, "please tell me who you are"),
 		strings.Contains(low, "empty ident name"):
 		f.Title = "还没配 git 用户名和邮箱"
-		f.Hint = "在终端里 git config --global user.name \"…\" 和 user.email \"…\" 配一次。"
+		f.Hint = "设置 → Git 配置 里填上 user.name 和 user.email，或者 `git config --global user.name \"…\"` 在终端里配一次。"
 	case strings.Contains(low, "gpg failed to sign"),
 		strings.Contains(low, "no signing key"),
 		strings.Contains(low, "secret key not available"):
@@ -323,6 +324,26 @@ func Describe(op Op, err error) Failure {
 		strings.Contains(low, "patch failed"):
 		f.Title = "这段改动落不进 index"
 		f.Hint = "文件可能刚被改过，列表已经刷新，重新试一次。"
+
+	// —— Git 配置写不进去（设置里的「Git 配置」页）——
+	case strings.Contains(low, "配置项名"):
+		// 这一档是 Gloss 自己挡下来的（见 config.go 的 checkConfigKey）：
+		// 与其把「-」开头的键名交给 git 去当选项解析，不如在写之前就拦住。
+		f.Title = "这个配置项名不能用"
+		f.Hint = "键名要写成「节.名」（core.autocrlf），子节用点接着写（url.<地址>.insteadof）；中间不能有空白和 =。"
+	case strings.Contains(low, "key does not contain a section"),
+		strings.Contains(low, "invalid key"),
+		strings.Contains(low, "invalid section name"),
+		strings.Contains(low, "invalid subsection name"):
+		f.Title = "这个配置项名 git 不认"
+		f.Hint = "键名要写成「节.名」（core.autocrlf），子节用点接着写（url.<地址>.insteadof）。"
+	case strings.Contains(low, "not in a git directory"),
+		strings.Contains(low, "not a git repository"):
+		f.Title = "这里不是仓库"
+		f.Hint = "项目级配置得站在仓库里改 —— 先在 Gloss 里打开这个仓库。"
+	case strings.Contains(low, "permission denied") && strings.Contains(low, "config"):
+		f.Title = "配置文件不让写"
+		f.Hint = "这个文件可能归别人所有（系统级配置就是这样），或者被设成了只读。"
 	}
 	return f
 }
@@ -393,6 +414,8 @@ func opTitle(op Op) string {
 		return "丢弃改动没成功"
 	case OpWrite:
 		return "保存文件没成功"
+	case OpGitConfig:
+		return "写 Git 配置没成功"
 	}
 	return "这个操作没成功"
 }

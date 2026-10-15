@@ -106,7 +106,7 @@ When reviewing large pull requests or AI-generated diffs, the biggest bottleneck
 | `⌘R` | Refresh repository status |
 | `⌘⇧F` / `⌘⇧P` / `⌘⇧U` | Fetch / Pull / Push |
 | `⌘+` / `⌘−` / `⌘0` | Zoom in / Zoom out / Reset font size |
-| `⌘,` | Model settings |
+| `⌘,` | Settings (Preferences / Models / Prompts / Git config …) |
 | `Esc` | Exit branch compare / PR review |
 
 The table uses macOS notation. **On Linux and Windows, ⌘ means `Ctrl`** — the same key does the same thing, and the app displays `Ctrl+…` there (see `keys_i18n.go`). ⌥ becomes `Alt`, ⌫ becomes `Backspace`, ⏎ becomes `Enter`.
@@ -162,6 +162,14 @@ export ANTHROPIC_API_KEY=sk-ant-...
 # Optional: export ANTHROPIC_BASE_URL=https://...
 ```
 
+## Git Configuration
+
+**Settings → Git Config** shows all three layers of git's own configuration in one page: **global** (`~/.gitconfig`, every repository on this machine), **local** (`.git/config`, this repository only), and **system** (`/etc/gitconfig` and vendor files, shown read-only). Edit values, add entries, remove entries — an entry that exists multiple times (`url.*.insteadof` and friends) is flagged as "multiple entries; merged into one on save".
+
+**Only the rows you changed are written.** Comments, `include` ordering, and anything Gloss does not understand are left exactly as they are — no full rewrite. Reads and writes both go through the `git` CLI, so `includeIf` conditions and subsections behave here exactly as they do on the command line.
+
+Needs git ≥ 2.26 (reading uses `--show-scope`). On older git the page shows git's own message instead of silently degrading — a half-read config is worse than a clear "your git is too old".
+
 ---
 
 ## Architecture
@@ -196,7 +204,8 @@ main.go / app.go         Window, menus, app state, root frame layout
   refs.go                Git reference grouping & filtering
   palette.go / keys.go   Command palette & shortcut bindings
   menu.go                macOS native menu bar commands
-  settings.go            Model settings modal
+  settings.go            Settings dialog (sidebar + Preferences / Models / Prompts / Updates / About)
+  gitconfig.go           Settings → Git Config page: read, edit and save all three layers (writes live in internal/gitrepo/config.go)
   theme.go               GitHub-aligned theme palette (light / dark)
 
 internal/
@@ -209,6 +218,7 @@ internal/
     pending.go           In-progress operation detection + continue / skip / abort
     conflict.go          Conflict side resolution (ours / theirs, delete-modify)
     failure.go           Plain-language git error translator
+    config.go            git config read/write: all three layers in one call, writes scoped to --global/--local
   diff/                  Unified diff parser
     slice.go             Slice hunk patches for hunk-level staging
     range.go             Build a patch for a line range (context only where both sides agree)

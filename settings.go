@@ -44,6 +44,7 @@ const (
 	settingsTabAbout   settingsTab = 2
 	settingsTabPrompts settingsTab = 3
 	settingsTabUpdates settingsTab = 4
+	settingsTabGit     settingsTab = 5
 )
 
 // modelTagInfo 表示模型及其特性标签（如：视觉、推理、代码）。
@@ -202,6 +203,14 @@ func (a *app) openSettings() {
 	a.providerSearch = ""
 	a.modelSearch = ""
 	a.settingsTab = settingsTabModels
+
+	// 「Git 配置」那一页每次打开都重读：那些文件命令行和别的客户端也在改，
+	// 留一份上次打开时的旧值摆在面板里，等于骗人。在飞的那一次读作废。
+	a.gitCfg.seq++
+	a.gitCfg.loaded = false
+	a.gitCfg.loading = false
+	a.gitCfg.groups = nil
+	a.gitCfg.err = ""
 
 	a.settingsOn = true
 	a.probeMagpie()
@@ -412,6 +421,13 @@ func (a *app) settingsBody(c *ui.Context, pal palette) {
 				a.settingsTab = settingsTabPrompts
 			})
 
+			// Git 配置紧跟在几个「Gloss 自己的设置」后面：这一页改的其实是
+			// git 的配置文件，但那也是设置里的一类，不该被塞进「系统」组 ——
+			// 组里那两项是更新与关于，跟仓库没关系。
+			settingsSidebarItem(c, t, T("Git 配置", "Git Config"), iconGitBranch, a.settingsTab == settingsTabGit, func() {
+				a.settingsTab = settingsTabGit
+			})
+
 			// 分组 2: 系统
 			ui.Text(c, T("系统", "System")).FontSize(textCaption).FontWeight(weightSemibold).TextColor(pal.inkSubtle).
 				Padding(12, 8, 2, 8)
@@ -454,6 +470,8 @@ func (a *app) settingsBody(c *ui.Context, pal palette) {
 					a.aboutSettingsPane(c, pal)
 				} else if a.settingsTab == settingsTabUpdates {
 					a.updatesSettingsPane(c, pal)
+				} else if a.settingsTab == settingsTabGit {
+					a.gitSettingsPane(c, pal)
 				} else {
 					a.modelsSettingsPane(c, pal)
 				}
@@ -1976,6 +1994,10 @@ func (a *app) applySettings() {
 
 	a.store.SetConfig(cfg)
 	a.persist()
+
+	// Git 配置走另一条路：它不是 Gloss 的设置，落在 git 自己的配置文件里，
+	// 写完由横幅/吐司回话（见 applyGitConfig）。
+	a.applyGitConfig()
 
 	a.settingsOn = false
 }

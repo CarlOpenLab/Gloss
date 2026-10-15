@@ -272,6 +272,11 @@ type app struct {
 	editCommitPrompt string
 	editBranchPrompt string
 
+	// gitCfg 是设置里「Git 配置」页的状态（gitconfig.go）：全局 / 当前项目 /
+	// 系统级三栏。它和上面那份 editCfg 不是一回事 —— 这里改的是 git 自己的
+	// 配置文件，落在 ~/.gitconfig 和 .git/config 里，不经过 Gloss 的 store。
+	gitCfg gitConfigState
+
 	// 模型设置搜索过滤状态
 	providerSearch string
 	modelSearch    string
