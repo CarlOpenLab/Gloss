@@ -454,6 +454,49 @@ func TestPushTagFromMenu(t *testing.T) {
 	}
 }
 
+// 本地分支右键菜单里也能删远程那份：只在它真有上游时才出现，删掉的确实是
+// 远程分支，本地分支留着。
+func TestLocalBranchMenuDeletesItsUpstream(t *testing.T) {
+	a, bare := remoteApp(t)
+	tt := ui.NewTester(a.view, 1280, 900)
+	dir := a.repoPath
+
+	runGit(t, dir, "branch", "feat-up")
+	runGit(t, dir, "push", "-u", "origin", "feat-up")
+	// 没有上游的本地分支：菜单里不该冒出「删除远程分支」。
+	runGit(t, dir, "branch", "feat-lonely")
+	a.loadRefs()
+	settle(t, a)
+	tt.Frame()
+
+	rightClick(t, tt, "feat-lonely")
+	if err := tt.ChooseMenuItem("删除远程分支 origin/feat-lonely…"); err == nil {
+		t.Fatal("没有上游的分支不该有「删除远程分支」")
+	}
+	tt.CloseMenu()
+
+	rightClick(t, tt, "feat-up")
+	if err := tt.ChooseMenuItem("删除远程分支 origin/feat-up…"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !a.confirm.on {
+		t.Fatal("应该弹出删除远程分支确认框")
+	}
+	if err := tt.Click("删除远程分支"); err != nil {
+		t.Fatal(err)
+	}
+	settle(t, a)
+	tt.Frame()
+
+	if got := strings.TrimSpace(gitOut(t, bare, "branch", "--list", "feat-up")); got != "" {
+		t.Errorf("远程分支该被删除了，实际：%q", got)
+	}
+	if got := strings.TrimSpace(gitOut(t, dir, "branch", "--list", "feat-up")); got == "" {
+		t.Errorf("本地分支不该被一起删掉")
+	}
+}
+
 // 远程分支右键菜单：删除远程分支（带确认）。
 func TestDeleteRemoteBranchDialog(t *testing.T) {
 	a, bare := remoteApp(t)

@@ -188,7 +188,8 @@ func (a *app) refMenu(m *ui.Menu, ref gitrepo.Ref) {
 	}
 }
 
-// localBranchMenu 是本地分支的右键菜单：检出、对比差异、合并、变基、重命名、删除、复制分支名。
+// localBranchMenu 是本地分支的右键菜单：检出、对比差异、合并、变基、重命名、
+// 删除本地分支（有上游时还能就地删远程那份）、复制分支名。
 func (a *app) localBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
 	busy := a.op != gitrepo.OpNone
 	isHead := ref.Head || ref.Name == a.branch
@@ -219,6 +220,19 @@ func (a *app) localBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
 	}
 	if m.Item(T("删除分支 "+ref.Name+"…", "Delete Branch "+ref.Name+"…")).Disabled(busy || isHead).Chosen() {
 		a.promptDeleteBranch(ref.Name)
+	}
+	// 本地分支也顺手能删掉它在远程那份：删的仍然是**远程分支**，与上一条删
+	// 本地完全两回事，所以是独立的菜单项、独立的二次确认（确认框里会写明
+	// 本地分支不动）。
+	//
+	// 只有这个分支真有上游时才摆出来 —— 没有上游就无从知道该删哪个远程分支，
+	// 摆一条永远灰着的只是噪音。
+	if upstream := a.upstreamOf(ref.Name); upstream != "" {
+		remote, upstreamBranch := splitUpstream(upstream)
+		if m.Item(T("删除远程分支 "+upstream+"…", "Delete Remote Branch "+upstream+"…")).
+			Disabled(busy || !a.canReachRemote()).Chosen() {
+			a.promptDeleteRemoteBranch(remote, upstreamBranch)
+		}
 	}
 	m.Separator()
 	if m.Item(T("复制分支名", "Copy Branch Name")).Disabled(busy).Chosen() {

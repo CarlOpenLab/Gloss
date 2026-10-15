@@ -148,12 +148,31 @@ func (a *app) pushTag(remote, tag string) {
 }
 
 // hasUpstream 判断 branch 是否配置了上游远程分支。
-func (a *app) hasUpstream(branch string) bool {
+func (a *app) hasUpstream(branch string) bool { return a.upstreamOf(branch) != "" }
+
+// upstreamOf 返回本地分支跟踪的上游远程分支名（形如 origin/main），没配
+// 上游时为空。
+//
+// 「删除远程分支」要知道删的是哪一个：上游名里有远程名也有分支名，本地面板
+// 上右键一个分支，得从它自己的上游推出来，不能猜 origin。
+func (a *app) upstreamOf(branch string) string {
 	if branch == "" || a.refByFull == nil {
-		return false
+		return ""
 	}
 	ref, ok := a.refByFull["refs/heads/"+branch]
-	return ok && ref.Upstream != ""
+	if !ok {
+		return ""
+	}
+	return ref.Upstream
+}
+
+// splitUpstream 把上游名的远程与分支拆开：第一个 / 之前是远程名，其余是分支名
+// —— 分支名自己带 / 很正常（feat/x），所以只按第一个拆。
+func splitUpstream(upstream string) (remote, branch string) {
+	if i := strings.Index(upstream, "/"); i > 0 {
+		return upstream[:i], upstream[i+1:]
+	}
+	return "", upstream
 }
 
 // promptForcePush 弹出强制推送二次确认。
