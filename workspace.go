@@ -157,6 +157,12 @@ func (a *app) workspaceFilterInput(c *ui.Context, pal palette) {
 	}
 }
 
+// wsCollapsed 供 filetree.FlattenFunc 问「工作区树的这个目录收起了吗」。
+// 与改动栏相反：编辑器栏默认全收起，只有用户点开过的目录才展开。
+func (a *app) wsCollapsed(key string) bool {
+	return !a.dirOpen(treeWorkspace, key)
+}
+
 // workspaceTreeView 画编辑器栏的文件树。筛选词变了就重算显示的文件 ——
 // 与改动栏同一套做法：直接比对值，不依赖控件的 Changed()。
 func (a *app) workspaceTreeView(c *ui.Context, pal palette, t *ui.Theme) {
@@ -164,7 +170,8 @@ func (a *app) workspaceTreeView(c *ui.Context, pal palette, t *ui.Theme) {
 		a.applyWsFilter()
 	}
 	// 筛选态一律展开：搜出来的文件藏在收起的目录里，等于没搜到。
-	rows := filetree.Flatten(a.wsTree, a.filesClosed, a.wsFilter != "")
+	// 平时按编辑器栏自己的折叠记录来，默认全收起（见 wsCollapsed）。
+	rows := filetree.FlattenFunc(a.wsTree, a.wsCollapsed, a.wsFilter != "")
 	if len(rows) == 0 {
 		msg := T("这个仓库里没有文件", "No files in this repository")
 		switch {
@@ -180,7 +187,7 @@ func (a *app) workspaceTreeView(c *ui.Context, pal palette, t *ui.Theme) {
 	}
 	a.wsList.Key = func(i int) any { return rows[i].Node.Key }
 	ui.List(c, &a.wsList, len(rows), func(i int) {
-		a.treeRowIn(c, pal, rows[i], a.wsFiles, &a.wsSel, a.syncEditorPane)
+		a.treeRowIn(c, pal, rows[i], rowSpec{list: a.wsFiles, sel: &a.wsSel, onClick: a.syncEditorPane, tree: treeWorkspace})
 	}).Grow(1)
 }
 
@@ -193,7 +200,7 @@ func (a *app) navWorkspaceFile(dir int) {
 	if len(a.wsFiles) == 0 {
 		return
 	}
-	rows := filetree.Flatten(a.wsTree, a.filesClosed, a.wsFilter != "")
+	rows := filetree.FlattenFunc(a.wsTree, a.wsCollapsed, a.wsFilter != "")
 
 	cur := -1
 	if a.wsSel >= 0 {

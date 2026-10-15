@@ -132,12 +132,21 @@ func walk(d *dirNode, prefix, keyPrefix string) []*Node {
 // flat 为 true 时忽略 collapsed（用于「全部展开」和筛选态 —— 筛选时
 // 必须无视折叠状态，否则搜到的文件可能藏在收起的目录里看不见）。
 func Flatten(nodes []*Node, collapsed map[string]bool, flat bool) []Row {
+	return FlattenFunc(nodes, func(key string) bool { return collapsed[key] }, flat)
+}
+
+// FlattenFunc 和 Flatten 一样摊平，但「某个目录是否收起」交给调用方判断。
+//
+// 两种默认值靠这个回调区分：改动列表那棵树默认展开、只记用户收起过哪些；
+// 编辑器栏的工作区树反过来 —— 默认全收起、只认用户展开过的那几个。树本身
+// 不必知道自己是哪一种，也就不会再有人把两份折叠状态混成一个 map。
+func FlattenFunc(nodes []*Node, collapsed func(key string) bool, flat bool) []Row {
 	var out []Row
 	var rec func(ns []*Node, depth int)
 	rec = func(ns []*Node, depth int) {
 		for _, n := range ns {
 			out = append(out, Row{Node: n, Depth: depth})
-			if n.Dir && (flat || !collapsed[n.Key]) {
+			if n.Dir && (flat || !collapsed(n.Key)) {
 				rec(n.Children, depth+1)
 			}
 		}

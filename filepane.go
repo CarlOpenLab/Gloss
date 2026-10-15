@@ -318,7 +318,19 @@ func (a *app) emptyTreeMsg() string {
 
 // treeRow 画改动栏（左侧文件列表）里的一行。见 treeRowIn。
 func (a *app) treeRow(c *ui.Context, pal palette, r filetree.Row) {
-	a.treeRowIn(c, pal, r, a.files, &a.fileSel, a.syncEditorPane)
+	a.treeRowIn(c, pal, r, rowSpec{list: a.files, sel: &a.fileSel, onClick: a.syncEditorPane, tree: treeChanges})
+}
+
+// rowSpec 是 treeRowIn 的入参：列表、选中下标、点击回调，加上「折叠状态
+// 记在哪一份」「要不要按改动上色」这两条只跟所在栏有关的开关。同一套画法
+// 因此能画两份列表：「改动」那份（a.files）和「编辑器」视图里整个工作区那
+// 份（a.wsFiles）。
+type rowSpec struct {
+	list     []gitrepo.File
+	sel      *int
+	onClick  func()
+	tree     treeFor
+	decorate bool
 }
 
 // treeRowIn 画文件树的一行。目录只画名字；文件画名字 + 增删行数 + 状态字母。
@@ -326,50 +338,64 @@ func (a *app) treeRow(c *ui.Context, pal palette, r filetree.Row) {
 // 行本身可点：目录行点了收起/展开，文件行点了让 diff 滚到那个文件的头上。
 // 选中态按**文件下标**记，不用 ui.List 的 Selected —— 那是扁平行下标，树一
 // 重建（筛选、折叠目录、刷新）就指到别的行去了，记文件下标怎么动都不会错。
-//
-// 文件从 list 里取、下标记在 sel 上，所以同一套画法能画两份列表：「改动」
-// 那份（a.files）和「编辑器」视图里整个工作区那份（a.wsFiles）。文件行点中
-// 之后再调 onClick，让那一栏自己把内容同步过去。
-func (a *app) treeRowIn(c *ui.Context, pal palette, r filetree.Row, list []gitrepo.File, sel *int, onClick func()) {
+// 文件从 o.list 里取、下标记在 o.sel 上，文件行点中之后再调 o.onClick，让
+// 那一栏自己把内容同步过去。
+func (a *app) treeRowIn(c *ui.Context, pal palette, r filetree.Row, o rowSpec) {
 	t := c.Theme()
 	n := r.Node
 
 	if n.Dir {
-		open := !a.filesClosed[n.Key]
+		open := a.dirOpen(o.tree, n.Key)
+		// 目录自己没有状态，「动没动过」看的是底下的文件。全收起的树里不给
+		// 目录上色，等于把哪儿动过整条藏起来 —— 那就白收起一层了。
+		labelColor := t.TextMuted
+		if o.decorate {
+			if s, ok := dirChangeStatus(n, o.list); ok {
+				labelColor = statusColor(s, pal)
+			}
+		}
 		row, arrow := treeRow(c, t, pal, treeRowOpts{Depth: r.Depth, HasKids: true, Open: open}, func() {
 			ui.Text(c, n.Label).FontSize(12).SingleLine().Grow(1).MinWidth(0).
-				TextColor(t.TextMuted)
+				TextColor(labelColor)
 		})
 		if arrow.Clicked() || row.Clicked() {
-			a.toggleFileDir(n.Key, open)
+			a.toggleDir(o.tree, n.Key, open)
 		}
 		return
 	}
 
-	if n.FileIdx < 0 || n.FileIdx >= len(list) {
+	if n.FileIdx < 0 || n.FileIdx >= len(o.list) {
 		treeRow(c, t, pal, treeRowOpts{Depth: r.Depth}, func() {
 			ui.Text(c, n.Label).FontSize(12).SingleLine()
 		})
 		return
 	}
 
-	f := list[n.FileIdx]
+	f := o.list[n.FileIdx]
 
 	// 勾选框要留到行构建完之后再判点击（见下面的 early return）。它在行里
 	// 是后建的子元素，指针事件会一路冒泡到整行 —— 不先问它，点一下既暂存
 	// 了文件又跳转了 diff。
 	var box ui.Element
 
-	row, _ := treeRow(c, t, pal, treeRowOpts{Depth: r.Depth, Selected: n.FileIdx == *sel}, func() {
+	row, _ := treeRow(c, t, pal, treeRowOpts{Depth: r.Depth, Selected: n.FileIdx == *o.sel}, func() {
 		// 历史提交和储藏的 diff 是只读的（SectionNone），那里不摆勾选框：
 		// 一个点了会对别的仓库状态动手的方框，比没有方框更糟。
 		if f.Section != gitrepo.SectionNone {
 			box = stageBox(c, pal, stageStateOf(f), a.op != gitrepo.OpNone)
 		}
 
-		// 已 review 的文件名变灰，一眼能看出哪些还没看
+		// 编辑器栏按改动给文件名上色（VSCode 那种：一眼扫出哪儿动过），
+		// 改动栏里则只有「已 review 变灰」这一种。
+		//
+		// 编辑器栏里上色优先于变灰：那一栏本来就是按改动找文件的，灰掉
+		// 等于把要找的东西藏起来。改动栏里反过来 —— 每个文件都改了，
+		// 全都上色等于全彩，反而没了信号，所以那一栏不上色。
 		nameColor := t.Text
-		if a.isViewed(f) {
+		switch {
+		case o.decorate && f.Status != "":
+			nameColor = statusColor(f.Status, pal)
+		case a.isViewed(f):
 			nameColor = t.TextMuted
 		}
 		ui.Text(c, n.Label).FontSize(12).SingleLine().Grow(1).MinWidth(0).TextColor(nameColor)
@@ -402,25 +428,112 @@ func (a *app) treeRowIn(c *ui.Context, pal palette, r filetree.Row, list []gitre
 		return
 	}
 	if row.Clicked() {
-		*sel = n.FileIdx
+		*o.sel = n.FileIdx
 		// 改动区跟着选中走（它在下一帧自己发现选中的文件变了）。
-		if onClick != nil {
-			onClick()
+		if o.onClick != nil {
+			o.onClick()
 		}
 	}
 }
 
-// toggleFileDir 收起/展开一个目录。记的是「用户收起过哪些」——
-// 没记过的默认展开：review 改动时几乎总想直接看到文件列表。
-func (a *app) toggleFileDir(key string, open bool) {
+// treeFor 选折叠状态记在哪一份上。两份名单的默认值正好相反。
+type treeFor int
+
+const (
+	treeChanges   treeFor = iota // 改动栏：默认展开
+	treeWorkspace                // 编辑器栏的工作区：默认全收起
+)
+
+// dirSet 是该树的折叠记录。
+func (a *app) dirSet(f treeFor) map[string]bool {
+	if f == treeWorkspace {
+		if a.wsOpen == nil {
+			a.wsOpen = map[string]bool{}
+		}
+		return a.wsOpen
+	}
 	if a.filesClosed == nil {
 		a.filesClosed = map[string]bool{}
 	}
-	if open {
-		a.filesClosed[key] = true
+	return a.filesClosed
+}
+
+// dirOpen 问一个目录是不是展开的。
+//
+// 改动栏默认展开、只记「收起过哪些」—— review 改动时几乎总想直接看到
+// 文件列表；编辑器栏的工作区树默认全收起、只记「展开过哪些」—— 一进
+// 编辑器先看到的应该是目录结构，而不是一屏文件。记录里只存偏离默认的
+// 那些，回到默认就把键删掉，来回切标签页不会越记越多。
+func (a *app) dirOpen(f treeFor, key string) bool {
+	set := a.dirSet(f)
+	if f == treeWorkspace {
+		return set[key] // 默认收起：记过的才是展开的
+	}
+	return !set[key] // 默认展开：记过的才是收起的
+}
+
+// toggleDir 翻转一个目录。open 是当前状态，翻转后回到默认值就把记录删掉，
+// 于是来回点不会在记录里越攒越多。
+func (a *app) toggleDir(f treeFor, key string, open bool) {
+	set := a.dirSet(f)
+	nw := !open
+	// 两份记录的语义相反（见 dirOpen）：改动栏存「收起」，工作区存「展开」。
+	if f == treeWorkspace {
+		if nw { // 展开 —— 偏离默认，要记
+			set[key] = true
+			return
+		}
+		delete(set, key) // 回到默认收起
 		return
 	}
-	delete(a.filesClosed, key)
+	if !nw { // 收起 —— 偏离默认，要记
+		set[key] = true
+		return
+	}
+	delete(set, key) // 回到默认展开
+}
+
+// dirChangeStatus 找目录里最要紧的那个改动状态。目录自己不会改，改的是
+// 底下的文件；全收起的树里不给目录上色，等于把「哪儿动过」整条藏起来。
+//
+// 优先级只用来在目录上挑一个代表的颜色，按「看见它的迫切程度」排：冲突
+// 和删除最要紧（文件可能已经不在工作区里了），其次是修改，再次是重命名
+// 或复制，最后才是新增 —— 新增的文件至少还好好待在那儿。
+func dirChangeStatus(n *filetree.Node, list []gitrepo.File) (gitrepo.Status, bool) {
+	var best gitrepo.Status
+	found := false
+	for _, kid := range n.Children {
+		var s gitrepo.Status
+		var ok bool
+		switch {
+		case kid.Dir:
+			s, ok = dirChangeStatus(kid, list)
+		case kid.FileIdx >= 0 && kid.FileIdx < len(list):
+			s, ok = list[kid.FileIdx].Status, list[kid.FileIdx].Status != ""
+		}
+		if !ok {
+			continue
+		}
+		if !found || statusRank(s) < statusRank(best) {
+			best, found = s, true
+		}
+	}
+	return best, found
+}
+
+// statusRank 越小越要紧，只用于在目录上挑一个代表的颜色（见 dirChangeStatus）。
+func statusRank(s gitrepo.Status) int {
+	switch s {
+	case gitrepo.StatusConflict:
+		return 0
+	case gitrepo.StatusDeleted:
+		return 1
+	case gitrepo.StatusModified:
+		return 2
+	case gitrepo.StatusRenamed, gitrepo.StatusCopied:
+		return 3
+	}
+	return 4
 }
 
 // filePaneFooter 是文件栏底下的那条栏脚：整份改动一共增删了多少行，

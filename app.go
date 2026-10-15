@@ -218,6 +218,9 @@ type app struct {
 	wsFilter     string
 	wsTreeFilter string
 	wsSel        int
+	// wsOpen 记的是工作区树里用户展开过的目录（编辑器栏默认全收起，见
+	// dirOpen）。和 filesClosed 是两份独立的记录：两份名单的默认值相反。
+	wsOpen map[string]bool
 
 	// —— 已 review：文件路径 -> 当时的内容指纹 ——
 	// 指纹对不上就说明文件又变了，标记自动失效。

@@ -70,6 +70,7 @@ type repoTab struct {
 	wsFilter     string
 	wsTreeFilter string
 	wsSel        int
+	wsOpen       map[string]bool
 
 	tab         int // 0 = 改动, 1 = 历史
 	commits     []gitrepo.Commit
@@ -151,6 +152,7 @@ func (a *app) saveActiveTab() {
 	tab.wsFilter = a.wsFilter
 	tab.wsTreeFilter = a.wsTreeFilter
 	tab.wsSel = a.wsSel
+	tab.wsOpen = a.wsOpen
 
 	tab.tab = a.tab
 	tab.commits = a.commits
@@ -224,6 +226,7 @@ func (a *app) restoreActiveTab() {
 	a.wsFilter = tab.wsFilter
 	a.wsTreeFilter = tab.wsTreeFilter
 	a.wsSel = tab.wsSel
+	a.wsOpen = tab.wsOpen
 
 	a.tab = tab.tab
 	a.commits = tab.commits

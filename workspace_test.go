@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/CarlOpenLab/Gloss/internal/diff"
+	"github.com/CarlOpenLab/Gloss/internal/filetree"
 	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
 	"github.com/egoist/mygo/ui"
 )
@@ -67,10 +68,16 @@ func TestEditorViewListsWholeWorkspace(t *testing.T) {
 
 	tt := ui.NewTester(a.view, 1280, 860)
 	tt.Frame()
-	for _, want := range []string{"README.md", "untouched.go"} {
+	// 根一层的文件和目录都在。
+	for _, want := range []string{"README.md", "a.go", "new.go", "internal/clean"} {
 		if !tt.HasText(want) {
 			t.Fatalf("编辑器栏里没有列出 %s（整份工作区都该列出来）", want)
 		}
+	}
+	// 但树默认全收起：子目录里的文件先不露面，免得一进编辑器就被一大片
+	// 文件糊住。想看就点开。
+	if tt.HasText("untouched.go") {
+		t.Fatalf("目录默认收起，untouched.go 不该先露出来")
 	}
 	// README.md、a.go、new.go、internal/clean/untouched.go，加上 .gitignore
 	// —— 计数报的是整份工作区，不是改动数。
@@ -82,10 +89,78 @@ func TestEditorViewListsWholeWorkspace(t *testing.T) {
 		t.Fatalf("编辑器栏底栏该报出改过的文件数")
 	}
 
+	// 点开那条目录链，文件就露出来了。（internal/clean 只有一个子项，
+	// 按 filetree 的规矩合并成一行。）
+	tt.Click("internal/clean")
+	tt.Frame()
+	if !tt.HasText("untouched.go") {
+		t.Fatalf("展开 internal/clean 之后该看到 untouched.go")
+	}
+
 	a.setViewMode(viewModeGit)
 	tt.Frame()
 	if tt.HasText("untouched.go") {
 		t.Fatalf("改动栏不该列出没改过的文件")
+	}
+}
+
+// 工作区树把每个文件的状态带进来（treeRowIn 据此上色）：改过的 a.go 是 M，
+// new.go 是新增的未跟踪文件，没动过的不带状态 —— 于是「有色」本身成为信息。
+func TestWorkspaceTreeCarriesStatusForColor(t *testing.T) {
+	a := workspaceApp(t)
+	a.setViewMode(viewModeEditor)
+	settle(t, a)
+
+	status := map[string]gitrepo.Status{}
+	for _, f := range a.wsFiles {
+		status[pathOf(f)] = f.Status
+	}
+	if status["a.go"] != gitrepo.StatusModified {
+		t.Fatalf("a.go 该带 M，实际 %q", status["a.go"])
+	}
+	if status["new.go"] != gitrepo.StatusUntracked {
+		t.Fatalf("new.go 该是未跟踪，实际 %q", status["new.go"])
+	}
+	if status["README.md"] != "" || status["internal/clean/untouched.go"] != "" {
+		t.Fatalf("没动过的文件不该带状态")
+	}
+}
+
+// 目录行取子树里最重的那一档上色：冲突 > 删除 > 修改 > 新增，且只含没动过
+// 的文件的目录不上色 —— 不然目录链会一路绿到底，把「这儿动过」指错地方。
+func TestDirChangeStatusPicksUrgentChild(t *testing.T) {
+	mk := func(p string, st gitrepo.Status) gitrepo.File {
+		return gitrepo.File{FileDiff: diff.FileDiff{NewPath: p}, Status: st}
+	}
+	files := []gitrepo.File{
+		mk("x/mod.go", gitrepo.StatusModified),
+		mk("x/new.go", gitrepo.StatusUntracked),
+		mk("x/clean.go", ""),
+	}
+	tree := filetree.Build(files)
+	var find func(ns []*filetree.Node, key string) *filetree.Node
+	find = func(ns []*filetree.Node, key string) *filetree.Node {
+		for _, n := range ns {
+			if n.Key == key {
+				return n
+			}
+			if got := find(n.Children, key); got != nil {
+				return got
+			}
+		}
+		return nil
+	}
+	dir := find(tree, "d:x")
+	if dir == nil {
+		t.Fatalf("该有目录 x")
+	}
+	if s, ok := dirChangeStatus(dir, files); !ok || s != gitrepo.StatusModified {
+		t.Fatalf("x 里有 M 和未跟踪，该报最重的 M，实际 %q/%v", s, ok)
+	}
+
+	cleanFiles := []gitrepo.File{mk("y/clean.go", "")}
+	if s, ok := dirChangeStatus(find(filetree.Build(cleanFiles), "d:y"), cleanFiles); ok {
+		t.Fatalf("y 里只有没动过的文件，不该有色：%q", s)
 	}
 }
 
