@@ -859,7 +859,8 @@ func (a *app) toolbarHeight(c *ui.Context) float32 {
 	return 46
 }
 
-// toolbar 是二级工具栏：提供 [Git 面板 | 终端 | 编辑器] 模式切换及当前模式对应的操作。
+// toolbar 是二级工具栏：提供 [改动 | 历史 | 终端 | 编辑器] 四选一的切换及
+// 当前那一块对应的操作。
 func (a *app) toolbar(c *ui.Context, pal palette) {
 	t := c.Theme()
 	bar := c.TitleBar()
@@ -867,15 +868,25 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 	padLeft := float32(12)
 
 	ui.Toolbar(c, func() {
-		// 视图模式切换：Git 面板 ⟷ 内置终端 ⟷ 代码编辑器
-		vm := a.viewMode
-		toolbarSegmentedIcons(c, pal, &vm, false,
-			segmentedIconItem{label: "Git", tip: Tf("Git 可视化面板 %s / Ctrl+~", "Git GUI Panel %s / Ctrl+~", K("⌘1")), icon: iconFileDiff},
-			segmentedIconItem{label: "Terminal", tip: Tf("内置终端 %s / Ctrl+~", "Built-in Terminal %s / Ctrl+~", K("⌘2")), icon: iconTerminal},
-			segmentedIconItem{label: "Editor", tip: Tf("代码编辑器 %s", "Code Editor %s", K("⌘3")), icon: iconCode},
+		// 「现在看哪一块」的四个选择都在这一处：改动 / 历史 / 终端 / 编辑器。
+		//
+		// 改动与历史原先长在侧栏顶部（一行文字 + 图标），终端与编辑器在这里
+		// —— 同一个问题（我现在看的是哪一块）在屏幕两端各摆了一份，⌘1 ⌘2
+		// 还得按当前模式分两种意思。并成一条之后，四格就是四种看法，⌘1~⌘4
+		// 依次对应，侧栏那一栏也空出来给分支树。
+		//
+		// 前两格要有仓库才点得动（setTab 自己也把着这道门），后两格不必，
+		// 所以关闭的是单格而不是整条控件。
+		noRepo := !a.repoReady()
+		sec := a.section()
+		toolbarSegmentedIcons(c, pal, &sec, false,
+			segmentedIconItem{label: T("改动", "Changes"), tip: Tf("工作区改动 %s", "Working tree changes %s", K("⌘1")), icon: iconFileDiff, off: noRepo},
+			segmentedIconItem{label: T("历史", "History"), tip: Tf("提交历史与拓扑图 %s", "Commit history & graph %s", K("⌘2")), icon: iconGitCommit, off: noRepo},
+			segmentedIconItem{label: T("终端", "Terminal"), tip: Tf("内置终端 %s / Ctrl+~", "Built-in Terminal %s / Ctrl+~", K("⌘3")), icon: iconTerminal},
+			segmentedIconItem{label: T("编辑器", "Editor"), tip: Tf("代码编辑器 %s", "Code Editor %s", K("⌘4")), icon: iconCode},
 		)
-		if vm != a.viewMode {
-			a.setViewMode(vm)
+		if sec != a.section() {
+			a.setSection(sec)
 		}
 
 		toolbarDivider(c, pal)
@@ -900,7 +911,8 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 			return
 		}
 
-		// 侧栏未开启时在工具栏左侧展示仓库名下拉与分支；侧栏开启时仓库名已位于侧栏顶部，工具栏直接展示当前分支
+		// 侧栏未开启时在工具栏左侧展示仓库名下拉与分支；侧栏开启时这一行留给分支芯片
+		// —— 那时仓库名在窗口顶栏的项目标签页上，工具栏不必再说一遍。
 		if !a.sidebarOn {
 			a.repoHeader(c, t, pal)
 		} else if a.branch != "" {
@@ -929,8 +941,6 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 			a.editorToolbar(c, pal)
 			return
 		}
-
-		noRepo := !a.repoReady()
 
 		// unified / split 切换（Lucide rows-3 / columns-2 矢量图标）。
 		split := a.split
@@ -1099,6 +1109,11 @@ func (a *app) repoDropdownPanel(c *ui.Context, panel ui.Element, pal palette) {
 					if isCurrent {
 						// 语义靠圆点，不靠染色（§2.5）。
 						specChip(c, pal, T("当前", "Current"), pal.laneColor(0), rowChipH, rowChipText)
+					}
+
+					// 同一份记录在 [+] 的下拉里也能删（见 recentRemoveButton）。
+					if a.recentRemoveButton(c, pal, pathCopy, base) {
+						a.removeRecentRepo(pathCopy)
 					}
 				})
 
@@ -1443,17 +1458,6 @@ func (a *app) totalDel() int {
 		n += f.DelCount
 	}
 	return n
-}
-
-// dirtyCount 计算工作区未提交的文件数量（staged + unstaged），用于侧栏「改动」项上的数字角标。
-func (a *app) dirtyCount() int {
-	if a.workFiles != nil {
-		return len(a.workFiles)
-	}
-	if a.tab == 0 {
-		return len(a.allFiles)
-	}
-	return 0
 }
 
 // run 起一个后台任务，并登记到 bg 上。所有后台 goroutine 都从这里出发，

@@ -63,21 +63,23 @@ func TestMenuAccelerators(t *testing.T) {
 	m := buildAppMenu(newApp())
 
 	want := map[string]string{
-		"打开仓库…":  "CmdOrCtrl+O",
-		"查看改动":   "CmdOrCtrl+1",
-		"查看历史":   "CmdOrCtrl+2",
-		"模型设置…":  "CmdOrCtrl+,",
-		"刷新":     "CmdOrCtrl+R",
-		"显示侧栏":   "CmdOrCtrl+Shift+B",
-		"放大代码字号": "CmdOrCtrl+Plus",
-		"缩小代码字号": "CmdOrCtrl+-",
-		"恢复默认字号": "CmdOrCtrl+0",
-		"命令栏…":   "CmdOrCtrl+K",
-		"筛选文件":   "CmdOrCtrl+P",
-		"新建分支…":  "CmdOrCtrl+Shift+N",
-		"抓取":     "CmdOrCtrl+Shift+F",
-		"拉取":     "CmdOrCtrl+Shift+P",
-		"推送":     "CmdOrCtrl+Shift+U",
+		"打开仓库…":   "CmdOrCtrl+O",
+		"查看改动":    "CmdOrCtrl+1",
+		"查看历史":    "CmdOrCtrl+2",
+		"打开终端":    "CmdOrCtrl+3",
+		"打开代码编辑器": "CmdOrCtrl+4",
+		"模型设置…":   "CmdOrCtrl+,",
+		"刷新":      "CmdOrCtrl+R",
+		"显示侧栏":    "CmdOrCtrl+Shift+B",
+		"放大代码字号":  "CmdOrCtrl+Plus",
+		"缩小代码字号":  "CmdOrCtrl+-",
+		"恢复默认字号":  "CmdOrCtrl+0",
+		"命令栏…":    "CmdOrCtrl+K",
+		"筛选文件":    "CmdOrCtrl+P",
+		"新建分支…":   "CmdOrCtrl+Shift+N",
+		"抓取":      "CmdOrCtrl+Shift+F",
+		"拉取":      "CmdOrCtrl+Shift+P",
+		"推送":      "CmdOrCtrl+Shift+U",
 	}
 	for label, accel := range want {
 		if got := menuItem(t, m, label).Accelerator; got != accel {

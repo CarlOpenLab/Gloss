@@ -103,7 +103,7 @@ When reviewing large pull requests or AI-generated diffs, the biggest bottleneck
 | `⌘S` | Save the edited side of the diff / editor (a conflict also runs `git add`) |
 | `⌘⏎` | Commit staged changes |
 | `⌘O` | Open repository |
-| `⌘1` / `⌘2` | Switch between Changes / History |
+| `⌘1` / `⌘2` / `⌘3` / `⌘4` | Changes / History / Terminal / Editor (the four toolbar segments — clicking them does the same) |
 | `⌘⇧B` | Toggle Sidebar |
 | `⌘R` | Refresh repository status |
 | `⌘⇧F` / `⌘⇧P` / `⌘⇧U` | Fetch / Pull / Push |

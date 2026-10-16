@@ -1,7 +1,6 @@
 package main
 
 import (
-	"strconv"
 	"strings"
 	"time"
 
@@ -36,11 +35,12 @@ func (a *app) sidebar(c *ui.Context, pal palette) {
 	ui.Column(c).Width(sw).Shrink(0).
 		Background(pal.sideBg).
 		Children(func() {
-			// 侧栏顶部只有工作区导航（Fork 风格：改动与历史）
-			a.sidebarHeader(c, t, pal)
-
+			// 侧栏顶部不再有工作区导航。改动 / 历史 已经并进工具栏那段
+			// 「改动 / 历史 / 终端 / 编辑器」的图标切换（见 app.toolbar）：
+			// 四个「现在看哪一块」的选择本该在一处，而侧栏这一栏本来就是
+			// 分支 / 远程 / 标签 / 储藏树，多出来的两行导航只是把它往下压。
 			if a.repoReady() {
-				ui.Box(c).Key("ref-filter-wrap").Padding(0, 8, 6, 8).Shrink(0).Children(func() {
+				ui.Box(c).Key("ref-filter-wrap").Padding(8, 8, 6, 8).Shrink(0).Children(func() {
 					a.refFilterInput(c, pal)
 				})
 			}
@@ -68,99 +68,6 @@ func (a *app) sidebar(c *ui.Context, pal palette) {
 				}
 			})
 		})
-}
-
-// sidebarHeader 呈现侧边栏顶部的工作区核心导航（改动 / 历史）。
-//
-// 这里原先还压着一张仓库名称卡片（名字 + 路径 + 最近项目下拉）。项目
-// 标签页固定到窗口顶栏之后（见 projectTabBar），同一个项目名在 60px 之内
-// 出现两遍，读起来像两个东西；顶栏那个还能切项目、建新项目，卡片只剩
-// 重复。最近项目仍然够得着：菜单栏「文件 → 最近打开的项目」和命令面板
-// （⌘K）里都有。
-func (a *app) sidebarHeader(c *ui.Context, t *ui.Theme, pal palette) {
-	ui.Column(c).Padding(6, 8, 4, 8).Gap(3).Shrink(0).FillWidth().Children(func() {
-		// 工作区主导航（改动与历史）
-		a.sidebarWorkspaceNav(c, t, pal)
-
-		// 分割线
-		ui.Box(c).Height(1).FillWidth().Margin(4, 2).Background(pal.hairline)
-	})
-}
-
-// sidebarWorkspaceNav 呈现 Fork 规范的工作区核心导航项：改动（带改动文件计数）与 历史。
-func (a *app) sidebarWorkspaceNav(c *ui.Context, t *ui.Theme, pal palette) {
-	noRepo := !a.repoReady()
-
-	// 1. 改动（Local Changes）
-	a.sidebarNavItem(c, t, pal, 0, T("改动", "Changes"), Tf("工作区改动 %s", "Working tree changes %s", K("⌘1")), iconFileDiff, noRepo, a.dirtyCount())
-
-	// 2. 历史（All Commits）
-	a.sidebarNavItem(c, t, pal, 1, T("历史", "History"), Tf("提交历史与拓扑图 %s", "Commit history & graph %s", K("⌘2")), iconGitCommit, noRepo, 0)
-}
-
-// sidebarNavItem 画侧栏主导航的一行（如「改动」或「历史」）。
-//
-// 激活态照 §4.3 来：Surface 2 底色 + 左侧 2px 强调白指示条 + 提亮到 Ink 的文字，
-// 不再是原来那块满宽的蓝底。三条线索里只有指示条带颜色 —— 位置、明度、色相
-// 各说一遍「就是这一项」。指示条是全屏少数几处实心强调之一，其余留给主按钮。
-func (a *app) sidebarNavItem(c *ui.Context, t *ui.Theme, pal palette, tabIdx int, label, tip string, svg *ui.SVG, disabled bool, badgeCount int) {
-	selected := a.tab == tabIdx && !disabled
-	btn := ui.ButtonBase(c).Height(28).FillWidth().Radius(radiusSM).
-		Padding(0, 8).Gap(7).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).Label(label).Tooltip(tip).Disabled(disabled)
-
-	bg := ui.Transparent
-	fg := pal.inkMuted
-	iconCol := pal.inkMuted
-	switch {
-	case disabled:
-		// 禁用态用 Ink Tertiary（§2.3），不是把 Ink Subtle 调暗 ——
-		// 那一档本身就是给「还没轮到你」的东西留的。
-		fg = pal.inkTertiary
-		iconCol = pal.inkTertiary
-		btn.Cursor(ui.CursorDefault)
-	case selected:
-		bg = pal.surface2
-		fg = pal.ink
-		iconCol = pal.ink
-	case btn.Hovered():
-		bg = pal.surface2
-		fg = pal.ink
-		iconCol = pal.ink
-	}
-	btn.Background(bg)
-	if selected {
-		// 指示条直接画在按钮左沿：放进内容流里当第一个子元素的话，它会落在
-		// 8px 内边距之后，看着像内容的一部分，而不是「这一行被选中了」。
-		btn.Draw(func(p *ui.Painter, r ui.Rect) {
-			p.Fill(ui.Rect{X: r.X, Y: r.Y + 6, W: 2, H: r.H - 12}, t.Accent, 1)
-		})
-	}
-	fadeColors(btn)
-
-	btn.Children(func() {
-		drawIcon(c, svg, 14, iconCol)
-
-		txt := ui.Text(c, label).FontSize(textButton).Grow(1).SingleLine().TextColor(fg)
-		if selected {
-			txt.FontWeight(weightSemibold)
-		}
-
-		if badgeCount > 0 && !disabled {
-			// 计数角标是 §3 里唯一用 pill 的地方。
-			ui.Box(c).Radius(radiusPill).Padding(1, 6).
-				Background(pal.surface3).Children(func() {
-				ui.Text(c, strconv.Itoa(badgeCount)).FontSize(textCaption).
-					FontWeight(weightMedium).
-					Font("monospace").FontFeatures("tnum").
-					TextColor(t.TextMuted)
-			})
-		}
-	})
-
-	if btn.Clicked() {
-		a.setTab(tabIdx)
-	}
 }
 
 // refFilterInput 是侧栏的筛选框。

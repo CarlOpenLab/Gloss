@@ -266,6 +266,10 @@ type segmentedIconItem struct {
 	label string
 	tip   string
 	icon  *ui.SVG
+	// off 让这一格单独变灰、点不动。分段里几格各有各的前提时用它 ——
+	// 「改动 / 历史」要有仓库而「终端 / 编辑器」不必，整条控件关掉就走
+	// toolbarSegmentedIcons 的 off 参数。
+	off bool
 }
 
 // toolbarSegmentedIcons 是工具栏上的图标分段控件（如「Unified / Split」切换）。
@@ -280,11 +284,14 @@ func toolbarSegmentedIcons(c *ui.Context, pal palette, selected *int, off bool, 
 		for i, it := range items {
 			s := parts.Segment(i).Size(26, 24).Radius(radiusSM).
 				Cursor(ui.CursorPointer).Label(it.label).Tooltip(it.tip)
-			sel := i == *selected
+			if it.off {
+				s.Disabled(true)
+			}
+			sel := i == *selected && !it.off
 			bg := ui.Transparent
 			fg := pal.inkMuted
 			switch {
-			case off:
+			case off || it.off:
 				fg = pal.inkTertiary
 			case sel:
 				bg = pal.surface3
@@ -573,5 +580,31 @@ func specModal(c *ui.Context, pal palette, open *bool, fn func()) {
 			MaxWidth(w-t.Space(10)).MaxHeight(h-t.Space(10)).
 			Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.24))
 		fn()
+	})
+}
+
+// dragAfter 看指针落在元素哪半边：右半边就插到它后面，左半边插到前面。
+func dragAfter(el ui.Element) bool {
+	if x, _, over := el.PointerPosition(); over {
+		return x > el.Bounds().W/2
+	}
+	return false
+}
+
+// drawDropMarker 在元素边上竖一道强调色，告诉用户「松手会插到这儿」。
+// 项目标签页和终端芯片共用这一处 —— 拖到哪、插哪儿，两边必须是同一个说法。
+//
+// 上下各探出元素一框 5px：框架拖拽时会在指针上画一份拖动元素的副本
+// （mygo 的 paintDrag，0.75 不透明度，画在整棵元素树之后），副本正好盖住
+// 元素本身这一框 —— 画在框里的提示线会被它压得一点也看不见。探出框外的
+// 这两截露在副本外面，线才看得见（见 TestProjectTabDragDrawsInsertMarker）。
+// 横向上居中在边缘上：落点是「这一页的前/后」，线就该压在那条缝上。
+func drawDropMarker(el ui.Element, after bool, accent ui.Color) {
+	el.DrawOver(func(p *ui.Painter, r ui.Rect) {
+		x := r.X - 1
+		if after {
+			x = r.X + r.W - 1
+		}
+		p.Fill(ui.Rect{X: x, Y: r.Y - 5, W: 2, H: r.H + 10}, accent, 1)
 	})
 }

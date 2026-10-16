@@ -150,3 +150,64 @@ func TestHeaderRepoDropdownPopover(t *testing.T) {
 		t.Error("按 Escape 后 repoDropdownOpen 应该为 false")
 	}
 }
+
+// 最近打开的项目，一条一条删得掉。
+//
+// 删的是「这一条记录」，不是「关掉这个项目」：正开着的标签页照旧开着，
+// 也不会顺手把这一条打开，只是下一次不再从最近列表里冒出来。
+func TestRecentRepoRemovedFromPlusMenu(t *testing.T) {
+	a := richApp(t)
+	// 再塞两条历史进去（richApp 已经把当前仓库记进去了）。
+	dirA := filepath.Join(t.TempDir(), "old-a")
+	dirB := filepath.Join(t.TempDir(), "old-b")
+	a.store.AddRecentRepo(dirA)
+	a.store.AddRecentRepo(dirB)
+	a.persist()
+	tabsBefore := len(a.tabs)
+
+	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+	tt.Frame()
+
+	// 开 [+] 的下拉。
+	if err := tt.Click("新建项目标签页"); err != nil {
+		t.Fatalf("点不开 [+] 的下拉：%v", err)
+	}
+	tt.Frame()
+	if _, ok := tt.Find(dirA); !ok {
+		t.Fatalf("下拉里找不到 %s：%q", dirA, tt.Texts())
+	}
+
+	// 点 dirA 那一行的 ×。按标签点：每行的 × 都带着自己那条的名称，
+	// 所以点的是哪一条不含糊（ro 坐标会落在行上的文字里，等于点了这一行）。
+	if err := tt.Click(Tf("从最近列表移除 %s", "Remove %s from recent", filepath.Base(dirA))); err != nil {
+		t.Fatalf("点不到 %s 那行的 ×：%v\n%q", dirA, err, tt.Texts())
+	}
+	tt.Frame()
+
+	got := a.store.State().RecentRepos
+	for _, p := range got {
+		if p == dirA {
+			t.Errorf("删掉了 %s，它还在最近列表里：%q", dirA, got)
+		}
+	}
+	found := false
+	for _, p := range got {
+		if p == dirB {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("只该删掉那一条，但 %s 也不见了：%q", dirB, got)
+	}
+	if _, ok := tt.Find(dirA); ok {
+		t.Errorf("删完这一行还画在面板上：%q", tt.Texts())
+	}
+	if _, ok := tt.Find(dirB); !ok {
+		t.Errorf("另一条不该跟着消失：%q", tt.Texts())
+	}
+	// 点 × 只是删记录：不该顺手把 dirA 打开成一个新标签页。
+	if len(a.tabs) != tabsBefore {
+		t.Errorf("删一条最近记录开了标签页：%d -> %d", tabsBefore, len(a.tabs))
+	}
+}

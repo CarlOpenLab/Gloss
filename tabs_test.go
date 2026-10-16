@@ -1,6 +1,7 @@
 package main
 
 import (
+	"image"
 	"io"
 	"path/filepath"
 	"sync"
@@ -413,4 +414,381 @@ func TestTerminalFontReachesLiveSession(t *testing.T) {
 	if cols, _, after := conn.size(); cols != at24 || after != calls {
 		t.Errorf("字体没变却又推了一次：列数 %d → %d，推送 %d → %d", at24, cols, calls, after)
 	}
+}
+
+// dragBetween 按住 (fromX, fromY) 一路挪到 (toX, toY) 再松手。中间分几步走，
+// 因为起手要指针挪够几个 DIP（见 mygo 的 dragStart）：一下就跳过去不算拖。
+func dragBetween(tt *ui.Tester, fromX, fromY, toX, toY float32) {
+	tt.Press(fromX, fromY)
+	for k := 1; k <= 4; k++ {
+		f := float32(k) / 4
+		tt.Move(fromX+(toX-fromX)*f, fromY+(toY-fromY)*f)
+	}
+	tt.Release(toX, toY)
+}
+
+// reorder 是项目标签页和终端芯片两处拖动共用的那一步：落点一律是「插到
+// 第 to 项前面」，而把要挪的那一项摘掉之后，落点在它后面的下标都要减一。
+// 这一步算错了，表现是「往右拖一格没动、拖两格跑过头」。
+func TestReorderMovesItem(t *testing.T) {
+	cases := []struct {
+		name     string
+		from, to int
+		want     []string
+	}{
+		{"往右挪一格", 0, 2, []string{"b", "a", "c", "d"}},
+		{"往右挪两格", 0, 3, []string{"b", "c", "a", "d"}},
+		{"往左挪", 3, 1, []string{"a", "d", "b", "c"}},
+		{"挪到最末", 0, 4, []string{"b", "c", "d", "a"}},
+		{"挪到最前", 3, 0, []string{"d", "a", "b", "c"}},
+		// to == from（插到自己前面）和 to == from+1（插到自己后面）都是原地
+		// 不动：这两个落点说的就是「现在这样」。
+		{"插在自己前面", 1, 1, []string{"a", "b", "c", "d"}},
+		{"插在自己后面", 1, 2, []string{"a", "b", "c", "d"}},
+		// 越界的落点原样返回，而不是把某一页弄丢。
+		{"落点越界", 1, 9, []string{"a", "b", "c", "d"}},
+		{"来源越界", 9, 1, []string{"a", "b", "c", "d"}},
+	}
+	for _, tc := range cases {
+		got := reorder([]string{"a", "b", "c", "d"}, tc.from, tc.to)
+		if len(got) != len(tc.want) {
+			t.Errorf("%s：长度 %d，想要 %d（%q）", tc.name, len(got), len(tc.want), got)
+			continue
+		}
+		for i := range got {
+			if got[i] != tc.want[i] {
+				t.Errorf("%s：%q，想要 %q", tc.name, got, tc.want)
+				break
+			}
+		}
+	}
+}
+
+// moveTab 挪的是顺序，不是选择：活动的那一页跟着它自己走（按指针认回来），
+// 而且新的顺序会落进 store —— 下一次启动看到的就是拖完的样子。
+func TestMoveTabKeepsActiveAndPersistsOrder(t *testing.T) {
+	a := newApp()
+	repo1 := filepath.Join(t.TempDir(), "repo1")
+	repo2 := filepath.Join(t.TempDir(), "repo2")
+	repo3 := filepath.Join(t.TempDir(), "repo3")
+	a.openInNewTab(repo1)
+	a.openInNewTab(repo2)
+	a.openInNewTab(repo3)
+
+	// 回到第一页，再把第一页拖到最末。
+	a.switchTab(0)
+	active := a.currentTab()
+	a.moveTab(0, 3)
+
+	if len(a.tabs) != 3 {
+		t.Fatalf("挪完还有 %d 页，想要 3 页", len(a.tabs))
+	}
+	if got := []string{a.tabs[0].path, a.tabs[1].path, a.tabs[2].path}; got[0] != repo2 || got[1] != repo3 || got[2] != repo1 {
+		t.Errorf("顺序是 %q，想要 [%s %s %s]", got, repo2, repo3, repo1)
+	}
+	if a.activeTab != 2 {
+		t.Errorf("活动页下标是 %d，想要 2", a.activeTab)
+	}
+	if a.currentTab() != active {
+		t.Error("挪完之后活动页换人了 —— 挪顺序不该改选择")
+	}
+	if got := a.store.State().OpenRepos; len(got) != 3 || got[2] != repo1 {
+		t.Errorf("存下来的打开顺序是 %q，想要末位是 %s", got, repo1)
+	}
+	// 再挪回来一次：从最末拖到最前。
+	a.moveTab(2, 0)
+	if got := a.tabs[0].path; got != repo1 {
+		t.Errorf("挪回最前后第一页是 %s，想要 %s", got, repo1)
+	}
+	if a.currentTab() != active || a.activeTab != 0 {
+		t.Errorf("挪回最前后活动页是下标 %d（%v），想要下标 0 上的那一页", a.activeTab, a.currentTab() == active)
+	}
+}
+
+// 项目标签页拖一下就能换位置：按住第一页拖到第三页的右半边，它就插到最末。
+// 这是拿走鼠标那一下真会发生的事 —— reorder 算得对不代表接得上（落点怎么
+// 算、Drop 落在哪一页上，都是另一码事）。
+func TestProjectTabsDragToReorder(t *testing.T) {
+	a := newApp()
+	repo1 := filepath.Join(t.TempDir(), "repo1")
+	repo2 := filepath.Join(t.TempDir(), "repo2")
+	repo3 := filepath.Join(t.TempDir(), "repo3")
+	a.openInNewTab(repo1)
+	a.openInNewTab(repo2)
+	a.openInNewTab(repo3)
+	// 回到第一页：拖它的才是「第一页」。
+	a.switchTab(0)
+
+	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+	tt.Frame()
+
+	first, ok := tt.Find("repo1")
+	if !ok {
+		t.Fatalf("顶栏上找不到 repo1 那一页：%q", tt.Texts())
+	}
+	last, ok := tt.Find("repo3")
+	if !ok {
+		t.Fatalf("顶栏上找不到 repo3 那一页：%q", tt.Texts())
+	}
+	// 落到最后一页的右半边 = 插到它后面。
+	dragBetween(tt, first.X+first.W/2, first.Y+first.H/2, last.X+last.W-3, last.Y+last.H/2)
+	tt.Frame()
+
+	got := []string{a.tabs[0].path, a.tabs[1].path, a.tabs[2].path}
+	if got[0] != repo2 || got[1] != repo3 || got[2] != repo1 {
+		t.Fatalf("拖完顺序是 %q，想要 [%s %s %s]", got, repo2, repo3, repo1)
+	}
+	if a.currentTab().path != repo1 {
+		t.Errorf("拖完活动页是 %s，想要 repo1 —— 拖动不该改选择", a.currentTab().path)
+	}
+}
+
+// 终端芯片也一样拖得动，而且拖的是顺序不是「现在看哪个 shell」。
+func TestTerminalChipsDragToReorder(t *testing.T) {
+	stubTerminal(t)
+
+	a := newApp()
+	a.openInNewTab(filepath.Join(t.TempDir(), "repo1"))
+	a.setSection(sectionTerminal)
+
+	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+	tt.Frame()
+
+	tab := a.currentTab()
+	a.newTerminalSession(tab)
+	a.newTerminalSession(tab)
+	tt.Frame()
+	if len(tab.terms) != 3 {
+		t.Fatalf("该有三个会话，实际 %d", len(tab.terms))
+	}
+	// 看的是第一枚，把第一枚拖到最末。
+	tab.termActive = 0
+	active := tab.terms[0]
+	tt.Frame()
+
+	first, ok := tt.Find("终端 1")
+	if !ok {
+		t.Fatalf("芯片带上找不到「终端 1」：%q", tt.Texts())
+	}
+	last, ok := tt.Find("终端 3")
+	if !ok {
+		t.Fatalf("芯片带上找不到「终端 3」：%q", tt.Texts())
+	}
+	dragBetween(tt, first.X+first.W/2, first.Y+first.H/2, last.X+last.W-3, last.Y+last.H/2)
+	tt.Frame()
+
+	if len(tab.terms) != 3 {
+		t.Fatalf("拖完还剩 %d 枚芯片，想要 3 枚", len(tab.terms))
+	}
+	if tab.terms[0].ord != 2 || tab.terms[1].ord != 3 || tab.terms[2].ord != 1 {
+		t.Errorf("拖完的顺序是 ord %d,%d,%d，想要 2,3,1",
+			tab.terms[0].ord, tab.terms[1].ord, tab.terms[2].ord)
+	}
+	if tab.termActive != 2 || tab.terms[2] != active {
+		t.Errorf("拖完看的是第 %d 枚（是不是当初那一枚：%v），想要最末那枚",
+			tab.termActive, tab.termActive >= 0 && tab.termActive < len(tab.terms) && tab.terms[tab.termActive] == active)
+	}
+}
+
+// 四选一那一段：section 是「视图模式 + 改动/历史」折出来的下标，⌘1~⌘4 与
+// 工具栏那四格走的是同一条路。
+func TestSectionsSwitchToolbarAndKeys(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+
+	if got := a.section(); got != sectionChanges {
+		t.Fatalf("开局该在改动，实际 %d", got)
+	}
+	tt.Key(ui.Cmd, ui.Key2)
+	if a.section() != sectionHistory || a.viewMode != viewModeGit || a.tab != 1 {
+		t.Errorf("⌘2 之后：section=%d viewMode=%d tab=%d，想要历史 / Git 面板 / 1",
+			a.section(), a.viewMode, a.tab)
+	}
+	tt.Key(ui.Cmd, ui.Key3)
+	if a.section() != sectionTerminal {
+		t.Errorf("⌘3 之后 section=%d，想要终端", a.section())
+	}
+	tt.Key(ui.Cmd, ui.Key4)
+	if a.section() != sectionEditor {
+		t.Errorf("⌘4 之后 section=%d，想要编辑器", a.section())
+	}
+	// 从编辑器回改动：走的是工具栏那一格，不是快捷键。
+	if err := tt.Click("改动"); err != nil {
+		t.Fatalf("工具栏上点不动「改动」：%v", err)
+	}
+	if a.section() != sectionChanges || a.viewMode != viewModeGit {
+		t.Errorf("点完「改动」：section=%d viewMode=%d，想要改动 / Git 面板", a.section(), a.viewMode)
+	}
+	// Ctrl+~ 从终端切回 Git 面板：回到的还是刚才那一页（历史），不是被重置
+	// 成改动 —— 四格并成一条之后，底下那两个字段各自还记着「回 Git 面板时
+	// 看哪一页」（见 section 上那段）。
+	tt.Key(ui.Cmd, ui.Key2)
+	tt.Key(ui.Cmd, ui.Key3)
+	if a.section() != sectionTerminal {
+		t.Fatalf("切到终端之后 section=%d", a.section())
+	}
+	tt.Key(ui.Ctrl, ui.KeyBackquote)
+	if a.viewMode != viewModeGit || a.tab != 1 || a.section() != sectionHistory {
+		t.Errorf("从终端切回来：viewMode=%d tab=%d section=%d，想要 Git 面板 / 1 / 历史",
+			a.viewMode, a.tab, a.section())
+	}
+	// 工具栏上那两格也点得动。
+	if err := tt.Click("改动"); err != nil {
+		t.Fatalf("工具栏上点不动「改动」：%v", err)
+	}
+	if a.section() != sectionChanges {
+		t.Errorf("点完「改动」section=%d，想要改动", a.section())
+	}
+	if err := tt.Click("历史"); err != nil {
+		t.Fatalf("工具栏上点不动「历史」：%v", err)
+	}
+	if a.section() != sectionHistory {
+		t.Errorf("点完「历史」section=%d，想要历史", a.section())
+	}
+	// 并进来的那两格（终端 / 编辑器）同样点得动 —— 它们以前不在这一条上，
+	// 只有快捷键这一条路，并进来之后鼠标也得走得通。
+	if err := tt.Click("终端"); err != nil {
+		t.Fatalf("工具栏上点不动「终端」：%v", err)
+	}
+	if a.section() != sectionTerminal || a.viewMode != viewModeTerm {
+		t.Errorf("点完「终端」：section=%d viewMode=%d，想要终端 / 终端", a.section(), a.viewMode)
+	}
+	if err := tt.Click("编辑器"); err != nil {
+		t.Fatalf("工具栏上点不动「编辑器」：%v", err)
+	}
+	if a.section() != sectionEditor || a.viewMode != viewModeEditor {
+		t.Errorf("点完「编辑器」：section=%d viewMode=%d，想要编辑器 / 编辑器", a.section(), a.viewMode)
+	}
+}
+
+// 拖着项目标签页的时候，得看得见「松手会插到哪儿」。
+//
+// 这条扫像素：重排和「画出插入提示线」是两条独立的线 —— 上面那条测试盯的是
+// 重排，把提示线摘掉它照样绿，用起来却成了盲拖。
+//
+// 比法上要绕开两样东西：一是悬停底色（按住拖动时指针下的标签页仍然是悬停
+// 态，两边一样，但别处会变），二是框架画的那个拖动副本 —— 它是指纹那枚
+// 标签的 0.75 不透明度拷贝，跟在指针下面，画在整棵元素树之后，正好盖住
+// 目标标签这一框。所以只扫标签框上、下的两条带子：副本不会画到框外，悬停
+// 底色也出不了框，那两条带子里能变的就只有提示线本身。
+func TestProjectTabDragDrawsInsertMarker(t *testing.T) {
+	a := newApp()
+	repo1 := filepath.Join(t.TempDir(), "repo1")
+	repo2 := filepath.Join(t.TempDir(), "repo2")
+	repo3 := filepath.Join(t.TempDir(), "repo3")
+	a.openInNewTab(repo1)
+	a.openInNewTab(repo2)
+	a.openInNewTab(repo3)
+	a.switchTab(0)
+
+	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+	tt.Frame()
+	tt.Frame()
+
+	first, ok := tt.Find("repo1")
+	if !ok {
+		t.Fatalf("找不到 repo1 那一页：%q", tt.Texts())
+	}
+	last, ok := tt.Find("repo3")
+	if !ok {
+		t.Fatalf("找不到 repo3 那一页：%q", tt.Texts())
+	}
+
+	// 标签框上、下各 6px 的两条带子（框内那 28px 归拖动副本，不扫）。
+	yTop0, yTop1 := int(last.Y)-6, int(last.Y)
+	yBot0, yBot1 := int(last.Y+last.H)+1, int(last.Y+last.H)+6
+	x0, x1 := int(last.X)-8, int(last.X+last.W)+8
+	type px struct{ x, y int }
+	band := func() map[px]uint32 {
+		img := tt.Image()
+		out := map[px]uint32{}
+		for _, yr := range [][2]int{{yTop0, yTop1}, {yBot0, yBot1}} {
+			for y := yr[0]; y < yr[1]; y++ {
+				if y < 0 {
+					continue
+				}
+				for x := x0; x < x1; x++ {
+					out[px{x, y}] = uint32At(img, x, y)
+				}
+			}
+		}
+		return out
+	}
+	// 两帧之间在带子里动了哪些像素。
+	changed := func(before, after map[px]uint32) []px {
+		var out []px
+		for k, v := range before {
+			if w, ok := after[k]; ok && v != w {
+				out = append(out, k)
+			}
+		}
+		return out
+	}
+
+	cy := last.Y + last.H/2
+	leftSpot := last.X + 4           // 最后一页左半边 ⇒ 插到它前面，线贴左沿
+	rightSpot := last.X + last.W - 4 // 右半边 ⇒ 插到它后面，线贴右沿
+
+	// 同一位置、不按：只有悬停，没有提示线，也没有拖动副本。
+	tt.Move(leftSpot, cy)
+	tt.Frame()
+	hoverLeft := band()
+	tt.Move(rightSpot, cy)
+	tt.Frame()
+	hoverRight := band()
+
+	// 再按住第一页，停在同样两个位置。
+	tt.Press(first.X+first.W/2, first.Y+first.H/2)
+	tt.Frame()
+	tt.Move(leftSpot, cy)
+	tt.Frame()
+	dragLeft := band()
+	tt.Move(rightSpot, cy)
+	tt.Frame()
+	dragRight := band()
+
+	// 左落点：多出来的像素必须贴着这一页的左沿（线宽 2、居中在沿上），
+	// 一带子里别处一个像素都不该动。
+	leftMarks := changed(hoverLeft, dragLeft)
+	if len(leftMarks) == 0 {
+		t.Fatal("左边落点处没多出任何像素 —— 没有插入提示线")
+	}
+	for _, m := range leftMarks {
+		if m.x > int(last.X)+1 {
+			t.Errorf("落点在左半边，提示线却画到了 x=%d（这一页左沿 %.0f）—— 该贴左沿",
+				m.x, last.X)
+			break
+		}
+	}
+	// 右落点：同理贴右沿。
+	rightMarks := changed(hoverRight, dragRight)
+	if len(rightMarks) == 0 {
+		t.Fatal("右边落点处没多出任何像素 —— 没有插入提示线")
+	}
+	for _, m := range rightMarks {
+		if m.x < int(last.X+last.W)-1 {
+			t.Errorf("落点在右半边，提示线却画到了 x=%d（这一页右沿 %.0f）—— 该贴右沿",
+				m.x, last.X+last.W)
+			break
+		}
+	}
+
+	// 拖到没人的地方松手：哪儿也不插。
+	tt.Move(600, 500)
+	tt.Frame()
+	tt.Release(600, 500)
+	tt.Frame()
+	tt.Frame()
+	if got := a.tabs[0].path; got != repo1 {
+		t.Errorf("落在空白处松手却重排了：第一页成了 %s，想要 %s", got, repo1)
+	}
+}
+
+func uint32At(img *image.RGBA, x, y int) uint32 {
+	r, g, b, al := img.At(x, y).RGBA()
+	return uint32(r)<<24 | uint32(g)<<16 | uint32(b)<<8 | uint32(al>>8)
 }

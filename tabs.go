@@ -18,6 +18,46 @@ const (
 	viewModeEditor = 2
 )
 
+// section 是工具栏那段分段控件上的四选一：改动 / 历史 / 终端 / 编辑器。
+//
+// 它不取代 viewMode 和 tab，只是把这两个字段「折」成一个下标 —— 分段控件
+// 要的就是一个下标，而底下这两个字段各自还记着「切回 Git 面板时该看哪一
+// 页」，合并掉就丢了那个信息。顺序就是工具栏上从左到右的顺序。
+const (
+	sectionChanges = iota
+	sectionHistory
+	sectionTerminal
+	sectionEditor
+)
+
+// section 返回当前看的是哪一块（改动 / 历史 / 终端 / 编辑器）。
+func (a *app) section() int {
+	switch a.viewMode {
+	case viewModeTerm:
+		return sectionTerminal
+	case viewModeEditor:
+		return sectionEditor
+	}
+	if a.tab == 1 {
+		return sectionHistory
+	}
+	return sectionChanges
+}
+
+// setSection 切到指定的那一块。两条路都从入口上把住：仓库没开成时
+// setTab 自己不切，这里也就不动（见 setTab 上那段）。
+func (a *app) setSection(i int) {
+	switch i {
+	case sectionChanges, sectionHistory:
+		a.setViewMode(viewModeGit)
+		a.setTab(i)
+	case sectionTerminal:
+		a.setViewMode(viewModeTerm)
+	case sectionEditor:
+		a.setViewMode(viewModeEditor)
+	}
+}
+
 // repoTab 是一个打开的项目标签页，维护该项目的独立工作区与内置终端。
 type repoTab struct {
 	path       string
@@ -316,6 +356,62 @@ func (a *app) openInNewTab(path string) {
 	a.persistOpenRepos()
 }
 
+// reorder 把 s 里第 from 项挪到「第 to 项之前」（to == len(s) 就是挪到最末），
+// 返回新的顺序；原地不动的情形原样返回。
+//
+// 项目标签页和终端芯片两处拖动共用这一套算法：拖动的落点都是「插到某一项
+// 前面」，而摘掉一项之后，落点在它后面的下标都要减一 —— 这一步算错了，
+// 表现是「往右拖一格没动、拖两格跑过头」，所以两处不各写一份。
+func reorder[T any](s []T, from, to int) []T {
+	if from < 0 || from >= len(s) || to < 0 || to > len(s) || to == from || to == from+1 {
+		return s
+	}
+	moved := s[from]
+	out := append(s[:from], s[from+1:]...)
+	if to > from {
+		to--
+	}
+	// rest 先拷一份：out[:to] 的 append 会写回同一块底层数组，直接从
+	// out[to:] 上取会把自己搬没。
+	rest := append([]T{}, out[to:]...)
+	return append(out[:to], append([]T{moved}, rest...)...)
+}
+
+// moveTab 把一个项目标签页挪到别的位置。活动的是哪一页不受影响 —— 挪的是
+// 顺序，不是选择（活动页按指针认回来，而不是按老下标现算）。
+//
+// 终端会话挂在各自的 repoTab 上，所以标签页一挪，它带着自己的 shell 一起走。
+func (a *app) moveTab(from, to int) {
+	if from < 0 || from >= len(a.tabs) {
+		return
+	}
+	active := a.currentTab()
+	a.tabs = reorder(a.tabs, from, to)
+	if active != nil {
+		for i, t := range a.tabs {
+			if t == active {
+				a.activeTab = i
+				break
+			}
+		}
+	}
+	// 打开的项目是按顺序记的（见 persistOpenRepos），所以下一次启动看到的
+	// 就是拖完的样子。
+	a.persistOpenRepos()
+}
+
+// removeRecentRepo 把一条项目从「最近打开的项目」里摘掉。
+//
+// 只摘这一条记录：它要是正开着，标签页照旧开着 —— 顶栏 [+] 那个下拉里每
+// 一行右边的 × 就是这个意思（见 newProjectRecentRow）。
+func (a *app) removeRecentRepo(path string) {
+	if a.store == nil {
+		return
+	}
+	a.store.RemoveRecentRepo(path)
+	a.persist()
+}
+
 // closeTab 关闭指定标签页。
 func (a *app) closeTab(idx int) {
 	if idx < 0 || idx >= len(a.tabs) {
@@ -411,6 +507,38 @@ func (a *app) persistOpenRepos() {
 	}
 	a.store.SetOpenRepos(paths)
 	a.persist()
+}
+
+// chipDrag 是一次终端芯片的拖动（值本身只用得上「从哪一枚来」，落点由
+// 指针戳在哪一枚上算）。
+type chipDrag struct {
+	from int
+}
+
+// moveTerminalSession 挪一枚终端芯片的位置。当前展示的那一枚跟着它自己
+// 走 —— 挪的是顺序，不是「现在看哪个 shell」（按指针认回来，而不是按老
+// 下标现算）。
+//
+// 收成包级函数而不是 app 上的方法：它只碰 tab 自己的会话列表，不碰别的
+// 状态。
+func moveTerminalSession(tab *repoTab, from, to int) {
+	if tab == nil || from < 0 || from >= len(tab.terms) {
+		return
+	}
+	var active *termSession
+	if tab.termActive >= 0 && tab.termActive < len(tab.terms) {
+		active = tab.terms[tab.termActive]
+	}
+	tab.terms = reorder(tab.terms, from, to)
+	if active == nil {
+		return
+	}
+	for i, s := range tab.terms {
+		if s == active {
+			tab.termActive = i
+			return
+		}
+	}
 }
 
 // termSession 是一个终端会话 —— 芯片带上的一枚芯片对应一个 shell 进程。
@@ -857,8 +985,17 @@ func (a *app) projectTabBar(c *ui.Context, pal palette) {
 					dirtyCount: len(a.workFiles),
 				}, pal, t)
 			} else {
+				// 拖动落点等这一圈画完再落：拖到一半就重排 a.tabs，后面的
+				// 标签会整体前移一格，这一帧剩下那几枚就画成别人了 ——
+				// 和下面终端芯片带是同一个道理。
+				from, to := -1, -1
 				for i, tab := range a.tabs {
-					a.renderProjectTab(c, i, tab, pal, t)
+					if f, at := a.renderProjectTab(c, i, tab, pal, t); f >= 0 {
+						from, to = f, at
+					}
+				}
+				if from >= 0 {
+					a.moveTab(from, to)
 				}
 			}
 
@@ -1006,6 +1143,10 @@ func (a *app) newProjectRecentRow(c *ui.Context, path string, pal palette) {
 				ui.Text(c, filepath.Dir(path)).FontSize(textCaption).
 					TextColor(pal.inkSubtle).MaxWidth(150).SingleLine()
 			}
+
+			if a.recentRemoveButton(c, pal, path, base) {
+				a.removeRecentRepo(path)
+			}
 		})
 	})
 	if row.Clicked() {
@@ -1014,8 +1155,44 @@ func (a *app) newProjectRecentRow(c *ui.Context, path string, pal palette) {
 	}
 }
 
-// renderProjectTab 呈现单个项目标签页。
-func (a *app) renderProjectTab(c *ui.Context, idx int, tab *repoTab, pal palette, t *ui.Theme) {
+// recentRemoveButton 画最近项目行尾那枚「从最近列表移除」的 ×，返回这一帧
+// 它有没有被点中。两处最近项目列表（顶栏 [+] 的下拉、工具栏的仓库下拉）共用
+// 这一枚：同一份记录，一处能删、另一处删不掉，就成了两处不一致。
+//
+// × 一直挂着，不跟着悬停才出现：一颗只在悬停时长出来的 × 会让行宽（跟着
+// 后面那一列）在指针扫过时变来变去，而且只看得见正指着的那一行 —— 想清理
+// 几条时得先摸过去才知道哪里有得点。
+func (a *app) recentRemoveButton(c *ui.Context, pal palette, path, base string) bool {
+	del := ui.ButtonBase(c).Size(16, 16).Radius(radiusXS).Shrink(0).
+		Cursor(ui.CursorPointer).
+		Label(Tf("从最近列表移除 %s", "Remove %s from recent", base)).
+		Tooltip(Tf("从最近打开的项目里移除 %s（不影响已打开的标签页）",
+			"Remove %s from recent projects (open tabs stay open)", base))
+	if del.Hovered() {
+		del.Background(pal.surface3)
+	}
+	fadeColors(del)
+	del.Children(func() {
+		ui.Row(c).AlignItems(ui.Center).Justify(ui.Center).Fill().Children(func() {
+			drawIcon(c, iconX, 10, pal.inkSubtle)
+		})
+	})
+	return del.Clicked()
+}
+
+// tabDrag 是一次项目标签页的拖动（值本身只用得上「从哪一页来」，落点由
+// 指针戳在哪一页上算）。
+type tabDrag struct {
+	from int
+}
+
+// renderProjectTab 呈现单个项目标签页，返回这一帧这一页被拖到了哪个落点
+// （-1 = 没有），由调用方在这一圈画完之后再重排 —— 理由见 projectTabBar。
+//
+// 拖一下换个位置就是这里的 .Drag 加落点那一块：按住的哪一页算「从哪来」，
+// 指针落在目标页的左半 / 右半就插到它前面 / 后面，和设置里供应商那份拖动
+// （settings.go 的 providerRow）是同一套算法。
+func (a *app) renderProjectTab(c *ui.Context, idx int, tab *repoTab, pal palette, t *ui.Theme) (from, to int) {
 	isActive := idx == a.activeTab
 	name := tab.name
 	if name == "" {
@@ -1030,6 +1207,16 @@ func (a *app) renderProjectTab(c *ui.Context, idx int, tab *repoTab, pal palette
 		Padding(0, 6, 0, 8).
 		Cursor(ui.CursorPointer).Label(name).
 		Tooltip(tab.path)
+
+	// 只有真标签页才拖得动：len(a.tabs) == 0 时画的那一枚是替身（直接 load
+	// 一个仓库的状态），它背后没有可重排的顺序。
+	draggable := idx >= 0 && idx < len(a.tabs)
+	if draggable {
+		tabBtn.Drag(tabDrag{from: idx})
+		if tabBtn.Dragging() {
+			tabBtn.Cursor(ui.CursorGrabbing)
+		}
+	}
 
 	if isActive {
 		tabBtn.Background(pal.surface2).Border(1, pal.hairlineStrong)
@@ -1087,6 +1274,29 @@ func (a *app) renderProjectTab(c *ui.Context, idx int, tab *repoTab, pal palette
 	if tabBtn.Clicked() {
 		a.switchTab(idx)
 	}
+
+	if !draggable {
+		return -1, -1
+	}
+	// 落点：指针在这一页的右半边 = 插到它后面。半宽取上一帧的实测宽度
+	// （Bounds），标签宽度是跟着项目名走的，没有常数可用。
+	after := dragAfter(tabBtn)
+	if _, over := ui.DragOver[tabDrag](tabBtn); over {
+		drawDropMarker(tabBtn, after, t.Accent)
+	}
+	// 落点只在这一帧算得出来（半宽是上一帧实测的），但「谁被拖走了」得从
+	// 拖拽载荷里读 —— 载荷里的 from 才是源，本帧的下标只是被落在谁头上。
+	// 早先把这里写成了「源 = 本帧下标」，于是拖到哪儿都变成原地挪一格。
+	if d, ok := ui.Drop[tabDrag](tabBtn); ok {
+		at := idx
+		if after {
+			at = idx + 1
+		}
+		if d.from != idx && d.from != at {
+			return d.from, at
+		}
+	}
+	return -1, -1
 }
 
 // termBarHeight 是终端会话芯片带的高度。
@@ -1112,15 +1322,24 @@ func (a *app) terminalTabBar(c *ui.Context, pal palette, tab *repoTab) {
 		Children(func() {
 			// 关会话等这一圈走完再落（见 renderTerminalChip 的返回值）：× 是
 			// 在画到一半时被点中的，就地删掉一个会让 append 把后面的会话整体
-			// 前移一格 —— 剩下那几枚芯片这一帧就画成别人了。
+			// 前移一格 —— 剩下那几枚芯片这一帧就画成别人了。拖动同理。
 			closeIdx := -1
+			from, to := -1, -1
 			for i, s := range tab.terms {
-				if a.renderTerminalChip(c, pal, tab, i, s) {
+				closeClicked, f, at := a.renderTerminalChip(c, pal, tab, i, s)
+				if closeClicked {
 					closeIdx = i
+				}
+				if f >= 0 {
+					from, to = f, at
 				}
 			}
 			if closeIdx >= 0 {
 				a.closeTerminalSession(tab, closeIdx)
+			} else if from >= 0 {
+				// 关掉一枚、又拖走另一枚，这两件事不会同时发生：拖要按住不放，
+				// 点 × 是一次点击。真撞上了让关闭优先，另一个等下一帧。
+				moveTerminalSession(tab, from, to)
 			}
 			if toolIconButton(c, pal, T("新建终端标签页", "New Terminal Tab"),
 				Tf("在项目目录里再开一个 shell %s", "Open another shell in the project %s", K("⌘⇧T")),
@@ -1130,8 +1349,9 @@ func (a *app) terminalTabBar(c *ui.Context, pal palette, tab *repoTab) {
 		})
 }
 
-// renderTerminalChip 画一枚终端会话芯片，返回这一帧它的 × 有没有被点中
-// （关的动作由调用方在这一圈走完之后再做，理由见 terminalTabBar）。
+// renderTerminalChip 画一枚终端会话芯片，返回这一帧它的 × 有没有被点中、
+// 以及它被拖到了哪个落点（-1 = 没拖）。两件事都由调用方在这一圈走完之后
+// 再做，理由见 terminalTabBar。
 //
 // 芯片上写 shell 自己报的标题（OSC 0/2），它不报就用「终端 N」兜底 —— 一屏
 // 里两个 shell 都叫「终端」，认不出哪一个是刚在跑构建的那个。
@@ -1139,7 +1359,8 @@ func (a *app) terminalTabBar(c *ui.Context, pal palette, tab *repoTab) {
 // 激活态只换颜色（底 surface2、边 hairlineStrong、字 ink），几何一律不动：
 // 边框两态都是 1px，内边距、字号、字重也都一样。切一次会话整条芯片带跟着
 // 重排的话，第二下就点不准了。
-func (a *app) renderTerminalChip(c *ui.Context, pal palette, tab *repoTab, idx int, s *termSession) bool {
+func (a *app) renderTerminalChip(c *ui.Context, pal palette, tab *repoTab, idx int, s *termSession) (closeClicked bool, dropFrom, dropAt int) {
+	dropFrom, dropAt = -1, -1
 	title := ""
 	if s != nil && s.term != nil {
 		title = strings.TrimSpace(s.term.Title())
@@ -1174,9 +1395,14 @@ func (a *app) renderTerminalChip(c *ui.Context, pal palette, tab *repoTab, idx i
 	chip.Background(bg).Border(1, bd)
 	fadeColors(chip)
 
+	// 拖一下换位置：和项目标签页那一排是同一套（见 renderProjectTab）。
+	chip.Drag(chipDrag{from: idx})
+	if chip.Dragging() {
+		chip.Cursor(ui.CursorGrabbing)
+	}
+
 	// × 的点击只记下来、不在这里动手：调用方要等这一圈芯片都画完再关
 	// （理由见 terminalTabBar）。
-	closeClicked := false
 	chip.Children(func() {
 		drawIcon(c, iconTerminal, 11, fg)
 		ui.Text(c, title).FontSize(textCaption).SingleLine().MaxWidth(140).TextColor(fg)
@@ -1203,7 +1429,21 @@ func (a *app) renderTerminalChip(c *ui.Context, pal palette, tab *repoTab, idx i
 	if chip.Clicked() {
 		tab.termActive = idx
 	}
-	return closeClicked
+
+	after := dragAfter(chip)
+	if _, over := ui.DragOver[chipDrag](chip); over {
+		drawDropMarker(chip, after, c.Theme().Accent)
+	}
+	if d, ok := ui.Drop[chipDrag](chip); ok {
+		at := idx
+		if after {
+			at = idx + 1
+		}
+		if d.from != idx && d.from != at {
+			dropFrom, dropAt = d.from, at
+		}
+	}
+	return closeClicked, dropFrom, dropAt
 }
 
 // terminalArea 呈现内置终端的主区全屏视图：顶上一条会话芯片，下面是当前会话。

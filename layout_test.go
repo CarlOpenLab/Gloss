@@ -192,9 +192,10 @@ func TestToolbarHugsSidebarEdge(t *testing.T) {
 	tt.Frame()
 	tt.Frame()
 
-	// 拿视图切换那两枚图标按钮定位工具栏的左沿：带文字的控件（仓库名、
-	// 分支徽章）在这两种状态里位置会变，只有它一直排在头一个。
-	seg, ok := tt.Find("Git")
+	// 拿视图切换那几枚图标按钮里最左边的一格（改动）定位工具栏的左沿：
+	// 带文字的控件（仓库名、分支徽章）在这两种状态里位置会变，只有它一直
+	// 排在头一个。
+	seg, ok := tt.Find("改动")
 	if !ok {
 		t.Fatalf("找不到工具栏的视图切换：%q", tt.Texts())
 	}
@@ -207,7 +208,7 @@ func TestToolbarHugsSidebarEdge(t *testing.T) {
 	a.sidebarOn = true
 	tt.Frame()
 	tt.Frame()
-	seg2, ok := tt.Find("Git")
+	seg2, ok := tt.Find("改动")
 	if !ok {
 		t.Fatalf("侧栏开着时找不到工具栏的视图切换：%q", tt.Texts())
 	}
@@ -775,33 +776,46 @@ func TestSettingsFitsWhenNarrow(t *testing.T) {
 	}
 }
 
-// 侧栏顶部不摆仓库卡片。
+// 工作区导航（改动 / 历史）和终端 / 编辑器并成工具栏那一段四选一，侧栏
+// 顶部不再有它。
 //
-// 项目名归顶栏那个项目标签（见 projectTabBar）—— 侧栏再压一张「仓库名 +
-// 路径」的卡片，同一个名字在一屏里出现两遍，读起来像两个东西，而不是两处
-// 强调。这条盯的就是「卡片别回来」。
+// 侧栏那一栏整片留给分支 / 远程 / 标签 / 储藏树；四格挤回侧栏里的话，
+// 「现在看哪一块」又在屏幕两端各说一遍（⌘1 ⌘2 也就跟着要按当前模式分两
+// 种意思，见 keys.go）。
 //
-// 判据卡得很死：工作区导航（「改动」）必须紧贴在侧栏内容区的最上沿。卡片
-// 在时它被整张卡片连同那行路径压到下面去（实测 nav.Y 从 82 掉到 120+），
-// 所以「离侧栏顶端多远」是个真的能分辨的判据 —— 松成「别掉到半屏以下」
-// 等于没写，卡片回来时测试照样绿。
-func TestSidebarHasNoRepoCard(t *testing.T) {
+// 判据：四格的左沿必须落在侧栏右边缘之后，而且排成一行、从左到右是
+// 改动 → 历史 → 终端 → 编辑器。要么哪一格缩回侧栏里，要么顺序变了，这条
+// 都会红。
+func TestWorkspaceNavLivesInToolbar(t *testing.T) {
 	a := richApp(t)
 
 	tt := ui.NewTester(a.view, 1280, 860)
 	still(tt)
 	tt.Frame()
+	tt.Frame()
 
-	nav, ok := tt.Find("改动")
-	if !ok {
-		t.Fatalf("侧栏上找不到工作区导航「改动」：%q", tt.Texts())
+	sw := a.sidebarWidth(nil)
+	order := []string{"改动", "历史", "终端", "编辑器"}
+	rects := make([]ui.Rect, 0, len(order))
+	for _, label := range order {
+		r, ok := tt.Find(label)
+		if !ok {
+			t.Fatalf("工具栏上找不到「%s」这一格：%q", label, tt.Texts())
+		}
+		rects = append(rects, r)
+		if r.X < sw {
+			t.Errorf("「%s」的左沿 x=%.0f 落在侧栏里（侧栏宽 %.0f）—— 它该在工具栏上",
+				label, r.X, sw)
+		}
 	}
-	// 没有卡片时实测 nav.Y=44（紧贴侧栏内容顶端，比顶栏下沿还高）。
-	// 卡片回来时它被整张卡片连同那行路径压到 67 以上 ——差的这 20 多像素
-	// 就是判据，所以阈值卡在 60：够放过字号/留白的变化，不够放过一张卡片。
-	// 写成「别掉到半屏以下」那种松判据等于没写，卡片回来时测试照样绿。
-	if maxY := float32(60); nav.Y > maxY {
-		t.Errorf("工作区导航掉到了 y=%.0f（没有卡片时是 44）—— 上面像是又压了仓库卡片",
-			nav.Y)
+	for i := 1; i < len(rects); i++ {
+		if rects[i].X <= rects[i-1].X {
+			t.Errorf("四格的顺序不对：%s 没排在 %s 右边（x=%.0f，前一格 x=%.0f）",
+				order[i], order[i-1], rects[i].X, rects[i-1].X)
+		}
+		if rects[i].Y != rects[i-1].Y {
+			t.Errorf("四格没排在一行：「%s」y=%.0f，「%s」y=%.0f",
+				order[i-1], rects[i-1].Y, order[i], rects[i].Y)
+		}
 	}
 }

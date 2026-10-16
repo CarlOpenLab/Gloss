@@ -189,3 +189,43 @@ func TestRecentReposPersistence(t *testing.T) {
 		t.Errorf("清空后 RecentRepos 该为空")
 	}
 }
+
+// 删一条最近记录：只动那一条，顺序里的其它记录原样保留。
+func TestRemoveRecentRepo(t *testing.T) {
+	dir := t.TempDir()
+	s := Open(dir)
+	s.AddRecentRepo("/repo/a")
+	s.AddRecentRepo("/repo/b")
+	s.AddRecentRepo("/repo/c")
+
+	s.RemoveRecentRepo("/repo/b")
+	got := s.State().RecentRepos
+	if len(got) != 2 || got[0] != "/repo/c" || got[1] != "/repo/a" {
+		t.Errorf("RecentRepos = %v, want [/repo/c /repo/a]", got)
+	}
+
+	// 删不存在的路径不该动列表，也不该报错。
+	s.RemoveRecentRepo("/repo/nope")
+	if got := s.State().RecentRepos; len(got) != 2 {
+		t.Errorf("删不存在的记录改动了列表：%v", got)
+	}
+
+	// 删掉「上次打开的仓库」时，那份指向也得一起清掉，
+	// 否则下次启动又把它打开，用户会以为没删掉。
+	s.RemoveRecentRepo("/repo/c")
+	if s.State().LastRepo == "/repo/c" {
+		t.Errorf("删了最近记录，LastRepo 还指向 %q", "/repo/c")
+	}
+	if got := s.State().RecentRepos; len(got) != 1 || got[0] != "/repo/a" {
+		t.Errorf("RecentRepos = %v, want [/repo/a]", got)
+	}
+
+	// 删完要落盘（和 AddRecentRepo 一样，写不写盘由调用方决定）。
+	if err := s.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	reopened := Open(dir)
+	if got := reopened.State().RecentRepos; len(got) != 1 || got[0] != "/repo/a" {
+		t.Errorf("重载后 RecentRepos = %v, want [/repo/a]", got)
+	}
+}

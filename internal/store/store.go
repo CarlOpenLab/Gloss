@@ -220,6 +220,29 @@ func (s *Store) AddRecentRepo(path string) {
 	s.st.RecentRepos = updated
 }
 
+// RemoveRecentRepo 把 path 从最近打开的仓库列表里摘掉。
+//
+// 只动这份历史：path 正开着的话，标签页照旧开着 —— 这一下说的是「别再把我
+// 列在最近里」，不是「关掉它」。顺带把 LastRepo 也清掉，否则下一次启动还会
+// 照 LastRepo 把这个刚被删掉的项目打开，用户会以为删除没生效。
+func (s *Store) RemoveRecentRepo(path string) {
+	if path == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var kept []string
+	for _, p := range s.st.RecentRepos {
+		if p != path && p != "" {
+			kept = append(kept, p)
+		}
+	}
+	s.st.RecentRepos = kept
+	if s.st.LastRepo == path {
+		s.st.LastRepo = ""
+	}
+}
+
 // ClearRecentRepos 清空最近打开的仓库列表。
 func (s *Store) ClearRecentRepos() {
 	s.mu.Lock()

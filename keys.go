@@ -87,22 +87,22 @@ func (a *app) handleKeys(c *ui.Context) {
 			a.openPalette()
 		}
 	}
+	// ⌘1~⌘4 依次是工具栏上那四格：改动 / 历史 / 终端 / 编辑器。
+	//
+	// ⌘1 ⌘2 以前按「当前是不是 Git 面板」有两种意思（在 Git 面板里切
+	// 改动/历史，在别处切回 Git 面板），得先看一眼自己在哪儿才知道按下去
+	// 会去哪儿；四格并成一条之后一个键就一种意思。
 	if c.Shortcut(ui.Cmd, ui.Key1) {
-		if a.viewMode == viewModeGit {
-			a.setTab(0)
-		} else {
-			a.setViewMode(viewModeGit)
-		}
+		a.setSection(sectionChanges)
 	}
 	if c.Shortcut(ui.Cmd, ui.Key2) {
-		if a.viewMode == viewModeGit {
-			a.setTab(1)
-		} else {
-			a.setViewMode(viewModeTerm)
-		}
+		a.setSection(sectionHistory)
 	}
 	if c.Shortcut(ui.Cmd, ui.Key3) {
-		a.setViewMode(viewModeEditor)
+		a.setSection(sectionTerminal)
+	}
+	if c.Shortcut(ui.Cmd, ui.Key4) {
+		a.setSection(sectionEditor)
 	}
 	// 「编辑器」视图里的 ⌘S 存回工作区。编辑器自身把 ⌘S 让了出来
 	// （State.Bindings 里绑成 NoCommand），所以这里能接住。

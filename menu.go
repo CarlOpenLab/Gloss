@@ -49,6 +49,8 @@ var updaterMenuItem = func() *mygo.MenuItem { return updater.MenuItem() }
 type appMenu struct {
 	tabDiff     *mygo.MenuItem
 	tabHist     *mygo.MenuItem
+	tabTerm     *mygo.MenuItem
+	tabEditor   *mygo.MenuItem
 	sidebar     *mygo.MenuItem
 	unified     *mygo.MenuItem
 	split       *mygo.MenuItem
@@ -75,8 +77,11 @@ type appMenu struct {
 func buildAppMenu(a *app) *mygo.Menu {
 	m := &appMenu{}
 
-	m.tabDiff = a.menuToggle(T("查看改动", "Show Changes"), "CmdOrCtrl+1", mygo.MenuItemRadio, true, func() { a.setTab(0) })
-	m.tabHist = a.menuToggle(T("查看历史", "Show History"), "CmdOrCtrl+2", mygo.MenuItemRadio, false, func() { a.setTab(1) })
+	// 视图那一段的四项就是工具栏上那四格（见 app.toolbar），⌘1~⌘4 依次对应。
+	m.tabDiff = a.menuToggle(T("查看改动", "Show Changes"), "CmdOrCtrl+1", mygo.MenuItemRadio, true, func() { a.setSection(sectionChanges) })
+	m.tabHist = a.menuToggle(T("查看历史", "Show History"), "CmdOrCtrl+2", mygo.MenuItemRadio, false, func() { a.setSection(sectionHistory) })
+	m.tabTerm = a.menuToggle(T("打开终端", "Show Terminal"), "CmdOrCtrl+3", mygo.MenuItemRadio, false, func() { a.setSection(sectionTerminal) })
+	m.tabEditor = a.menuToggle(T("打开代码编辑器", "Show Code Editor"), "CmdOrCtrl+4", mygo.MenuItemRadio, false, func() { a.setSection(sectionEditor) })
 	m.unified = a.menuToggle(T("统一视图", "Unified View"), "CmdOrCtrl+U", mygo.MenuItemRadio, !a.split, func() { a.setSplit(false) })
 	m.split = a.menuToggle(T("左右对照", "Split View"), "", mygo.MenuItemRadio, a.split, func() { a.setSplit(true) })
 	m.sidebar = a.menuToggle(T("显示侧栏", "Show Sidebar"), "CmdOrCtrl+Shift+B", mygo.MenuItemCheckbox, true, a.toggleSidebar)
@@ -123,7 +128,7 @@ func buildAppMenu(a *app) *mygo.Menu {
 	}
 
 	view := []*mygo.MenuItem{
-		m.tabDiff, m.tabHist,
+		m.tabDiff, m.tabHist, m.tabTerm, m.tabEditor,
 		a.menuCmd(T("切换终端 / Git 面板", "Toggle Terminal / Git Panel"), "CmdOrCtrl+J", a.toggleViewMode),
 		mygo.Separator(),
 		m.unified, m.split,
@@ -299,8 +304,10 @@ func (a *app) syncMenu() {
 	// 一个口径 —— 失败态的出路是屏幕中间那张卡片，不是这几项。
 	noRepo := !a.repoReady()
 
-	checkItem(m.tabDiff, a.tab == 0)
-	checkItem(m.tabHist, a.tab == 1)
+	checkItem(m.tabDiff, a.section() == sectionChanges)
+	checkItem(m.tabHist, a.section() == sectionHistory)
+	checkItem(m.tabTerm, a.section() == sectionTerminal)
+	checkItem(m.tabEditor, a.section() == sectionEditor)
 	checkItem(m.sidebar, a.sidebarOn)
 	checkItem(m.unified, !a.split)
 	checkItem(m.split, a.split)
