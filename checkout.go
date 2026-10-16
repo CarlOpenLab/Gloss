@@ -130,6 +130,11 @@ func (a *app) checkoutRef(ref gitrepo.Ref) {
 // loadLoading，那一刻 repoReady 是 false，调了等于没调。它里面清筛选
 // 那几句是这里必须做的，所以照抄一份。
 func (a *app) finishCheckout() {
+	// 视图也要管：从编辑器视图里双击检出时，光把 a.tab 置成 0，屏幕还停在
+	// 编辑器那一栏 —— 用户看到的是「双击了，界面没动」（见 enterHistory）。
+	if a.viewMode != viewModeGit {
+		a.setViewMode(viewModeGit)
+	}
 	a.tab = 0
 	// 两个 tab 的文件集完全不同，筛选词跟着作废（和 setTab 一个道理）
 	a.fileFilter = ""
@@ -139,10 +144,12 @@ func (a *app) finishCheckout() {
 	// 还解析得到（refs/heads/main 一直都在），照着读会得到一份和眼前对不上
 	// 的历史；refSel 是侧栏的选中态，指向的那棵树也已经重建过了。
 	a.histRev = ""
+	a.histAll = false
 	a.stashRev = ""
 	a.commitSel = -1
 	a.refSel = ""
 	a.commits = nil
+	a.allCommits = nil
 	a.histFiles = nil
 	a.histListID = ""
 	a.hist = loadIdle

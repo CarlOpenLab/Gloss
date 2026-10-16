@@ -3,6 +3,7 @@ package gitrepo
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/CarlOpenLab/Gloss/internal/diff"
@@ -332,5 +333,89 @@ func TestStashDiffMissing(t *testing.T) {
 	r := tempRepo(t)
 	if _, err := r.StashDiff(context.Background(), "stash@{7}"); err == nil {
 		t.Error("不存在的储藏该报错")
+	}
+}
+
+// 上游的超前/落后从 %(upstream:track) 里带出来，一次 for-each-ref 就够 ——
+// 侧栏一列分支几十条，按分支各跑一次 rev-list 会把读引用变成几十倍慢。
+func TestRefsUpstreamCounts(t *testing.T) {
+	r := refRepo(t)
+	dir := r.Root
+
+	// 夹具里 main 刚推上去，和 origin/main 一样；本地再提交一个就超前 1
+	write(t, filepath.Join(dir, "local.txt"), "local\n")
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-m", "本地提交")
+
+	refs, err := r.Refs(context.Background())
+	if err != nil {
+		t.Fatalf("Refs: %v", err)
+	}
+	var main, feat *Ref
+	for i := range refs {
+		switch refs[i].Name {
+		case "main":
+			main = &refs[i]
+		case "feature":
+			feat = &refs[i]
+		}
+	}
+	if main == nil || feat == nil {
+		t.Fatalf("没读到 main / feature：%+v", refs)
+	}
+	if main.Upstream != "origin/main" {
+		t.Errorf("main 的上游 = %q, want origin/main", main.Upstream)
+	}
+	if main.Ahead != 1 || main.Behind != 0 {
+		t.Errorf("main 超前/落后 = +%d −%d, want +1 −0", main.Ahead, main.Behind)
+	}
+	// feature 没有上游：三个数都该是零值，侧栏那一行不画计数
+	if feat.Upstream != "" || feat.Ahead != 0 || feat.Behind != 0 || feat.UpstreamGone {
+		t.Errorf("feature 没有上游，计数该全是零：%+v", *feat)
+	}
+
+	// 远程也往前走一个（从另一份克隆推），本地就变成又超前又落后
+	bare := strings.TrimSpace(gitOut(t, dir, "remote", "get-url", "origin"))
+	other := filepath.Join(t.TempDir(), "other")
+	git(t, dir, "clone", "-q", bare, other)
+	write(t, filepath.Join(other, "remote.txt"), "remote\n")
+	git(t, other, "add", ".")
+	git(t, other, "commit", "-m", "远程上的提交")
+	git(t, other, "push", "-q", "origin", "main")
+	git(t, dir, "fetch", "-q", "origin")
+
+	refs, err = r.Refs(context.Background())
+	if err != nil {
+		t.Fatalf("Refs（fetch 之后）: %v", err)
+	}
+	for _, ref := range refs {
+		if ref.Name != "main" {
+			continue
+		}
+		if ref.Ahead != 1 || ref.Behind != 1 {
+			t.Errorf("fetch 之后 main 超前/落后 = +%d −%d, want +1 −1", ref.Ahead, ref.Behind)
+		}
+	}
+}
+
+func TestParseTrack(t *testing.T) {
+	cases := []struct {
+		in            string
+		ahead, behind int
+		gone          bool
+	}{
+		{"", 0, 0, false},           // 同步，或没有上游
+		{"[ahead 1]", 1, 0, false},  // 只超前
+		{"[behind 2]", 0, 2, false}, // 只落后
+		{"[ahead 3, behind 4]", 3, 4, false},
+		{"[gone]", 0, 0, true},    // 上游已经在远程上被删掉
+		{"[不认识的写法]", 0, 0, false}, // git 换格式：当没有可说，别让读引用失败
+	}
+	for _, c := range cases {
+		ahead, behind, gone := parseTrack(c.in)
+		if ahead != c.ahead || behind != c.behind || gone != c.gone {
+			t.Errorf("parseTrack(%q) = +%d −%d gone=%v, want +%d −%d gone=%v",
+				c.in, ahead, behind, gone, c.ahead, c.behind, c.gone)
+		}
 	}
 }

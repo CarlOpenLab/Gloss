@@ -126,6 +126,86 @@ func TestWorkspaceTreeCarriesStatusForColor(t *testing.T) {
 	}
 }
 
+// 编辑器栏的文件树只画名字：没有状态字母、没有增删行数，改动过的文件按
+// 状态给名字上色（VSCode 那种）。
+//
+// 那一栏的用途是「打开仓库里某个文件看一眼」，一列里绝大多数文件没动过 ——
+// 每个改动过的都挂一枚字母加两个数字，扫下来全是噪声。改动栏反过来，字母和
+// 增删行数正是那里要读的东西（见 rowSpec.plain）。
+func TestWorkspaceTreeRowsArePlain(t *testing.T) {
+	a := workspaceApp(t)
+	a.setViewMode(viewModeEditor)
+	settle(t, a)
+
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+
+	// 名字都在
+	for _, want := range []string{"a.go", "new.go", "README.md"} {
+		if !tt.HasText(want) {
+			t.Errorf("编辑器栏里找不到 %q：%q", want, tt.Texts())
+		}
+	}
+	// 字母和增删行数不在。用精确匹配数：HasText 是子串匹配，"M" 会命中
+	// 任何含 M 的文本。
+	texts := tt.Texts()
+	if n := countText(texts, "M"); n != 0 {
+		t.Errorf("编辑器栏不该画状态字母，实际有 %d 个 %q：%q", n, "M", texts)
+	}
+	for _, c := range []string{"+1", "−1"} {
+		if n := countText(texts, c); n != 0 {
+			t.Errorf("编辑器栏不该画增删行数，实际有 %d 个 %q：%q", n, c, texts)
+		}
+	}
+	// 名字前头也不该有暂存勾选框（它的无障碍名字就是「暂存」）。一列文件里
+	// 绝大多数没动过，摆一排会改 index 的方框在那儿，随手点一行就可能暂存
+	// 一个文件；要暂存去改动栏或右键菜单。
+	if n := countText(texts, T("暂存", "Stage")); n != 0 {
+		t.Errorf("编辑器栏不该摆暂存勾选框，实际有 %d 个：%q", n, texts)
+	}
+
+	// 上色：a.go 改过是琥珀（暖），new.go 未跟踪是绿，README.md 没动过是中性灰。
+	// 三种都验到才算「按改动上色」在画 —— 只验改过的那一个的话，全屏一个色
+	// 也能蒙混过关。
+	hue := func(name string) (warm, green bool) {
+		box, ok := tt.Find(name)
+		if !ok {
+			t.Fatalf("找不到 %q 好取色", name)
+		}
+		y := int(box.Y + box.H/2)
+		for x := int(box.X); x < int(box.X+box.W); x++ {
+			p := pixelAt(tt, x, y)
+			// 比较前转 int：uint8 上加 20 会绕回，237 > 219 就成了
+			// 「237 > 3」，满屏背景色都算命中。
+			if int(p[0]) > int(p[2])+20 {
+				warm = true
+			}
+			if int(p[1]) > int(p[0])+20 && int(p[1]) > int(p[2])+20 {
+				green = true
+			}
+		}
+		return warm, green
+	}
+	if warm, _ := hue("a.go"); !warm {
+		t.Error("改过的文件该是暖色（琥珀）")
+	}
+	if _, green := hue("new.go"); !green {
+		t.Error("新增的文件该是绿的")
+	}
+	if warm, green := hue("README.md"); warm || green {
+		t.Errorf("没动过的文件不该带色 warm=%v green=%v", warm, green)
+	}
+
+	// 对照：改动栏照旧摆勾选框 —— 那里列的全是改动，勾选框正是要用的东西。
+	// 没有这一条，上面那条可能只是因为整个勾选框坏了。
+	a.setViewMode(viewModeGit)
+	settle(t, a)
+	tt.Frame()
+	if n := countText(tt.Texts(), T("暂存", "Stage")); n == 0 {
+		t.Errorf("改动栏照旧该有暂存勾选框：%q", tt.Texts())
+	}
+}
+
 // 目录行取子树里最重的那一档上色：冲突 > 删除 > 修改 > 新增，且只含没动过
 // 的文件的目录不上色 —— 不然目录链会一路绿到底，把「这儿动过」指错地方。
 func TestDirChangeStatusPicksUrgentChild(t *testing.T) {

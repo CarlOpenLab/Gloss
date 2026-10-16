@@ -31,8 +31,17 @@ type Ref struct {
 	Full     string
 	Remote   string // 远程分支所属的 remote（"origin"），别的种类留空
 	Upstream string // 本地分支的上游（"origin/main"），没有或非本地分支为空
-	Hash     string // 短哈希
-	Head     bool   // 当前检出的本地分支
+	// Ahead / Behind 是本地分支相对上游的超前/落后提交数，UpstreamGone 是
+	// 上游已经在远程上被删掉（%(upstream:track) 给的是 [gone]）。
+	//
+	// 三个数都从同一次 for-each-ref 里带出来，不按分支各跑一次 rev-list：
+	// 侧栏一列分支几十条，一次一条进程会把读引用变成几十倍慢。track 为空
+	// 表示「同步」或「没有上游」—— 两者都不值得在侧栏占一行字。
+	Ahead        int
+	Behind       int
+	UpstreamGone bool
+	Hash         string // 短哈希
+	Head         bool   // 当前检出的本地分支
 	// Subject 只有储藏用得上：储藏名字（"On main: ..."）是全部信息，
 	// 分支和标签的提交信息在提交列表里看。
 	Subject string
@@ -55,7 +64,7 @@ func (r Ref) Label() string {
 func (r *Repo) Refs(ctx context.Context) ([]Ref, error) {
 	out, err := run(ctx, r.Root, "for-each-ref",
 		"--sort=-committerdate",
-		"--format=%(refname)%00%(objectname:short)%00%(HEAD)%00%(symref)%00%(committerdate:unix)%00%(upstream:short)",
+		"--format=%(refname)%00%(objectname:short)%00%(HEAD)%00%(symref)%00%(committerdate:unix)%00%(upstream:short)%00%(upstream:track)",
 		"refs/heads", "refs/remotes", "refs/tags")
 	if err != nil {
 		return nil, err
@@ -119,9 +128,44 @@ func parseRefs(out string) []Ref {
 		if len(f) > 5 {
 			ref.Upstream = strings.TrimSpace(f[5])
 		}
+		if len(f) > 6 {
+			ref.Ahead, ref.Behind, ref.UpstreamGone = parseTrack(f[6])
+		}
 		refs = append(refs, ref)
 	}
 	return refs
+}
+
+// parseTrack 把 %(upstream:track) 的输出拆成超前/落后计数。
+//
+// 形如 "[ahead 1, behind 2]"；同步和没有上游都是空串；上游被删掉是
+// "[gone]"。认不出来的写法（git 换格式）一律当「没有可说」—— 侧栏那两
+// 个小数字不显示就是了，不该让整份引用读失败。
+func parseTrack(s string) (ahead, behind int, gone bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, 0, false
+	}
+	if strings.Contains(s, "gone") {
+		return 0, 0, true
+	}
+	for _, part := range strings.Split(s, ",") {
+		f := strings.Fields(strings.Trim(part, "[] "))
+		if len(f) != 2 {
+			continue
+		}
+		n, err := strconv.Atoi(f[1])
+		if err != nil {
+			continue
+		}
+		switch f[0] {
+		case "ahead":
+			ahead = n
+		case "behind":
+			behind = n
+		}
+	}
+	return ahead, behind, false
 }
 
 func parseStashes(out string) []Ref {

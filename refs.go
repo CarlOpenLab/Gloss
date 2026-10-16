@@ -12,6 +12,9 @@ import (
 const (
 	refGroup = "g:" // 分组行：g:local / g:remote:origin / g:tag / g:stash
 	refLeaf  = "r:" // 分支、标签、储藏
+	// refAll 是「所有分支」那一行。它不是一条引用（没有 Full 可以喂给
+	// Log），所以单独一个键，不走 refByFull 那条查表的路。
+	refAll = "a:all"
 )
 
 // buildRefTree 把读到的引用排成侧栏那棵树，顺便按筛选词筛一道。
@@ -34,10 +37,33 @@ func buildRefTree(refs []gitrepo.Ref, query string) []*filetree.Node {
 
 	local, remote, tags, stashes := splitRefs(kept)
 
+	// 「所有分支」是本地分组的第一行：点它看的是所有引用合起来的历史，
+	// 不是某一条线。它不是一条 Ref（没有 Full 可以喂给 Log），所以树里
+	// 用 refAll 这个键占位，refRow 见到这个键走自己的渲染和点击。
+	//
+	// 筛选时也留着：用户搜一个分支名时，「看看全部」往往正是他想做的
+	// 下一件事。空仓库（一条引用都没有）不画 —— 那会儿历史也是空的。
+	allNode := (*filetree.Node)(nil)
+	if len(kept) > 0 {
+		allNode = &filetree.Node{
+			Key: refAll, Label: T("所有分支", "All Branches"), Path: "all",
+			FileIdx: -1,
+		}
+	}
+
 	// 组的顺序是固定的：本地 → 远程 → 标签 → 储藏。空组不画。
+	//
+	// 本地分组多画一种情况：一条本地分支都没有时也画 —— 那至少还有
+	// 「所有分支」那一行点得动（只看远程分支的仓库、刚克隆完还没建分支）。
+	// 别的组都有东西时反而不画，不然「本地分支」四个字下面空空如也。
+	others := len(remote) + len(tags) + len(stashes)
 	var roots []*filetree.Node
-	if len(local) > 0 {
-		roots = append(roots, refGroupNode("g:local", T("本地分支", "Local Branches"), refLeaves(local)))
+	if len(local) > 0 || (allNode != nil && others == 0) {
+		kids := refLeaves(local)
+		if allNode != nil {
+			kids = append([]*filetree.Node{allNode}, kids...)
+		}
+		roots = append(roots, refGroupNode("g:local", T("本地分支", "Local Branches"), kids))
 	}
 	if len(remote) > 0 {
 		roots = append(roots, refGroupNode("g:remote", T("远程分支", "Remote Branches"), remoteGroups(remote)))
@@ -113,4 +139,29 @@ func refLeaves(refs []gitrepo.Ref) []*filetree.Node {
 
 func refGroupNode(key, label string, children []*filetree.Node) *filetree.Node {
 	return &filetree.Node{Key: key, Label: label, Path: label, Dir: true, FileIdx: -1, Children: children}
+}
+
+// trackLabel 是侧栏本地分支行尾巴上那截「和上游差几个提交」。
+//
+// 只本地分支有上游，别的种类一律空串。同步（或没有上游）也返回空 ——
+// 一条分支后面挂个「↑0 ↓0」只会把一列分支搞得更难读。
+//
+// 上游被远程删掉（%(upstream:track) 的 [gone]）返回「上游已删除」：那种
+// 分支推上去会新建一条远程分支，用户至少该知道自己跟踪的那条已经没了。
+func trackLabel(ref gitrepo.Ref) string {
+	if ref.Kind != gitrepo.RefLocal || ref.Upstream == "" {
+		return ""
+	}
+	if ref.UpstreamGone {
+		return T("上游已删除", "upstream gone")
+	}
+	switch {
+	case ref.Ahead > 0 && ref.Behind > 0:
+		return Tf("↑%d ↓%d", "↑%d ↓%d", ref.Ahead, ref.Behind)
+	case ref.Ahead > 0:
+		return Tf("↑%d", "↑%d", ref.Ahead)
+	case ref.Behind > 0:
+		return Tf("↓%d", "↓%d", ref.Behind)
+	}
+	return ""
 }

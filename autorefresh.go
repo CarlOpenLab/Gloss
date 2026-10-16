@@ -16,14 +16,25 @@ import (
 // 应用自己的写操作、手动 ⌘R 结束后的重读都会把基线推到「刚读到的这份」，
 // 于是同一份变化只会被自动刷新处理一次，不会和 reloadAfterOp 双重刷新。
 //
-// 线程约定：这个 goroutine 不碰 app 字段，只读 watchRoot/watchVer 两个
-// atomic；触发刷新通过 a.dispatch 回到主线程（见 app.go 顶上的四条约定）。
+// 线程约定：这个 goroutine 不碰 app 字段，只读 watchRoot/watchVer/autoFetchOn
+// 这几个 atomic；触发刷新通过 a.dispatch 回到主线程（见 app.go 顶上的四条约定）。
 // 永不退出，所以不能登记进 a.bg（测试的 settle 会等它等到超时）——它只在
 // main.go 里启动，测试不启动，也就没有这个问题。
+//
+// 同一个 goroutine 还兼「后台自动抓取」（见 autoFetchInterval）：开关打开时
+// 每隔几分钟对所有远程跑一次 git fetch。它跑在这个线程上是安全的 —— 抓取
+// 只动远程跟踪引用，不碰工作区和 index，和主线程上的写操作（暂存/提交/检出）
+// 互不干扰；真撞上 index.lock 那也是别人的操作在等 git 自己的锁。
 
 // autoRefreshInterval 是轮询间隔。2 秒对「改完 ~2 秒内跟上」够快，对没动
 // 过的仓库只是一趟 git status + show-ref，代价可忽略。
 const autoRefreshInterval = 2 * time.Second
+
+// autoFetchInterval 是后台自动抓取的间隔。
+//
+// 5 分钟：远程分支的变化本来就以「别人推了东西」为节奏，抓太勤只是白跑
+// 进程；抓取的成果是侧栏那几行和超前/落后计数，晚一会儿看见不要紧。
+const autoFetchInterval = 5 * time.Minute
 
 // autoReloadMinGap 是主线程上两次自动 reload 的最小间隔（防刷新风暴）。
 const autoReloadMinGap = time.Second
@@ -88,6 +99,12 @@ func (a *app) autoRefreshLoop(stop <-chan struct{}) {
 	var seenVer int32 = -1
 	var repo *gitrepo.Repo
 	var lastFP string
+	// 这个仓库有没有远程。一条远程都没有的仓库（本地新建的那种）不抓 ——
+	// git fetch --all 对它是静默退 0，白起一个进程。
+	hasRemotes := false
+	// 上一次自动抓取的时间。零值时第一次 tick 就抓（开关刚打开那一下），
+	// 之后按 autoFetchInterval 走。
+	var lastFetch time.Time
 
 	for {
 		select {
@@ -97,6 +114,7 @@ func (a *app) autoRefreshLoop(stop <-chan struct{}) {
 				seenVer = -1
 				repo = nil
 				lastFP = ""
+				hasRemotes = false
 				continue
 			}
 			if ver := a.watchVer.Load(); ver != seenVer {
@@ -107,10 +125,15 @@ func (a *app) autoRefreshLoop(stop <-chan struct{}) {
 				if err != nil {
 					repo = nil
 					lastFP = ""
+					hasRemotes = false
 					continue
 				}
 				repo = r
 				lastFP = r.StateFingerprint(ctx)
+				// 有没有远程跟着版本一起问：换仓库时 remotes 会变，而
+				// 「抓不抓」每 tick 都要用它。
+				remotes, err := r.Remotes(ctx)
+				hasRemotes = err == nil && len(remotes) > 0
 				continue
 			}
 			if repo == nil {
@@ -124,10 +147,40 @@ func (a *app) autoRefreshLoop(stop <-chan struct{}) {
 				// 不会白白吞掉；自己 reload 完也不会因为这个变化再刷第二遍。
 				a.dispatch(a.autoReloadNow)
 			}
+			// 后台自动抓取。放在指纹比对之后：本地有变化的那一两秒里用户
+			// 正在等界面刷新，别让一个可能跑几秒的 fetch 插在同一 tick 上。
+			//
+			// 抓取就在这个线程上跑，不另起一个：它是每 5 分钟一次的事，
+			// 代价是那几秒里指纹也跟着停（自动刷新晚几秒）—— 换成一个
+			// goroutine 加一把「在飞」的标记，只为这一点延迟不值当。
+			//
+			// 失败不重试、不报错：下一档（5 分钟后）自然再来一次。真需要
+			// 知道为什么没抓到，手动抓一次就有说法（工具栏那颗、⌘⇧F）。
+			if a.autoFetchOn.Load() == 1 && hasRemotes && time.Since(lastFetch) >= autoFetchInterval {
+				lastFetch = time.Now()
+				if err := repo.Fetch(ctx); err == nil {
+					a.dispatch(a.autoFetched)
+				}
+			}
 		case <-stop:
 			return
 		}
 	}
+}
+
+// autoFetched 是后台抓取成功之后 dispatch 到主线程的收尾。
+//
+// 只重读引用，和手动「抓取」一个路子（见 doFetch）：抓取不动工作区也不动
+// index，主区那份 diff 一个字节都没变，reload 会把它闪一下。要的是侧栏
+// 的远程分支和每个本地分支的 ↑/↓ 计数跟上。
+//
+// 仓库可能在这一会儿换了（fetch 跑了半天）：只认当前还开着同一个根的那
+// 一次，别的直接丢。
+func (a *app) autoFetched() {
+	if !a.repoReady() {
+		return
+	}
+	a.loadRefs()
 }
 
 // autoReloadNow 是 dispatch 到主线程的自动刷新入口。

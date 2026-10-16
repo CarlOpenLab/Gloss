@@ -214,7 +214,9 @@ func (a *app) consumeHistoryJump() {
 	}
 	// 不走 setTab：它在「已经在这个 tab」时会整个不做事，而从改动 tab 过来
 	// 时（或者本来就在历史 tab、只是换一个提交时）要的正是把下半区换掉。
-	a.tab = 1
+	// enterHistory 顺带把视图切回 Git 面板 —— 从编辑器视图跳过来时，光改
+	// tab 字段屏幕还停在编辑器那一栏。
+	a.enterHistory()
 	a.fileFilter = ""
 	a.fileTreeFilter = ""
 
@@ -232,8 +234,10 @@ func (a *app) consumeHistoryJump() {
 	// 也就是它。
 	a.refSel = ""
 	a.histRev = hash
+	a.histAll = false // 切到某一次提交上了，不再是「所有分支」
 	a.commitSel = -1
 	a.commits = nil
+	a.allCommits = nil
 	a.histFiles = nil
 	a.histListID = ""
 	a.stashRev = ""

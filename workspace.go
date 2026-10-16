@@ -187,7 +187,10 @@ func (a *app) workspaceTreeView(c *ui.Context, pal palette, t *ui.Theme) {
 	}
 	a.wsList.Key = func(i int) any { return rows[i].Node.Key }
 	ui.List(c, &a.wsList, len(rows), func(i int) {
-		a.treeRowIn(c, pal, rows[i], rowSpec{list: a.wsFiles, sel: &a.wsSel, onClick: a.syncEditorPane, tree: treeWorkspace})
+		a.treeRowIn(c, pal, rows[i], rowSpec{
+			list: a.wsFiles, sel: &a.wsSel, onClick: a.syncEditorPane,
+			tree: treeWorkspace, plain: true,
+		})
 	}).Grow(1)
 }
 

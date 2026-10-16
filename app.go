@@ -57,8 +57,11 @@ type app struct {
 	// 模型重读自增，轮询 goroutine 靠它重新对齐基线。两个都是 atomic，
 	// 因为轮询线程要读它们，而写只发生在主线程。
 	// autoStop 关掉轮询；autoReloadedAt 防自动刷新风暴（主线程专用）。
-	watchRoot      atomic.Value // string
-	watchVer       atomic.Int32
+	watchRoot atomic.Value // string
+	watchVer  atomic.Int32
+	// autoFetchOn 是「后台自动抓取」的开关（0/1）。同样是 atomic：轮询线程
+	// 要读它，写只发生在主线程（setAutoFetch / attachStore）。
+	autoFetchOn    atomic.Int32
 	autoStop       chan struct{}
 	autoReloadedAt time.Time
 
@@ -227,16 +230,35 @@ type app struct {
 	viewed map[string]string
 
 	// —— 历史 ——
-	tab        int // 0 = 改动，1 = 历史
+	tab int // 0 = 改动，1 = 历史
+	// allCommits 是这一趟读回来的全部提交（没筛过），commits 是筛完之后
+	// 显示的那一份。两者分开是因为「加载更多」要按没筛的数算 offset，
+	// 而图、选中、导航全按筛过的走 —— 合成一个字段的话，筛选词一改，
+	// 「下一页从哪继续读」就错了。
+	allCommits []gitrepo.Commit
 	commits    []gitrepo.Commit
 	graph      []graphRow // 和 commits 一一对应，见 setCommits
 	maxLanes   int        // 整张图占几条泳道，图形栏按它定宽
 	commitList ui.ListState
-	commitSel  int // 选中的提交下标，-1 表示还没选
+	// commitFilter 是提交列表顶上的筛选词：按提交信息、哈希、作者和指向
+	// 它的引用（分支 / 标签）匹配。只筛已经读回来的那批 —— 栏头写着
+	// 「筛选出 X / 共 Y」，范围是说得出来的。
+	commitFilter string
+	// commitFilterBuilt 是当前显示的那份提交用的筛选词。和 commitFilter
+	// 不一致就说明该重算视图了（和 refsFilter / fileTreeFilter 一个套路）。
+	commitFilterBuilt string
+	// focusCommitFilter 是「把焦点放进提交筛选框」的一次性请求（/ 键、
+	// 命令栏）。和 focusFilter 同一个套路：置位的那一帧列表可能已经画过。
+	focusCommitFilter bool
+	commitSel         int // 选中的提交下标，-1 表示还没选
 	// histRev 是历史看的是哪条引用（侧栏点的那条分支/标签），空串表示 HEAD。
 	// 不为空时 Log 直接喂给它，不能悄悄退回 HEAD —— 点了分支看着没反应
 	// 比报错还难受。
 	histRev string
+	// histAll 是侧栏「所有分支」那一行：提交列表看的是所有引用（本地 +
+	// 远程 + 标签）合起来的历史，不是某一条线。和 histRev 互斥 —— 开着它
+	// 的时候 histRev 是空串。
+	histAll bool
 	// stashRev 是下半区正在显示的储藏（完整引用名），空串表示没在看储藏。
 	//
 	// 和 histRev 是两回事：储藏不属于任何一条分支历史，提交列表照旧显示
@@ -279,6 +301,10 @@ type app struct {
 	themeMode     string // "system", "light", "dark"
 	locale        string // "zh", "en"
 	appIcon       string // "black", "white"
+	// autoFetch 是「后台自动抓取」开关（设置 → 通用偏好 → Git）。开着的话
+	// autorefresh 那个轮询每隔 autoFetchInterval 对所有远程抓一次，侧栏的
+	// 远程分支和超前/落后计数自己跟上。只抓不拉，见 store.Config.AutoFetch。
+	autoFetch     bool
 	editThemeMode string
 	editLocale    string
 	editAppIcon   string
@@ -485,6 +511,8 @@ func (a *app) attachStore(s *store.Store) {
 	if a.termFontSize > 0 {
 		a.termFontSize = clamp(a.termFontSize, termFontMin, termFontMax)
 	}
+	a.autoFetch = cfg.AutoFetch
+	a.syncAutoFetch()
 
 	// 恢复已打开的多项目标签页
 	a.tabs = nil
@@ -541,6 +569,7 @@ func (a *app) saveViewSettings() {
 	cfg.GraphLanesLight = nonEmpty(a.graphLanesLight)
 	cfg.TermFontFamily = a.termFontFamily
 	cfg.TermFontSize = a.termFontSize
+	cfg.AutoFetch = a.autoFetch
 	a.store.SetConfig(cfg)
 	a.persist()
 }
@@ -694,6 +723,29 @@ func (a *app) setTermFontFamily(family string) {
 	}
 	a.termFontFamily = family
 	a.saveViewSettings()
+}
+
+// setAutoFetch 开/关后台自动抓取，并把开关告诉轮询。
+//
+// 轮询只认 atomic（见 autorefresh.go 头上的线程约定），所以真状态在 app
+// 字段上，推到 atomic 的那一下单独一步 —— 漏了它的话设置改了而后台还在
+// 按老开关跑（或者该跑的没跑）。
+func (a *app) setAutoFetch(on bool) {
+	if a.autoFetch == on {
+		return
+	}
+	a.autoFetch = on
+	a.saveViewSettings()
+	a.syncAutoFetch()
+}
+
+// syncAutoFetch 把 autoFetch 的当前值推给轮询 goroutine。
+func (a *app) syncAutoFetch() {
+	v := int32(0)
+	if a.autoFetch {
+		v = 1
+	}
+	a.autoFetchOn.Store(v)
 }
 
 // isDark 根据用户外观偏好和当前环境计算生效的暗黑状态。
@@ -1522,8 +1574,12 @@ func (a *app) openRepo(path string) {
 		a.refFilter = ""
 		a.refSel = ""
 		a.histRev = ""
+		a.histAll = false
 		a.commitSel = -1
 		a.commits = nil
+		a.allCommits = nil
+		a.commitFilter = ""
+		a.commitFilterBuilt = ""
 		a.histFiles = nil
 		a.histListID = ""
 		a.hist = loadIdle

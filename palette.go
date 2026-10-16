@@ -52,6 +52,8 @@ func (a *app) commands() []command {
 		{T("打开终端", "Show Terminal"), K("⌘3"), func(a *app) { a.setSection(sectionTerminal) }},
 		{T("打开代码编辑器", "Show Code Editor"), K("⌘4"), func(a *app) { a.setSection(sectionEditor) }},
 		{T("筛选文件", "Filter Files"), K("⌘P"), func(a *app) { a.focusFilter = true }},
+		{T("筛选提交", "Filter Commits"), K("/"), func(a *app) { a.focusCommitFilter = true }},
+		{T("查看所有分支的历史", "History of All Branches"), "", func(a *app) { a.selectAllRefs() }},
 		{T("统一视图（Unified）", "Unified View"), K("⌘U"), func(a *app) { a.setSplit(false) }},
 		{T("左右对照（Split）", "Split View"), "", func(a *app) { a.setSplit(true) }},
 		{T("模型设置…", "Settings…"), K("⌘,"), func(a *app) { a.openSettings() }},

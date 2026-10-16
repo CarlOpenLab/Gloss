@@ -416,3 +416,71 @@ func TestBranchDiffAndCommits(t *testing.T) {
 		t.Errorf("最新提交 = %q", commits[0].Subject)
 	}
 }
+
+// 「所有分支」看的是所有引用合起来的历史，不是 HEAD 那一条线。
+//
+// 判据是「HEAD 走不到的提交也在里面」：只比较条数的话，一个恰好同样长的
+// 历史也能蒙混过关。
+func TestLogAllCoversEveryBranch(t *testing.T) {
+	r := tempRepo(t)
+	for _, s := range []string{"2", "3"} {
+		write(t, filepath.Join(r.Root, "a.txt"), "x\n"+s+"\n")
+		git(t, r.Root, "commit", "-am", "c"+s)
+	}
+	// 支线：从 init 分出去，HEAD 走不到
+	git(t, r.Root, "checkout", "-q", "-b", "side", "HEAD~2")
+	write(t, filepath.Join(r.Root, "side.txt"), "side\n")
+	git(t, r.Root, "add", ".")
+	git(t, r.Root, "commit", "-m", "支线提交")
+	git(t, r.Root, "checkout", "-q", "main")
+
+	head, err := r.Log(context.Background(), "", 10, 0)
+	if err != nil {
+		t.Fatalf("Log: %v", err)
+	}
+	all, err := r.LogAll(context.Background(), 10, 0)
+	if err != nil {
+		t.Fatalf("LogAll: %v", err)
+	}
+	if len(all) <= len(head) {
+		t.Fatalf("LogAll 读到 %d 条，HEAD 那条 %d 条 —— 该更多", len(all), len(head))
+	}
+	var found bool
+	for _, c := range all {
+		if c.Subject == "支线提交" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("支线提交不在 LogAll 里：%v", all)
+	}
+	// 储藏不算「分支」：--all 不收 refs/stash，硬塞进去会打断拓扑图
+	write(t, filepath.Join(r.Root, "a.txt"), "dirty\n")
+	git(t, r.Root, "stash", "push", "-q", "-m", "半成品")
+	all, err = r.LogAll(context.Background(), 10, 0)
+	if err != nil {
+		t.Fatalf("LogAll（有储藏）: %v", err)
+	}
+	for _, c := range all {
+		if strings.Contains(c.Subject, "WIP on") {
+			t.Errorf("储藏不该出现在所有分支的历史里：%q", c.Subject)
+		}
+	}
+}
+
+// 空仓库里 --all 也是「没有历史」，不是出错。
+func TestLogAllEmptyRepo(t *testing.T) {
+	dir := t.TempDir()
+	git(t, dir, "init", "-q", "-b", "main")
+	r, err := Open(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	commits, err := r.LogAll(context.Background(), 10, 0)
+	if err != nil {
+		t.Fatalf("LogAll 在空仓库上报错：%v", err)
+	}
+	if len(commits) != 0 {
+		t.Errorf("空仓库该没有提交，实际 %d 条", len(commits))
+	}
+}

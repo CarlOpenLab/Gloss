@@ -322,18 +322,26 @@ func (a *app) treeRow(c *ui.Context, pal palette, r filetree.Row) {
 }
 
 // rowSpec 是 treeRowIn 的入参：列表、选中下标、点击回调，加上「折叠状态
-// 记在哪一份」「要不要按改动上色」这两条只跟所在栏有关的开关。同一套画法
-// 因此能画两份列表：「改动」那份（a.files）和「编辑器」视图里整个工作区那
-// 份（a.wsFiles）。
+// 记在哪一份」「画哪一种行」这两条只跟所在栏有关的开关。同一套画法因此能画
+// 两份列表：「改动」那份（a.files）和「编辑器」视图里整个工作区那份
+// （a.wsFiles）。
 type rowSpec struct {
-	list     []gitrepo.File
-	sel      *int
-	onClick  func()
-	tree     treeFor
-	decorate bool
+	list    []gitrepo.File
+	sel     *int
+	onClick func()
+	tree    treeFor
+	// plain 是编辑器视图那一栏的画法：只画名字，按改动给名字上色
+	// （VSCode 那样，一眼扫出哪儿动过），**不画**增删行数和状态字母。
+	//
+	// 那一栏的用途是「打开仓库里某个文件看一眼」，一列文件里绝大多数没动
+	// 过；每个改动过的文件都挂一枚字母加两个数字，一屏下来全是噪声。改动
+	// 栏反过来（plain = false）：那里列的全是改动，字母和增删行数正是要读
+	// 的东西，而给每个文件上色等于全彩，反而没了信号。
+	plain bool
 }
 
-// treeRowIn 画文件树的一行。目录只画名字；文件画名字 + 增删行数 + 状态字母。
+// treeRowIn 画文件树的一行。目录只画名字；文件画名字，改动栏还画增删行数
+// 和状态字母（见 rowSpec.plain）。
 //
 // 行本身可点：目录行点了收起/展开，文件行点了让 diff 滚到那个文件的头上。
 // 选中态按**文件下标**记，不用 ui.List 的 Selected —— 那是扁平行下标，树一
@@ -349,7 +357,7 @@ func (a *app) treeRowIn(c *ui.Context, pal palette, r filetree.Row, o rowSpec) {
 		// 目录自己没有状态，「动没动过」看的是底下的文件。全收起的树里不给
 		// 目录上色，等于把哪儿动过整条藏起来 —— 那就白收起一层了。
 		labelColor := t.TextMuted
-		if o.decorate {
+		if o.plain {
 			if s, ok := dirChangeStatus(n, o.list); ok {
 				labelColor = statusColor(s, pal)
 			}
@@ -381,7 +389,12 @@ func (a *app) treeRowIn(c *ui.Context, pal palette, r filetree.Row, o rowSpec) {
 	row, _ := treeRow(c, t, pal, treeRowOpts{Depth: r.Depth, Selected: n.FileIdx == *o.sel}, func() {
 		// 历史提交和储藏的 diff 是只读的（SectionNone），那里不摆勾选框：
 		// 一个点了会对别的仓库状态动手的方框，比没有方框更糟。
-		if f.Section != gitrepo.SectionNone {
+		//
+		// 编辑器栏也不摆（o.plain）：那一栏的用途是「打开某个文件看一眼」，
+		// 一列文件里绝大多数没动过，摆一排会改 index 的方框在名字前头，
+		// 随手点一行就可能暂存一个文件。要暂存去「改动」栏，或者右键菜单
+		// （那里是明确的选择，不是顺手）。
+		if f.Section != gitrepo.SectionNone && !o.plain {
 			box = stageBox(c, pal, stageStateOf(f), a.op != gitrepo.OpNone)
 		}
 
@@ -393,28 +406,32 @@ func (a *app) treeRowIn(c *ui.Context, pal palette, r filetree.Row, o rowSpec) {
 		// 全都上色等于全彩，反而没了信号，所以那一栏不上色。
 		nameColor := t.Text
 		switch {
-		case o.decorate && f.Status != "":
+		case o.plain && f.Status != "":
 			nameColor = statusColor(f.Status, pal)
 		case a.isViewed(f):
 			nameColor = t.TextMuted
 		}
 		ui.Text(c, n.Label).FontSize(12).SingleLine().Grow(1).MinWidth(0).TextColor(nameColor)
 
-		// 增删行数用来快速判断改动规模。用等宽字体 + tnum 让数字对齐，
+		// 增删行数和状态字母只画在改动栏（见 rowSpec.plain）。
+		//
+		// 增删行数用来快速判断改动规模，用等宽字体 + tnum 让数字对齐，
 		// 一列扫下来不会参差不齐。
-		if f.AddCount > 0 {
-			ui.Textf(c, "+%d", f.AddCount).FontSize(10).Bold().
-				Font("monospace").FontFeatures("tnum").TextColor(pal.addBar)
-		}
-		if f.DelCount > 0 {
-			ui.Textf(c, "−%d", f.DelCount).FontSize(10).Bold().
-				Font("monospace").FontFeatures("tnum").TextColor(pal.delBar)
-		}
+		if !o.plain {
+			if f.AddCount > 0 {
+				ui.Textf(c, "+%d", f.AddCount).FontSize(10).Bold().
+					Font("monospace").FontFeatures("tnum").TextColor(pal.addBar)
+			}
+			if f.DelCount > 0 {
+				ui.Textf(c, "−%d", f.DelCount).FontSize(10).Bold().
+					Font("monospace").FontFeatures("tnum").TextColor(pal.delBar)
+			}
 
-		ui.Text(c, string(f.Status.Letter())).FontSize(10).Bold().
-			Width(12).TextAlign(ui.Center).
-			TextColor(statusColor(f.Status, pal)).
-			Tooltip(f.Status.Label())
+			ui.Text(c, string(f.Status.Letter())).FontSize(10).Bold().
+				Width(12).TextAlign(ui.Center).
+				TextColor(statusColor(f.Status, pal)).
+				Tooltip(f.Status.Label())
+		}
 	})
 
 	// 右键菜单：暂存、丢弃、复制路径、看这个文件的历史……都在这里（见

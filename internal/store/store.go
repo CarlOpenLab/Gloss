@@ -63,6 +63,13 @@ type Config struct {
 	TermFontFamily string `json:"termFontFamily,omitempty"`
 	// TermFontSize 是内置终端的字号（DIP），0 表示默认值。
 	TermFontSize float32 `json:"termFontSize,omitempty"`
+	// AutoFetch 是「后台自动抓取」：每隔几分钟对所有远程跑一次
+	// git fetch --all --prune，让侧栏的远程分支和超前/落后计数自己跟上。
+	//
+	// 只抓取、不拉取：抓取只动远程跟踪引用，不碰工作区和 index，不可能
+	// 在半路撞出冲突来；拉取会合并进当前分支，那一下必须用户自己点。
+	// 默认关（零值 false）—— 后台联网要用户点头。
+	AutoFetch bool `json:"autoFetch,omitempty"`
 }
 
 // EffectiveCommitPrompt 返回生效的 Git 提交信息生成系统提示词。

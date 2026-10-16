@@ -37,12 +37,16 @@ func TestPaletteFiltersCommands(t *testing.T) {
 	tt.Type("历史")
 	tt.Frame()
 
+	// 「历史」命中两条：查看历史、查看所有分支的历史。两条都在才说明
+	// 模糊匹配是「包含就行」，而不是只认某一个写死的命令。
 	cmds := a.matchedCommands()
-	if len(cmds) != 1 || cmds[0].label != "查看历史" {
+	if len(cmds) != 2 || cmds[0].label != "查看历史" || cmds[1].label != "查看所有分支的历史" {
 		t.Fatalf("匹配结果 = %+v", cmds)
 	}
-	if !tt.HasText("查看历史") {
-		t.Errorf("筛选后的命令没画出来：%q", tt.Texts())
+	for _, want := range []string{"查看历史", "查看所有分支的历史"} {
+		if !tt.HasText(want) {
+			t.Errorf("筛选后的命令没画出来：%q", tt.Texts())
+		}
 	}
 	// 工具栏上也有个「打开仓库…」按钮，拿只有命令栏里才有的那条来验
 	if tt.HasText("查看改动") {

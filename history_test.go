@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -763,6 +764,336 @@ func TestSidebarBranchNarrowsHistory(t *testing.T) {
 	if tt.HasText("主线四") {
 		t.Errorf("主线四不在 feat1 上，不该出现在列表里：%q", tt.Texts())
 	}
+}
+
+// 点侧栏「所有分支」：提交列表换成所有引用合起来的历史。
+//
+// 这是「本地 / 远程两棵树分开列、点哪条看哪条」之外的那一屏：用户问的是
+// 「这个仓库总共在干什么」。判据是 HEAD 走不到的支线提交也出现 —— 只比
+// 条数的话，一条恰好同样长的历史也能蒙混过关。
+func TestAllBranchesRowShowsEveryBranch(t *testing.T) {
+	a := graphApp(t)
+	tt := ui.NewTester(a.view, 1280, 1100)
+	tt.Frame()
+	settle(t, a)
+	tt.Frame()
+
+	// 夹具里两条支线都被合并进了 main，HEAD 走得到每一条。补一条没合并的
+	// 分支 —— 「所有分支」要比 HEAD 多的那几条正是它。
+	runGit(t, a.repoPath, "checkout", "-q", "-b", "unmerged")
+	writeFile(t, filepath.Join(a.repoPath, "u.txt"), "u\n")
+	runGit(t, a.repoPath, "add", ".")
+	runGit(t, a.repoPath, "commit", "-m", "没人要的分支上的提交")
+	runGit(t, a.repoPath, "checkout", "-q", "main")
+	a.reload()
+	settle(t, a)
+
+	a.setTab(1)
+	settle(t, a)
+	tt.Frame()
+
+	headOnly := len(a.commits)
+	if headOnly == 0 {
+		t.Fatal("HEAD 的历史是空的")
+	}
+
+	// 用坐标点，不用 tt.Click("所有分支")：栏头也会写这四个字，而那一处
+	// 在点了之后才出现 —— 之前侧栏里只有这一处，Find 拿到的就是它。
+	box, ok := tt.Find("所有分支")
+	if !ok {
+		t.Fatalf("侧栏里找不到「所有分支」：%q", tt.Texts())
+	}
+	tt.ClickAt(box.X+box.W/2, box.Y+box.H/2)
+	settle(t, a)
+	tt.Frame()
+
+	if !a.histAll {
+		t.Error("点了「所有分支」之后 histAll 该是 true")
+	}
+	if a.histRev != "" {
+		t.Errorf("「所有分支」不是一条引用，histRev 该是空串，实际 %q", a.histRev)
+	}
+	if a.tab != 1 {
+		t.Errorf("该留在历史 tab，实际 tab = %d", a.tab)
+	}
+	if len(a.commits) <= headOnly {
+		t.Errorf("所有分支的历史该比 HEAD 那条长：%d vs %d（%v）",
+			len(a.commits), headOnly, subjects(a.commits))
+	}
+	// 没合并的那条分支上的提交，HEAD 走不到
+	for _, want := range []string{"没人要的分支上的提交"} {
+		if !tt.HasText(want) {
+			t.Errorf("%s 不在所有分支的历史里：%q", want, tt.Texts())
+		}
+	}
+	// 栏头得说出在看的是哪一份，不然用户不知道自己在看什么
+	if !tt.HasText("所有分支") {
+		t.Errorf("栏头没写「所有分支」：%q", tt.Texts())
+	}
+}
+
+// 提交筛选框：打字即筛，只筛已经读回来的那一批。
+func TestCommitFilterNarrowsHistory(t *testing.T) {
+	a := graphApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	a.setTab(1)
+	settle(t, a)
+	tt.Frame()
+
+	// / 把焦点放进提交筛选框
+	tt.Key(0, ui.KeySlash)
+	tt.Frame()
+	tt.Type("支线二")
+	settle(t, a)
+	tt.Frame()
+
+	if a.commitFilter != "支线二" {
+		t.Fatalf("输入没进提交筛选框，commitFilter = %q", a.commitFilter)
+	}
+	// feat2 上两个提交；合并支线二那条是合并提交，信息里带「支线二」三个字
+	if len(a.commits) != 3 {
+		t.Errorf("筛「支线二」该留下 3 条，实际 %d：%v", len(a.commits), subjects(a.commits))
+	}
+	if !tt.HasText("支线二之一") {
+		t.Errorf("筛出来的提交没列出来：%q", tt.Texts())
+	}
+	if tt.HasText("主线一") {
+		t.Errorf("主线一不该匹配「支线二」：%q", tt.Texts())
+	}
+	// 栏头说得出范围：屏幕上几个、这一趟一共几个
+	if !tt.HasText("筛选出") {
+		t.Errorf("筛选时栏头该写「筛选出 X / Y」：%q", tt.Texts())
+	}
+
+	// 空结果是「没有匹配」，不该是「还没有提交」—— 那说的是空仓库
+	tt.Type("肯定没有这样的提交信息")
+	settle(t, a)
+	tt.Frame()
+	if len(a.commits) != 0 {
+		t.Errorf("筛一个不存在的词该空，实际 %d 条", len(a.commits))
+	}
+	if !tt.HasText("没有匹配") {
+		t.Errorf("空筛选该提示没有匹配：%q", tt.Texts())
+	}
+
+	// 清空回到全量：筛选只是视图，读回来的提交一条都没丢。
+	// （框里那个 × 是画出来的图标、没有文字可点，这里直接清词再走一遍
+	// 重算 —— 和点 × 落到同一处。）
+	a.commitFilter = ""
+	a.applyCommitFilter()
+	tt.Frame()
+	if a.commitFilter != "" || len(a.commits) != len(a.allCommits) {
+		t.Errorf("清空之后该回到全量：filter=%q commits=%d all=%d",
+			a.commitFilter, len(a.commits), len(a.allCommits))
+	}
+}
+
+// 筛选把选中的那个提交筛掉时，选中必须作废。
+//
+// 不清的话下标往往还合法（列表短了一截，旧下标恰好还在范围内），于是下半区
+// 显示的是别处的 diff —— 界面上没有任何异常，只是内容和选中对不上。
+func TestCommitFilterDropsStaleSelection(t *testing.T) {
+	a := graphApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	a.setTab(1)
+	settle(t, a)
+	tt.Frame()
+
+	if a.commitSel < 0 {
+		t.Fatal("进来该自动选中最近那个提交")
+	}
+	sel := a.commits[a.commitSel]
+
+	// 筛一个选中的提交匹配不上的词
+	a.commitFilter = "肯定匹配不上" + sel.Subject
+	a.applyCommitFilter()
+	tt.Frame()
+
+	if a.commitSel != -1 {
+		t.Errorf("选中的提交被筛掉之后 commitSel 该是 -1，实际 %d", a.commitSel)
+	}
+	if a.histDiff == loadReady && len(a.files) > 0 && a.histListID == "c:"+sel.Hash {
+		t.Error("下半区还显示着已经被筛掉的那个提交")
+	}
+}
+
+// 筛选态下「加载更多」接着没筛过的那份往下读。
+//
+// offset 按 a.allCommits 算，不是按筛完的 a.commits：筛掉一半还按后者算的
+// 话，下一页会把同一批提交读第二遍 —— 屏幕上看着「筛出来的还是那些」，
+// 其实已经重复了，而 allCommits 越长重复越多。
+func TestLoadMoreCommitsWhileFiltering(t *testing.T) {
+	dir := t.TempDir()
+	runGit(t, dir, "init", "-b", "main")
+	runGit(t, dir, "config", "user.name", "Test")
+	runGit(t, dir, "config", "user.email", "test@example.com")
+	runGit(t, dir, "config", "commit.gpgsign", "false")
+
+	// 505 个提交：首批 500，还剩 5 个在下一页
+	var fi strings.Builder
+	for i := 1; i <= 505; i++ {
+		fmt.Fprintf(&fi, "commit refs/heads/main\ncommitter Test <test@example.com> %d +0000\ndata %d\ncommit %d\nM 644 inline file.txt\ndata 5\nhello\n\n", 1700000000+i, len(fmt.Sprintf("commit %d", i)), i)
+	}
+	cmd := exec.Command("git", "fast-import")
+	cmd.Dir = dir
+	cmd.Stdin = strings.NewReader(fi.String())
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("fast-import failed: %v: %s", err, string(out))
+	}
+	runGit(t, dir, "reset", "--hard", "main")
+
+	a := loadApp(t, dir)
+	a.setTab(1)
+	settle(t, a)
+
+	if len(a.allCommits) != 500 || !a.histHasMore {
+		t.Fatalf("首批该读到 500 个且还有更多：all=%d hasMore=%v", len(a.allCommits), a.histHasMore)
+	}
+
+	// 只留一个提交在屏幕上
+	a.commitFilter = "commit 3 "
+	a.applyCommitFilter()
+	if len(a.commits) == 0 || len(a.commits) >= len(a.allCommits) {
+		t.Fatalf("筛选该只留下个位数条，实际 %d / %d", len(a.commits), len(a.allCommits))
+	}
+	shown := subjects(a.commits)
+
+	a.loadMoreCommits()
+	settle(t, a)
+
+	if len(a.allCommits) != 505 {
+		t.Errorf("加载更多之后该有 505 个未筛提交，实际 %d", len(a.allCommits))
+	}
+	// 读回来的提交一条都不该重复：按筛过的条数算 offset 就会把整批读第二遍
+	seen := map[string]bool{}
+	for _, cm := range a.allCommits {
+		if seen[cm.Hash] {
+			t.Fatalf("提交 %s 被读了两遍", cm.Short)
+		}
+		seen[cm.Hash] = true
+	}
+	// 筛选结果跟着新读回来的那批走：原来筛中的还在（它不会被读第二遍改变）
+	for _, s := range shown {
+		found := false
+		for _, cm := range a.commits {
+			if cm.Subject == s {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("筛出来的 %s 在加载更多之后丢了", s)
+		}
+	}
+}
+
+// 在编辑器 / 终端视图里点侧栏的分支，界面要回到 Git 面板的历史那一栏。
+//
+// tab 只在 Git 面板里活着（主区画哪一栏归 viewMode 管）：光把 a.tab 置成 1，
+// 屏幕上还是编辑器那一栏 —— 用户看到的就是「点了没反应」。从终端视图点过来
+// 是同一条路，一起钉住。
+func TestSidebarBranchClickLeavesOtherViews(t *testing.T) {
+	for _, mode := range []struct {
+		name string
+		mode int
+	}{{"编辑器", viewModeEditor}, {"终端", viewModeTerm}} {
+		t.Run(mode.name, func(t *testing.T) {
+			a := graphApp(t)
+			tt := ui.NewTester(a.view, 1280, 1100)
+			tt.Frame()
+			settle(t, a)
+			tt.Frame()
+
+			a.setViewMode(mode.mode)
+			settle(t, a)
+			tt.Frame()
+			if a.viewMode != mode.mode {
+				t.Fatalf("没切进那一视图：viewMode = %d", a.viewMode)
+			}
+
+			// 用坐标点，不用 tt.Click("feat1")：提交列表里那个提交还挂着
+			// feat1 的徽章，同名文本有两处，按名字点会点中哪一个全看遍历顺序。
+			box, ok := tt.Find("feat1")
+			if !ok {
+				t.Fatalf("侧栏里找不到 feat1：%q", tt.Texts())
+			}
+			tt.ClickAt(box.X+box.W/2, box.Y+box.H/2)
+			settle(t, a)
+			tt.Frame()
+
+			if a.viewMode != viewModeGit {
+				t.Errorf("点了分支该回到 Git 面板，实际 viewMode = %d", a.viewMode)
+			}
+			if a.tab != 1 {
+				t.Errorf("点了分支该切到历史 tab，实际 tab = %d", a.tab)
+			}
+			if a.histRev != "refs/heads/feat1" {
+				t.Errorf("点了 feat1 之后 histRev = %q, want refs/heads/feat1", a.histRev)
+			}
+			if !tt.HasText("支线一之二") {
+				t.Errorf("feat1 的提交没列出来：%q", tt.Texts())
+			}
+		})
+	}
+}
+
+// 历史 tab 栏头的增删计数上色：绿 / 红，和文件树行尾、栏脚「总计」同一个
+// 口径（addBar / delBar）。
+//
+// 曾经这里两个数字共用一支中性的 ref 色（分支名、哈希那支）—— 同样两个数字
+// 在屏幕三处三个脸色，读的人得分别记。
+func TestHistoryHeaderCountsAreColored(t *testing.T) {
+	a := richApp(t)
+	a.setTab(1)
+	settle(t, a)
+
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+	if a.histDiff != loadReady || len(a.files) == 0 {
+		t.Fatalf("选中提交的 diff 没读出来：hist=%v files=%d err=%s",
+			a.histDiff, len(a.files), a.histDiffErr)
+	}
+
+	// 栏脚「总计」那一对数字和栏头一模一样（同一个 totalAdd/totalDel），
+	// Find 取先遍历到的那个 —— 栏头建在栏脚前面，拿到的就是栏头。
+	add := "+" + strconv.Itoa(a.totalAdd())
+	del := "−" + strconv.Itoa(a.totalDel())
+
+	box, ok := tt.Find(add)
+	if !ok {
+		t.Fatalf("栏头找不到 %q：%q", add, tt.Texts())
+	}
+	if box.Y > 200 {
+		t.Errorf("拿到的是栏脚那一对（Y=%.0f），不是栏头", box.Y)
+	}
+	if green, red := countHue(tt, box); !green || red {
+		t.Errorf("栏头的 %s 该是绿的（不红），实际 green=%v red=%v", add, green, red)
+	}
+
+	box, ok = tt.Find(del)
+	if !ok {
+		t.Fatalf("栏头找不到 %q：%q", del, tt.Texts())
+	}
+	if green, red := countHue(tt, box); green || !red {
+		t.Errorf("栏头的 %s 该是红的（不绿），实际 green=%v red=%v", del, green, red)
+	}
+}
+
+// countHue 在这一行字里横向扫一遍，看有没有绿像素、有没有红像素。
+//
+// 抗锯齿让多数字素停在灰阶上，字与字之间全是背景色，所以扫一片而不是取一个
+// 点。比较前转 int：uint8 上加 20 会绕回（237 > 219 变成 237 > 3）。
+func countHue(tt *ui.Tester, box ui.Rect) (green, red bool) {
+	y := int(box.Y + box.H/2)
+	for x := int(box.X); x < int(box.X+box.W); x++ {
+		p := pixelAt(tt, x, y)
+		if int(p[1]) > int(p[0])+20 && int(p[1]) > int(p[2])+20 {
+			green = true
+		}
+		if int(p[0]) > 150 && int(p[1]) < 120 && int(p[2]) < 120 {
+			red = true
+		}
+	}
+	return green, red
 }
 
 // subjects 是给报错信息用的提交主题列表。

@@ -112,17 +112,21 @@ type repoTab struct {
 	wsSel        int
 	wsOpen       map[string]bool
 
-	tab         int // 0 = 改动, 1 = 历史
-	commits     []gitrepo.Commit
-	graph       []graphRow
-	maxLanes    int
-	commitList  ui.ListState
-	commitSel   int
-	histRev     string
-	hist        loadState
-	histDiff    loadState
-	histErr     string
-	histDiffErr string
+	tab               int // 0 = 改动, 1 = 历史
+	allCommits        []gitrepo.Commit
+	commits           []gitrepo.Commit
+	graph             []graphRow
+	maxLanes          int
+	commitList        ui.ListState
+	commitSel         int
+	histAll           bool
+	histRev           string
+	commitFilter      string
+	commitFilterBuilt string
+	hist              loadState
+	histDiff          loadState
+	histErr           string
+	histDiffErr       string
 
 	refs       []gitrepo.Ref
 	refByFull  map[string]*gitrepo.Ref
@@ -195,12 +199,16 @@ func (a *app) saveActiveTab() {
 	tab.wsOpen = a.wsOpen
 
 	tab.tab = a.tab
+	tab.allCommits = a.allCommits
 	tab.commits = a.commits
 	tab.graph = a.graph
 	tab.maxLanes = a.maxLanes
 	tab.commitList = a.commitList
 	tab.commitSel = a.commitSel
+	tab.histAll = a.histAll
 	tab.histRev = a.histRev
+	tab.commitFilter = a.commitFilter
+	tab.commitFilterBuilt = a.commitFilterBuilt
 	tab.hist = a.hist
 	tab.histDiff = a.histDiff
 	tab.histErr = a.histErr
@@ -269,12 +277,16 @@ func (a *app) restoreActiveTab() {
 	a.wsOpen = tab.wsOpen
 
 	a.tab = tab.tab
+	a.allCommits = tab.allCommits
 	a.commits = tab.commits
 	a.graph = tab.graph
 	a.maxLanes = tab.maxLanes
 	a.commitList = tab.commitList
 	a.commitSel = tab.commitSel
+	a.histAll = tab.histAll
 	a.histRev = tab.histRev
+	a.commitFilter = tab.commitFilter
+	a.commitFilterBuilt = tab.commitFilterBuilt
 	a.hist = tab.hist
 	a.histDiff = tab.histDiff
 	a.histErr = tab.histErr

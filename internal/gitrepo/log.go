@@ -37,6 +37,32 @@ func (r *Repo) Log(ctx context.Context, rev string, limit, skip int) ([]Commit, 
 	if _, err := run(ctx, r.Root, "rev-parse", "--verify", "--quiet", probe); err != nil {
 		return nil, nil
 	}
+	return r.log(ctx, []string{rev}, limit, skip)
+}
+
+// LogAll 读**所有分支**的提交：本地分支、远程跟踪分支、标签一起，按拓扑序排。
+//
+// 侧栏「所有分支」那一行用的就是它 —— 用户想看的是这个仓库总共在干什么，
+// 不是某一条线的历史。储藏不在里面（git log --all 本来就不收 refs/stash），
+// 那是储藏自己的视图。
+//
+// 空仓库直接返回空：--all 一条引用都没有时 git log 也是空输出，但顺带吐一
+// 句 "does not have any commits yet" 到 stderr，按错误处理就错了。
+func (r *Repo) LogAll(ctx context.Context, limit, skip int) ([]Commit, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	if _, err := run(ctx, r.Root, "rev-parse", "--verify", "--quiet", "HEAD"); err != nil {
+		return nil, nil
+	}
+	return r.log(ctx, nil, limit, skip)
+}
+
+// log 是 Log / LogAll 公共的身子：revs 是要看的 revision 列表（nil = HEAD）。
+//
+// 分开两个入口是因为「所有分支」不是一条 revision：--all 是个 flag，塞进
+// rev 里会被 git 当成一条叫 "--all" 的引用名，报一句和真实原因无关的错。
+func (r *Repo) log(ctx context.Context, revs []string, limit, skip int) ([]Commit, error) {
 	// 用 %x00 分隔字段、%x1e 分隔记录：作者名和提交信息里可能有任何
 	// 可打印字符，用普通分隔符会被内容里的逗号、竖线之类拆错。
 	format := "%H%x00%h%x00%an%x00%aI%x00%D%x00%P%x00%s%x1e"
@@ -48,8 +74,16 @@ func (r *Repo) Log(ctx context.Context, rev string, limit, skip int) ([]Commit, 
 		"--date=iso-strict", "--topo-order", "--pretty=format:" + format,
 		"--skip=" + strconv.Itoa(skip), "-n", strconv.Itoa(limit),
 	}
-	if rev != "" {
-		args = append(args, rev)
+	// revs 为空表示「所有分支」：--all 是 flag 不是 revision，得加在参数
+	// 里。什么都不加的话 git log 退回 HEAD 一条线 —— 那正是「所有分支」
+	// 这一行要避免的。
+	if len(revs) == 0 {
+		args = append(args, "--all")
+	}
+	for _, rev := range revs {
+		if rev != "" {
+			args = append(args, rev)
+		}
 	}
 	out, err := run(ctx, r.Root, args...)
 	if err != nil {

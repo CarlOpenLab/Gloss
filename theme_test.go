@@ -169,7 +169,7 @@ func TestAccentIsAchromatic(t *testing.T) {
 // TestGraphLanesHaveNoPurple 断言拓扑图的支线里没有紫 / 靛。
 //
 // 八条线同时出现在一屏里，任何一条是紫，整张图就会被读成「紫色的那个软件」——
-// 主干已经改走中性 Ink，剩下的七条也必须是明确的非紫。
+// 主干是一支蓝，其余的七条也必须是明确的非紫。
 func TestGraphLanesHaveNoPurple(t *testing.T) {
 	for _, dark := range []bool{false, true} {
 		pal := paletteFor(themeFor(dark, ui.Preferences{}), laneSet{})
@@ -182,27 +182,42 @@ func TestGraphLanesHaveNoPurple(t *testing.T) {
 	}
 }
 
-// TestGraphMainLaneIsInk 断言 0 号色（主干 / HEAD）是中性 Ink，且是整张图上
-// 最亮（浅色下最重）的一条。
+// TestGraphMainLaneIsTheBlue 断言 0 号色（主干 / HEAD）带色相，而且是全图
+// 唯一一支蓝。
 //
-// 主干同时是「我在哪条分支」那颗圆点、提交行里本地分支芯片上那颗 6px 点、
-// 提交栏状态胶囊的颜色（见 history.go 的 badgeDot、sidebar.go 的 refRow）。
-// 它一旦换成某个彩色 —— 上一版是 `#58a6ff` 经典亮蓝 —— 主线立刻降级成「又一
-// 条支线」，跟着那几处圆点一起变色，整屏就多出一串蓝点。这条闸是按那次回退加的。
-func TestGraphMainLaneIsInk(t *testing.T) {
-	for _, dark := range []bool{false, true} {
-		pal := paletteFor(themeFor(dark, ui.Preferences{}), laneSet{})
-		main := pal.lanes[0]
-		if spread(main) > 16 {
-			t.Errorf("dark=%v: 主干色 %v 带色相（RGB 极差 %d）—— 主干走中性 Ink", dark, main, spread(main))
-		}
-		for i := 1; i < len(pal.lanes); i++ {
-			lm, li := luma(main), luma(pal.lanes[i])
-			if dark && lm <= li {
-				t.Errorf("深色下主干 %.2f 不比 %d 号线 %.2f 亮 —— 主线要一眼认得出来", lm, i, li)
+// 曾经 0 号是中性 Ink（浅色下近黑、深色下近白），那一版回退过：主线降级成
+// 「又一条支线」，而 0 号同时是侧栏当前分支圆点、HEAD 芯片点、提交栏状态胶囊
+// 的颜色，整屏多出一串同色点。现在主干走一支彩色（钢青蓝），那几处跟着一起
+// 变 —— 这是明确选定过的取舍（用户拍板），这里守住的是它的另一半：色相独占。
+//
+// 两支蓝并排会被读成「一条蓝渐变 + 几个别的色」，支线之间分不出彼此，图就白
+// 画了；mono 那一套整份灰阶，是「不靠色相」的选项，0 号保持最亮/最重的一阶。
+func TestGraphMainLaneIsTheBlue(t *testing.T) {
+	for _, p := range lanePresets {
+		for _, dark := range []bool{false, true} {
+			cols := p.lanes(dark)
+			main := cols[0]
+			if p.id == "mono" {
+				continue
 			}
-			if !dark && lm >= li {
-				t.Errorf("浅色下主干 %.2f 不比 %d 号线 %.2f 暗 —— 主线要一眼认得出来", lm, i, li)
+			if hue(main) < 0 {
+				t.Errorf("%s(dark=%v)：主干色 %v 没有色相 —— 主干该是一支彩色", p.id, dark, main)
+			}
+			if !isBlueFamily(main) {
+				t.Errorf("%s(dark=%v)：主干 %v 不是蓝的", p.id, dark, main)
+			}
+			blues := 0
+			for i, c := range cols {
+				if isBlueFamily(c) {
+					blues++
+					if i != 0 {
+						t.Errorf("%s(dark=%v)：第 %d 号 %v 也是蓝的 —— 全图只允许一支蓝，且是主干",
+							p.id, dark, i, c)
+					}
+				}
+			}
+			if blues != 1 {
+				t.Errorf("%s(dark=%v)：有 %d 支蓝", p.id, dark, blues)
 			}
 		}
 	}
@@ -246,15 +261,17 @@ func abs(f float64) float64 {
 	return f
 }
 
-// 内置的拓扑图方案都得守住 §2.6 那三条：0 号中性 Ink、8 支两两不同、
+// 内置的拓扑图方案都得守住 §2.6 那几条：0 号是主干（带色相，mono 除外）、
+// 8 支两两不同、
 // 全图只有一支蓝。方案是给用户挑的，挑完照样得能读图 —— 这条就是那道闸。
 func TestLanePresetsKeepDesignRules(t *testing.T) {
 	for _, p := range lanePresets {
 		for _, dark := range []bool{false, true} {
 			cols := p.lanes(dark)
-			if got := spread(cols[0]); got > 16 {
-				t.Errorf("%s(dark=%v)：0 号是主干，得是中性 Ink，实际 %v（极差 %d）",
-					p.id, dark, cols[0], got)
+			// 0 号是主干：classic / vivid 里必须是一支彩色（且是唯一的蓝，
+			// 下面那条看着），mono 整份灰阶例外。
+			if p.id != "mono" && hue(cols[0]) < 0 {
+				t.Errorf("%s(dark=%v)：0 号是主干，得带色相，实际 %v", p.id, dark, cols[0])
 			}
 			seen := map[ui.Color]int{}
 			blues := 0
@@ -319,14 +336,15 @@ func isBlueFamily(c ui.Color) bool {
 
 // 出厂那一套就是 DESIGN.md §2.6 写死的 8 色。它现在是「可自定义」的默认值，
 // 谁改掉它等于改了规范，所以在这里钉一遍：深色、浅色各 8 个。
+// 0 号是主干（钢青蓝），3 号是它让出来之后补上的芥末黄。
 func TestClassicLanesMatchDesignSpec(t *testing.T) {
 	want := map[bool][]string{
 		true: {
-			"#e6e6e6", "#3eb489", "#e09f3e", "#4c86e8",
+			"#4c86e8", "#3eb489", "#e09f3e", "#c9a227",
 			"#e5484d", "#d977a8", "#38b2ac", "#9aab45",
 		},
 		false: {
-			"#0f1115", "#2d9d74", "#c9822b", "#2f6fd0",
+			"#2f6fd0", "#2d9d74", "#c9822b", "#a8860b",
 			"#cf3b40", "#b85487", "#288c87", "#6f7a1f",
 		},
 	}

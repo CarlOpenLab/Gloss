@@ -80,6 +80,14 @@ func (a *app) handleKeys(c *ui.Context) {
 			a.focusFilter = true
 		}
 	}
+	// `/` 聚焦提交筛选框。只在历史 tab 认：改动 tab 里没有这个东西，
+	// 挂上去按下去没反应更糊。焦点已经在框里的时候框架先把键给输入框
+	// （焦点元素先收到 keyDown），所以打 `/` 不会自己抢自己。
+	if a.viewMode == viewModeGit && a.tab == 1 && !a.modalOn() {
+		if c.Shortcut(0, ui.KeySlash) {
+			a.focusCommitFilter = true
+		}
+	}
 	if c.Shortcut(ui.Cmd, ui.KeyK) {
 		if a.viewMode == viewModeTerm {
 			a.clearCurrentTerminal()

@@ -152,6 +152,8 @@ func buildAppMenu(a *app) *mygo.Menu {
 		// ⌘F 留给改动区自己的查找（DiffView 里那一栏）：找内容和找文件是
 		// 两件事，而且内容查找的「当前哪一条」只有编辑器自己知道。
 		a.menuCmd(T("筛选文件", "Filter Files"), "CmdOrCtrl+P", func() { a.focusFilter = true }),
+		a.menuCmd(T("筛选提交", "Filter Commits"), "/", func() { a.focusCommitFilter = true }),
+		a.menuCmd(T("查看所有分支的历史", "History of All Branches"), "", func() { a.selectAllRefs() }),
 		mygo.Separator(),
 		{Role: mygo.RoleToggleFullScreen, Label: T("进入全屏", "Toggle Full Screen")},
 	}

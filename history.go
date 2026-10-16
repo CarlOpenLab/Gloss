@@ -97,6 +97,7 @@ func (a *app) loadCommits() {
 	seq := a.logSeq
 	dir := a.repoPath
 	rev := a.histRev
+	all := a.histAll
 	a.histHasMore = true
 	a.histLoadingMore = false
 
@@ -104,7 +105,11 @@ func (a *app) loadCommits() {
 		repo, err := gitrepo.Open(context.Background(), dir)
 		var commits []gitrepo.Commit
 		if err == nil {
-			commits, err = repo.Log(context.Background(), rev, logBatchSize, 0)
+			if all {
+				commits, err = repo.LogAll(context.Background(), logBatchSize, 0)
+			} else {
+				commits, err = repo.Log(context.Background(), rev, logBatchSize, 0)
+			}
 		}
 		a.dispatch(func() {
 			if a.logSeq != seq {
@@ -127,10 +132,15 @@ func (a *app) loadCommits() {
 			// 进来先选中最近那个提交，省得用户还要再点一下。
 			//
 			// 正在看储藏的时候不能选：那会把下半区从储藏的改动换成某个
-			// 提交的，用户点的是储藏，屏幕上是别的东西。
-			if a.commitSel < 0 && a.stashRev == "" && len(commits) > 0 {
+			// 提交的，用户点的是储藏，屏幕上是别的东西。选中按**筛完之后**
+			// 那一份算（a.commits）：筛选词把最近那个提交藏起来时，该选中的
+			// 是屏幕上第一个，不是被藏起来的那个。
+			if a.stashRev != "" || len(a.commits) == 0 {
+				return
+			}
+			if a.commitSel < 0 {
 				a.loadCommit(0)
-			} else if a.commitSel == 0 && a.stashRev == "" && len(commits) > 0 && commits[0].Hash != oldHead {
+			} else if a.commitSel == 0 && a.commits[0].Hash != oldHead {
 				a.loadCommit(0)
 			}
 		})
@@ -146,13 +156,21 @@ func (a *app) loadMoreCommits() {
 	seq := a.logSeq
 	dir := a.repoPath
 	rev := a.histRev
-	offset := len(a.commits)
+	all := a.histAll
+	// offset 按**没筛过**的那份算：筛选只是把已经读回来的提交藏起来，
+	// 下一页该从哪儿接着读和筛选词无关。按筛过的 len(a.commits) 算的话，
+	// 筛掉一半就会把同一批提交读第二遍。
+	offset := len(a.allCommits)
 
 	a.run(func() {
 		repo, err := gitrepo.Open(context.Background(), dir)
 		var more []gitrepo.Commit
 		if err == nil {
-			more, err = repo.Log(context.Background(), rev, logBatchSize, offset)
+			if all {
+				more, err = repo.LogAll(context.Background(), logBatchSize, offset)
+			} else {
+				more, err = repo.Log(context.Background(), rev, logBatchSize, offset)
+			}
 		}
 		a.dispatch(func() {
 			if a.logSeq != seq {
@@ -166,7 +184,7 @@ func (a *app) loadMoreCommits() {
 			if len(more) < logBatchSize {
 				a.histHasMore = false
 			}
-			a.setCommits(append(a.commits, more...))
+			a.setCommits(append(a.allCommits, more...))
 		})
 	})
 }
@@ -174,9 +192,48 @@ func (a *app) loadMoreCommits() {
 // setCommits 换掉提交列表，顺便把拓扑图的布局算出来。
 //
 // 两者必须一起换：图的第 i 行就是列表的第 i 行，分开赋值迟早会对不上。
+// 进来的这一份是**没筛过**的全部提交，筛完之后显示的那份由 applyCommitFilter
+// 算 —— 筛选词改一下只重算视图，不用重新读盘。
 func (a *app) setCommits(commits []gitrepo.Commit) {
-	a.commits = commits
-	a.graph, a.maxLanes = buildGraph(commits)
+	a.allCommits = commits
+	a.applyCommitFilter()
+}
+
+// applyCommitFilter 按 commitFilter 算要显示的提交，并重建拓扑图。
+//
+// 匹配大小写不敏感，范围是提交信息、完整/短哈希、作者和指向它的引用
+// （分支、标签）。引用一起进来是因为「按分支名找提交」是最常见的找法 ——
+// 提交信息里往往不写分支名。
+func (a *app) applyCommitFilter() {
+	q := strings.ToLower(strings.TrimSpace(a.commitFilter))
+	if q == "" {
+		a.commits = a.allCommits
+	} else {
+		kept := make([]gitrepo.Commit, 0, len(a.allCommits))
+		for _, cm := range a.allCommits {
+			if commitMatches(cm, q) {
+				kept = append(kept, cm)
+			}
+		}
+		a.commits = kept
+	}
+	a.commitFilterBuilt = a.commitFilter
+	a.graph, a.maxLanes = buildGraph(a.commits)
+	// 选中可能已经被筛掉了：下标越界时清掉，别让下半区显示别处的 diff
+	// （和 selectRef 清 commitSel 是同一个道理）。
+	if a.commitSel >= len(a.commits) {
+		a.commitSel = -1
+		a.histFiles = nil
+		a.histListID = ""
+		a.stashRev = ""
+		a.histDiff = loadIdle
+	}
+}
+
+// commitMatches 看一个提交是否匹配已经转成小写的筛选词。
+func commitMatches(cm gitrepo.Commit, q string) bool {
+	hay := strings.ToLower(cm.Subject + " " + cm.Hash + " " + cm.Short + " " + cm.Author + " " + cm.Refs)
+	return strings.Contains(hay, q)
 }
 
 // loadCommit 把某个提交的 diff 读出来，作为主区显示的内容。
@@ -262,7 +319,7 @@ func (a *app) selectStash(ref gitrepo.Ref) {
 	a.stashName = ref.Name
 	a.histDiff = loadLoading
 	a.histDiffErr = ""
-	a.tab = 1
+	a.enterHistory()
 
 	// 用户可能是在改动 tab 上直接点的储藏，提交列表还没读过。不补这一下，
 	// 上半区会停在 loadIdle，显示「还没有提交」—— 仓库里明明有一堆。
@@ -349,7 +406,12 @@ func (a *app) commitListPane(c *ui.Context, pal palette) {
 		ui.Row(c).Shrink(0).Padding(8, 12).Gap(8).AlignItems(ui.Center).Children(func() {
 			n := T("提交", "Commits")
 			if a.hist == loadReady {
-				if a.histHasMore {
+				if a.commitFilter != "" {
+					// 筛选的时候两个数都得说：屏幕上这几个、这一趟读回来
+					// 一共几个。只说前者的话，「我这个分支明明有更多提交」
+					// 和「筛选把提交藏起来了」分不清。
+					n = Tf("筛选出 %d / %d 个提交", "Filtered %d of %d commits", len(a.commits), len(a.allCommits))
+				} else if a.histHasMore {
 					n = Tf("已加载 %d 个提交…", "Loaded %d commits…", len(a.commits))
 				} else {
 					n = Tf("%d 个提交", "%d commits", len(a.commits))
@@ -357,16 +419,40 @@ func (a *app) commitListPane(c *ui.Context, pal palette) {
 			}
 			ui.Text(c, n).FontSize(11).Font("monospace").FontFeatures("tnum").
 				TextColor(t.TextMuted)
-			if a.histRev != "" {
-				// 点了分支之后得有个说法，不然用户不知道自己在看哪条历史
-				ui.Text(c, a.histRev).FontSize(11).Bold().SingleLine().
+			if name := a.histName(); name != "" {
+				// 点了分支（或「所有分支」）之后得有个说法，不然用户不知道
+				// 自己在看哪条历史
+				ui.Text(c, name).FontSize(11).Bold().SingleLine().
 					TextColor(pal.ref)
 			}
 			ui.Spacer(c)
 			if a.histDiff == loadReady && len(a.files) > 0 {
-				ui.Textf(c, "+%d −%d", a.totalAdd(), a.totalDel()).
-					FontSize(11).Font("monospace").FontFeatures("tnum").
-					TextColor(pal.ref)
+				// 增删各上一支色（addBar / delBar），和文件树行尾、栏脚
+				// 「总计」同一个口径：一处用中性 ref 色，同样两个数字在
+				// 屏幕三处三个脸色，读的人得分别记。
+				ui.Textf(c, "+%d", a.totalAdd()).FontSize(11).Bold().
+					Font("monospace").FontFeatures("tnum").TextColor(pal.addBar)
+				ui.Textf(c, "−%d", a.totalDel()).FontSize(11).Bold().
+					Font("monospace").FontFeatures("tnum").TextColor(pal.delBar)
+			}
+		})
+
+		// 提交筛选框。和侧栏筛分支、主区筛文件是同一副样子：常驻、随手打
+		// 字即筛。它筛的是**已经读回来**的那批（见 commitFilter 的注释），
+		// 想翻更早的提交还有列表底部那一行「加载更多」。
+		//
+		// 筛完的那一份提交是用哪个词算的，记在 commitFilterBuilt 里：不一致
+		// 就重算视图（和 refsFilter / fileTreeFilter 同一个套路）。不重新读盘，
+		// 也不清选中 —— 选中的提交被筛掉时 applyCommitFilter 自己会收尾。
+		if a.commitFilter != a.commitFilterBuilt {
+			a.applyCommitFilter()
+		}
+		ui.Box(c).Key("commit-filter-wrap").Shrink(0).Padding(0, 12, 6, 12).Children(func() {
+			in := searchField(c, pal, &a.commitFilter, T("筛选提交", "Filter commits"))
+			// / 键、命令栏置位的一次性焦点请求（见 focusCommitFilter）。
+			if a.focusCommitFilter {
+				in.Focus()
+				a.focusCommitFilter = false
 			}
 		})
 
@@ -385,6 +471,18 @@ func (a *app) commitListPane(c *ui.Context, pal palette) {
 			}
 		}
 		if len(a.commits) == 0 {
+			// 筛选出一个都没有、而这一趟还没读完时，别让用户对着空列表猜：
+			// 接着往下读，找到为止（读完了就还是空的，栏头那个「筛选出
+			// 0 / N」会说明范围）。
+			if a.commitFilter != "" && a.histHasMore && !a.histLoadingMore {
+				a.loadMoreCommits()
+				emptyNote(c, t, T("正在更多提交里筛选…", "Searching earlier commits…"))
+				return
+			}
+			if a.commitFilter != "" {
+				emptyNote(c, t, Tf("没有匹配「%s」的提交", "No commits matching \"%s\"", a.commitFilter))
+				return
+			}
 			emptyNote(c, t, T("还没有提交", "No commits yet"))
 			return
 		}
@@ -404,8 +502,11 @@ func (a *app) commitListPane(c *ui.Context, pal palette) {
 		ui.List(c, &a.commitList, totalRows, func(i int) {
 			if i < len(a.commits) {
 				a.commitRow(c, pal, i)
-				// 预加载：当滚动接近列表末尾（倒数 20 行以内）时，自动触发加载更早提交
-				if i >= len(a.commits)-20 && a.histHasMore && !a.histLoadingMore {
+				// 预加载：滚动到接近列表末尾（倒数 20 行以内）时自动读更早的提交。
+				// 筛选态不在这里预载 —— 那时下标数的是筛过的那份，列表一短
+				// 就贴着阈值，会一路读到仓库尽头；筛选要往下找走上面那条
+				// 「一个都没筛出来」的路。
+				if a.commitFilter == "" && i >= len(a.commits)-20 && a.histHasMore && !a.histLoadingMore {
 					a.loadMoreCommits()
 				}
 			} else {
@@ -570,15 +671,20 @@ type refBadge struct {
 
 // badgeDot 是芯片上那颗圆点的颜色（§2.5 的小标签亮色）。
 //
-// 四种引用各一支色，而且只落在那颗 6px 的点上：HEAD 跟主干、跟侧栏「我在哪」
-// 那颗圆点共用 Ink —— 它是全屏少数几处实心强调之一，不能变成又一颗彩点；
-// 本地分支、远程、标签则各拿一支，颜色都借自拓扑图那套色板，
+// 四种引用各一支色，而且只落在那颗 6px 的点上：HEAD 跟「我在哪」共用 Ink
+// —— 它是全屏少数几处实心强调之一，不能变成又一颗彩点；本地分支、远程、
+// 标签则各拿一支，颜色都借自拓扑图那套色板，
 // 于是「这条线是哪条分支」和「这枚芯片是哪类引用」是同一套颜色语言。
 // 这里原来本地分支与 HEAD 同色（都是 Ink），一列芯片上全是白点，谁也认不出谁。
+//
+// HEAD **不跟主干走**：主干占走钢青蓝之后，它和本地分支那支 accentBlue 是同一
+// 支 hex，跟着走就等于 HEAD 芯片和本地分支芯片共用一颗点 —— 一列芯片上两种
+// 引用分不开，正是上面那句要防的事。「我在哪」因此保持 Ink，图里那条蓝线是
+// 「这是主干」，两件事各说各话。
 func badgeDot(pal palette, kind refBadgeKind) ui.Color {
 	switch kind {
 	case refBadgeHead:
-		return pal.laneColor(0)
+		return pal.ink
 	case refBadgeRemote:
 		return pal.accentTeal
 	case refBadgeTag:

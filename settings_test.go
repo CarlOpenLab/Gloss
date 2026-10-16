@@ -759,3 +759,61 @@ func TestUpdatePrefsWithoutPlugin(t *testing.T) {
 		t.Error("未检查时应给出占位文案")
 	}
 }
+
+// 设置 → 通用偏好里的「后台自动抓取」：点了就存、重开还记得，并且真的
+// 推给了轮询（只改 app 字段不改 atomic 的话，设置像动了而后台不跑）。
+func TestAutoFetchSettingPersists(t *testing.T) {
+	dir := t.TempDir()
+	s := store.Open(dir)
+	a := richApp(t)
+	a.attachStore(s)
+	settle(t, a)
+
+	if a.autoFetch {
+		t.Fatal("后台自动抓取默认该是关的")
+	}
+	if a.autoFetchOn.Load() != 0 {
+		t.Error("轮询那边的开关该跟着是 0")
+	}
+
+	const winH float32 = 900
+	tt := ui.NewTester(a.view, 1280, int(winH))
+	still(tt)
+	tt.Frame()
+	a.openSettings()
+	a.settingsTab = settingsTabGeneral
+	tt.Frame()
+
+	if !tt.HasText(T("远程同步", "Remote Sync")) {
+		t.Fatalf("通用偏好里没有远程同步分区：%q", tt.Texts())
+	}
+	// 那一分区在页面底下，先滚到能看见
+	scrollTo(t, tt, T("后台自动抓取", "Fetch in the Background"), winH)
+	// 开关有它自己的名字（行左边那行字是纯文本，点了不 toggle）
+	if err := tt.Click(T("后台自动抓取开关", "Fetch in the Background switch")); err != nil {
+		t.Fatalf("点「后台自动抓取」开关: %v", err)
+	}
+	settle(t, a)
+	tt.Frame()
+
+	if !a.autoFetch {
+		t.Error("点过之后 autoFetch 该是 true")
+	}
+	if a.autoFetchOn.Load() != 1 {
+		t.Errorf("轮询那边的开关该是 1，实际 %d", a.autoFetchOn.Load())
+	}
+	// 落盘：换个 store 实例读同一个目录，值还在
+	if !store.Open(dir).Config().AutoFetch {
+		t.Error("autoFetch 没存进配置文件")
+	}
+
+	// 关回去
+	if err := tt.Click(T("后台自动抓取开关", "Fetch in the Background switch")); err != nil {
+		t.Fatalf("再点一次「后台自动抓取」开关: %v", err)
+	}
+	settle(t, a)
+	tt.Frame()
+	if a.autoFetch || a.autoFetchOn.Load() != 0 {
+		t.Errorf("再点一次该关回去：autoFetch=%v on=%d", a.autoFetch, a.autoFetchOn.Load())
+	}
+}

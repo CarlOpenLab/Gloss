@@ -957,6 +957,35 @@ func (a *app) generalSettingsPane(c *ui.Context, pal palette) {
 					})
 				})
 			})
+
+			ui.Box(c).Height(1).FillWidth().Background(pal.hairline)
+
+			// 7. 远程同步：后台自动抓取。
+			//
+			// 只抓不拉。抓取（git fetch）只更新远程跟踪分支，不碰工作区和
+			// index，不可能在半路撞出冲突；拉取会把提交合并进当前分支，那一下
+			// 必须用户自己点（工具栏那颗、⌘⇧P）。开着它，侧栏的远程分支和每个
+			// 本地分支后面的 ↑n ↓n 会自己跟上，不用先手动抓一次。
+			ui.Column(c).Gap(10).FillWidth().Children(func() {
+				ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
+					drawIcon(c, iconFetch, 15, t.Accent)
+					ui.Text(c, T("远程同步", "Remote Sync")).FontSize(textBody).FontWeight(weightSemibold).TextColor(pal.ink)
+				})
+
+				on := a.autoFetch
+				settingRow(c, pal,
+					T("后台自动抓取", "Fetch in the Background"),
+					T("每 5 分钟对所有远程抓取一次，只更新远程分支，不动工作区。", "Fetches all remotes every 5 minutes. Updates remote-tracking refs only; never touches the working tree."),
+					func() {
+						// 开关挂一个自己的名字：屏幕阅读器念得出「这是个开关、
+						// 现在开着没有」，测试也点得到它（行左边那行字是纯文本，
+						// 点了不 toggle）。
+						sw := ui.Switch(c, &on).Label(T("后台自动抓取开关", "Fetch in the Background switch"))
+						if sw.Clicked() {
+							a.setAutoFetch(on)
+						}
+					})
+			})
 		})
 	})
 }

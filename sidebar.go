@@ -127,6 +127,19 @@ func (a *app) refRow(c *ui.Context, pal palette, r filetree.Row) {
 
 	ref, ok := a.refByFull[strings.TrimPrefix(n.Key, refLeaf)]
 	if !ok {
+		// 「所有分支」不是一条引用：没有 Full 可以查，也不用查 —— 它要的
+		// 是所有引用合起来的那份历史。选中态跟着 histAll 走，这样侧栏说得出
+		// 「现在看的是全部」。
+		if n.Key == refAll {
+			row, _ := treeRow(c, t, pal, treeRowOpts{Depth: r.Depth, Selected: a.histAll}, func() {
+				ui.Text(c, n.Label).FontSize(12).SingleLine().
+					Grow(1).MinWidth(0).TextColor(pal.inkMuted)
+			})
+			if row.Clicked() {
+				a.selectAllRefs()
+			}
+			return
+		}
 		ui.Text(c, n.Label).FontSize(12).SingleLine()
 		return
 	}
@@ -156,7 +169,24 @@ func (a *app) refRow(c *ui.Context, pal palette, r filetree.Row) {
 		if ref.Head {
 			txt.FontWeight(weightSemibold).TextColor(pal.ink)
 			// HEAD 芯片走 §2.5 的配方，和提交行里那些引用芯片同一副面孔。
-			specChip(c, pal, "HEAD", pal.laneColor(0), rowChipH, rowChipText)
+			// 用 Ink 而不是 laneColor(0)：主干现在是钢青蓝，跟下去就和本地
+			// 分支芯片那颗 accentBlue 点同色，两种引用分不开（见 badgeDot）。
+			specChip(c, pal, "HEAD", pal.ink, rowChipH, rowChipText)
+		}
+		// 有上游的分支把「和远程差几个提交」摆在名字后面。
+		//
+		// 本地 / 远程两棵树分开列，看起来是两套互不相干的东西；把这几个数
+		// 放在本地分支上，「main 和 origin/main 是同一条线、现在差俩提交」
+		// 就不用点两次才看出来了。上游已经被远程删掉也在这儿说一声。
+		if track := trackLabel(*ref); track != "" {
+			// 上游没了用危险色：那是一件得处理的事（推上去会新建一条远程
+			// 分支），压暗成和其它计数一样等于「看一眼就过去」。
+			trackColor := t.TextMuted
+			if ref.UpstreamGone {
+				trackColor = pal.danger
+			}
+			ui.Text(c, track).FontSize(10).Font("monospace").FontFeatures("tnum").
+				Shrink(0).TextColor(trackColor)
 		}
 	})
 
@@ -238,6 +268,9 @@ func (a *app) selectRef(key string, ref gitrepo.Ref) {
 		return
 	}
 
+	a.histAll = false
+	// 从「所有分支」点回一条具体分支时也要重读：那时候 histRev 是空串，
+	// 屏幕上却是全部引用那份历史。
 	if a.histRev != ref.Full {
 		a.histRev = ref.Full
 		a.commitSel = -1
@@ -247,8 +280,64 @@ func (a *app) selectRef(key string, ref gitrepo.Ref) {
 		a.stashRev = "" // 换看分支了，下半区不再是储藏
 		a.histDiff = loadIdle
 	}
-	a.tab = 1
+	a.enterHistory()
 	a.loadCommits()
+}
+
+// enterHistory 把界面带到历史那一栏。
+//
+// 从终端 / 编辑器视图里点分支、点储藏，光改 a.tab 是不够的：主区画哪一栏归
+// viewMode 管，tab 只在 Git 面板里活着。不先把视图切回去，提交列表读得再对
+// 也是画在别人那一栏上 —— 用户看到的就是「点了没反应」。
+func (a *app) enterHistory() {
+	if a.viewMode != viewModeGit {
+		a.setViewMode(viewModeGit)
+	}
+	a.tab = 1
+}
+
+// selectAllRefs 是点了「所有分支」：提交列表换成所有引用合起来的历史。
+//
+// histAll 和 histRev 互斥：开着 histAll 时 histRev 是空串，loadCommits 因此
+// 走 LogAll（git log --all）而不是某一条 revision。
+func (a *app) selectAllRefs() {
+	a.histAll = true
+	a.histRev = ""
+	a.refSel = "" // 「所有分支」那一行不是引用，选中态由 histAll 说
+	a.commitSel = -1
+	a.commits = nil
+	a.histFiles = nil
+	a.histListID = ""
+	a.stashRev = ""
+	a.histDiff = loadIdle
+	a.enterHistory()
+	a.loadCommits()
+}
+
+// histName 是提交列表栏头里「现在看的是哪条历史」的那行字。
+//
+// 不能把 histRev 原样摆上去：它是 refs/heads/feat1 这种完整引用名，用户点
+// 的时候看的是 feat1。「所有分支」也不是引用名，得有个说法。
+func (a *app) histName() string {
+	if a.histAll {
+		return T("所有分支", "All Branches")
+	}
+	if a.histRev == "" {
+		return ""
+	}
+	return shortRev(a.histRev)
+}
+
+// shortRev 把完整引用名缩成侧栏里那个样子：refs/heads/feat1 → feat1，
+// refs/remotes/origin/main → origin/main。认不出来（哈希、HEAD~3 这类）
+// 原样返回。
+func shortRev(full string) string {
+	for _, prefix := range []string{"refs/heads/", "refs/remotes/", "refs/tags/"} {
+		if s, ok := strings.CutPrefix(full, prefix); ok {
+			return s
+		}
+	}
+	return full
 }
 
 // rebuildRefTree 依据当前引用和筛选词重建侧栏的树。
