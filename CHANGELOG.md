@@ -4,7 +4,7 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
-## [Unreleased]
+## [0.3.10] - 2026-10-19
 
 ### 新增
 - 内置终端支持往 AI CLI 里**粘贴图片**：剪贴板上是图片（没有文本）时按 ⌘V，会把 Ctrl+V 补发给前台程序 —— Claude Code 这类 AI CLI 的「粘贴图片」是自己读系统剪贴板的，等的就是这个按键（Ghostty 用户装 ghostty-paste 补的也是这一下：吞掉 ⌘V、改发 Ctrl+V）。剪贴板上有文本时照旧走 Bracketed Paste，直接按 Ctrl+V 也仍旧到达程序，两条老路都没变
