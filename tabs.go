@@ -327,7 +327,7 @@ func (a *app) switchTab(idx int) {
 			a.openRepo(tab.path)
 		}
 		// 终端不在这里起：起 shell 要一份当前配色，而配色只有视图那层有。
-		// 切到终端视图那一帧，terminalArea 自己会把缺的会话补上。
+		// 进了终端视图，shell 也只因「新建终端」而起（见 terminalArea）。
 	}
 	a.persistOpenRepos()
 }
@@ -608,21 +608,12 @@ func (a *app) newTerminalTab() {
 	a.newTerminalSession(tab)
 }
 
-// closeTerminalSession 是芯片上那个 ×：关掉一个会话，并且保证这个标签页
-// 关完还剩至少一个。
-//
-// 关掉最后一个就立刻补一个空的，而不是留一块「没有终端」的空状态再摆个
-// 按钮：能点到这一步的人手上正在用终端，他要的是「这个 shell 不要了」，
-// 不是「关掉终端」这个功能 —— 再让他点一下 + 只是白走一步。窗口关闭、
-// 关闭项目标签页那些路径走的是 releaseTermSessions，只放进程，不补。
-func (a *app) closeTerminalSession(tab *repoTab, idx int) {
-	dropTerminalSession(tab, idx)
-	if tab != nil && len(tab.terms) == 0 {
-		a.newTerminalSession(tab)
-	}
-}
-
 // dropTerminalSession 放掉一个会话的进程并从列表里摘掉它，不做任何补偿。
+//
+// 芯片上的 × 走这里：关掉最后一个就落到底下的空状态页（terminalEmptyState），
+// 不再立刻补一个新的 shell —— 会点到 × 的人要的是「这个 shell 不要了」，
+// 补一个只是替他做决定。窗口关闭、关闭项目标签页那些路径走的是
+// releaseTermSessions，只放进程，不补偿。
 func dropTerminalSession(tab *repoTab, idx int) {
 	if tab == nil || idx < 0 || idx >= len(tab.terms) {
 		return
@@ -904,12 +895,33 @@ func (a *app) startTerminal(tab *repoTab, s *termSession, dark bool, pal palette
 			a.dispatch(func() {})
 		}
 	}
+	// term 由下面的 OnPaste 引用：粘贴发生时 shell 早就起好了，指针已经落到
+	// s.term 上；起失败时它是 nil，回调里直接让过去。
+	var term *terminal.Terminal
 	term, err := terminalNew(terminal.Options{
 		Dir:     dir,
 		Font:    a.terminalFont(),
 		Theme:   terminalTheme(dark, pal),
 		OnTitle: func(string) { redraw() },
 		OnExit:  func(int) { redraw() },
+		OnPaste: func(text string) bool {
+			// 剪贴板上没有文本（一张图片）时，把 Ctrl+V 补发给前台程序。
+			//
+			// Claude Code 这类 AI CLI 的「粘贴图片」是自己读系统剪贴板的，
+			// 等的就是这个按键；而插件的粘贴只把文本送进去，图片这一下被
+			// 它整键吃掉 —— Ghostty 里能贴进 AI 的图，在这里石沉大海。
+			// Ghostty 用户装 ghostty-paste 补的也正是这一下：吞掉 Cmd+V、
+			// 改发 Ctrl+V。
+			//
+			// 有文本时让回去（false），插件照旧走 Bracketed Paste。
+			if text != "" {
+				return false
+			}
+			if term != nil {
+				term.Send([]byte("\x16")) // Ctrl+V
+			}
+			return true
+		},
 	})
 	if err != nil {
 		s.err = err.Error()
@@ -1347,7 +1359,7 @@ func (a *app) terminalTabBar(c *ui.Context, pal palette, tab *repoTab) {
 				}
 			}
 			if closeIdx >= 0 {
-				a.closeTerminalSession(tab, closeIdx)
+				dropTerminalSession(tab, closeIdx)
 			} else if from >= 0 {
 				// 关掉一枚、又拖走另一枚，这两件事不会同时发生：拖要按住不放，
 				// 点 × 是一次点击。真撞上了让关闭优先，另一个等下一帧。
@@ -1459,6 +1471,10 @@ func (a *app) renderTerminalChip(c *ui.Context, pal palette, tab *repoTab, idx i
 }
 
 // terminalArea 呈现内置终端的主区全屏视图：顶上一条会话芯片，下面是当前会话。
+//
+// 一个会话都不剩时（从没开过、或最后一个被 × 关掉）显示空状态页
+// terminalEmptyState —— 终端视图不擅自起 shell：会话只因为用户点过
+// 「新建终端」（空页上的按钮、芯片带上的 +、⌘⇧T）而存在。
 func (a *app) terminalArea(c *ui.Context, pal palette) {
 	tab := a.currentTab()
 	if tab == nil {
@@ -1468,24 +1484,23 @@ func (a *app) terminalArea(c *ui.Context, pal palette) {
 		return
 	}
 
-	// shell 是进了终端视图才起的：在 Git 面板里点来点去，不该在背后悄悄
-	// 攒下一排 shell 进程。
-	if len(tab.terms) == 0 {
-		a.newTerminalSession(tab)
-	}
-	if tab.termActive < 0 || tab.termActive >= len(tab.terms) {
-		tab.termActive = 0
-	}
-	cur := tab.terms[tab.termActive]
-	// 明暗从这一帧的主题读（view 开头刚按 isDark 设过），和推给终端的
-	// 那一份是同一个判断。
-	dark := a.isDark(c)
-	if !cur.started {
-		a.startTerminal(tab, cur, dark, pal)
-	}
-
 	ui.Column(c).Fill().AlignItems(ui.Stretch).Children(func() {
 		a.terminalTabBar(c, pal, tab)
+
+		if len(tab.terms) == 0 {
+			a.terminalEmptyState(c, pal, tab)
+			return
+		}
+		if tab.termActive < 0 || tab.termActive >= len(tab.terms) {
+			tab.termActive = 0
+		}
+		cur := tab.terms[tab.termActive]
+		// 明暗从这一帧的主题读（view 开头刚按 isDark 设过），和推给终端的
+		// 那一份是同一个判断。
+		dark := a.isDark(c)
+		if !cur.started {
+			a.startTerminal(tab, cur, dark, pal)
+		}
 
 		switch {
 		case cur.err != "":
@@ -1506,5 +1521,31 @@ func (a *app) terminalArea(c *ui.Context, pal palette) {
 				terminal.View(c, cur.term).Fill().AutoFocus()
 			})
 		}
+	})
+}
+
+// terminalEmptyState 是一个终端会话都不剩时的那一页：正中间一句话、一颗
+// 「新建终端」。
+//
+// 关掉最后一个会话就落到这里，而不是像从前那样立刻补一个新的 shell：会点
+// 到 × 的人要的就是「这个 shell 不要了」，补一个只是替他做决定。从没开过
+// 会话的终端视图也是这一页 —— 空状态是唯一显式说「这里可以没有终端」的地方。
+// 芯片带上的 + 和 ⌘⇧T 指向同一个动作（newTerminalSession）。
+func (a *app) terminalEmptyState(c *ui.Context, pal palette, tab *repoTab) {
+	t := c.Theme()
+	ui.Box(c).Grow(1).FillWidth().Background(pal.codeBg).Children(func() {
+		ui.Column(c).Fill().Center().Gap(10).Padding(24).Children(func() {
+			drawIcon(c, iconTerminal, 28, pal.inkSubtle)
+			headline(c, pal, T("没有终端会话", "No Terminal Sessions"))
+			ui.Text(c, T("在这个仓库里开一个 shell：跑构建、看日志、敲 git，或者跑 AI CLI。",
+				"Open a shell in this repository for builds, logs, git, or an AI CLI.")).
+				TextColor(t.TextMuted)
+			if primaryAction(c, pal, T("新建终端", "New Terminal"),
+				Tf("在项目目录里开一个 shell %s", "Open a shell in the project %s", K("⌘⇧T")), false).Clicked() {
+				a.newTerminalSession(tab)
+			}
+			// 空页上顺便把快捷键说一遍：下次就不用找按钮。
+			ui.Text(c, Tf("快捷键 %s", "Press %s to open", K("⌘⇧T"))).FontSize(textCaption).TextColor(t.TextMuted)
+		})
 	})
 }

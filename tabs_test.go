@@ -4,6 +4,7 @@ import (
 	"image"
 	"io"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -151,24 +152,35 @@ func TestTerminalSessions(t *testing.T) {
 		t.Fatalf("没进终端视图就起了会话：%d 个，起了 %d 次", len(tab.terms), *spawns)
 	}
 
-	// 进终端视图：自动补一个会话，并在这一帧把它起起来。
+	// 进终端视图：不擅自起 shell —— 一个会话都没有，落空状态页。
 	a.setViewMode(viewModeTerm)
 	tt.Frame()
+	if len(tab.terms) != 0 || *spawns != 0 {
+		t.Fatalf("进终端视图不该擅自起会话：%d 个，起了 %d 次", len(tab.terms), *spawns)
+	}
+	if !tt.HasText("没有终端会话") {
+		t.Errorf("空状态页该有标题，实际 %q", tt.Texts())
+	}
+
+	// 多渲染几帧照样一个都不起。
+	tt.Frame()
+	tt.Frame()
+	if *spawns != 0 {
+		t.Errorf("没有会话时渲染多帧也不该起 shell，实际 %d 次", *spawns)
+	}
+
+	// 空状态页上的「新建终端」起第一个会话，并在这一帧把它起起来。
+	if err := tt.Click("新建终端"); err != nil {
+		t.Fatalf("空状态页上找不到新建按钮：%v（%q）", err, tt.Texts())
+	}
 	if len(tab.terms) != 1 || tab.termActive != 0 {
-		t.Fatalf("进终端视图该有一个会话：%d 个，激活 %d", len(tab.terms), tab.termActive)
+		t.Fatalf("点「新建终端」该有一个会话：%d 个，激活 %d", len(tab.terms), tab.termActive)
 	}
 	if *spawns != 1 {
-		t.Fatalf("进终端视图该起一次 shell，实际 %d 次", *spawns)
+		t.Fatalf("新会话该起一次 shell，实际 %d 次", *spawns)
 	}
 	if !tt.HasText("终端 1") {
 		t.Errorf("空标题该回落到「终端 1」，实际 %q", tt.Texts())
-	}
-
-	// 多渲染几帧不该重复起：一枚芯片就是一个 shell。
-	tt.Frame()
-	tt.Frame()
-	if *spawns != 1 {
-		t.Errorf("渲染多帧只该起一次 shell，实际 %d 次", *spawns)
 	}
 
 	// ⌘⇧T：再开一个，并切到新的那个。
@@ -214,17 +226,40 @@ func TestTerminalSessions(t *testing.T) {
 		t.Errorf("关会话不该顺手再起 shell，多起了 %d 次", *spawns-before)
 	}
 
-	// 再关两下：倒数第二个关掉之后剩一个，最后一个关掉时自动补一个新的。
-	for range 2 {
-		if err := tt.Click("关闭终端标签页"); err != nil {
-			t.Fatalf("找不到关闭按钮：%v（%q）", err, tt.Texts())
-		}
-		if len(tab.terms) != 1 {
-			t.Fatalf("关会话后该一直有且只有一个会话可用，实际 %d", len(tab.terms))
-		}
+	// 再关一下：剩最后一个，不补。
+	if err := tt.Click("关闭终端标签页"); err != nil {
+		t.Fatalf("找不到关闭按钮：%v（%q）", err, tt.Texts())
 	}
-	if tab.terms[0].ord != 4 {
-		t.Errorf("关掉最后一个该补一个编号继续往后发的新会话（ord 4），实际 %d", tab.terms[0].ord)
+	if len(tab.terms) != 1 || tab.terms[0].ord != 3 {
+		t.Fatalf("关掉一个后该剩 ord 3 那一个，实际 %d 个", len(tab.terms))
+	}
+	if *spawns != before {
+		t.Errorf("关会话不该顺手再起 shell，多起了 %d 次", *spawns-before)
+	}
+
+	// 关掉最后一个：落空状态页，不补新的 shell。
+	if err := tt.Click("关闭终端标签页"); err != nil {
+		t.Fatalf("找不到关闭按钮：%v（%q）", err, tt.Texts())
+	}
+	if len(tab.terms) != 0 {
+		t.Fatalf("关掉最后一个该剩空状态，实际 %d 个", len(tab.terms))
+	}
+	if !tt.HasText("没有终端会话") {
+		t.Errorf("关光之后该回空状态页，实际 %q", tt.Texts())
+	}
+	if *spawns != before {
+		t.Errorf("关掉最后一个不该补新 shell，多起了 %d 次", *spawns-before)
+	}
+
+	// 空状态页上再新建：编号接着往后发（ord 4）。
+	if err := tt.Click("新建终端"); err != nil {
+		t.Fatalf("空状态页上找不到新建按钮：%v（%q）", err, tt.Texts())
+	}
+	if len(tab.terms) != 1 || tab.terms[0].ord != 4 {
+		t.Fatalf("新会话该是编号继续往后发的那一个（ord 4），实际 %d 个", len(tab.terms))
+	}
+	if *spawns != before+1 {
+		t.Errorf("新建该起一次 shell，实际多起 %d 次", *spawns-before)
 	}
 
 	// 重启只换壳不换芯片：会话还是那一个，编号也不动。
@@ -301,6 +336,7 @@ func TestTerminalFontFallsBackToMonospace(t *testing.T) {
 		a.termFontFamily = family
 		tt := ui.NewTester(a.view, 1000, 700)
 		a.setViewMode(viewModeTerm)
+		a.newTerminalSession(a.currentTab()) // 终端视图不擅自起 shell，会话自己开
 		tt.Frame()
 		tt.Frame()
 		return waitCols(t, conn, 0)
@@ -388,6 +424,7 @@ func TestTerminalFontReachesLiveSession(t *testing.T) {
 	tt := ui.NewTester(a.view, 1000, 700)
 
 	a.setViewMode(viewModeTerm)
+	a.newTerminalSession(a.currentTab()) // 终端视图不擅自起 shell，会话自己开
 	tt.Frame()
 	tt.Frame()
 
@@ -557,6 +594,7 @@ func TestTerminalChipsDragToReorder(t *testing.T) {
 	tt.Frame()
 
 	tab := a.currentTab()
+	a.newTerminalSession(tab)
 	a.newTerminalSession(tab)
 	a.newTerminalSession(tab)
 	tt.Frame()
@@ -791,4 +829,100 @@ func TestProjectTabDragDrawsInsertMarker(t *testing.T) {
 func uint32At(img *image.RGBA, x, y int) uint32 {
 	r, g, b, al := img.At(x, y).RGBA()
 	return uint32(r)<<24 | uint32(g)<<16 | uint32(b)<<8 | uint32(al>>8)
+}
+
+// pasteConn 冒充终端的对端：记下写进来的一切字节。
+//
+// 图片粘贴的断言要看「程序到底收到了什么」—— 插件把按键编成字节写进 pty，
+// 这一份就是 pty 那头。
+type pasteConn struct {
+	mu   sync.Mutex
+	buf  []byte
+	done chan struct{}
+	once sync.Once
+}
+
+func newPasteConn() *pasteConn { return &pasteConn{done: make(chan struct{})} }
+
+func (c *pasteConn) Read([]byte) (int, error) { <-c.done; return 0, io.EOF }
+
+func (c *pasteConn) Write(p []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.buf = append(c.buf, p...)
+	return len(p), nil
+}
+
+func (c *pasteConn) Close() error {
+	c.once.Do(func() { close(c.done) })
+	return nil
+}
+
+func (c *pasteConn) Resize(cols, rows int) error { return nil }
+
+// waitPaste 等到对端收到包含 want 的字节（写输入走插件自己的 goroutine，
+// 只能等，不能拍一帧就断言）。
+func waitPaste(t *testing.T, c *pasteConn, want string) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		c.mu.Lock()
+		got := string(c.buf)
+		c.mu.Unlock()
+		if strings.Contains(got, want) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	c.mu.Lock()
+	got := string(c.buf)
+	c.mu.Unlock()
+	t.Fatalf("对端没收到 %q，实际收到 %q", want, got)
+}
+
+// TestTerminalPasteForwardsImageKey：剪贴板上是图片（没有文本）时，⌘V 要把
+// Ctrl+V 补发给前台程序 —— AI CLI（Claude Code 等）的「粘贴图片」是自己读
+// 系统剪贴板的，等的就是这个按键；插件的粘贴分支只会把文本送进去，图片这一
+// 下会被整键吃掉。有文本时仍走原来的 Bracketed Paste，Ctrl+V 也仍旧直达到
+// 程序，两条老路都不许变。
+func TestTerminalPasteForwardsImageKey(t *testing.T) {
+	conn := newPasteConn()
+	t.Cleanup(func() { conn.Close() })
+	old := terminalNew
+	terminalNew = func(o terminal.Options) (*terminal.Terminal, error) {
+		o.Conn = conn
+		return terminal.New(o)
+	}
+	t.Cleanup(func() { terminalNew = old })
+
+	a := newApp()
+	a.openInNewTab(t.TempDir())
+	a.setViewMode(viewModeTerm)
+	a.newTerminalSession(a.currentTab())
+	tt := ui.NewTester(a.view, 1000, 700)
+	tt.Frame()
+	tt.Frame()
+
+	// Ctrl+V 老路：直达到程序，一个字节都不多包。
+	tt.Key(ui.Ctrl, ui.KeyV)
+	waitPaste(t, conn, "\x16")
+
+	// 图片（空文本）+ ⌘V：补发 Ctrl+V。
+	tt.SetClipboard("")
+	tt.Key(ui.Super, ui.KeyV)
+	waitPaste(t, conn, "\x16")
+
+	// 文本 + ⌘V：照旧把文本送进程序，不补发按键。
+	conn.mu.Lock()
+	conn.buf = nil
+	conn.mu.Unlock()
+	tt.SetClipboard("pasted text")
+	tt.Key(ui.Super, ui.KeyV)
+	waitPaste(t, conn, "pasted text")
+	conn.mu.Lock()
+	got := string(conn.buf)
+	conn.mu.Unlock()
+	if strings.Contains(got, "\x16") {
+		t.Errorf("有文本时不该补发 Ctrl+V，实际写了 %q", got)
+	}
 }

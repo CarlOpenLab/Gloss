@@ -677,7 +677,9 @@ func TestDumpTerminalTabs(t *testing.T) {
 	tt.SetTitleBar(realTitleBar)
 	tt.Frame()
 
-	// 第二个会话（就是 + / ⌘⇧T 那个动作），它会是激活的那一枚。
+	// 两个会话都显式开（终端视图不擅自起 shell）：第一个是激活的那一枚，
+	// 第二个就是 + / ⌘⇧T 那个动作开出来的。
+	a.newTerminalSession(a.currentTab())
 	a.newTerminalSession(a.currentTab())
 	tt.Frame()
 	tab := a.currentTab()
