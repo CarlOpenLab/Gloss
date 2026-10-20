@@ -9,32 +9,28 @@ import (
 	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
 )
 
-// 提交详情卡：点了一个提交之后，文件列表顶上那张「这个提交是谁、什么时候、
+// 提交详情栏：点了一个提交之后，文件列表左边那一栏「这个提交是谁、什么时候、
 // 哪一串哈希、信息写了什么」。
 //
-// 摆在文件列表那一栏顶上，不另开一个面板：用户点提交的那一刻想确认的
-// 就是「这是我要的那个吗」，而答案就在眼皮底下那份文件列表旁边。
+// 是**独立的一栏**（见 detailPane），不是文件列表头上的一张卡：它说的是
+// 「这个提交」，文件列表说的是「这个提交改了哪些文件」，两件事并列摆着才读
+// 得出来；摞在一起的话，详情一高，文件列表就被顶没了。
 //
-// 卡里每行都是**文本**，而且整张卡是一个 Selectable 容器 —— 哈希、邮箱
-// 这些要复制的东西拖一下选中、⌘C 就进剪贴板，不必为每一项单开一个
-// 「复制」菜单。
+// 栏里每行都是**文本**，而且整栏是一个 Selectable 容器 —— 哈希、邮箱这些
+// 要复制的东西拖一下选中、⌘C 就进剪贴板。没有「点击复制」：一颗会动的
+// 按钮在一列纯文本里是个异物，而选中本来就是更快的那个动作。
 
 // commitAvatar 是作者头像的直径。
 const commitAvatar = 34
 
-// commitMsgMaxH 是提交信息正文那一块的最高度。
-//
-// 一封写得长的提交信息能把整个文件列表顶出屏幕，所以封顶并允许内部滚动：
-// 想看全文的滚一下就行，不想看的也不会被它挤没。
-const commitMsgMaxH = 72
-
-// commitDetailVisible 问现在该不该画这张卡。
+// commitDetailVisible 问现在该不该画这一栏。
 //
 // 条件一个都不能少：在历史 tab、选中了一个提交、没在看储藏。储藏那一屏
-// 下半区是另一个东西（储藏的改动），摆一张提交的详情在那儿是张冠李戴。
+// 下半区是另一个东西（储藏的改动），摆一栏提交的详情在那儿是张冠李戴。
 //
 // 对比分支和 PR 检视两屏同理 —— 它们霸占着下半区，那时文件列表里列的不是
-// 这个提交的改动，卡上写着「这个提交」就是错的。
+// 这个提交的改动，栏上写着「这个提交」就是错的。摆不摆得下（detailPaneFits）
+// 不归这里管：那是布局问题，由 detailPane 问。
 func (a *app) commitDetailVisible() bool {
 	if a.compare.on || a.prReview.on {
 		return false
@@ -43,13 +39,13 @@ func (a *app) commitDetailVisible() bool {
 		a.commitSel >= 0 && a.commitSel < len(a.commits)
 }
 
-// commitDetailPane 画这张卡。cm 是选中的那个提交。
+// commitDetailPane 画这一栏。cm 是选中的那个提交。
 func (a *app) commitDetailPane(c *ui.Context, pal palette, cm gitrepo.Commit) {
 	t := c.Theme()
 
-	// 整张卡一个选区：拖动选中时可以连着邮箱、哈希一起选，⌘C 出去是三行。
-	ui.Column(c).Shrink(0).Selectable().
-		Background(pal.surface1).Children(func() {
+	// 整栏一个选区：拖动选中时可以连着邮箱、哈希一起选，⌘C 出去是三行。
+	ui.Column(c).Width(a.detailPaneWidth(c)).Shrink(0).FillHeight().
+		Background(pal.surface1).Selectable().Children(func() {
 		// 头像 + 名字 + 时间，居中。作者名是这一屏里最该被认出来的东西，
 		// 摆中间比塞在行首和一行元信息混在一起好认。
 		ui.Box(c).Shrink(0).Padding(12, 12, 10, 12).Children(func() {
@@ -67,7 +63,7 @@ func (a *app) commitDetailPane(c *ui.Context, pal palette, cm gitrepo.Commit) {
 		})
 
 		// 元信息三行：邮箱、哈希、网页链接。图标 12，和 11px 的字排在一行
-		// 不抢宽度 —— 这一栏只有 300（split 下 220）宽。
+		// 不抢宽度。
 		ui.Column(c).Shrink(0).Padding(0, 12).Gap(4).Children(func() {
 			if cm.Email != "" {
 				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
@@ -76,29 +72,17 @@ func (a *app) commitDetailPane(c *ui.Context, pal palette, cm gitrepo.Commit) {
 						Grow(1).MinWidth(0).TextColor(pal.inkMuted)
 				})
 			}
-			// 哈希行可点：点一下复制完整那一串。短哈希摆在这儿是给人认的，
-			// 要粘到终端里的是完整那个（cherry-pick、revert 都吃长的）。
-			hashRow := ui.Row(c).Gap(6).AlignItems(ui.Center).
-				Cursor(ui.CursorPointer)
-			hashRow.Children(func() {
+			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "#").FontSize(11).FontWeight(weightSemibold).
 					TextColor(pal.inkSubtle)
 				ui.Text(c, cm.Short).Font("monospace").FontSize(11).
 					Grow(1).MinWidth(0).TextColor(pal.inkMuted)
-				ui.Text(c, T("点击复制", "Click to copy")).FontSize(10).
-					Shrink(0).TextColor(pal.inkSubtle)
 			})
-			hashRow.Tooltip(T("复制完整提交哈希", "Copy full commit hash")).
-				Label(T("复制完整提交哈希", "Copy full commit hash"))
-			if hashRow.Clicked() && cm.Hash != "" {
-				a.copyText = cm.Hash
-			}
-
-			// 网页链接。走 app 的 openURL 钩子（和「在编辑器打开」「在访达
-			// 中显示」一个套路：main 接上 Shell.OpenExternal，测试里是 nil），
-			// 不用 ui.Link —— 那一个自己找 host 开浏览器，绕过这个钩子，
-			// 于是同一个 App 有两条开网页的路。
 			if url, label := a.commitWebURL(cm); url != "" {
+				// 网页链接走 app 的 openURL 钩子（和「在编辑器打开」「在访达
+				// 中显示」一个套路：main 接上 Shell.OpenExternal，测试里是 nil），
+				// 不用 ui.Link —— 那一个自己找 host 开浏览器，绕过这个钩子，
+				// 于是同一个 App 有两条开网页的路。
 				link := ui.Row(c).Gap(6).AlignItems(ui.Center).
 					Cursor(ui.CursorPointer).Role(ui.RoleLink)
 				link.Children(func() {
@@ -115,45 +99,33 @@ func (a *app) commitDetailPane(c *ui.Context, pal palette, cm gitrepo.Commit) {
 				}
 			}
 		})
-		ui.Box(c).Shrink(0).Height(10)
 
-		// 提交信息。默认摊开（那是用户点这个提交时最想读的东西），收起状态
-		// 记在 commitMsgClosed 里 —— 和文件树的 filesClosed 一个套路：
-		// 记的是「偏离默认的那一次」，来回切提交不会越攒越多。
-		ui.Box(c).Shrink(0).Height(1).FillWidth().
+		// 一条发丝线隔开「这个提交是谁」和「它说了什么」。没有「提交信息」
+		// 标题，也没有折叠：一栏纯文本里那个标题只是在重复下一行就要说的
+		// 事，而这一栏装得下一封正常长度的提交信息。
+		ui.Box(c).Shrink(0).Margin(10, 0, 0, 0).Height(1).FillWidth().
 			Background(pal.hairline)
-		ui.Box(c).Shrink(0).Padding(0, 12, 8, 12).Children(func() {
-			ui.Column(c).FillWidth().Gap(4).Children(func() {
-				head := ui.Row(c).Shrink(0).Gap(4).AlignItems(ui.Center).
-					Cursor(ui.CursorPointer)
-				head.Children(func() {
-					drawIcon(c, iconChevronDown, 12, pal.inkSubtle)
-					ui.Text(c, T("提交信息", "Message")).FontSize(11).
-						FontWeight(weightSemibold).TextColor(pal.inkSubtle)
+
+		// 提交信息占剩下的高度、自己滚：一封写得长的提交信息不该把这一栏
+		// 撑到屏幕外面去，也不该为了它把文件列表和 diff 挤掉。
+		ui.Box(c).Grow(1).FillWidth().MinHeight(0).Padding(10, 12, 12, 12).Children(func() {
+			ui.Scroll(c).FillWidth().FillHeight().Children(func() {
+				ui.Column(c).FillWidth().Gap(6).Children(func() {
+					ui.Text(c, cm.Subject).FontSize(12).TextColor(pal.ink)
+					if cm.Body != "" {
+						ui.Text(c, cm.Body).FontSize(11).TextColor(t.TextMuted)
+					}
 				})
-				if head.Clicked() {
-					a.commitMsgClosed = !a.commitMsgClosed
-				}
-				if !a.commitMsgClosed {
-					ui.Scroll(c).MaxHeight(commitMsgMaxH).FillWidth().Children(func() {
-						ui.Column(c).FillWidth().Gap(4).Children(func() {
-							ui.Text(c, cm.Subject).FontSize(12).TextColor(pal.ink)
-							if cm.Body != "" {
-								ui.Text(c, cm.Body).FontSize(11).TextColor(t.TextMuted)
-							}
-						})
-					})
-				}
 			})
 		})
 	})
 }
 
-// commitWhen 是详情卡里那个绝对时间。
+// commitWhen 是详情栏里那个绝对时间。
 //
-// 列表行给的是「3 小时前」（找的是「今天早上那个提交」），卡里反过来给绝对
-// 时间：已经点开一个提交看了，要的是「它到底发生在哪一刻」，相对时间回答
-// 不了这个。
+// 列表行给的是「3 小时前」（找的是「今天早上那个提交」），这一栏反过来给
+// 绝对时间：已经点开一个提交看了，要的是「它到底发生在哪一刻」，相对时间
+// 回答不了这个。
 func commitWhen(t time.Time) string {
 	if t.IsZero() {
 		return ""
@@ -194,9 +166,9 @@ type webRepo struct {
 //
 // 三种写法都要认：
 //
-//	git@github.com:owner/repo.git            （ssh 的 scp 简写，最常见）
-//	ssh://git@github.com/owner/repo.git
-//	https://github.com/owner/repo.git
+//	git@gitee.com:carl/gloss.git            （ssh 的 scp 简写，最常见）
+//	ssh://git@gitee.com/carl/gloss.git
+//	https://gitee.com/carl/gloss.git
 //
 // 认不出来（本地路径、file://、git-daemon）就返回 false。
 func parseWebRepo(raw string) (webRepo, bool) {

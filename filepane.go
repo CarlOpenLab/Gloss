@@ -64,24 +64,131 @@ func (a *app) resetFilePaneWidth() {
 	a.saveViewSettings()
 }
 
+// 提交详情那一栏（历史 tab 里文件列表左边那一栏）的默认与限制宽度。
+const (
+	detailPaneW    = float32(260)
+	detailPaneMinW = float32(180)
+	detailPaneMaxW = float32(420)
+)
+
+// detailPaneWidth 是提交详情那一栏的宽度。
+//
+// 上限跟着窗口走：那一栏右边还有文件列表和 diff，窗口窄的时候它先让。
+func (a *app) detailPaneWidth(c *ui.Context) float32 {
+	w := a.detailPaneWidthVal
+	if w <= 0 {
+		w = detailPaneW
+	}
+	return clamp(w, detailPaneMinW, a.detailPaneMaxW(c))
+}
+
+// detailPaneMaxW 是这一屏摆得下的详情栏最大宽度。
+func (a *app) detailPaneMaxW(c *ui.Context) float32 {
+	avail := a.mainAvailW(c)
+	if avail <= 0 {
+		return detailPaneMaxW
+	}
+	// 至少给文件列表留一栏、给 diff 留 240
+	return max(detailPaneMinW, avail-a.filePaneWidth(c)-240)
+}
+
+// detailPaneFits 问这一屏摆不摆得下三栏（详情 + 文件列表 + diff）。
+//
+// 摆不下就整个不出面板：三栏各守着自己的最小宽度硬挤，diff 被压到 0，
+// 用户看到的是「点了提交，右边什么都没有」。
+func (a *app) detailPaneFits(c *ui.Context) bool {
+	return a.detailPaneFitsW(a.mainAvailW(c))
+}
+
+// detailPaneFitsW 是 detailPaneFits 的身子，收一个可用的宽度。
+//
+// 分开是为了能单测：窗口尺寸只在 c.Size() 里，测试里拿不到一个 Context。
+func (a *app) detailPaneFitsW(avail float32) bool {
+	return avail >= detailPaneMinW+filePaneMinW+240
+}
+
+// mainAvailW 是主区可用的宽度（扣掉侧栏）。
+//
+// c.Size() 在整整一帧里都是同一个值（ Children 不改它，见 ui 的 context），
+// 所以在这儿算和在 detailPane 里算是一样的。
+func (a *app) mainAvailW(c *ui.Context) float32 {
+	if c == nil {
+		return 0
+	}
+	avail, _ := c.Size()
+	if a.sidebarOn {
+		avail -= a.sidebarWidth(c)
+	}
+	return avail
+}
+
+func (a *app) setDetailPaneWidth(c *ui.Context, w float32) {
+	clamped := clamp(w, detailPaneMinW, a.detailPaneMaxW(c))
+	if clamped != a.detailPaneWidthVal {
+		a.detailPaneWidthVal = clamped
+	}
+}
+
+func (a *app) resetDetailPaneWidth() {
+	a.detailPaneWidthVal = detailPaneW
+	a.saveViewSettings()
+}
+
 // filePaneSplitter 是文件列表与 Diff 视图之间的可拖拽分隔条。
 func (a *app) filePaneSplitter(c *ui.Context, pal palette) {
+	a.paneSplitter(c, pal, paneSplit{
+		width: func() float32 { return a.filePaneWidth(c) },
+		set:   func(w float32) { a.setFilePaneWidth(c, w) },
+		reset: a.resetFilePaneWidth,
+		drag:  &a.filePaneDragging,
+	})
+}
+
+// detailPaneSplitter 是提交详情那一栏与文件列表之间的可拖拽分隔条。
+func (a *app) detailPaneSplitter(c *ui.Context, pal palette) {
+	a.paneSplitter(c, pal, paneSplit{
+		width: func() float32 { return a.detailPaneWidth(c) },
+		set:   func(w float32) { a.setDetailPaneWidth(c, w) },
+		reset: a.resetDetailPaneWidth,
+		drag:  &a.detailPaneDragging,
+	})
+}
+
+// paneSplitterW 是两条分隔条占的宽度：1px 发丝线（§2.2）。
+const paneSplitterW = float32(1)
+
+// paneSplit 是 paneSplitter 要的那几个钩子：现在多宽、改成多宽、怎么复位、
+// 「正拖着」记在哪儿。
+//
+// 两条分隔条（详情↔文件、文件↔diff）的画法、命中区、双击复位的行为必须
+// 一模一样，分开写两份迟早有一处忘了同步。
+type paneSplit struct {
+	width func() float32
+	set   func(float32)
+	reset func()
+	drag  *bool
+}
+
+// paneSplitter 是两栏之间那条 1px 的分隔条：拖着改栏宽，双击复位，松手落盘。
+//
+// 命中区比那 1px 宽（左右各探出 3px）—— 一条发丝线是世界上最难点中的东西。
+func (a *app) paneSplitter(c *ui.Context, pal palette, s paneSplit) {
 	t := c.Theme()
 	grip := float32(6)
 
-	ui.Box(c).Width(1).Shrink(0).FillHeight().Children(func() {
+	ui.Box(c).Width(paneSplitterW).Shrink(0).FillHeight().Children(func() {
 		handle := ui.Box(c).Absolute().
 			Top(0).Bottom(0).Left(-(grip - 1) / 2).Width(grip).
 			Cursor(ui.CursorResizeEW).Role(ui.RoleNone)
 
 		if handle.DoubleClicked() {
-			a.resetFilePaneWidth()
+			s.reset()
 		}
 		if dx, _, held := handle.Dragged(); held && dx != 0 {
-			a.setFilePaneWidth(c, a.filePaneWidth(c)+dx)
-			a.filePaneDragging = true
-		} else if a.filePaneDragging && !held {
-			a.filePaneDragging = false
+			s.set(s.width() + dx)
+			*s.drag = true
+		} else if *s.drag && !held {
+			*s.drag = false
 			a.saveViewSettings()
 		}
 		handle.Draw(func(p *ui.Painter, r ui.Rect) {
@@ -94,10 +201,14 @@ func (a *app) filePaneSplitter(c *ui.Context, pal palette) {
 	})
 }
 
-// detailPane 是主区下半：文件列表 + diff。
+// detailPane 是主区下半：提交详情（历史 tab）+ 文件列表 + diff。
 //
 // 两个 tab 共用它 —— 改动 tab 的工作区改动、历史 tab 里选中提交的改动，
 // 走的都是 a.files 这一份数据，视图没有理由分家。
+//
+// 提交详情是**文件列表左边独立的一栏**，不是文件列表头上的一张卡：它说的
+// 是「这个提交」，文件列表说的是「这个提交改了哪些文件」，两件事并列摆着
+// 才读得出来；摞在一起的话，详情卡一高，文件列表就被顶没了。
 func (a *app) detailPane(c *ui.Context, pal palette) {
 	t := c.Theme()
 
@@ -115,6 +226,10 @@ func (a *app) detailPane(c *ui.Context, pal palette) {
 	}
 
 	ui.Row(c).Grow(1).FillWidth().AlignItems(ui.Stretch).Children(func() {
+		if a.commitDetailVisible() && a.detailPaneFits(c) {
+			a.commitDetailPane(c, pal, a.commits[a.commitSel])
+			a.detailPaneSplitter(c, pal)
+		}
 		a.fileListPane(c, pal, t)
 		a.filePaneSplitter(c, pal)
 		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
@@ -154,12 +269,6 @@ func (a *app) hasDiff() bool {
 func (a *app) fileListPane(c *ui.Context, pal palette, t *ui.Theme) {
 	ui.Column(c).Width(a.filePaneWidth(c)).Shrink(0).FillHeight().
 		Background(pal.surface1).Children(func() {
-		// 历史 tab 选中了一个提交时，顶上先摆这张卡的：这是哪个提交、
-		// 谁提交的、哪一串哈希、信息写了什么（见 commitdetail.go）。
-		// 放在文件数那一行之前 —— 读的顺序是「这个提交 → 几个文件 → 列表」。
-		if a.commitDetailVisible() {
-			a.commitDetailPane(c, pal, a.commits[a.commitSel])
-		}
 		// 栏头只留「几个文件」一件必读的信息，以及左边的三态勾选框。
 		//
 		// 这一栏的宽度是定死的 300（split 下 220）。原来还并排塞着

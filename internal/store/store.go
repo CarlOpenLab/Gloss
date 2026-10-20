@@ -38,6 +38,9 @@ type Config struct {
 	SidebarWidth float32 `json:"sidebarWidth,omitempty"`
 	// FilePaneWidth 是主区文件列表栏宽度，0 表示默认值。
 	FilePaneWidth float32 `json:"filePaneWidth,omitempty"`
+	// DetailPaneWidth 是主区提交详情栏的宽度（历史 tab 里文件列表左边那一栏），
+	// 0 表示默认值。
+	DetailPaneWidth float32 `json:"detailPaneWidth,omitempty"`
 	// ThemeMode 是外观模式偏好："" 或 "system"（跟随系统）、"light"（浅色模式）、"dark"（暗黑模式）。
 	ThemeMode string `json:"themeMode,omitempty"`
 	// Locale 是界面语言设定："" 或 "zh"（简体中文）、"en"（English）。

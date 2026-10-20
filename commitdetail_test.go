@@ -9,7 +9,7 @@ import (
 
 // 「在网页上看这个提交」那个链接：从 git remote 里配的 URL 拼出来。
 //
-// 只测这个纯函数 —— 链接点在界面上会真去开浏览器，那是 ui.Link 的事。
+// 只测这个纯函数。
 
 func TestParseWebRepo(t *testing.T) {
 	cases := []struct {
@@ -78,7 +78,7 @@ func TestHostName(t *testing.T) {
 	}
 }
 
-// 详情卡该出现的时候出现，不该出现的时候不出现。
+// 详情栏该出现的时候出现，不该出现的时候不出现。
 func TestCommitDetailVisible(t *testing.T) {
 	a := graphApp(t)
 	if a.commitDetailVisible() {
@@ -93,11 +93,11 @@ func TestCommitDetailVisible(t *testing.T) {
 	// 看储藏时下半区是储藏的改动，摆一张提交的详情在那儿是张冠李戴
 	a.stashRev = "refs/stash"
 	if a.commitDetailVisible() {
-		t.Errorf("看储藏时不该有提交详情卡")
+		t.Errorf("看储藏时不该有提交详情栏")
 	}
 }
 
-// 卡里的字真的画在了屏幕上，而且提交信息默认是摊开的。
+// 栏里的字真的画在了屏幕上，而且没有「提交信息」标题、没有点击复制。
 func TestCommitDetailPaneRenders(t *testing.T) {
 	a := graphApp(t)
 	tt := ui.NewTester(a.view, 1280, 900)
@@ -107,9 +107,16 @@ func TestCommitDetailPaneRenders(t *testing.T) {
 	tt.Frame()
 
 	cm := a.commits[a.commitSel]
-	for _, want := range []string{cm.Author, cm.Email, cm.Short, "提交信息"} {
+	for _, want := range []string{cm.Author, cm.Email, cm.Short} {
 		if !tt.HasText(want) {
-			t.Errorf("详情卡里找不到 %q：%q", want, tt.Texts())
+			t.Errorf("详情栏里找不到 %q：%q", want, tt.Texts())
+		}
+	}
+	// 「提交信息」这个标题不要了：下一行就是要读的那段话，标题只是在重复。
+	// 「点击复制」也不要：整栏是可选中的，选中本来就是更快的那个动作。
+	for _, unwanted := range []string{"提交信息", "Message", "点击复制", "Click to copy"} {
+		if tt.HasText(unwanted) {
+			t.Errorf("详情栏里不该有 %q：%q", unwanted, tt.Texts())
 		}
 	}
 }
@@ -190,58 +197,63 @@ func TestCommitDetailWebLink(t *testing.T) {
 	}
 }
 
-// 点哈希那一行 = 复制完整哈希。界面上摆的是短哈希，要粘去终端的是长的。
-func TestCommitDetailHashRowCopies(t *testing.T) {
-	a, tt := detailApp(t)
-	cm := a.commits[a.commitSel]
-	// 按标签点，不按哈希文本点：提交列表行尾也有一列同样的短哈希，按文本
-	// 点会落到列表行上去（那一列的点击是「选中这个提交」）。
-	if err := tt.Click("复制完整提交哈希"); err != nil {
-		t.Fatalf("点哈希行：%v", err)
-	}
-	settle(t, a)
-	tt.Frame()
-
-	// 剪贴板里是完整那一串：界面上摆的短哈希是给人认的，要粘去终端的是长的
-	if got := tt.Clipboard(); got != cm.Hash {
-		t.Errorf("剪贴板里是 %q，want 完整哈希 %q", got, cm.Hash)
-	}
-}
-
-// 提交信息那一块能收起来：一封写得长的提交信息不该把文件列表顶出屏幕。
-func TestCommitDetailMessageCollapses(t *testing.T) {
-	a, tt := detailApp(t)
-	if a.commitMsgClosed {
-		t.Fatalf("默认该是摊开的")
-	}
-	if err := tt.Click("提交信息"); err != nil {
-		t.Fatalf("点「提交信息」：%v", err)
-	}
-	settle(t, a)
-	tt.Frame()
-	if !a.commitMsgClosed {
-		t.Errorf("点了该收起")
-	}
-	if tt.HasText("这一段是正文：解释为什么补、补的是什么。") {
-		t.Errorf("收起来了正文不该还在")
-	}
-	// 再点摊开
-	if err := tt.Click("提交信息"); err != nil {
-		t.Fatalf("再点「提交信息」：%v", err)
-	}
-	settle(t, a)
-	tt.Frame()
-	if a.commitMsgClosed {
-		t.Errorf("再点该摊开")
-	}
-}
-
-// 改动 tab 不画这张卡：那儿没有「选中的提交」可讲。
+// 改动 tab 不画这一栏：那儿没有「选中的提交」可讲。
 func TestCommitDetailHiddenOnChangesTab(t *testing.T) {
 	a, _ := detailApp(t)
 	a.setTab(0)
 	settle(t, a)
 	if a.commitDetailVisible() {
-		t.Errorf("改动 tab 不该有提交详情卡")
+		t.Errorf("改动 tab 不该有提交详情栏")
+	}
+}
+
+// 三栏摆不下的时候整个不出面板：详情、文件、diff 各守着自己的最小宽度硬挤，
+// diff 被压到 0，用户看到的是「点了提交，右边什么都没有」。
+func TestCommitDetailHiddenWhenNarrow(t *testing.T) {
+	a, tt := detailApp(t)
+	if _, ok := tt.Find("在 Gitee 上查看"); !ok {
+		t.Fatalf("默认宽度下该有详情栏：%q", tt.Texts())
+	}
+
+	// 拖窄：700 - 侧栏 = 摆不下三栏，那一栏整个消失
+	tt.SetSize(700, 700)
+	tt.Frame()
+	settle(t, a)
+	tt.Frame()
+
+	if _, ok := tt.Find("在 Gitee 上查看"); ok {
+		t.Errorf("700 宽还摆着详情栏 —— 三栏硬挤会把 diff 压没")
+	}
+	// 但状态还在：窗口拖宽一点它自己回来，不是「从此没有选中的提交了」
+	if !a.commitDetailVisible() {
+		t.Errorf("状态被窄窗口弄坏了")
+	}
+	tt.SetSize(1280, 900)
+	tt.Frame()
+	settle(t, a)
+	tt.Frame()
+	if _, ok := tt.Find("在 Gitee 上查看"); !ok {
+		t.Errorf("拖宽了详情栏该回来：%q", tt.Texts())
+	}
+}
+
+// 详情栏在文件列表**左边**：这是它存在的形式（独立一栏），不是文件列表头上
+// 的一张卡。
+func TestCommitDetailSitsLeftOfFiles(t *testing.T) {
+	a, tt := detailApp(t)
+	detail, ok := tt.Find("在 Gitee 上查看")
+	if !ok {
+		t.Fatalf("屏幕上找不到详情栏的链接：%q", tt.Texts())
+	}
+	files, ok := tt.Find("筛选文件")
+	if !ok {
+		t.Fatalf("屏幕上找不到文件栏的筛选框：%q", tt.Texts())
+	}
+	if detail.X >= files.X {
+		t.Errorf("详情栏（x=%v）该在文件栏（x=%v）左边", detail.X, files.X)
+	}
+	// 而且文件栏不该被详情栏挤到右边去之后又把 diff 压没
+	if w := a.detailPaneWidth(nil); w < detailPaneMinW {
+		t.Errorf("详情栏宽度 %v 小于下限 %v", w, detailPaneMinW)
 	}
 }

@@ -205,8 +205,12 @@ type app struct {
 	sidebarDragging  bool
 	filePaneWidthVal float32 // 主区文件列表栏宽度，0 时取默认值
 	filePaneDragging bool
-	fileFilter       string
-	fileTreeFilter   string // 建树时用的筛选词，和 fileFilter 不一致就说明该重建了
+	// detailPaneWidthVal 是提交详情那一栏的宽度（历史 tab 里文件列表左边
+	// 那一栏），0 时取默认值。和文件栏一样可拖、可双击复位、记得住。
+	detailPaneWidthVal float32
+	detailPaneDragging bool
+	fileFilter         string
+	fileTreeFilter     string // 建树时用的筛选词，和 fileFilter 不一致就说明该重建了
 	// filesClosed 记的是用户收起过的目录，同 refsClosed：默认展开。
 	// review 改动时几乎总想直接看到文件列表，默认收起反而要先点一下。
 	filesClosed map[string]bool
@@ -254,10 +258,6 @@ type app struct {
 	// 命令栏）。和 focusFilter 同一个套路：置位的那一帧列表可能已经画过。
 	focusCommitFilter bool
 	commitSel         int // 选中的提交下标，-1 表示还没选
-	// commitMsgClosed 是提交详情卡里「提交信息」那一块被用户收起来了。
-	// 和 filesClosed / refsClosed 一个套路：记的是「偏离默认的那一次」，
-	// 没记过的一律摊开 —— 来回点提交不会越攒越多，也不会一换提交就忘。
-	commitMsgClosed bool
 	// histRev 是历史看的是哪条引用（侧栏点的那条分支/标签），空串表示 HEAD。
 	// 不为空时 Log 直接喂给它，不能悄悄退回 HEAD —— 点了分支看着没反应
 	// 比报错还难受。
@@ -493,6 +493,7 @@ func (a *app) attachStore(s *store.Store) {
 	a.sidebarOn = !cfg.SidebarOff
 	a.sidebarWidthVal = cfg.SidebarWidth
 	a.filePaneWidthVal = cfg.FilePaneWidth
+	a.detailPaneWidthVal = cfg.DetailPaneWidth
 	a.themeMode = cfg.ThemeMode
 	if a.themeMode == "" {
 		a.themeMode = "system"
@@ -569,6 +570,9 @@ func (a *app) saveViewSettings() {
 	}
 	if a.filePaneWidthVal > 0 {
 		cfg.FilePaneWidth = a.filePaneWidthVal
+	}
+	if a.detailPaneWidthVal > 0 {
+		cfg.DetailPaneWidth = a.detailPaneWidthVal
 	}
 	cfg.ThemeMode = a.themeMode
 	cfg.Locale = a.locale

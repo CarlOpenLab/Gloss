@@ -218,13 +218,17 @@ func TestToolbarHugsSidebarEdge(t *testing.T) {
 	}
 }
 
-// 「Fork 式布局」的形式化定义：提交列表在上、文件列表在下，两块都从侧栏
-// 右边开始 —— 也就是上下分，不是左右分。
+// 「Fork 式布局」的形式化定义：提交列表在上、文件列表在下 —— 也就是上下分，
+// 不是左右分。
 //
 // 锚点得挑屏幕上唯一的文本。两栏栏头里那句「N 个文件」工具栏上也有一个
 // （工作区的文件数），Find 返回先遍历到的那个，拿它当锚点会量到工具栏上去。
-// 所以上栏用「N 个提交」，下栏用筛选框 —— 筛选框的矩形左边就是它那一栏的
-// 左边缘 +12，和栏头同宽，两者相等就等于两栏左边缘相等。
+// 所以上栏用「N 个提交」，下栏用筛选框。
+//
+// 两栏左边缘**不再要求相等**：历史 tab 里文件列表左边多一栏提交详情
+// （commitdetail.go），文件列表因此整体右移一栏。这里守的是「文件列表在
+// 提交列表下面、且不探到它左边」，那才是「上下分」的本意 —— 具体右移多少
+// 由详情栏的宽度说，那一栏在改动 tab 里根本不出现。
 func TestForkLayoutPanesStack(t *testing.T) {
 	a := graphApp(t)
 	tt := ui.NewTester(a.view, 1280, 1100)
@@ -246,12 +250,18 @@ func TestForkLayoutPanesStack(t *testing.T) {
 		t.Errorf("提交列表顶边 y=%.0f 不低于文件列表的 y=%.0f —— 该是上下分",
 			cmBox.Y, fileBox.Y)
 	}
-	if cmBox.X != fileBox.X {
-		t.Errorf("两栏的左边缘没对齐：提交 %.0f vs 文件 %.0f", cmBox.X, fileBox.X)
+	if fileBox.X < cmBox.X {
+		t.Errorf("文件列表探到提交列表左边去了（%.0f < %.0f）—— 那是左右分",
+			fileBox.X, cmBox.X)
 	}
 	if want := float32(sidebarWidth) + 12; cmBox.X != want {
 		t.Errorf("主区左边缘 x=%.0f, want %.0f（侧栏 %d + 内边距 12）",
 			cmBox.X, want, sidebarWidth)
+	}
+	// 文件列表右移的那一栏正是提交详情，中间隔着那条 1px 分隔条
+	if want := float32(sidebarWidth) + 12 + detailPaneW + paneSplitterW; fileBox.X != want {
+		t.Errorf("文件列表左边缘 x=%.0f, want %.0f（侧栏 + 详情栏 %v + 分隔条 %v + 内边距 12）",
+			fileBox.X, want, detailPaneW, paneSplitterW)
 	}
 
 	// 下半区内部：文件列表在 diff 左边。「已 review」是 diff 文件头里的勾选框，
