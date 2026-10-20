@@ -360,8 +360,7 @@ body::after {
     rgba(18, 20, 23, 0.045), transparent 58%);
 }
 
-.stage-cap,
-.stage-foot {
+.stage-cap {
   position: relative;
   z-index: 1;
   display: flex;
@@ -371,7 +370,6 @@ body::after {
 }
 .stage-cap { padding-bottom: 11px; border-bottom: 1px solid var(--line); }
 .stage-cap-right { color: var(--ink-4); }
-.stage-foot { padding-top: 13px; }
 
 .frame {
   position: relative;
@@ -895,7 +893,6 @@ html.js.no-reveal [data-reveal] {
   .stage-cap .mono:last-child { display: none; }
   .fig-cap { flex-direction: column; align-items: flex-start; gap: 4px; }
   .fig-cap .mono:last-child { text-transform: none; letter-spacing: 0.02em; }
-  .stage-foot .mono:last-child { display: none; }
   .foot { padding: 34px 0 44px; }
   .foot-links { gap: 16px; flex-wrap: wrap; }
 }
