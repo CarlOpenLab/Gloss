@@ -106,7 +106,7 @@
               <div class="win-bar">
                 <span class="tl tl-r"></span><span class="tl tl-y"></span><span class="tl tl-g"></span>
                 <div class="win-tabs">
-                  <span class="wtab is-on">
+                  <span class="wtab">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
                     atlas-web
                     <span class="wx">×</span>
@@ -114,6 +114,11 @@
                   <span class="wtab">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
                     core-api
+                    <span class="wx">×</span>
+                  </span>
+                  <span class="wtab is-on">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+                    atlas-client
                     <span class="wx">×</span>
                   </span>
                   <span class="wtab-add">＋</span>
@@ -129,7 +134,7 @@
                 <span class="tb-sep"></span>
                 <span class="tb-branch">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="6" cy="6" r="2.4"></circle><circle cx="6" cy="18" r="2.4"></circle><path d="M6 8.4v7.2M15 6a3 3 0 0 1 3 3v6a2.4 2.4 0 1 1-2.4-2.4"></path></svg>
-                  <span>main</span>
+                  <span>beta</span>
                   <span class="caret">▾</span>
                 </span>
                 <span class="tb-count"><span class="up">↑2</span> <span class="down">↓0</span></span>
@@ -141,78 +146,50 @@
               </div>
 
               <div class="win-body">
-                <aside class="sb">
-                  <div class="sb-filter">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
-                    Filter branches
-                  </div>
-                  <div class="sb-scroll">
-                    <div class="sb-group">
-                      <span class="sb-group-label">Local Branches</span>
-                      <span class="sb-chev">⌄</span>
-                    </div>
-                    <div class="sb-row">
-                      <span class="sb-ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="6" r="2.2"></circle><circle cx="6" cy="18" r="2.2"></circle><circle cx="18" cy="18" r="2.2"></circle><path d="M6 8.2v7.6M8.2 6H14a4 4 0 0 1 4 4v5.8"></path></svg></span>
-                      <span class="sb-name">All branches</span>
-                    </div>
-                    <div class="sb-row is-on">
-                      <span class="sb-dot"></span>
-                      <span class="sb-name">main</span>
-                      <span class="sb-chip">HEAD</span>
-                      <span class="sb-ab"><i class="up">↑2</i></span>
-                    </div>
-                    <div class="sb-row">
-                      <span class="sb-ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="6" r="2.2"></circle><circle cx="6" cy="18" r="2.2"></circle><path d="M6 8.2v7.6M14 6a4 4 0 0 1 4 4v6a2.2 2.2 0 1 1-2.2-2.2"></path></svg></span>
-                      <span class="sb-name">feat/audit-log</span>
-                    </div>
+          <aside class="sb">
+            <div class="sb-filter">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
+              Filter branches
+            </div>
+            <div class="sb-scroll">
+              <div class="sb-group"><span class="sb-group-label">Local Branches</span><span class="sb-chev">⌄</span></div>
+              <div class="sb-row"><span class="sb-ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="6" r="2.2"></circle><circle cx="6" cy="18" r="2.2"></circle><circle cx="18" cy="18" r="2.2"></circle><path d="M6 8.2v7.6M8.2 6H14a4 4 0 0 1 4 4v5.8"></path></svg></span><span class="sb-name">All branches</span></div>
+              <div class="sb-row"><span class="sb-ic"></span><span class="sb-name">master</span></div>
+              <div class="sb-row"><span class="sb-ic"></span><span class="sb-name">optimize/dy-auth-flow</span></div>
+              <div class="sb-row"><span class="sb-ic"></span><span class="sb-name">feat/search-auto-complete</span></div>
+              <div class="sb-row"><span class="sb-ic"></span><span class="sb-name">feat/private-msg-theme</span></div>
+              <div class="sb-row is-on"><span class="sb-dot"></span><span class="sb-name">beta</span><span class="sb-chip">HEAD</span><span class="sb-ab"><i class="up">↑2</i></span></div>
+              <div class="sb-row sb-dim"><span class="sb-ic"></span><span class="sb-name">refactor/publish-infra</span></div>
 
-                    <div class="sb-group">
-                      <span class="sb-group-label">Remote Branches</span>
-                      <span class="sb-chev">⌄</span>
-                    </div>
-                    <div class="sb-row sb-row--ind">
-                      <span class="sb-ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 6h16M4 12h16M4 18h16"></path></svg></span>
-                      <span class="sb-name">origin</span>
-                      <span class="sb-chev">⌄</span>
-                    </div>
-                    <div class="sb-row sb-row--ind2">
-                      <span class="sb-name">main</span>
-                      <span class="sb-ab"><i class="up">↑2</i></span>
-                    </div>
-                    <div class="sb-row sb-row--ind2">
-                      <span class="sb-name">feat/audit-log</span>
-                      <span class="sb-ab"><i class="up">↑1</i></span>
-                    </div>
+              <div class="sb-group"><span class="sb-group-label">Remote Branches</span><span class="sb-chev">⌄</span></div>
+              <div class="sb-row sb-row--ind"><span class="sb-ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 6h16M4 12h16M4 18h16"></path></svg></span><span class="sb-name">origin</span><span class="sb-chev">⌄</span></div>
+              <div class="sb-row sb-row--ind2"><span class="sb-name">master</span></div>
+              <div class="sb-row sb-row--ind2"><span class="sb-name">optimize/dy-auth-flow</span></div>
+              <div class="sb-row sb-row--ind2"><span class="sb-name">beta</span><span class="sb-ab"><i class="up">↑2</i></span></div>
+              <div class="sb-row sb-row--ind2"><span class="sb-name">panel-optimize</span></div>
+              <div class="sb-row sb-row--ind"><span class="sb-ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 6h16M4 12h16M4 18h16"></path></svg></span><span class="sb-name">shared-lib</span><span class="sb-chev">⌄</span></div>
+              <div class="sb-row sb-row--ind2"><span class="sb-name">feat/search-auto-complete</span></div>
+              <div class="sb-row sb-row--ind2"><span class="sb-name">master</span></div>
 
-                    <div class="sb-group">
-                      <span class="sb-group-label">Tags</span>
-                      <span class="sb-chev">⌄</span>
-                    </div>
-                    <div class="sb-row"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.9.0</span><span class="sb-tag">latest</span></div>
-                    <div class="sb-row"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.8.4</span></div>
-                    <div class="sb-row"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.8.0</span></div>
-                    <div class="sb-row"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.7.6</span></div>
-                    <div class="sb-row"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.7.2</span></div>
-                    <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.7.0</span></div>
-                    <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.6.4</span></div>
-                    <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.6.0</span></div>
-                    <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.5.2</span></div>
-                    <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.5.0</span></div>
+              <div class="sb-group"><span class="sb-group-label">Tags</span><span class="sb-chev">⌄</span></div>
+              <div class="sb-row"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.9.0</span><span class="sb-tag">latest</span></div>
+              <div class="sb-row"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.8.4</span></div>
+              <div class="sb-row"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.8.0</span></div>
+              <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.7.6</span></div>
+              <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.7.2</span></div>
+              <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.7.0</span></div>
+              <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.6.4</span></div>
 
-                    <div class="sb-group">
-                      <span class="sb-group-label">Stashes</span>
-                      <span class="sb-chev">⌄</span>
-                    </div>
-                    <div class="sb-row"><span class="sb-ic sb-ic--stash"></span><span class="sb-name">wip: tab relay</span></div>
-                    <div class="sb-row sb-dim"><span class="sb-ic sb-ic--stash"></span><span class="sb-name">wip: lane palette</span></div>
-                    <div class="sb-row sb-dim"><span class="sb-ic sb-ic--stash"></span><span class="sb-name">wip: diff wrap</span></div>
-                  </div>
-                </aside>
+              <div class="sb-group"><span class="sb-group-label">Stashes</span><span class="sb-chev">⌄</span></div>
+              <div class="sb-row"><span class="sb-ic sb-ic--stash"></span><span class="sb-name">wip: tab relay</span></div>
+              <div class="sb-row sb-dim"><span class="sb-ic sb-ic--stash"></span><span class="sb-name">wip: lane palette</span></div>
+            </div>
+          </aside>
 
                 <section class="cl">
                   <div class="cl-head">
-                    <span class="cl-count">75 commits</span>
-                    <span class="cl-delta"><i class="add">+77</i><i class="del">−17</i></span>
+                    <span>Loaded 500 commits…</span>
+                    <span class="cl-delta"><i class="add">+12</i><i class="del">−4</i></span>
                   </div>
                   <div class="cl-filter">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
@@ -220,112 +197,116 @@
                     <span class="cl-kbd">⌘F</span>
                   </div>
                   <div class="cl-list">
-                    <div class="cl-row is-on">
-                      <span class="lane"><i class="node n0"></i></span>
-                      <span class="cl-msg">chore(release): v0.9.0</span>
-                      <span class="cl-refs"><b>HEAD → main</b><em>v0.9.0</em></span>
-                      <span class="cl-hash">e0cf311</span>
-                    </div>
-                    <div class="cl-row">
-                      <span class="lane"><i class="node n0"></i></span>
-                      <span class="cl-msg">fix(review): keep reviewed state per commit</span>
-                      <span class="cl-hash">94a7360</span>
-                    </div>
-                    <div class="cl-row">
-                      <span class="lane"><i class="node n0"></i></span>
-                      <span class="cl-msg">feat(graph): lane palettes for both themes</span>
-                      <span class="cl-hash">de30fed</span>
-                    </div>
-                    <div class="cl-row">
-                      <span class="lane"><i class="node n1"></i></span>
-                      <span class="cl-msg">test(review): platform-honest rename tests</span>
-                      <span class="cl-hash">a22699e</span>
-                    </div>
-                    <div class="cl-row">
-                      <span class="lane"><i class="node n1"></i></span>
-                      <span class="cl-msg">refactor(ui): detail column owns the file list</span>
-                      <span class="cl-hash">a854bd0</span>
-                    </div>
-                    <div class="cl-row">
-                      <span class="lane"><i class="node n2"></i></span>
-                      <span class="cl-msg">fix(tabs): re-attach remote tabs after relay drop</span>
-                      <span class="cl-hash">8c1d204</span>
-                    </div>
-                    <div class="cl-row">
-                      <span class="lane"><i class="node n2"></i></span>
-                      <span class="cl-msg">feat(web): manual refresh for sessions</span>
-                      <span class="cl-hash">3fa9c21</span>
-                    </div>
-                    <div class="cl-row">
-                      <span class="lane"><i class="node n0"></i></span>
-                      <span class="cl-msg">feat(desktop): sync remote PTY dimensions</span>
-                      <span class="cl-hash">b27e19a</span>
-                    </div>
-                    <div class="cl-row">
-                      <span class="lane"><i class="node n3"></i></span>
-                      <span class="cl-msg">fix(tabs): bottom hairline in tab strip</span>
-                      <span class="cl-hash">6e0aa1c</span>
-                    </div>
-                    <div class="cl-row">
-                      <span class="lane"><i class="node n0"></i></span>
-                      <span class="cl-msg">perf(graph): cache lane geometry per row</span>
-                      <span class="cl-hash">0b7f412</span>
-                    </div>
-                    <div class="cl-row">
-                      <span class="lane"><i class="node n1"></i></span>
-                      <span class="cl-msg">fix(graph): clip lanes at panel edges</span>
-                      <span class="cl-hash">5c2e9b0</span>
-                    </div>
-                    <div class="cl-row">
-                      <span class="lane"><i class="node n0"></i></span>
-                      <span class="cl-msg">chore(deps): bump go to 1.27</span>
-                      <span class="cl-hash">2a4d17c</span>
-                    </div>
-                    <div class="cl-row">
-                      <span class="lane"><i class="node n1"></i></span>
-                      <span class="cl-msg">docs(readme): review-first section</span>
-                      <span class="cl-hash">7f81aa3</span>
-                    </div>
-                    <div class="cl-row">
-                      <span class="lane"><i class="node n3"></i></span>
-                      <span class="cl-msg">feat(palette): fuzzy match on paths</span>
-                      <span class="cl-hash">d09c512</span>
-                    </div>
-                    <div class="cl-row">
-                      <span class="lane"><i class="node n2"></i></span>
-                      <span class="cl-msg">fix(stash): keep message when applying</span>
-                      <span class="cl-hash">41ba8de</span>
-                    </div>
-                    <div class="cl-row">
-                      <span class="lane"><i class="node n0"></i></span>
-                      <span class="cl-msg">refactor(theme): single source for tokens</span>
-                      <span class="cl-hash">c17e3f0</span>
-                    </div>
-                    <div class="cl-row">
-                      <span class="lane"><i class="node n1"></i></span>
-                      <span class="cl-msg">test(histor): keep revisions in order</span>
-                      <span class="cl-hash">9d20b71</span>
-                    </div>
-                    <div class="cl-row">
-                      <span class="lane"><i class="node n0"></i></span>
-                      <span class="cl-msg">feat(menu): native shortcuts for review</span>
-                      <span class="cl-hash">e4a1c66</span>
-                    </div>
-                    <div class="cl-row">
-                      <span class="lane"><i class="node n2"></i></span>
-                      <span class="cl-msg">fix(diff): keep word highlight on wrap</span>
-                      <span class="cl-hash">b73f0d9</span>
-                    </div>
-                    <div class="cl-row">
-                      <span class="lane"><i class="node n0"></i></span>
-                      <span class="cl-msg">chore(ci): cache go build artefacts</span>
-                      <span class="cl-hash">6a1e820</span>
-                    </div>
-                    <div class="cl-row">
-                      <span class="lane"><i class="node n1"></i></span>
-                      <span class="cl-msg">feat(review): collapse reviewed files</span>
-                      <span class="cl-hash">0f9b3c4</span>
-                    </div>
+            <svg class="cl-graph" width="54" height="448" viewBox="0 0 54 448" fill="none" aria-hidden="true">
+              <path d="M12 16V432" stroke="var(--app-lane0)" stroke-width="1.4"></path>
+              <path d="M12 80C12 96 28 94 28 112V160C28 176 12 174 12 190" stroke="var(--app-lane1)" stroke-width="1.4"></path>
+              <path d="M28 176C28 192 44 190 44 208V256C44 272 12 270 12 286" stroke="var(--app-lane2)" stroke-width="1.4"></path>
+              <circle cx="12" cy="16" r="4.5" fill="var(--app-lane0)"></circle>
+              <circle cx="12" cy="48" r="3.5" fill="var(--app-lane0)"></circle>
+              <circle cx="12" cy="80" r="3.5" fill="var(--app-lane0)"></circle>
+              <circle cx="28" cy="112" r="3.5" fill="var(--app-lane1)"></circle>
+              <circle cx="28" cy="144" r="3.5" fill="var(--app-lane1)"></circle>
+              <circle cx="28" cy="176" r="3.5" fill="var(--app-lane1)"></circle>
+              <circle cx="44" cy="208" r="3.5" fill="var(--app-lane2)"></circle>
+              <circle cx="44" cy="240" r="3.5" fill="var(--app-lane2)"></circle>
+              <circle cx="44" cy="272" r="3.5" fill="var(--app-lane2)"></circle>
+              <circle cx="12" cy="304" r="3.5" fill="var(--app-lane0)"></circle>
+              <circle cx="12" cy="336" r="3.5" fill="var(--app-lane0)"></circle>
+              <circle cx="28" cy="368" r="3.5" fill="var(--app-lane1)"></circle>
+              <circle cx="12" cy="400" r="3.5" fill="var(--app-lane0)"></circle>
+              <circle cx="12" cy="432" r="3.5" fill="var(--app-lane0)"></circle>
+            </svg>
+            <div class="cl-row is-on">
+              <span class="cl-msg">Merge 'feat/audit-log' into beta</span>
+              <span class="cl-refs"><b>HEAD → beta</b></span>
+              <span class="cl-author">Lin Wei</span>
+              <span class="cl-when">6 天前</span>
+              <span class="cl-hash">11c4fe5</span>
+            </div>
+            <div class="cl-row">
+              <span class="cl-msg">fix(review): 只标注当前 hunk</span>
+              
+              <span class="cl-author">Lin Wei</span>
+              <span class="cl-when">6 天前</span>
+              <span class="cl-hash">89f8c56</span>
+            </div>
+            <div class="cl-row">
+              <span class="cl-msg">Merge 'feat/audit-log' into beta</span>
+              
+              <span class="cl-author">Lin Wei</span>
+              <span class="cl-when">6 天前</span>
+              <span class="cl-hash">8af2425</span>
+            </div>
+            <div class="cl-row">
+              <span class="cl-msg">feat(audit): 自动关闭风险提示</span>
+              
+              <span class="cl-author">Lin Wei</span>
+              <span class="cl-when">6 天前</span>
+              <span class="cl-hash">d71682c</span>
+            </div>
+            <div class="cl-row">
+              <span class="cl-msg">chore: sync shared tokens</span>
+              
+              <span class="cl-author">Kai Chen</span>
+              <span class="cl-when">7 天前</span>
+              <span class="cl-hash">64d9b26</span>
+            </div>
+            <div class="cl-row">
+              <span class="cl-msg">merge: sync beta into feat/audit-log</span>
+              
+              <span class="cl-author">Kai Chen</span>
+              <span class="cl-when">10 天前</span>
+              <span class="cl-hash">38f1af4</span>
+            </div>
+            <div class="cl-row">
+              <span class="cl-msg">Merge 'panel-optimize' into beta</span>
+              
+              <span class="cl-author">Seul</span>
+              <span class="cl-when">11 天前</span>
+              <span class="cl-hash">ed2d1f0</span>
+            </div>
+            <div class="cl-row">
+              <span class="cl-msg">客户端 Panel 组件优化</span>
+              
+              <span class="cl-author">Seul</span>
+              <span class="cl-when">11 天前</span>
+              <span class="cl-hash">5b6fe7b</span>
+            </div>
+            <div class="cl-row">
+              <span class="cl-msg">chore: sync common</span>
+              
+              <span class="cl-author">CI Robot</span>
+              <span class="cl-when">12 天前</span>
+              <span class="cl-hash">392185c</span>
+            </div>
+            <div class="cl-row">
+              <span class="cl-msg">fix: 消息通知成员审核无法打开</span>
+              
+              <span class="cl-author">Lin Wei</span>
+              <span class="cl-when">26 天前</span>
+              <span class="cl-hash">d8dca12</span>
+            </div>
+            <div class="cl-row">
+              <span class="cl-msg">feat(panel): lazy mount panes</span>
+              
+              <span class="cl-author">Lin Wei</span>
+              <span class="cl-when">26 天前</span>
+              <span class="cl-hash">b018c24</span>
+            </div>
+            <div class="cl-row">
+              <span class="cl-msg">test(review): 保持 hunk 顺序</span>
+              
+              <span class="cl-author">Kai Chen</span>
+              <span class="cl-when">27 天前</span>
+              <span class="cl-hash">4f7a011</span>
+            </div>
+            <div class="cl-row">
+              <span class="cl-msg">perf(graph): 按行缓存车道几何</span>
+              
+              <span class="cl-author">Lin Wei</span>
+              <span class="cl-when">27 天前</span>
+              <span class="cl-hash">9c1de02</span>
+            </div>
                   </div>
                 </section>
 
@@ -335,96 +316,89 @@
                       <span class="avatar">LW</span>
                       <div class="cd-who">
                         <b>Lin Wei</b>
-                        <span>Oct 20 2026 18:58</span>
+                        <span>14 Oct 2026 17:04</span>
                       </div>
                     </div>
                     <div class="cd-meta">
                       <span class="cd-mail">lin@example.dev</span>
-                      <span class="cd-hash">#e0cf311</span>
+                      <span class="cd-hash">#11c4fe5</span>
                       <span class="cd-link">View on GitHub ↗</span>
                     </div>
-                    <div class="cd-subject">chore(release): v0.9.0</div>
+                    <div class="cd-subject">Merge 'feat/audit-log' into beta</div>
                     <ul class="cd-body">
-                      <li>审查状态按提交隔离，切换提交不再串味。</li>
-                      <li>拓扑图支持逐车道配色，深浅主题各自保存。</li>
-                      <li>侧栏分组高度统一，图标与文字基线对齐。</li>
+                      <li>审查状态按提交隔离，切换分支不再串味。</li>
+                      <li>行内风险标注只保留当前 hunk，减少干扰。</li>
                     </ul>
                   </div>
 
                   <div class="cd-files">
                     <div class="cd-files-head">
-                      <span>13 files</span>
+                      <span>4 files</span>
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
                     </div>
-                    <div class="cf-row"><span class="cf-path">cmd/app/nav.go</span><span class="cf-num"><i class="add">+20</i><i class="del">−14</i></span><span class="cf-st">M</span></div>
-                    <div class="cf-row"><span class="cf-path">internal/graph/lane.go</span><span class="cf-num"><i class="add">+38</i></span><span class="cf-st">A</span></div>
-                    <div class="cf-row"><span class="cf-path">web/package.json</span><span class="cf-num"><i class="add">+1</i><i class="del">−1</i></span><span class="cf-st">M</span></div>
-                    <div class="cf-row is-on"><span class="cf-path">CHANGELOG.md</span><span class="cf-num"><i class="add">+13</i></span><span class="cf-st">M</span></div>
-                    <div class="cf-row"><span class="cf-path">build/gloss.json</span><span class="cf-num"><i class="add">+1</i><i class="del">−1</i></span><span class="cf-st">M</span></div>
-                    <div class="cf-row"><span class="cf-path">package.json</span><span class="cf-num"><i class="add">+1</i><i class="del">−1</i></span><span class="cf-st">M</span></div>
-                    <div class="cf-row"><span class="cf-path">internal/review/state.go</span><span class="cf-num"><i class="add">+42</i><i class="del">−8</i></span><span class="cf-st">M</span></div>
-                    <div class="cf-row"><span class="cf-path">internal/review/state_test.go</span><span class="cf-num"><i class="add">+31</i></span><span class="cf-st">A</span></div>
-                    <div class="cf-row"><span class="cf-path">web/src/pane.css</span><span class="cf-num"><i class="add">+12</i><i class="del">−3</i></span><span class="cf-st">M</span></div>
-                    <div class="cf-row"><span class="cf-path">docs/shortcuts.md</span><span class="cf-num"><i class="add">+4</i></span><span class="cf-st">A</span></div>
-                    <div class="cf-row"><span class="cf-path">internal/graph/lane_test.go</span><span class="cf-num"><i class="add">+18</i><i class="del">−2</i></span><span class="cf-st">M</span></div>
-                    <div class="cf-row"><span class="cf-path">Makefile</span><span class="cf-num"><i class="add">+2</i><i class="del">−2</i></span><span class="cf-st">M</span></div>
-                    <div class="cf-row"><span class="cf-path">internal/theme/tokens.go</span><span class="cf-num"><i class="add">+9</i><i class="del">−6</i></span><span class="cf-st">M</span></div>
-                    <div class="cf-row"><span class="cf-path">internal/theme/tokens_test.go</span><span class="cf-num"><i class="add">+14</i></span><span class="cf-st">A</span></div>
-                    <div class="cf-row"><span class="cf-path">web/src/palette.ts</span><span class="cf-num"><i class="add">+22</i><i class="del">−4</i></span><span class="cf-st">M</span></div>
-                    <div class="cf-row"><span class="cf-path">docs/changelog.md</span><span class="cf-num"><i class="add">+6</i><i class="del">−1</i></span><span class="cf-st">M</span></div>
-                    <div class="cf-row"><span class="cf-path">.github/workflows/build.yml</span><span class="cf-num"><i class="add">+3</i><i class="del">−3</i></span><span class="cf-st">M</span></div>
-                    <div class="cd-total"><span>Total</span><span><i class="add">+77</i><i class="del">−17</i></span></div>
+                    <div class="cd-path-bar">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+                      src/views/layout/panel/components
+                    </div>
+                    <div class="cf-row is-on"><span class="cf-path">PanelList.vue</span><span class="cf-num"><i class="add">+12</i><i class="del">−4</i></span><span class="cf-st">M</span></div>
+                    <div class="cf-row"><span class="cf-path">usePanelUpdate.ts</span><span class="cf-num"><i class="add">+3</i><i class="del">−1</i></span><span class="cf-st">M</span></div>
+                    <div class="cf-row"><span class="cf-path">panel.less</span><span class="cf-num"><i class="add">+6</i></span><span class="cf-st">M</span></div>
+                    <div class="cf-row"><span class="cf-path">PanelList.test.ts</span><span class="cf-num"><i class="add">+9</i></span><span class="cf-st">A</span></div>
+                    <div class="cd-total"><span>Total</span><span><i class="add">+30</i><i class="del">−5</i></span></div>
                   </div>
                 </section>
 
                 <section class="df">
                   <div class="df-head">
-                    <span class="df-file">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"></path><path d="M14 3v5h5"></path></svg>
-                      CHANGELOG.md
-                    </span>
                     <span class="df-badge">M</span>
-                    <span class="df-plus">+13</span>
+                    <span class="df-file">src/views/layout/panel/components/PanelList.vue</span>
+                    <span class="df-plus">+12</span>
+                    <span class="df-minus">−4</span>
                     <span class="df-spacer"></span>
                     <span class="df-reviewed"><i class="cb">✓</i>Reviewed</span>
                   </div>
-                  <div class="df-collapsed">
-                    <span class="chev">⌄</span> 3 unmodified lines
-                  </div>
+                  <div class="df-collapsed"><span class="chev">⌄</span> 156 unmodified lines</div>
                   <div class="df-code">
-                    <div class="dl"><span class="ln">20</span><span class="ln">20</span><span class="lc">## 0.8.4</span></div>
-                    <div class="dl"><span class="ln">21</span><span class="ln">21</span><span class="lc"></span></div>
-                    <div class="dl"><span class="ln">22</span><span class="ln">22</span><span class="lc">**Performance** — 冷启动 92ms。</span></div>
-                    <div class="dl dl-add"><span class="ln">23</span><span class="ln">23</span><span class="lc">## 0.9.0</span></div>
-                    <div class="dl dl-add"><span class="ln">24</span><span class="ln">24</span><span class="lc"></span></div>
-                    <div class="dl dl-add"><span class="ln">25</span><span class="ln">25</span><span class="lc">**Review** — 审查标记按提交隔离。</span></div>
-                    <div class="dl dl-add"><span class="ln">26</span><span class="ln">26</span><span class="lc">切换提交时，折叠状态与已读进度各自保留，</span></div>
-                    <div class="dl dl-add"><span class="ln">27</span><span class="ln">27</span><span class="lc">不再互相污染。</span></div>
-                    <div class="dl dl-add"><span class="ln">28</span><span class="ln">28</span><span class="lc"></span></div>
-                    <div class="dl dl-add"><span class="ln">29</span><span class="ln">29</span><span class="lc">- **Graph.** 贝塞尔车道支持逐车道配色。</span></div>
-                    <div class="dl dl-add"><span class="ln">30</span><span class="ln">30</span><span class="lc">- **Detail.** 提交详情独占一栏，文件列表不再</span></div>
-                    <div class="dl dl-add"><span class="ln">31</span><span class="ln">31</span><span class="lc">  与差异争夺宽度。</span></div>
-                    <div class="dl"><span class="ln">32</span><span class="ln">32</span><span class="lc"></span></div>
-                <div class="dl dl-add"><span class="ln"></span><span class="ln">33</span><span class="lc">- **Shortcuts.** 新增 ⌘G 生成提交信息。</span></div>
-                <div class="dl dl-add"><span class="ln"></span><span class="ln">34</span><span class="lc"></span></div>
-                <div class="dl dl-add"><span class="ln"></span><span class="ln">35</span><span class="lc">## 0.8.0</span></div>
-                <div class="dl dl-add"><span class="ln"></span><span class="ln">36</span><span class="lc"></span></div>
-                <div class="dl dl-add"><span class="ln"></span><span class="ln">37</span><span class="lc">**Audit** — 风险标注进入行内，按严重度排序。</span></div>
-                <div class="dl"><span class="ln">33</span><span class="ln">38</span><span class="lc"></span></div>
-                <div class="dl"><span class="ln">34</span><span class="ln">39</span><span class="lc">- **Tabs.** 中继断线后自动恢复远端标签。</span></div>
-                <div class="dl"><span class="ln">35</span><span class="ln">40</span><span class="lc">- **Graph.** 车道几何按行缓存，滚动保持 60fps。</span></div>
-                <div class="dl"><span class="ln">36</span><span class="ln">41</span><span class="lc"></span></div>
-                <div class="dl"><span class="ln">37</span><span class="ln">42</span><span class="lc">## 0.7.6</span></div>
-                <div class="dl"><span class="ln">38</span><span class="ln">43</span><span class="lc"></span></div>
-                <div class="dl"><span class="ln">39</span><span class="ln">44</span><span class="lc">**Native** — 侧栏改为纯 Go 绘制，最后</span></div>
-                <div class="dl"><span class="ln">40</span><span class="ln">45</span><span class="lc">一处 WebView 依赖移除。</span></div>
-                <div class="dl"><span class="ln">41</span><span class="ln">46</span><span class="lc"></span></div>
-                <div class="dl"><span class="ln">42</span><span class="ln">47</span><span class="lc">- **Stash.** 应用时保留原始信息与未跟踪</span></div>
-                <div class="dl"><span class="ln">43</span><span class="ln">48</span><span class="lc">  文件，右键即可查看差异。</span></div>
-                <div class="dl"><span class="ln">44</span><span class="ln">49</span><span class="lc"></span></div>
-                <div class="dl"><span class="ln">45</span><span class="ln">50</span><span class="lc">## 0.7.2</span></div>
-                <div class="dl"><span class="ln">46</span><span class="ln">51</span><span class="lc"></span></div>
-                <div class="dl"><span class="ln">47</span><span class="ln">52</span><span class="lc">**Boot** — 冷启动 80ms，二进制 20MB。</span></div>
+                    <div class="dl"><span class="ln">157</span><span class="ln">157</span><span class="lc"><span class="k">const</span> { subscriptionPanel } = <span class="fn">usePanelUpdate</span>()</span></div>
+                    <div class="dl"><span class="ln">158</span><span class="ln">158</span><span class="lc"><span class="k">const</span> internalIsActive = <span class="fn">computed</span>(</span></div>
+                    <div class="dl"><span class="ln">159</span><span class="ln">159</span><span class="lc">  () =&gt; props.panelKey === props.activeKey,</span></div>
+                    <div class="dl"><span class="ln">160</span><span class="ln">160</span><span class="lc">)</span></div>
+                    <div class="dl"><span class="ln">161</span><span class="ln">161</span><span class="lc"></span></div>
+                    <div class="dl dl-add"><span class="ln"></span><span class="ln">162</span><span class="lc"><span class="c">/**</span></span></div>
+                    <div class="dl dl-add"><span class="ln"></span><span class="ln">163</span><span class="lc"><span class="c"> * 普通号固定分组：列表里只取</span></span></div>
+                    <div class="dl dl-add"><span class="ln"></span><span class="ln">164</span><span class="lc"><span class="c"> * UNKNOWN/PERSONAL 筛选号的分组。</span></span></div>
+                    <div class="dl dl-add"><span class="ln"></span><span class="ln">165</span><span class="lc"><span class="c"> * 该分组只能通过官网登录 Cookie 接入。</span></span></div>
+                    <div class="dl dl-add"><span class="ln"></span><span class="ln">166</span><span class="lc"><span class="c"> */</span></span></div>
+                    <div class="dl dl-add"><span class="ln"></span><span class="ln">167</span><span class="lc"><span class="k">const</span> isNormalGroup = <span class="fn">computed</span>(</span></div>
+                    <div class="dl dl-add"><span class="ln"></span><span class="ln">168</span><span class="lc">  () =&gt; props.types === <span class="s">'msg'</span> &amp;&amp;</span></div>
+                    <div class="dl dl-add"><span class="ln"></span><span class="ln">169</span><span class="lc">    props.accountTypes?.<span class="fn">some</span>(isNormalAccount),</span></div>
+                    <div class="dl dl-add"><span class="ln"></span><span class="ln">170</span><span class="lc">)</span></div>
+                    <div class="dl"><span class="ln">171</span><span class="ln">171</span><span class="lc"></span></div>
+                    <div class="dl"><span class="ln">172</span><span class="ln">172</span><span class="lc"><span class="k">const</span> <span class="fn">toggleActivePanel</span> = () =&gt; {</span></div>
+                    <div class="dl"><span class="ln">173</span><span class="ln">173</span><span class="lc">  <span class="fn">emits</span>(<span class="s">'toggleActivePanel'</span>, props.panelKey)</span></div>
+                    <div class="dl"><span class="ln">174</span><span class="ln">174</span><span class="lc">}</span></div>
+                  </div>
+                  <div class="df-collapsed"><span class="chev">⌄</span> 148 unmodified lines</div>
+                  <div class="df-code">
+                    <div class="dl"><span class="ln">318</span><span class="ln">318</span><span class="lc"><span class="k">const</span> accountType = Reflect.<span class="fn">get</span>(target, <span class="s">'AccountType'</span>)</span></div>
+                    <div class="dl"><span class="ln">319</span><span class="ln">319</span><span class="lc"><span class="k">const</span> normalizedAccountType =</span></div>
+                    <div class="dl"><span class="ln">320</span><span class="ln">320</span><span class="lc">  accountType ?? <span class="fn">Number</span>(accountType)</span></div>
+                    <div class="dl"><span class="ln">321</span><span class="ln">321</span><span class="lc"><span class="k">const</span> isXhsAccount =</span></div>
+                    <div class="dl"><span class="ln">322</span><span class="ln">322</span><span class="lc">  <span class="fn">String</span>(PlatformType) === PLATFORM_TYPE.XHS</span></div>
+                    <div class="dl dl-del"><span class="ln">323</span><span class="ln"></span><span class="lc"><span class="k">const</span> isNormalGroup = <span class="k">false</span></span></div>
+                    <div class="dl dl-add"><span class="ln"></span><span class="ln">323</span><span class="lc"><span class="k">const</span> isNormalGroup =</span></div>
+                    <div class="dl dl-add"><span class="ln"></span><span class="ln">324</span><span class="lc">  props.types === <span class="s">'msg'</span> &amp;&amp;</span></div>
+                    <div class="dl dl-add"><span class="ln"></span><span class="ln">325</span><span class="lc">  props.accountTypes?.<span class="fn">some</span>(</span></div>
+                    <div class="dl dl-add"><span class="ln"></span><span class="ln">326</span><span class="lc">    (type) =&gt; <span class="fn">isXhsNormalAccount</span>(type),</span></div>
+                    <div class="dl dl-add"><span class="ln"></span><span class="ln">327</span><span class="lc">  ) === <span class="k">true</span></span></div>
+                    <div class="dl"><span class="ln">328</span><span class="ln">328</span><span class="lc"></span></div>
+                    <div class="dl"><span class="ln">329</span><span class="ln">329</span><span class="lc"><span class="k">const</span> panelVisible = <span class="fn">computed</span>(() =&gt; {</span></div>
+                    <div class="dl"><span class="ln">330</span><span class="ln">330</span><span class="lc">  <span class="k">if</span> (!isNormalGroup.value) <span class="k">return</span> <span class="k">false</span></span></div>
+                    <div class="dl"><span class="ln">331</span><span class="ln">331</span><span class="lc">  <span class="k">return</span> accountTypes.value.<span class="fn">includes</span>(</span></div>
+                    <div class="dl"><span class="ln">332</span><span class="ln">332</span><span class="lc">    AccountType.PERSONAL,</span></div>
+                    <div class="dl"><span class="ln">333</span><span class="ln">333</span><span class="lc">  )</span></div>
+                    <div class="dl"><span class="ln">334</span><span class="ln">334</span><span class="lc">})</span></div>
+                    <div class="dl"><span class="ln">335</span><span class="ln">335</span><span class="lc"></span></div>
                   </div>
                   <div class="df-fade"></div>
                 </section>
@@ -433,7 +407,7 @@
               <div class="win-status">
                 <span class="st-branch">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="6" cy="6" r="2.4"></circle><circle cx="6" cy="18" r="2.4"></circle><path d="M6 8.4v7.2M15 6a3 3 0 0 1 3 3v6a2.4 2.4 0 1 1-2.4-2.4"></path></svg>
-                  main
+                  beta
                 </span>
                 <span class="st-dot"></span>
                 <span>0 conflicts</span>
