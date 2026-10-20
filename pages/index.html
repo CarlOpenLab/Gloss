@@ -3,37 +3,64 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gloss — Pure Go, GPU-Direct Git Client</title>
-  <meta name="description" content="A precision, distraction-free Git client built in pure Go with GPU direct rendering. Zero WebViews, pre-flight change audits, and multi-LLM commit intelligence.">
+  <title>Gloss — 先看清，再合并</title>
+  <meta name="description" content="Gloss 是一款纯 Go 编写的原生 Git 客户端。风险标注、分支拓扑与提交信息，都在按下 ⌘↩ 之前就绪。">
+  <meta name="theme-color" content="#070809" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f5f4f0" media="(prefers-color-scheme: light)">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Gloss — 先看清，再合并。">
+  <meta property="og:description" content="纯 Go 编写的原生 Git 客户端：风险标注、分支拓扑与提交信息，都在按下 ⌘↩ 之前就绪。">
+  <meta property="og:url" content="https://carlopenlab.github.io/Gloss/">
+  <meta property="og:image" content="https://carlopenlab.github.io/Gloss/shots/v1-dark.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/png" href="assets/icon.png">
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="app-mock.css">
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("gloss_theme");
+        var q = new URLSearchParams(window.location.search).get("theme");
+        if (q === "light" || q === "dark") t = q;
+        if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+      } catch (e) { /* default dark */ }
+      document.documentElement.classList.add("js");
+    })();
+  </script>
 </head>
 <body>
+  <div class="page-rules" aria-hidden="true"></div>
 
-  <!-- Nav — 安静、透明、黏顶 -->
-  <header class="top-nav">
-    <div class="nav-inner">
-      <a href="#" class="brand-link">
-        <span class="brand-text">Gloss</span>
-        <span class="brand-ver">v0.3.10</span>
+  <header class="nav">
+    <div class="shell nav-in">
+      <a class="brand" href="#top" aria-label="Gloss 首页">
+        <img class="brand-logo is-dark" src="assets/logo-dark.png" alt="" width="22" height="22">
+        <img class="brand-logo is-light" src="assets/logo.png" alt="" width="22" height="22">
+        <span class="brand-name">Gloss</span>
+        <span class="brand-ver">0.3.12</span>
       </a>
 
-      <nav class="nav-menu">
-        <a href="#features" data-i18n="nav_features">核心能力</a>
-        <a href="#benchmark" data-i18n="nav_benchmark">性能对比</a>
-        <a href="#shortcuts" data-i18n="nav_shortcuts">快捷键</a>
-        <a href="#install" data-i18n="nav_install">下载</a>
+      <nav class="nav-links" aria-label="主导航">
+        <a href="#review">审查</a>
+        <a href="#graph">图谱</a>
+        <a href="#intelligence">智能</a>
+        <a href="#keyboard">键盘</a>
+        <a href="#download">下载</a>
       </nav>
 
-      <div class="nav-ctrls">
-        <button id="lang-btn" class="ctrl-btn" aria-label="Toggle language">
-          <span id="lang-label">EN</span>
+      <div class="nav-end">
+        <button class="icon-btn" id="theme-btn" type="button" aria-label="切换深浅外观">
+          <svg class="i-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="4"></circle>
+            <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path>
+          </svg>
+          <svg class="i-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"></path>
+          </svg>
         </button>
-        <button id="theme-btn" class="ctrl-btn" aria-label="Toggle theme">
-          <span class="theme-glyph">◐</span>
-        </button>
-        <a href="https://github.com/CarlOpenLab/Gloss" target="_blank" rel="noopener" class="btn-repo">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+        <a class="nav-gh" href="https://github.com/CarlOpenLab/Gloss" target="_blank" rel="noopener">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 .5C5.73.5.75 5.48.75 11.75c0 4.94 3.2 9.13 7.65 10.6.56.1.77-.24.77-.54v-2.1c-3.12.68-3.78-1.32-3.78-1.32-.51-1.3-1.25-1.65-1.25-1.65-1.02-.7.08-.68.08-.68 1.13.08 1.72 1.16 1.72 1.16 1 1.72 2.63 1.22 3.27.93.1-.73.39-1.22.71-1.5-2.49-.28-5.11-1.25-5.11-5.55 0-1.23.44-2.23 1.16-3.02-.12-.28-.5-1.42.11-2.96 0 0 .94-.3 3.08 1.15a10.6 10.6 0 0 1 5.6 0c2.14-1.45 3.08-1.15 3.08-1.15.61 1.54.23 2.68.11 2.96.72.79 1.16 1.79 1.16 3.02 0 4.31-2.63 5.26-5.13 5.54.4.35.76 1.03.76 2.08v3.08c0 .3.2.65.78.54a11.26 11.26 0 0 0 7.64-10.6C23.25 5.48 18.27.5 12 .5z"></path>
           </svg>
           <span>GitHub</span>
         </a>
@@ -41,324 +68,836 @@
     </div>
   </header>
 
-  <main>
-    <!-- ═══════════════════════════════════════════════════════════════
-         HERO — 大字宣言 + 硬核数据胶囊 + 产品截图
-         ═══════════════════════════════════════════════════════════════ -->
+  <main id="top">
+
+    <!-- ══════════ HERO ══════════ -->
     <section class="hero">
-      <div class="hero-inner">
-        <h1 class="hero-title" data-i18n="hero_title">
-          纯 Go 编写。<br>GPU 直出渲染。<br>专为审查而生。
-        </h1>
-
-        <p class="hero-sub" data-i18n="hero_desc">
-          没有 Chromium，没有 Node.js，没有 400MB 的空载内存。<br>
-          遵循 Linear 2.0 设计规范的跨平台 Git 客户端。
-        </p>
-
-        <!-- 三枚硬核数据胶囊 -->
-        <div class="hero-stats">
-          <div class="stat-capsule">
-            <span class="stat-num">~80</span>
-            <span class="stat-unit">ms</span>
-            <span class="stat-label" data-i18n="stat_boot">冷启动</span>
-          </div>
-          <div class="stat-capsule">
-            <span class="stat-num">~35</span>
-            <span class="stat-unit">MB</span>
-            <span class="stat-label" data-i18n="stat_mem">待机内存</span>
-          </div>
-          <div class="stat-capsule">
-            <span class="stat-num">~20</span>
-            <span class="stat-unit">MB</span>
-            <span class="stat-label" data-i18n="stat_bin">二进制体积</span>
-          </div>
-        </div>
-
-        <div class="hero-actions">
-          <a href="#install" class="action-key" id="main-dl-btn">
-            <span id="main-dl-label" data-i18n="btn_dl_mac">获取 macOS 通用版 (.dmg)</span>
-          </a>
-          <div class="cli-strap">
-            <code>go install github.com/CarlOpenLab/Gloss@latest</code>
-            <button class="strap-copy" id="copy-btn" title="Copy command" aria-label="Copy">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-              </svg>
-              <span class="copy-tag" id="copy-tag" data-i18n="copied">已复制</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 产品截图 — 真实而非模拟 -->
-      <div class="hero-shot-wrap">
-        <div class="hero-shot">
-          <img src="shots/v1-dark.png" alt="Gloss — Code diff review" class="shot-dark" loading="eager">
-          <img src="shots/v1-light.png" alt="Gloss — Code diff review (light)" class="shot-light" loading="eager">
-        </div>
-      </div>
-    </section>
-
-    <!-- ═══════════════════════════════════════════════════════════════
-         FEATURES — 用截图讲故事，左右交替布局
-         ═══════════════════════════════════════════════════════════════ -->
-    <section class="features" id="features">
-
-      <!-- Feature 1: 风险预检 -->
-      <div class="feat-row">
-        <div class="feat-text">
-          <span class="mono-label" data-i18n="f1_label">PRE-FLIGHT AUDIT</span>
-          <h2 data-i18n="f1_title">提交前自动风险审计</h2>
-          <p data-i18n="f1_desc">
-            一键静态扫描暂存区中的代码变动，揪出意外带入的私钥、AWS/OpenAI 凭据、SQL 注入隐患和调试断点。按文件行号精准定位，按严重级别分类展示。
-          </p>
-        </div>
-        <div class="feat-shot">
-          <img src="shots/v5-riskscan-dark.png" alt="Pre-flight risk scan" class="shot-dark" loading="lazy">
-          <img src="shots/v5-riskscan-light.png" alt="Pre-flight risk scan (light)" class="shot-light" loading="lazy">
-        </div>
-      </div>
-
-      <!-- Feature 2: 分支拓扑 -->
-      <div class="feat-row feat-row--reverse">
-        <div class="feat-text">
-          <span class="mono-label" data-i18n="f2_label">TOPOLOGY GRAPH</span>
-          <h2 data-i18n="f2_title">高精度贝塞尔曲线拓扑图</h2>
-          <p data-i18n="f2_desc">
-            自研贝塞尔分支车道算法，支持经典、鲜艳与全灰度三种调色盘体系。分支合并与分叉路径一目了然，双击分支芯片直接检出。
-          </p>
-        </div>
-        <div class="feat-shot">
-          <img src="shots/v1-history-dark.png" alt="Bezier branch topology" class="shot-dark" loading="lazy">
-          <img src="shots/v1-history-light.png" alt="Bezier branch topology (light)" class="shot-light" loading="lazy">
-        </div>
-      </div>
-
-      <!-- Feature 3: 多 LLM 原生 -->
-      <div class="feat-row">
-        <div class="feat-text">
-          <span class="mono-label" data-i18n="f3_label">MULTI-LLM NATIVE</span>
-          <h2 data-i18n="f3_title">直连私有大模型</h2>
-          <p data-i18n="f3_desc">
-            支持 Claude、OpenAI、DeepSeek 及本地 Ollama 实例。API Key 完全保留在本地。深度理解代码差异块（Hunk），一键总结严谨的 Conventional Commits 格式。
-          </p>
-        </div>
-        <div class="feat-shot">
-          <img src="shots/v5-tags-dark.png" alt="AI commit generation" class="shot-dark" loading="lazy">
-          <img src="shots/v3-tags-light.png" alt="AI commit generation (light)" class="shot-light" loading="lazy">
-        </div>
-      </div>
-
-      <!-- Feature 4: 内置终端 -->
-      <div class="feat-row feat-row--reverse">
-        <div class="feat-text">
-          <span class="mono-label" data-i18n="f4_label">BUILT-IN TERMINAL</span>
-          <h2 data-i18n="f4_title">多会话终端与全键盘驱动</h2>
-          <p data-i18n="f4_desc">
-            内置多标签终端，支持 OSC 标题、字体字号自定义、图片粘贴直通 Claude Code。全键盘操作行云流水，已审文件一键标记 Viewed 折叠。
-          </p>
-        </div>
-        <div class="feat-shot">
-          <img src="shots/v4-term-tabs-dark.png" alt="Built-in terminal" class="shot-dark" loading="lazy">
-          <img src="shots/v4-term-tabs-light.png" alt="Built-in terminal (light)" class="shot-light" loading="lazy">
-        </div>
-      </div>
-    </section>
-
-    <!-- ═══════════════════════════════════════════════════════════════
-         三大工程原则 — 紧凑横向条
-         ═══════════════════════════════════════════════════════════════ -->
-    <section class="principles">
-      <div class="shell-wrap">
-        <div class="tri-columns">
-          <div class="tri-col">
-            <div class="col-num">01</div>
-            <h3 data-i18n="p1_head">GPU 直接绘制通道</h3>
-            <p data-i18n="p1_body">
-              基于纯 Go 与 <code>mygo</code> 底层图形管线，直接调用系统原生 Metal / Direct3D 接口提交图元。没有 DOM 解析和重排重绘，万行历史与大型 Diff 在 60fps 下保持平滑。
-            </p>
+      <div class="shell">
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <p class="eyebrow"><span class="dot" aria-hidden="true"></span>NATIVE GIT CLIENT — PURE GO · GPU DIRECT</p>
+            <h1 class="display">先看清，再合并。</h1>
           </div>
 
-          <div class="tri-col">
-            <div class="col-num">02</div>
-            <h3 data-i18n="p2_head">无彩色克制视觉规范</h3>
-            <p data-i18n="p2_body">
-              继承 Linear 经典的黑白两极系统。界面本身不使用多余杂色，将注意力 100% 留给 Git 变动的语义增减与分支车道。
-            </p>
-          </div>
-
-          <div class="tri-col">
-            <div class="col-num">03</div>
-            <h3 data-i18n="p3_head">~35MB 极轻常驻开销</h3>
-            <p data-i18n="p3_body">
-              启动约 80 毫秒，待机内存约为 Electron 类工具的十分之一。整天常驻后台处理庞大 Monorepo，也不会成为系统的资源黑洞。
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ═══════════════════════════════════════════════════════════════
-         BENCHMARK — 对比表
-         ═══════════════════════════════════════════════════════════════ -->
-    <section class="section-boundary" id="benchmark">
-      <div class="shell-wrap">
-        <div class="section-meta">
-          <span class="mono-label" data-i18n="sec_bench">DATA &amp; BENCHMARK</span>
-          <h2 data-i18n="bench_title">客观指标对照</h2>
-        </div>
-
-        <div class="data-table-frame">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th data-i18n="tb_metric">指标</th>
-                <th class="active-col">Gloss</th>
-                <th>Electron / WebView</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td data-i18n="tb_m1">技术栈</td>
-                <td class="active-col"><strong>Pure Go + GPU Direct</strong></td>
-                <td>Chromium + Node.js</td>
-              </tr>
-              <tr>
-                <td data-i18n="tb_m2">冷启动时间</td>
-                <td class="active-col"><strong>~80 ms</strong></td>
-                <td>1,800 ~ 3,200 ms</td>
-              </tr>
-              <tr>
-                <td data-i18n="tb_m3">静默待机内存</td>
-                <td class="active-col"><strong>~35 MB</strong></td>
-                <td>280 MB ~ 550 MB</td>
-              </tr>
-              <tr>
-                <td data-i18n="tb_m4">二进制包体积</td>
-                <td class="active-col"><strong>~20 MB</strong></td>
-                <td>130 MB ~ 240 MB</td>
-              </tr>
-              <tr>
-                <td data-i18n="tb_m5">AI 与网络依赖</td>
-                <td class="active-col" data-i18n="tb_v5_gloss">本地优先 / 直连自有模型</td>
-                <td data-i18n="tb_v5_other">多数需要云端登录</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <!-- ═══════════════════════════════════════════════════════════════
-         SHORTCUTS — 两排三列
-         ═══════════════════════════════════════════════════════════════ -->
-    <section class="section-boundary" id="shortcuts">
-      <div class="shell-wrap">
-        <div class="section-meta">
-          <span class="mono-label" data-i18n="sec_shortcuts">KEYBOARD-FIRST</span>
-          <h2 data-i18n="shortcuts_title">全键盘驱动，指尖行云流水</h2>
-        </div>
-
-        <div class="shortcuts-deck">
-          <div class="shortcut-unit">
-            <div class="kbd-wrap"><kbd>Space</kbd></div>
-            <div class="sc-desc" data-i18n="sc_1">暂存 / 取消暂存当前选中文件或 Hunk 块</div>
-          </div>
-          <div class="shortcut-unit">
-            <div class="kbd-wrap"><kbd>⌘</kbd> + <kbd>K</kbd></div>
-            <div class="sc-desc" data-i18n="sc_2">呼出全局命令面板 (Palette)</div>
-          </div>
-          <div class="shortcut-unit">
-            <div class="kbd-wrap"><kbd>⌘</kbd> + <kbd>Enter</kbd></div>
-            <div class="sc-desc" data-i18n="sc_3">提交当前已暂存的变动</div>
-          </div>
-          <div class="shortcut-unit">
-            <div class="kbd-wrap"><kbd>V</kbd></div>
-            <div class="sc-desc" data-i18n="sc_4">标记当前文件为"已审查 (Viewed)"并自动折叠</div>
-          </div>
-          <div class="shortcut-unit">
-            <div class="kbd-wrap"><kbd>[</kbd> / <kbd>]</kbd></div>
-            <div class="sc-desc" data-i18n="sc_5">在前后差异块 (Hunk) 之间快速跳转</div>
-          </div>
-          <div class="shortcut-unit">
-            <div class="kbd-wrap"><kbd>R</kbd></div>
-            <div class="sc-desc" data-i18n="sc_6">一键触发暂存区代码安全预检</div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ═══════════════════════════════════════════════════════════════
-         INSTALL — 三列下载卡
-         ═══════════════════════════════════════════════════════════════ -->
-    <section class="section-boundary" id="install">
-      <div class="shell-wrap">
-        <div class="section-meta">
-          <span class="mono-label" data-i18n="sec_install">DOWNLOADS</span>
-          <h2 data-i18n="install_title">开箱即用，支持主流操作系统</h2>
-        </div>
-
-        <div class="download-deck">
-          <!-- macOS -->
-          <div class="deck-item" id="deck-mac">
-            <div class="deck-head">
-              <span class="deck-os">macOS</span>
-              <span class="deck-tag">Universal</span>
+          <div class="hero-side">
+            <p class="lead">Gloss 把一次代码审查压缩进一屏：提交详情、逐行差异、风险标注与审查进度，都在你按下 <kbd class="inline-kbd">⌘</kbd><kbd class="inline-kbd">↩</kbd> 之前就绪。</p>
+            <div class="actions">
+              <a class="btn btn-primary" href="https://github.com/CarlOpenLab/Gloss/releases/latest" target="_blank" rel="noopener" id="main-dl">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"></path>
+                </svg>
+                <span id="main-dl-label">下载 macOS 版</span>
+                <span class="btn-meta" id="main-dl-meta">.dmg</span>
+              </a>
+              <a class="btn btn-ghost" href="https://github.com/CarlOpenLab/Gloss" target="_blank" rel="noopener">在 GitHub 上查看</a>
             </div>
-            <div class="deck-desc" data-i18n="mac_desc">Apple Silicon (M1/M2/M3/M4) 与 Intel 架构通用 DMG</div>
-            <a href="https://github.com/CarlOpenLab/Gloss/releases/latest" class="btn-deck" target="_blank" rel="noopener">
-              <span data-i18n="btn_dl_dmg">下载 .dmg 安装镜像</span>
+            <p class="fine">macOS · Windows · Linux　—　单文件，约 20 MB</p>
+          </div>
+        </div>
+
+        <figure class="stage" data-stage>
+          <div class="stage-cap">
+            <span class="mono">HISTORY — 提交详情 · 文件清单 · 逐行差异</span>
+            <span class="mono stage-cap-right">v0.3.12 / macOS</span>
+          </div>
+
+          <div class="frame">
+            <div class="win" aria-hidden="true">
+              <div class="win-bar">
+                <span class="tl tl-r"></span><span class="tl tl-y"></span><span class="tl tl-g"></span>
+                <div class="win-tabs">
+                  <span class="wtab is-on">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+                    atlas-web
+                    <span class="wx">×</span>
+                  </span>
+                  <span class="wtab">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+                    core-api
+                    <span class="wx">×</span>
+                  </span>
+                  <span class="wtab-add">＋</span>
+                </div>
+                <span class="win-bar-pad"></span>
+                <svg class="win-gear" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.08a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.08a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.08a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+              </div>
+
+              <div class="win-tb">
+                <span class="tb-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M9 4v16"></path></svg></span>
+                <span class="tb-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 17l6-5-6-5M12 19h8"></path></svg></span>
+                <span class="tb-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 6l-5 6 5 6M16 6l5 6-5 6"></path></svg></span>
+                <span class="tb-sep"></span>
+                <span class="tb-branch">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="6" cy="6" r="2.4"></circle><circle cx="6" cy="18" r="2.4"></circle><path d="M6 8.4v7.2M15 6a3 3 0 0 1 3 3v6a2.4 2.4 0 1 1-2.4-2.4"></path></svg>
+                  <span>main</span>
+                  <span class="caret">▾</span>
+                </span>
+                <span class="tb-count"><span class="up">↑2</span> <span class="down">↓0</span></span>
+                <span class="tb-spacer"></span>
+                <span class="tb-hint"><kbd>⌘</kbd><kbd>K</kbd></span>
+                <span class="tb-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 9h18M9 9v11"></path></svg></span>
+                <span class="tb-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 9h18M12 9v11"></path></svg></span>
+                <span class="tb-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"></path></svg></span>
+              </div>
+
+              <div class="win-body">
+                <aside class="sb">
+                  <div class="sb-filter">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
+                    Filter branches
+                  </div>
+                  <div class="sb-scroll">
+                    <div class="sb-group">
+                      <span class="sb-group-label">Local Branches</span>
+                      <span class="sb-chev">⌄</span>
+                    </div>
+                    <div class="sb-row">
+                      <span class="sb-ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="6" r="2.2"></circle><circle cx="6" cy="18" r="2.2"></circle><circle cx="18" cy="18" r="2.2"></circle><path d="M6 8.2v7.6M8.2 6H14a4 4 0 0 1 4 4v5.8"></path></svg></span>
+                      <span class="sb-name">All branches</span>
+                    </div>
+                    <div class="sb-row is-on">
+                      <span class="sb-dot"></span>
+                      <span class="sb-name">main</span>
+                      <span class="sb-chip">HEAD</span>
+                      <span class="sb-ab"><i class="up">↑2</i></span>
+                    </div>
+                    <div class="sb-row">
+                      <span class="sb-ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="6" r="2.2"></circle><circle cx="6" cy="18" r="2.2"></circle><path d="M6 8.2v7.6M14 6a4 4 0 0 1 4 4v6a2.2 2.2 0 1 1-2.2-2.2"></path></svg></span>
+                      <span class="sb-name">feat/audit-log</span>
+                    </div>
+
+                    <div class="sb-group">
+                      <span class="sb-group-label">Remote Branches</span>
+                      <span class="sb-chev">⌄</span>
+                    </div>
+                    <div class="sb-row sb-row--ind">
+                      <span class="sb-ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 6h16M4 12h16M4 18h16"></path></svg></span>
+                      <span class="sb-name">origin</span>
+                      <span class="sb-chev">⌄</span>
+                    </div>
+                    <div class="sb-row sb-row--ind2">
+                      <span class="sb-name">main</span>
+                      <span class="sb-ab"><i class="up">↑2</i></span>
+                    </div>
+                    <div class="sb-row sb-row--ind2">
+                      <span class="sb-name">feat/audit-log</span>
+                      <span class="sb-ab"><i class="up">↑1</i></span>
+                    </div>
+
+                    <div class="sb-group">
+                      <span class="sb-group-label">Tags</span>
+                      <span class="sb-chev">⌄</span>
+                    </div>
+                    <div class="sb-row"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.9.0</span><span class="sb-tag">latest</span></div>
+                    <div class="sb-row"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.8.4</span></div>
+                    <div class="sb-row"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.8.0</span></div>
+                    <div class="sb-row"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.7.6</span></div>
+                    <div class="sb-row"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.7.2</span></div>
+                    <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.7.0</span></div>
+                    <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.6.4</span></div>
+                    <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.6.0</span></div>
+                    <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.5.2</span></div>
+                    <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.5.0</span></div>
+
+                    <div class="sb-group">
+                      <span class="sb-group-label">Stashes</span>
+                      <span class="sb-chev">⌄</span>
+                    </div>
+                    <div class="sb-row"><span class="sb-ic sb-ic--stash"></span><span class="sb-name">wip: tab relay</span></div>
+                    <div class="sb-row sb-dim"><span class="sb-ic sb-ic--stash"></span><span class="sb-name">wip: lane palette</span></div>
+                    <div class="sb-row sb-dim"><span class="sb-ic sb-ic--stash"></span><span class="sb-name">wip: diff wrap</span></div>
+                  </div>
+                </aside>
+
+                <section class="cl">
+                  <div class="cl-head">
+                    <span class="cl-count">75 commits</span>
+                    <span class="cl-delta"><i class="add">+77</i><i class="del">−17</i></span>
+                  </div>
+                  <div class="cl-filter">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
+                    Filter commits
+                    <span class="cl-kbd">⌘F</span>
+                  </div>
+                  <div class="cl-list">
+                    <div class="cl-row is-on">
+                      <span class="lane"><i class="node n0"></i></span>
+                      <span class="cl-msg">chore(release): v0.9.0</span>
+                      <span class="cl-refs"><b>HEAD → main</b><em>v0.9.0</em></span>
+                      <span class="cl-hash">e0cf311</span>
+                    </div>
+                    <div class="cl-row">
+                      <span class="lane"><i class="node n0"></i></span>
+                      <span class="cl-msg">fix(review): keep reviewed state per commit</span>
+                      <span class="cl-hash">94a7360</span>
+                    </div>
+                    <div class="cl-row">
+                      <span class="lane"><i class="node n0"></i></span>
+                      <span class="cl-msg">feat(graph): lane palettes for both themes</span>
+                      <span class="cl-hash">de30fed</span>
+                    </div>
+                    <div class="cl-row">
+                      <span class="lane"><i class="node n1"></i></span>
+                      <span class="cl-msg">test(review): platform-honest rename tests</span>
+                      <span class="cl-hash">a22699e</span>
+                    </div>
+                    <div class="cl-row">
+                      <span class="lane"><i class="node n1"></i></span>
+                      <span class="cl-msg">refactor(ui): detail column owns the file list</span>
+                      <span class="cl-hash">a854bd0</span>
+                    </div>
+                    <div class="cl-row">
+                      <span class="lane"><i class="node n2"></i></span>
+                      <span class="cl-msg">fix(tabs): re-attach remote tabs after relay drop</span>
+                      <span class="cl-hash">8c1d204</span>
+                    </div>
+                    <div class="cl-row">
+                      <span class="lane"><i class="node n2"></i></span>
+                      <span class="cl-msg">feat(web): manual refresh for sessions</span>
+                      <span class="cl-hash">3fa9c21</span>
+                    </div>
+                    <div class="cl-row">
+                      <span class="lane"><i class="node n0"></i></span>
+                      <span class="cl-msg">feat(desktop): sync remote PTY dimensions</span>
+                      <span class="cl-hash">b27e19a</span>
+                    </div>
+                    <div class="cl-row">
+                      <span class="lane"><i class="node n3"></i></span>
+                      <span class="cl-msg">fix(tabs): bottom hairline in tab strip</span>
+                      <span class="cl-hash">6e0aa1c</span>
+                    </div>
+                    <div class="cl-row">
+                      <span class="lane"><i class="node n0"></i></span>
+                      <span class="cl-msg">perf(graph): cache lane geometry per row</span>
+                      <span class="cl-hash">0b7f412</span>
+                    </div>
+                    <div class="cl-row">
+                      <span class="lane"><i class="node n1"></i></span>
+                      <span class="cl-msg">fix(graph): clip lanes at panel edges</span>
+                      <span class="cl-hash">5c2e9b0</span>
+                    </div>
+                    <div class="cl-row">
+                      <span class="lane"><i class="node n0"></i></span>
+                      <span class="cl-msg">chore(deps): bump go to 1.27</span>
+                      <span class="cl-hash">2a4d17c</span>
+                    </div>
+                    <div class="cl-row">
+                      <span class="lane"><i class="node n1"></i></span>
+                      <span class="cl-msg">docs(readme): review-first section</span>
+                      <span class="cl-hash">7f81aa3</span>
+                    </div>
+                    <div class="cl-row">
+                      <span class="lane"><i class="node n3"></i></span>
+                      <span class="cl-msg">feat(palette): fuzzy match on paths</span>
+                      <span class="cl-hash">d09c512</span>
+                    </div>
+                    <div class="cl-row">
+                      <span class="lane"><i class="node n2"></i></span>
+                      <span class="cl-msg">fix(stash): keep message when applying</span>
+                      <span class="cl-hash">41ba8de</span>
+                    </div>
+                    <div class="cl-row">
+                      <span class="lane"><i class="node n0"></i></span>
+                      <span class="cl-msg">refactor(theme): single source for tokens</span>
+                      <span class="cl-hash">c17e3f0</span>
+                    </div>
+                    <div class="cl-row">
+                      <span class="lane"><i class="node n1"></i></span>
+                      <span class="cl-msg">test(histor): keep revisions in order</span>
+                      <span class="cl-hash">9d20b71</span>
+                    </div>
+                    <div class="cl-row">
+                      <span class="lane"><i class="node n0"></i></span>
+                      <span class="cl-msg">feat(menu): native shortcuts for review</span>
+                      <span class="cl-hash">e4a1c66</span>
+                    </div>
+                    <div class="cl-row">
+                      <span class="lane"><i class="node n2"></i></span>
+                      <span class="cl-msg">fix(diff): keep word highlight on wrap</span>
+                      <span class="cl-hash">b73f0d9</span>
+                    </div>
+                    <div class="cl-row">
+                      <span class="lane"><i class="node n0"></i></span>
+                      <span class="cl-msg">chore(ci): cache go build artefacts</span>
+                      <span class="cl-hash">6a1e820</span>
+                    </div>
+                    <div class="cl-row">
+                      <span class="lane"><i class="node n1"></i></span>
+                      <span class="cl-msg">feat(review): collapse reviewed files</span>
+                      <span class="cl-hash">0f9b3c4</span>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="cd">
+                  <div class="cd-card">
+                    <div class="cd-top">
+                      <span class="avatar">LW</span>
+                      <div class="cd-who">
+                        <b>Lin Wei</b>
+                        <span>Oct 20 2026 18:58</span>
+                      </div>
+                    </div>
+                    <div class="cd-meta">
+                      <span class="cd-mail">lin@example.dev</span>
+                      <span class="cd-hash">#e0cf311</span>
+                      <span class="cd-link">View on GitHub ↗</span>
+                    </div>
+                    <div class="cd-subject">chore(release): v0.9.0</div>
+                    <ul class="cd-body">
+                      <li>审查状态按提交隔离，切换提交不再串味。</li>
+                      <li>拓扑图支持逐车道配色，深浅主题各自保存。</li>
+                      <li>侧栏分组高度统一，图标与文字基线对齐。</li>
+                    </ul>
+                  </div>
+
+                  <div class="cd-files">
+                    <div class="cd-files-head">
+                      <span>13 files</span>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
+                    </div>
+                    <div class="cf-row"><span class="cf-path">cmd/app/nav.go</span><span class="cf-num"><i class="add">+20</i><i class="del">−14</i></span><span class="cf-st">M</span></div>
+                    <div class="cf-row"><span class="cf-path">internal/graph/lane.go</span><span class="cf-num"><i class="add">+38</i></span><span class="cf-st">A</span></div>
+                    <div class="cf-row"><span class="cf-path">web/package.json</span><span class="cf-num"><i class="add">+1</i><i class="del">−1</i></span><span class="cf-st">M</span></div>
+                    <div class="cf-row is-on"><span class="cf-path">CHANGELOG.md</span><span class="cf-num"><i class="add">+13</i></span><span class="cf-st">M</span></div>
+                    <div class="cf-row"><span class="cf-path">build/gloss.json</span><span class="cf-num"><i class="add">+1</i><i class="del">−1</i></span><span class="cf-st">M</span></div>
+                    <div class="cf-row"><span class="cf-path">package.json</span><span class="cf-num"><i class="add">+1</i><i class="del">−1</i></span><span class="cf-st">M</span></div>
+                    <div class="cf-row"><span class="cf-path">internal/review/state.go</span><span class="cf-num"><i class="add">+42</i><i class="del">−8</i></span><span class="cf-st">M</span></div>
+                    <div class="cf-row"><span class="cf-path">internal/review/state_test.go</span><span class="cf-num"><i class="add">+31</i></span><span class="cf-st">A</span></div>
+                    <div class="cf-row"><span class="cf-path">web/src/pane.css</span><span class="cf-num"><i class="add">+12</i><i class="del">−3</i></span><span class="cf-st">M</span></div>
+                    <div class="cf-row"><span class="cf-path">docs/shortcuts.md</span><span class="cf-num"><i class="add">+4</i></span><span class="cf-st">A</span></div>
+                    <div class="cf-row"><span class="cf-path">internal/graph/lane_test.go</span><span class="cf-num"><i class="add">+18</i><i class="del">−2</i></span><span class="cf-st">M</span></div>
+                    <div class="cf-row"><span class="cf-path">Makefile</span><span class="cf-num"><i class="add">+2</i><i class="del">−2</i></span><span class="cf-st">M</span></div>
+                    <div class="cf-row"><span class="cf-path">internal/theme/tokens.go</span><span class="cf-num"><i class="add">+9</i><i class="del">−6</i></span><span class="cf-st">M</span></div>
+                    <div class="cf-row"><span class="cf-path">internal/theme/tokens_test.go</span><span class="cf-num"><i class="add">+14</i></span><span class="cf-st">A</span></div>
+                    <div class="cf-row"><span class="cf-path">web/src/palette.ts</span><span class="cf-num"><i class="add">+22</i><i class="del">−4</i></span><span class="cf-st">M</span></div>
+                    <div class="cf-row"><span class="cf-path">docs/changelog.md</span><span class="cf-num"><i class="add">+6</i><i class="del">−1</i></span><span class="cf-st">M</span></div>
+                    <div class="cf-row"><span class="cf-path">.github/workflows/build.yml</span><span class="cf-num"><i class="add">+3</i><i class="del">−3</i></span><span class="cf-st">M</span></div>
+                    <div class="cd-total"><span>Total</span><span><i class="add">+77</i><i class="del">−17</i></span></div>
+                  </div>
+                </section>
+
+                <section class="df">
+                  <div class="df-head">
+                    <span class="df-file">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"></path><path d="M14 3v5h5"></path></svg>
+                      CHANGELOG.md
+                    </span>
+                    <span class="df-badge">M</span>
+                    <span class="df-plus">+13</span>
+                    <span class="df-spacer"></span>
+                    <span class="df-reviewed"><i class="cb">✓</i>Reviewed</span>
+                  </div>
+                  <div class="df-collapsed">
+                    <span class="chev">⌄</span> 3 unmodified lines
+                  </div>
+                  <div class="df-code">
+                    <div class="dl"><span class="ln">20</span><span class="ln">20</span><span class="lc">## 0.8.4</span></div>
+                    <div class="dl"><span class="ln">21</span><span class="ln">21</span><span class="lc"></span></div>
+                    <div class="dl"><span class="ln">22</span><span class="ln">22</span><span class="lc">**Performance** — 冷启动 92ms。</span></div>
+                    <div class="dl dl-add"><span class="ln">23</span><span class="ln">23</span><span class="lc">## 0.9.0</span></div>
+                    <div class="dl dl-add"><span class="ln">24</span><span class="ln">24</span><span class="lc"></span></div>
+                    <div class="dl dl-add"><span class="ln">25</span><span class="ln">25</span><span class="lc">**Review** — 审查标记按提交隔离。</span></div>
+                    <div class="dl dl-add"><span class="ln">26</span><span class="ln">26</span><span class="lc">切换提交时，折叠状态与已读进度各自保留，</span></div>
+                    <div class="dl dl-add"><span class="ln">27</span><span class="ln">27</span><span class="lc">不再互相污染。</span></div>
+                    <div class="dl dl-add"><span class="ln">28</span><span class="ln">28</span><span class="lc"></span></div>
+                    <div class="dl dl-add"><span class="ln">29</span><span class="ln">29</span><span class="lc">- **Graph.** 贝塞尔车道支持逐车道配色。</span></div>
+                    <div class="dl dl-add"><span class="ln">30</span><span class="ln">30</span><span class="lc">- **Detail.** 提交详情独占一栏，文件列表不再</span></div>
+                    <div class="dl dl-add"><span class="ln">31</span><span class="ln">31</span><span class="lc">  与差异争夺宽度。</span></div>
+                    <div class="dl"><span class="ln">32</span><span class="ln">32</span><span class="lc"></span></div>
+                <div class="dl dl-add"><span class="ln"></span><span class="ln">33</span><span class="lc">- **Shortcuts.** 新增 ⌘G 生成提交信息。</span></div>
+                <div class="dl dl-add"><span class="ln"></span><span class="ln">34</span><span class="lc"></span></div>
+                <div class="dl dl-add"><span class="ln"></span><span class="ln">35</span><span class="lc">## 0.8.0</span></div>
+                <div class="dl dl-add"><span class="ln"></span><span class="ln">36</span><span class="lc"></span></div>
+                <div class="dl dl-add"><span class="ln"></span><span class="ln">37</span><span class="lc">**Audit** — 风险标注进入行内，按严重度排序。</span></div>
+                <div class="dl"><span class="ln">33</span><span class="ln">38</span><span class="lc"></span></div>
+                <div class="dl"><span class="ln">34</span><span class="ln">39</span><span class="lc">- **Tabs.** 中继断线后自动恢复远端标签。</span></div>
+                <div class="dl"><span class="ln">35</span><span class="ln">40</span><span class="lc">- **Graph.** 车道几何按行缓存，滚动保持 60fps。</span></div>
+                <div class="dl"><span class="ln">36</span><span class="ln">41</span><span class="lc"></span></div>
+                <div class="dl"><span class="ln">37</span><span class="ln">42</span><span class="lc">## 0.7.6</span></div>
+                <div class="dl"><span class="ln">38</span><span class="ln">43</span><span class="lc"></span></div>
+                <div class="dl"><span class="ln">39</span><span class="ln">44</span><span class="lc">**Native** — 侧栏改为纯 Go 绘制，最后</span></div>
+                <div class="dl"><span class="ln">40</span><span class="ln">45</span><span class="lc">一处 WebView 依赖移除。</span></div>
+                <div class="dl"><span class="ln">41</span><span class="ln">46</span><span class="lc"></span></div>
+                <div class="dl"><span class="ln">42</span><span class="ln">47</span><span class="lc">- **Stash.** 应用时保留原始信息与未跟踪</span></div>
+                <div class="dl"><span class="ln">43</span><span class="ln">48</span><span class="lc">  文件，右键即可查看差异。</span></div>
+                <div class="dl"><span class="ln">44</span><span class="ln">49</span><span class="lc"></span></div>
+                <div class="dl"><span class="ln">45</span><span class="ln">50</span><span class="lc">## 0.7.2</span></div>
+                <div class="dl"><span class="ln">46</span><span class="ln">51</span><span class="lc"></span></div>
+                <div class="dl"><span class="ln">47</span><span class="ln">52</span><span class="lc">**Boot** — 冷启动 80ms，二进制 20MB。</span></div>
+                  </div>
+                  <div class="df-fade"></div>
+                </section>
+              </div>
+
+              <div class="win-status">
+                <span class="st-branch">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="6" cy="6" r="2.4"></circle><circle cx="6" cy="18" r="2.4"></circle><path d="M6 8.4v7.2M15 6a3 3 0 0 1 3 3v6a2.4 2.4 0 1 1-2.4-2.4"></path></svg>
+                  main
+                </span>
+                <span class="st-dot"></span>
+                <span>0 conflicts</span>
+                <span class="st-spacer"></span>
+                <span>UTF-8 · LF</span>
+                <span class="st-dot"></span>
+                <span>GPU 60 fps</span>
+              </div>
+            </div>
+          </div>
+
+          <figcaption class="stage-foot">
+            <span class="mono">REAL INTERFACE — 1:1 复刻，非截图</span>
+            <span class="mono">1240 × 840</span>
+          </figcaption>
+        </figure>
+
+        <div class="spec-strip">
+          <div class="spec"><span class="spec-n">80<em>ms</em></span><span class="spec-l">冷启动</span></div>
+          <div class="spec"><span class="spec-n">35<em>MB</em></span><span class="spec-l">待机内存</span></div>
+          <div class="spec"><span class="spec-n">20<em>MB</em></span><span class="spec-l">安装包</span></div>
+          <div class="spec"><span class="spec-n">0<em>WebView</em></span><span class="spec-l">运行时依赖</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ 01 REVIEW ══════════ -->
+    <section class="sec" id="review">
+      <div class="shell">
+        <header class="sec-head" data-reveal>
+          <p class="sec-label"><span class="idx">01</span>REVIEW</p>
+          <div class="sec-titles">
+            <h2>改动不止要看见，<br>要读得懂。</h2>
+            <p>一次 PR 往往有几十个文件。提交信息、文件清单与逐行差异并排在同一屏；每一处可疑变更都被标在它所在的那一行，而不是藏进另一个窗口。</p>
+          </div>
+        </header>
+
+        <figure class="figure" data-reveal>
+          <div class="fig-cap">
+            <span class="mono">FIG. 01 — 差异阅读器</span>
+            <span class="mono">逐 hunk 暂存 · 词级高亮 · 行内风险标注</span>
+          </div>
+
+          <div class="panel dp">
+            <div class="dp-tabs">
+              <span class="dp-tab is-on">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"></path><path d="M14 3v5h5"></path></svg>
+                internal/review/state.go
+                <span class="dp-tab-x">×</span>
+              </span>
+              <span class="dp-tab">internal/review/store.go</span>
+              <span class="dp-tab">review_test.go</span>
+              <span class="dp-tabs-pad"></span>
+              <span class="seg"><i class="is-on">Split</i><i>Unified</i></span>
+              <span class="dp-reviewed"><i class="cb">✓</i>Reviewed</span>
+            </div>
+
+            <div class="dp-sub">
+              <span class="dp-path">internal/review/state.go</span>
+              <span class="dp-badge">M</span>
+              <span class="dp-num"><i class="add">+42</i><i class="del">−8</i></span>
+              <span class="dp-spacer"></span>
+              <span class="dp-hunks">hunk 3 / 7</span>
+              <span class="dp-keys"><kbd>[</kbd><kbd>]</kbd></span>
+            </div>
+
+            <div class="dp-body">
+              <div class="dp-hunk">@@ -118,7 +118,19 @@ func (s *Store) MarkReviewed(commit, path string) error {</div>
+              <div class="dl"><span class="ln">118</span><span class="ln">118</span><span class="lc"><span class="k">func</span> (s *Store) <span class="fn">MarkReviewed</span>(commit, path <span class="k">string</span>) <span class="k">error</span> {</span></div>
+              <div class="dl"><span class="ln">119</span><span class="ln">119</span><span class="lc">    s.mu.Lock()</span></div>
+              <div class="dl"><span class="ln">120</span><span class="ln">120</span><span class="lc">    <span class="k">defer</span> s.mu.Unlock()</span></div>
+              <div class="dl dl-del"><span class="ln">121</span><span class="ln"></span><span class="lc">    s.reviewed[path] = <span class="k">true</span></span></div>
+              <div class="dl dl-add"><span class="ln"></span><span class="ln">121</span><span class="lc">    key := commit + <span class="s">":"</span> + path</span></div>
+              <div class="dl dl-add"><span class="ln"></span><span class="ln">122</span><span class="lc">    s.reviewed[key] = <span class="k">true</span></span></div>
+              <div class="dl dl-add"><span class="ln"></span><span class="ln">123</span><span class="lc">    s.dirty = <span class="k">true</span></span></div>
+              <div class="dl dl-add dl-risk"><span class="ln"></span><span class="ln">124</span><span class="lc">    token := <span class="s">"ghp_live_9fA2xQ7kLm"</span></span></div>
+              <div class="dl dl-add"><span class="ln"></span><span class="ln">125</span><span class="lc">    <span class="k">return</span> s.flush(key, token)</span></div>
+              <div class="dl"><span class="ln">126</span><span class="ln">126</span><span class="lc">}</span></div>
+              <div class="dl"><span class="ln">127</span><span class="ln">127</span><span class="lc"></span></div>
+              <div class="dl"><span class="ln">128</span><span class="ln">128</span><span class="lc"><span class="k">func</span> (s *Store) <span class="fn">Reset</span>() {</span></div>
+
+              <div class="risk-pop">
+                <div class="risk-head"><span class="sev">CRITICAL</span><span>硬编码访问凭据</span></div>
+                <p>变量 <code>token</code> 含明文密钥，将随仓库一并提交。</p>
+                <div class="risk-fix"><b>建议：</b>改从环境变量或密钥服务读取。</div>
+              </div>
+            </div>
+
+            <div class="dp-foot">
+              <span class="prog"><i style="width:66%"></i></span>
+              <span class="dp-prog-t">已审查 4 / 6 文件</span>
+              <span class="dp-spacer"></span>
+              <span class="dp-act"><kbd>R</kbd> 风险扫描</span>
+              <span class="dp-act is-primary"><kbd>⌘</kbd><kbd>↩</kbd> 提交</span>
+            </div>
+          </div>
+        </figure>
+      </div>
+    </section>
+
+    <!-- ══════════ 02 GRAPH ══════════ -->
+    <section class="sec sec--band" id="graph">
+      <div class="shell">
+        <header class="sec-head" data-reveal>
+          <p class="sec-label"><span class="idx">02</span>TOPOLOGY</p>
+          <div class="sec-titles">
+            <h2>分叉与合并，<br>一眼到底。</h2>
+            <p>自研贝塞尔车道算法，三条内置调色盘，支持逐车道配色。「All branches」把本地、远端与标签画进同一张图，方向键走完整个历史。</p>
+          </div>
+        </header>
+
+        <figure class="figure" data-reveal>
+          <div class="fig-cap">
+            <span class="mono">FIG. 02 — 全分支拓扑</span>
+            <span class="mono">三车道 · 深浅两套调色</span>
+          </div>
+
+          <div class="panel gp">
+            <div class="gp-head">
+              <span class="gp-title">All branches</span>
+              <span class="gp-count">75 commits</span>
+              <span class="gp-palette"><i class="p0"></i><i class="p1"></i><i class="p2"></i></span>
+              <span class="gp-spacer"></span>
+              <span class="gp-meta">3 lanes · 2 remotes</span>
+            </div>
+
+            <div class="gp-body">
+              <svg class="gp-lanes" width="120" height="340" viewBox="0 0 120 340" fill="none" aria-hidden="true">
+                <path d="M28 17V323" stroke="var(--app-lane0)" stroke-width="1.5"></path>
+                <path d="M28 51C28 68 46 67 46 85V153C46 171 28 169 28 187" stroke="var(--app-lane1)" stroke-width="1.5"></path>
+                <path d="M28 221C28 238 64 237 64 255V289C64 306 28 304 28 323" stroke="var(--app-lane2)" stroke-width="1.5"></path>
+                <circle cx="28" cy="17" r="4.5" fill="var(--app-lane0)" stroke="var(--app-bg)" stroke-width="2"></circle>
+                <circle cx="28" cy="51" r="3.5" fill="var(--app-lane0)"></circle>
+                <circle cx="46" cy="85" r="4" fill="var(--app-lane1)"></circle>
+                <circle cx="46" cy="119" r="3.5" fill="var(--app-lane1)"></circle>
+                <circle cx="46" cy="153" r="3.5" fill="var(--app-lane1)"></circle>
+                <circle cx="28" cy="187" r="4" fill="var(--app-lane0)"></circle>
+                <circle cx="28" cy="221" r="4" fill="var(--app-lane0)"></circle>
+                <circle cx="64" cy="255" r="4" fill="var(--app-lane2)"></circle>
+                <circle cx="64" cy="289" r="3.5" fill="var(--app-lane2)"></circle>
+                <circle cx="28" cy="323" r="4" fill="var(--app-lane0)"></circle>
+              </svg>
+
+              <div class="gp-rows">
+                <div class="gp-row">
+                  <span class="gp-msg">chore(release): v0.9.0</span>
+                  <span class="gp-refs"><b>HEAD → main</b><em>v0.9.0</em></span>
+                  <span class="gp-author">Lin Wei</span><span class="gp-when">1 小时前</span>
+                </div>
+                <div class="gp-row gp-row--dim">
+                  <span class="gp-msg">chore: bump graph fixtures</span>
+                  <span class="gp-author">Lin Wei</span><span class="gp-when">2 小时前</span>
+                </div>
+                <div class="gp-row">
+                  <span class="gp-msg">feat(audit): structured finding model</span>
+                  <span class="gp-refs"><em>feat/audit-log</em></span>
+                  <span class="gp-author">Lin Wei</span><span class="gp-when">3 小时前</span>
+                </div>
+                <div class="gp-row gp-row--dim">
+                  <span class="gp-msg">test(audit): severity ordering</span>
+                  <span class="gp-author">Lin Wei</span><span class="gp-when">4 小时前</span>
+                </div>
+                <div class="gp-row gp-row--dim">
+                  <span class="gp-msg">feat(audit): inline risk anchors</span>
+                  <span class="gp-author">Lin Wei</span><span class="gp-when">5 小时前</span>
+                </div>
+                <div class="gp-row is-merge">
+                  <span class="gp-msg">merge: feat/audit-log into main</span>
+                  <span class="gp-refs"><b>main</b></span>
+                  <span class="gp-author">Lin Wei</span><span class="gp-when">6 小时前</span>
+                </div>
+                <div class="gp-row">
+                  <span class="gp-msg">feat(graph): lane palettes for both themes</span>
+                  <span class="gp-refs"><em>origin/main</em></span>
+                  <span class="gp-author">Lin Wei</span><span class="gp-when">7 小时前</span>
+                </div>
+                <div class="gp-row">
+                  <span class="gp-msg">fix(tabs): re-attach remote tabs after relay drop</span>
+                  <span class="gp-refs"><em>feat/tabs</em></span>
+                  <span class="gp-author">Lin Wei</span><span class="gp-when">8 小时前</span>
+                </div>
+                <div class="gp-row gp-row--dim">
+                  <span class="gp-msg">feat(tabs): hairline under tab strip</span>
+                  <span class="gp-author">Lin Wei</span><span class="gp-when">9 小时前</span>
+                </div>
+                <div class="gp-row">
+                  <span class="gp-msg">perf(graph): cache lane geometry per row</span>
+                  <span class="gp-author">Lin Wei</span><span class="gp-when">10 小时前</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </figure>
+      </div>
+    </section>
+
+    <!-- ══════════ 03 INTELLIGENCE ══════════ -->
+    <section class="sec" id="intelligence">
+      <div class="shell">
+        <header class="sec-head" data-reveal>
+          <p class="sec-label"><span class="idx">03</span>INTELLIGENCE</p>
+          <div class="sec-titles">
+            <h2>提交信息，<br>用你自己的模型。</h2>
+            <p>内置 Claude、DeepSeek、Kimi、Qwen 与 GLM 预设，也接受任意 OpenAI 兼容端点。提示词、密钥与仓库上下文只留在本机。</p>
+          </div>
+        </header>
+
+        <figure class="figure figure--inset" data-reveal>
+          <div class="fig-cap">
+            <span class="mono">FIG. 03 — 提交信息生成</span>
+            <span class="mono">Conventional Commits</span>
+          </div>
+
+          <div class="panel ai">
+            <div class="ai-head">
+              <span class="ai-title">生成提交信息</span>
+              <span class="ai-chip is-on">DeepSeek</span>
+              <span class="ai-chip">Claude</span>
+              <span class="ai-chip">Kimi</span>
+              <span class="ai-chip">Qwen</span>
+              <span class="ai-chip">Ollama</span>
+              <span class="ai-spacer"></span>
+              <span class="ai-local">本地直连 · 无云端登录</span>
+            </div>
+            <div class="ai-intent">
+              <span class="ai-intent-label">意图</span>
+              <span class="ai-intent-text">修复暂存区大小写重命名时的竞态</span>
+              <span class="ai-caret"></span>
+              <span class="ai-intent-spacer"></span>
+            </div>
+            <div class="ai-out">
+              <div class="ai-out-label">
+                <span>生成结果</span>
+                <span class="ai-tokens">312 tokens · 0.9s</span>
+              </div>
+              <p class="ai-msg"><b>fix(stage): preserve rename case on macOS</b></p>
+              <p class="ai-body">Compare paths case-sensitively before staging, and reset the cached status after a case-only rename. Adds a regression test for <code>A → a</code> renames on case-insensitive volumes.</p>
+            </div>
+            <div class="ai-foot">
+              <span class="ai-act is-primary"><kbd>⌘</kbd><kbd>↩</kbd> 提交</span>
+              <span class="ai-act"><kbd>Tab</kbd> 换个模型</span>
+              <span class="ai-act"><kbd>Esc</kbd> 放弃</span>
+              <span class="ai-spacer"></span>
+              <span class="ai-note">diff 46 行 · 6 文件</span>
+            </div>
+          </div>
+        </figure>
+      </div>
+    </section>
+
+    <!-- ══════════ 04 KEYBOARD ══════════ -->
+    <section class="sec" id="keyboard">
+      <div class="shell">
+        <header class="sec-head" data-reveal>
+          <p class="sec-label"><span class="idx">04</span>KEYBOARD</p>
+          <div class="sec-titles">
+            <h2>手不离键。</h2>
+            <p><kbd class="inline-kbd">⌘</kbd><kbd class="inline-kbd">K</kbd> 呼出命令面板，空格暂存当前 hunk，<kbd class="inline-kbd">V</kbd> 标记已读，<kbd class="inline-kbd">R</kbd> 发起风险扫描。完整 macOS 原生菜单快捷键，按下即有回应。</p>
+          </div>
+        </header>
+
+        <figure class="figure figure--inset" data-reveal>
+          <div class="fig-cap">
+            <span class="mono">FIG. 04 — 命令面板</span>
+            <span class="mono">按 Esc 收起 · ⌘K 呼出</span>
+          </div>
+
+          <div class="panel pal is-open" id="palette">
+            <div class="pal-stage">
+              <div class="pal-ghost">
+                <span class="pal-ghost-icon"><kbd>⌘</kbd><kbd>K</kbd></span>
+                <span class="pal-ghost-text">任何操作，两下按键。</span>
+                <span class="pal-ghost-sub">点击或按下 ⌘K</span>
+              </div>
+
+              <div class="pal-card" id="palette-card" aria-hidden="false">
+                <div class="pal-input">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
+                  <span>提交</span>
+                  <span class="pal-caret"></span>
+                  <span class="pal-esc">esc</span>
+                </div>
+                <div class="pal-list">
+                  <div class="pal-item is-on">
+                    <span class="pal-ic">↵</span>
+                    <span class="pal-label">提交已暂存的改动</span>
+                    <span class="pal-hint">Commit staged changes</span>
+                    <kbd>⌘</kbd><kbd>↩</kbd>
+                  </div>
+                  <div class="pal-item">
+                    <span class="pal-ic">⌥</span>
+                    <span class="pal-label">用 AI 生成提交信息</span>
+                    <span class="pal-hint">Generate message</span>
+                    <kbd>⌘</kbd><kbd>G</kbd>
+                  </div>
+                  <div class="pal-item">
+                    <span class="pal-ic">↗</span>
+                    <span class="pal-label">推送到 origin/main</span>
+                    <span class="pal-hint">Push</span>
+                    <kbd>⌘</kbd><kbd>P</kbd>
+                  </div>
+                  <div class="pal-item">
+                    <span class="pal-ic">⚑</span>
+                    <span class="pal-label">对暂存区运行风险扫描</span>
+                    <span class="pal-hint">Run risk scan</span>
+                    <kbd>R</kbd>
+                  </div>
+                </div>
+                <div class="pal-foot">
+                  <span><kbd>↑</kbd><kbd>↓</kbd> 选择</span>
+                  <span><kbd>⏎</kbd> 执行</span>
+                  <span class="pal-spacer"></span>
+                  <span>4 条命令</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </figure>
+
+        <div class="keys" data-reveal>
+          <div class="key-item"><kbd>Space</kbd><span>暂存 / 取消暂存当前文件或 hunk</span></div>
+          <div class="key-item"><kbd>⌘</kbd><kbd>K</kbd><span>全局命令面板</span></div>
+          <div class="key-item"><kbd>⌘</kbd><kbd>↩</kbd><span>提交已暂存的改动</span></div>
+          <div class="key-item"><kbd>V</kbd><span>标记已读并折叠文件</span></div>
+          <div class="key-item"><kbd>[</kbd><kbd>]</kbd><span>在差异块之间跳转</span></div>
+          <div class="key-item"><kbd>R</kbd><span>运行风险扫描</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ 05 SPEC ══════════ -->
+    <section class="sec sec--band" id="spec">
+      <div class="shell">
+        <header class="sec-head" data-reveal>
+          <p class="sec-label"><span class="idx">05</span>SPEC</p>
+          <div class="sec-titles">
+            <h2>性能不是感觉，<br>是数字。</h2>
+            <p>同一台机器、同一个仓库的对照。没有 Chromium，没有 Node 运行时，也没有一个只在后台待命就吃掉半 GB 的进程。</p>
+          </div>
+        </header>
+
+        <div class="figures" data-reveal>
+          <div class="fig">
+            <span class="fig-n">80<em>ms</em></span>
+            <span class="fig-l">冷启动</span>
+            <span class="fig-s">Electron 客户端 1,800 – 3,200 ms</span>
+          </div>
+          <div class="fig">
+            <span class="fig-n">35<em>MB</em></span>
+            <span class="fig-l">静默待机内存</span>
+            <span class="fig-s">Electron 客户端 280 – 550 MB</span>
+          </div>
+          <div class="fig">
+            <span class="fig-n">20<em>MB</em></span>
+            <span class="fig-l">单文件安装包</span>
+            <span class="fig-s">Electron 客户端 130 – 240 MB</span>
+          </div>
+          <div class="fig">
+            <span class="fig-n">0</span>
+            <span class="fig-l">WebView / JS 运行时</span>
+            <span class="fig-s">纯 Go，GPU 直接绘制</span>
+          </div>
+        </div>
+
+        <div class="bars" data-reveal>
+          <div class="bar-row">
+            <span class="bar-label">冷启动</span>
+            <span class="bar-track"><i class="bar-gloss" style="width:9%"></i></span>
+            <span class="bar-track"><i class="bar-other" style="width:88%"></i></span>
+            <span class="bar-legend"><b>Gloss</b> / 其他</span>
+          </div>
+          <div class="bar-row">
+            <span class="bar-label">待机内存</span>
+            <span class="bar-track"><i class="bar-gloss" style="width:6%"></i></span>
+            <span class="bar-track"><i class="bar-other" style="width:74%"></i></span>
+            <span class="bar-legend"><b>Gloss</b> / 其他</span>
+          </div>
+          <div class="bar-row">
+            <span class="bar-label">安装包</span>
+            <span class="bar-track"><i class="bar-gloss" style="width:8%"></i></span>
+            <span class="bar-track"><i class="bar-other" style="width:62%"></i></span>
+            <span class="bar-legend"><b>Gloss</b> / 其他</span>
+          </div>
+        </div>
+
+        <p class="footnote" data-reveal>对照组为常见 Electron / WebView 架构 Git 客户端；数值取自 macOS 本地实测，随仓库规模浮动。</p>
+      </div>
+    </section>
+
+    <!-- ══════════ DOWNLOAD ══════════ -->
+    <section class="sec sec--download" id="download">
+      <div class="shell">
+        <header class="sec-head" data-reveal>
+          <p class="sec-label"><span class="idx">06</span>DOWNLOAD</p>
+          <div class="sec-titles">
+            <h2>一条命令，<br>或一个安装包。</h2>
+            <p>三个平台，同一个原生二进制。不捆绑浏览器内核，不需要额外运行时。</p>
+          </div>
+        </header>
+
+        <div class="dl-wrap" data-reveal>
+          <div class="dl-lead">
+            <span class="mono">LATEST RELEASE</span>
+            <p class="dl-ver">v0.3.12</p>
+            <a class="btn btn-primary btn-lg" href="https://github.com/CarlOpenLab/Gloss/releases/latest" target="_blank" rel="noopener" id="main-dl-2">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"></path>
+              </svg>
+              <span id="main-dl2-label">下载 macOS 版</span>
+              <span class="btn-meta" id="main-dl2-meta">.dmg</span>
+            </a>
+            <p class="fine">Universal · Apple Silicon / Intel · 约 20 MB</p>
+          </div>
+
+          <div class="dl-list">
+            <a class="dl-row" href="https://github.com/CarlOpenLab/Gloss/releases/latest" target="_blank" rel="noopener">
+              <span class="dl-os">macOS</span>
+              <span class="dl-desc">Universal · Apple Silicon &amp; Intel</span>
+              <span class="dl-tag">.dmg</span>
+              <span class="dl-arrow">↗</span>
+            </a>
+            <a class="dl-row" href="https://github.com/CarlOpenLab/Gloss/releases/latest" target="_blank" rel="noopener">
+              <span class="dl-os">Windows</span>
+              <span class="dl-desc">x64 · 安装版与便携版</span>
+              <span class="dl-tag">.exe / .zip</span>
+              <span class="dl-arrow">↗</span>
+            </a>
+            <a class="dl-row" href="https://github.com/CarlOpenLab/Gloss/releases/latest" target="_blank" rel="noopener">
+              <span class="dl-os">Linux</span>
+              <span class="dl-desc">x86_64 · 静态二进制</span>
+              <span class="dl-tag">.tar.gz</span>
+              <span class="dl-arrow">↗</span>
             </a>
           </div>
-
-          <!-- Windows -->
-          <div class="deck-item" id="deck-win">
-            <div class="deck-head">
-              <span class="deck-os">Windows</span>
-              <span class="deck-tag">x64</span>
-            </div>
-            <div class="deck-desc" data-i18n="win_desc">提供 NSIS 官方安装包及便携免安装绿色 ZIP</div>
-            <div class="deck-split">
-              <a href="https://github.com/CarlOpenLab/Gloss/releases/latest" class="btn-deck" target="_blank" rel="noopener">
-                <span>Setup .exe</span>
-              </a>
-              <a href="https://github.com/CarlOpenLab/Gloss/releases/latest" class="btn-deck ghost" target="_blank" rel="noopener">
-                <span>便携版 .zip</span>
-              </a>
-            </div>
-          </div>
-
-          <!-- Linux / CLI -->
-          <div class="deck-item" id="deck-linux">
-            <div class="deck-head">
-              <span class="deck-os">Linux / CLI</span>
-              <span class="deck-tag">Go Toolchain</span>
-            </div>
-            <div class="deck-desc" data-i18n="linux_desc">Linux x86_64 二进制压缩包，或通过 Go 工具链直接安装</div>
-            <div class="deck-code">
-              <code>go install github.com/CarlOpenLab/Gloss@latest</code>
-            </div>
-          </div>
         </div>
+
+        <div class="cli" data-reveal>
+          <span class="cli-label">CLI</span>
+          <code id="cli-cmd">go install github.com/CarlOpenLab/Gloss@latest</code>
+          <button class="cli-copy" id="copy-btn" type="button" aria-label="复制安装命令">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            <span id="copy-label">复制</span>
+          </button>
+        </div>
+        <p class="footnote" data-reveal>全部版本发布于 GitHub Releases。MIT License。</p>
       </div>
     </section>
   </main>
 
-  <!-- 极简页脚 -->
-  <footer class="footer-wrap">
-    <div class="shell-wrap footer-inner">
-      <div class="footer-sign">
-        <span class="brand-text">Gloss</span>
-        <span class="footer-meta">Copyright © 2026 CarlOpenLab. Released under the MIT License.</span>
+  <footer class="foot">
+    <div class="shell foot-in">
+      <div class="foot-brand">
+        <img class="brand-logo is-dark" src="assets/logo-dark.png" alt="" width="20" height="20">
+        <img class="brand-logo is-light" src="assets/logo.png" alt="" width="20" height="20">
+        <span class="foot-name">Gloss</span>
+        <span class="foot-tag">原生 Git 客户端 · 为审查而生</span>
       </div>
-      <div class="footer-anchors">
+      <nav class="foot-links" aria-label="页脚">
         <a href="https://github.com/CarlOpenLab/Gloss" target="_blank" rel="noopener">Repository</a>
         <a href="https://github.com/CarlOpenLab/Gloss/releases" target="_blank" rel="noopener">Releases</a>
         <a href="https://github.com/CarlOpenLab/Gloss/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
         <a href="https://github.com/CarlOpenLab/Gloss/issues" target="_blank" rel="noopener">Issues</a>
-      </div>
+      </nav>
+      <p class="foot-copy">© 2026 CarlOpenLab</p>
     </div>
   </footer>
 
