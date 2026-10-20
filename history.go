@@ -595,6 +595,10 @@ func (a *app) commitRow(c *ui.Context, pal palette, i int) {
 		row.Background(pal.surface2)
 	}
 	fadeColors(row)
+	// 徽章上那一下双击也要拦住整行的单击：芯片是行里的子元素，指针事件一
+	// 路冒泡到行，不拦的话双击检出的同时还会把选中切回这个提交（紧接着
+	// 检出又把界面带去改动 tab，白读一份 diff）。
+	chipDouble := false
 	row.Children(func() {
 		// 图形栏：本行的线画在这块的 Draw 里，r 就是它这一行的矩形。
 		// 宽度按整张图的最大泳道数定，所以每行的图对齐，文字也齐。
@@ -621,7 +625,21 @@ func (a *app) commitRow(c *ui.Context, pal palette, i int) {
 				// 四枚芯片共用同一副面孔，靠圆点分本地 / 远程 / 标签。
 				// 逐个染色的版本见 git 历史：一行里蓝、绿、灰三色并排，
 				// 扫过去只看见色块，认不出分支名。
-				specChip(c, pal, b.Label, badgeDot(pal, b.Kind), rowChipH, rowChipText)
+				chip := specChip(c, pal, b.Label, badgeDot(pal, b.Kind), rowChipH, rowChipText)
+				// 双击一枚分支芯片 = 检出那条分支（和侧栏里双击一行同一个
+				// 动作）。提交行上一枚分支名是「这条线上有哪个分支」，看见
+				// 了想切过去的人第一反应就是点它 —— 以前点了什么都不会发生。
+				//
+				// 单击不接：那一交由整行处理（选中这个提交），和侧栏
+				// 「单击看历史、双击才检出」是同一个分工。
+				if ref, ok := badgeRef(b, a.refByFull); ok {
+					chip.Tooltip(Tf("双击检出 %s", "Double-click to check out %s", ref.Name)).
+						Cursor(ui.CursorPointer)
+					if chip.DoubleClicked() {
+						chipDouble = true
+						a.checkoutRef(ref)
+					}
+				}
 			}
 			if overflow > 0 {
 				ui.Text(c, fmt.Sprintf("+%d", overflow)).FontSize(rowChipText).
@@ -644,6 +662,9 @@ func (a *app) commitRow(c *ui.Context, pal palette, i int) {
 	// 越好。挂在行上之后行内不再有别的菜单，右键一定落在这里。
 	row.ContextMenu(func(m *ui.Menu) { a.commitMenu(m, cm) })
 
+	if chipDouble {
+		return
+	}
 	if row.Clicked() {
 		a.loadCommit(i)
 	}
@@ -692,6 +713,31 @@ func badgeDot(pal palette, kind refBadgeKind) ui.Color {
 	default: // refBadgeLocal
 		return pal.accentBlue
 	}
+}
+
+// badgeRef 把提交行上的一枚徽章对回侧栏里那条引用。
+//
+// 徽章上写的是给人看的简称（beta、origin/beta、tag: v1.0），对回引用要的是
+// 全名。对不上就返回 false：远程分支还没读进来、或者引用刚被删掉，那一枚
+// 芯片点不出东西 —— 比点出一个错的强。HEAD 那枚也不对（它指的是「现在
+// 就在这儿」，没有可检出的目标）。
+func badgeRef(b refBadge, byFull map[string]*gitrepo.Ref) (gitrepo.Ref, bool) {
+	var full string
+	switch b.Kind {
+	case refBadgeLocal:
+		full = "refs/heads/" + b.Label
+	case refBadgeRemote:
+		full = "refs/remotes/" + b.Label
+	case refBadgeTag:
+		full = "refs/tags/" + strings.TrimPrefix(b.Label, "tag: ")
+	default:
+		return gitrepo.Ref{}, false
+	}
+	ref, ok := byFull[full]
+	if !ok || ref == nil {
+		return gitrepo.Ref{}, false
+	}
+	return *ref, true
 }
 
 func refPriority(b refBadge) int {

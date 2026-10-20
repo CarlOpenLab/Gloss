@@ -75,10 +75,13 @@ type Model struct {
 	Repo     *Repo
 	Branch   string
 	Detached bool // HEAD 不在任何分支上（检出过标签/提交，或变基到一半）
-	Remotes  []string
-	Files    []File
-	TotalAdd int
-	TotalDel int
+	// Remotes 是远程名。RemoteURLs 是同一个远程配的 URL（提交详情卡拿它
+	// 拼「在网页上看这个提交」的地址）—— 两条一起读，见 RemoteURLs。
+	Remotes    []string
+	RemoteURLs map[string]string
+	Files      []File
+	TotalAdd   int
+	TotalDel   int
 
 	// Pending 是仓库正卡在哪一步写操作中间（合并/变基/拣选/回退/am 撞了
 	// 冲突停着）。零值 = 没卡住。
@@ -125,6 +128,7 @@ func (r *Repo) Load(ctx context.Context) (*Model, error) {
 	if err != nil {
 		remotes = nil // 远程读不到不算加载失败，只是远程操作点不了
 	}
+	remoteURLs := r.RemoteURLs(ctx, remotes)
 	worktree, err := r.WorktreeFiles(ctx)
 	if err != nil {
 		worktree = nil // 同上：编辑器那一栏少点文件，不影响仓库状态本身
@@ -143,16 +147,17 @@ func (r *Repo) Load(ctx context.Context) (*Model, error) {
 	unstaged := indexByPath(diff.Parse(string(rawUnstaged)))
 
 	m := &Model{
-		Repo:     r,
-		Branch:   branch,
-		Detached: detached,
-		Remotes:  remotes,
-		Pending:  r.pending(),
-		HasHead:  base != emptyTree,
-		Ahead:    ahead,
-		Behind:   behind,
-		Upstream: upstream,
-		Worktree: worktree,
+		Repo:       r,
+		Branch:     branch,
+		Detached:   detached,
+		Remotes:    remotes,
+		RemoteURLs: remoteURLs,
+		Pending:    r.pending(),
+		HasHead:    base != emptyTree,
+		Ahead:      ahead,
+		Behind:     behind,
+		Upstream:   upstream,
+		Worktree:   worktree,
 	}
 	appendFile := func(f File) {
 		m.Files = append(m.Files, f)

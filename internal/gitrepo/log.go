@@ -14,11 +14,24 @@ type Commit struct {
 	Hash    string    // 完整哈希
 	Short   string    // 短哈希，界面上显示这个
 	Author  string    // 作者名
+	Email   string    // 作者邮箱
 	When    time.Time // 作者时间
 	Subject string    // 提交信息的第一行
+	Body    string    // 提交信息第一行之后的那些段；没有就是空串
 	Refs    string    // 指向它的分支/标签，如 "HEAD -> main, origin/main"
 	Parents []string  // 完整哈希的父提交；合并提交有两个以上，根提交没有
 }
+
+// logFormat 是三处读提交（Log / FileLog / BranchCommits）共用的 pretty 格式。
+//
+// 单独一个常量：三处各写一遍的话，加一个字段（作者邮箱、提交信息正文就是
+// 这么加进来的）总有哪一处忘了改，那个入口读出来的提交就少一截信息，而
+// 界面上只看得出「这里没有」，看不出「这里没读」。
+//
+// %x00 分隔字段、%x1e 分隔记录：作者名和提交信息里可以有任何可打印字符，
+// 用普通分隔符会被内容里的逗号、竖线之类拆错。%b 是提交正文，里面允许有
+// 换行 —— 记录分隔符因此不能用换行。
+const logFormat = "%H%x00%h%x00%an%x00%ae%x00%aI%x00%D%x00%P%x00%s%x00%b%x1e"
 
 // Log 读最近的提交。skip 用来翻页。
 //
@@ -65,7 +78,7 @@ func (r *Repo) LogAll(ctx context.Context, limit, skip int) ([]Commit, error) {
 func (r *Repo) log(ctx context.Context, revs []string, limit, skip int) ([]Commit, error) {
 	// 用 %x00 分隔字段、%x1e 分隔记录：作者名和提交信息里可能有任何
 	// 可打印字符，用普通分隔符会被内容里的逗号、竖线之类拆错。
-	format := "%H%x00%h%x00%an%x00%aI%x00%D%x00%P%x00%s%x1e"
+	format := logFormat
 	// --topo-order：默认是按提交时间倒序，几条分支的提交会互相穿插，
 	// 画出来的线是乱的。拓扑序保证父提交永远排在子提交之后，而且同一条
 	// 线上的提交是连续的 —— 画泳道图的前提。
@@ -107,7 +120,7 @@ func (r *Repo) FileLog(ctx context.Context, path string, limit int) ([]Commit, e
 	if path == "" {
 		return nil, nil
 	}
-	format := "%H%x00%h%x00%an%x00%aI%x00%D%x00%P%x00%s%x1e"
+	format := logFormat
 	args := []string{
 		"-c", "core.quotePath=false", "log", "--no-color",
 		"--date=iso-strict", "--follow", "--pretty=format:" + format,
@@ -128,10 +141,10 @@ func parseLog(out string) []Commit {
 			continue
 		}
 		f := strings.Split(rec, "\x00")
-		if len(f) < 7 {
+		if len(f) < 9 {
 			continue
 		}
-		when, err := time.Parse(time.RFC3339, f[3])
+		when, err := time.Parse(time.RFC3339, f[4])
 		if err != nil {
 			when = time.Time{}
 		}
@@ -139,10 +152,13 @@ func parseLog(out string) []Commit {
 			Hash:    f[0],
 			Short:   f[1],
 			Author:  f[2],
+			Email:   f[3],
 			When:    when,
-			Refs:    strings.TrimSpace(f[4]),
-			Parents: strings.Fields(f[5]), // 空格分隔，根提交是空串
-			Subject: f[6],
+			Refs:    strings.TrimSpace(f[5]),
+			Parents: strings.Fields(f[6]), // 空格分隔，根提交是空串
+			Subject: f[7],
+			// 正文只去掉首尾的空白：段间的空行是作者排的版，留着
+			Body: strings.TrimSpace(f[8]),
 		})
 	}
 	return commits
@@ -214,7 +230,7 @@ func (r *Repo) BranchCommits(ctx context.Context, base, target string, limit int
 		limit = 100
 	}
 	rangeRev := base + ".." + target
-	format := "%H%x00%h%x00%an%x00%aI%x00%D%x00%P%x00%s%x1e"
+	format := logFormat
 	args := []string{
 		"-c", "core.quotePath=false", "log", "--no-color",
 		"--date=iso-strict", "--topo-order", "--pretty=format:" + format,

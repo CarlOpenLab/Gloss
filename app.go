@@ -80,6 +80,9 @@ type app struct {
 	// 可用性看它：`git fetch --all` 在一条远程都没有时是**静默成功**的，
 	// 等命令报错等不到「这个仓库没有远程」。
 	remotes []string
+	// remoteURLs 是每个远程配的 URL（远程名 → URL），跟着每次 Load 一起读
+	// 回来。提交详情卡拿它拼「在网页上看这个提交」那个链接（见 commitWebURL）。
+	remoteURLs map[string]string
 	// ahead 和 behind 是当前分支相对配置上游的超前和落后提交数。
 	// 用于在推送/拉取按钮上渲染徽标，让用户一目了然待同步的提交数。
 	ahead    int
@@ -251,6 +254,10 @@ type app struct {
 	// 命令栏）。和 focusFilter 同一个套路：置位的那一帧列表可能已经画过。
 	focusCommitFilter bool
 	commitSel         int // 选中的提交下标，-1 表示还没选
+	// commitMsgClosed 是提交详情卡里「提交信息」那一块被用户收起来了。
+	// 和 filesClosed / refsClosed 一个套路：记的是「偏离默认的那一次」，
+	// 没记过的一律摊开 —— 来回点提交不会越攒越多，也不会一换提交就忘。
+	commitMsgClosed bool
 	// histRev 是历史看的是哪条引用（侧栏点的那条分支/标签），空串表示 HEAD。
 	// 不为空时 Log 直接喂给它，不能悄悄退回 HEAD —— 点了分支看着没反应
 	// 比报错还难受。
@@ -390,6 +397,10 @@ type app struct {
 	// 中显示」）。main.go 接 mygo 的 Shell.ShowItemInFolder，测试里同样是
 	// nil —— 和 openPath 一个道理。
 	revealPath func(string)
+
+	// openURL 把网址交给系统默认浏览器打开（关于界面上的「访问官方网站」等）。
+	// main.go 接 mygo 的 Shell.OpenExternal；测试里同样是 nil。
+	openURL func(string)
 
 	// fileHist 是「文件历史」对话框的状态（filehist.go）。
 	fileHist fileHistState
@@ -1774,6 +1785,7 @@ func (a *app) applyModel(m *gitrepo.Model) {
 	a.branch = m.Branch
 	a.detached = m.Detached
 	a.remotes = m.Remotes
+	a.remoteURLs = m.RemoteURLs
 	a.pending = m.Pending
 	a.hasHead = m.HasHead
 	a.ahead = m.Ahead

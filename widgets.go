@@ -48,10 +48,14 @@ const (
 //
 // 高度和字号由调用方给：芯片出现在 24px 的树行、30px 的提交行和对话框里，
 // 尺寸不一样，但底、边、圆点这三样必须一样 —— 那是「它是什么」的部分。
-func specChip(c *ui.Context, pal palette, label string, dot ui.Color, height, fontSize float32) {
-	ui.Row(c).Height(height).Shrink(0).AlignItems(ui.Center).Gap(4).
+//
+// 返回元素：调用方可能要再往上挂东西（提交行的分支芯片挂「双击检出」）。
+// 其余调用处照旧当语句用，返回值直接丢掉就行。
+func specChip(c *ui.Context, pal palette, label string, dot ui.Color, height, fontSize float32) ui.Element {
+	chip := ui.Row(c).Height(height).Shrink(0).AlignItems(ui.Center).Gap(4).
 		Padding(0, 6).Radius(radiusXS).
-		Background(pal.surface2).Border(1, pal.hairline).Children(func() {
+		Background(pal.surface2).Border(1, pal.hairline)
+	chip.Children(func() {
 		if dot.A > 0 {
 			ui.Box(c).Size(chipDot, chipDot).Shrink(0).
 				Radius(chipDot / 2).Background(dot)
@@ -59,6 +63,7 @@ func specChip(c *ui.Context, pal palette, label string, dot ui.Color, height, fo
 		ui.Text(c, label).FontSize(fontSize).FontWeight(weightMedium).
 			SingleLine().TextColor(pal.inkMuted)
 	})
+	return chip
 }
 
 // headline 是空状态、出错态那张大标题（§typography 的 display 档）。

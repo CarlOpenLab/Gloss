@@ -186,8 +186,8 @@ func waitingLane(lanes []string, h string) int {
 	return -1
 }
 
-// 提交图的尺寸。行高是定死的 commitH = 30，泳道宽 20 和它相配：节点直径 10，
-// 左右各留 5 像素，相邻两条线不会挨在一起。
+// 提交图的尺寸。行高是定死的 commitH = 30，泳道宽 20 和它相配：节点是半径 5
+// 的空心环（环壁 3，外沿 6.5），左右各留 5 像素多，相邻两条线不会挨在一起。
 //
 // 这组数是跟着行高一起定的：行压低到 30 之后，泳道如果还照旧的 14，图在
 // 全宽的列表里就细得像根头发。横向铺开 20 一格，一条泳道横移 20 像素只有
@@ -197,9 +197,16 @@ const (
 	graphLaneW  = 20
 	graphPad    = 10 // 图形栏左边的留白
 	graphNodeR  = 5  // 节点半径
+	graphNodeW  = 3  // 节点环壁的粗细，比线粗一档：它是一个点，不是又一条线
 	graphLineW  = 2
 	graphMaxCol = 6 // 最多铺几条泳道，再多就都挤在最右边那条上
 )
+
+// graphNodeEdge 是节点环的外沿到圆心的距离 —— 连上节点的线在这里停住。
+//
+// 环是空心的，线要是照旧画到圆心，就会从环中间穿过去，看着像一颗实心点
+// 中间戳了根牙签。停在外沿，环壁自己把接头盖住，和以前实心点的效果一样。
+func graphNodeEdge() float32 { return graphNodeR + graphNodeW/2 }
 
 // graphWidth 是图形栏的宽度。
 //
@@ -232,6 +239,9 @@ func drawGraphRow(p *ui.Painter, r ui.Rect, pal palette, row graphRow, maxLanes 
 	at := func(l int) float32 { return r.X + laneX(l, maxLanes) }
 	mid := r.Y + r.H/2
 	nodeX := at(row.Lane)
+	// 环是空心的，线在外沿停住（见 graphNodeEdge）
+	edge := graphNodeEdge()
+	top, bot := mid-edge, mid+edge
 
 	// 贯穿本行的线，上下各多画一像素盖住行与行之间的接缝：描边是圆头的，
 	// 正好停在行边界上会留下一道发丝粗的缝。
@@ -245,25 +255,28 @@ func drawGraphRow(p *ui.Painter, r ui.Rect, pal palette, row graphRow, maxLanes 
 	// 上半行：从上面连进节点
 	for _, s := range row.In {
 		if s.Lane == row.Lane {
-			drawSeg(p, at(s.Lane), r.Y-1, mid, pal.laneColor(s.Color))
+			drawSeg(p, at(s.Lane), r.Y-1, top, pal.laneColor(s.Color))
 		} else {
-			drawVein(p, at(s.Lane), r.Y, nodeX, mid, pal.laneColor(s.Color))
+			// 斜线走 S 形，末端是竖直朝节点来的（见 drawVein），所以把终点
+			// 往里收一截就正好落在环的上沿，看不出来被剪过。
+			drawVein(p, at(s.Lane), r.Y, nodeX, top, pal.laneColor(s.Color))
 		}
 	}
 
 	// 下半行：从节点连到下面
 	for _, s := range row.Out {
 		if s.Lane == row.Lane {
-			drawSeg(p, at(s.Lane), mid, r.Y+r.H+1, pal.laneColor(s.Color))
+			drawSeg(p, at(s.Lane), bot, r.Y+r.H+1, pal.laneColor(s.Color))
 		} else {
-			drawVein(p, nodeX, mid, at(s.Lane), r.Y+r.H, pal.laneColor(s.Color))
+			drawVein(p, nodeX, bot, at(s.Lane), r.Y+r.H, pal.laneColor(s.Color))
 		}
 	}
 
-	// 节点画在最后，盖住底下的线头
-	var dot ui.Path
-	dot.Circle(nodeX, mid, graphNodeR)
-	p.FillPath(&dot, pal.laneColor(row.Color))
+	// 节点是一颗空心的环：实心点在一屏几十个提交里是一片实色块，环把
+	// 「这里有一个提交」说得一样清楚，又不跟实色的强调抢注意力（§5）。
+	var ring ui.Path
+	ring.Circle(nodeX, mid, graphNodeR)
+	p.StrokePath(&ring, graphNodeW, pal.laneColor(row.Color))
 }
 
 // drawSeg 是竖直的直线段。

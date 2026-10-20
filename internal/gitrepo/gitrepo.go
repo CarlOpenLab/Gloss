@@ -96,6 +96,41 @@ func (r *Repo) Remotes(ctx context.Context) ([]string, error) {
 	return names, nil
 }
 
+// RemoteURLs 一次读出这些远程各自配的 URL。
+//
+// 用 `git remote -v` 而不是每个远程一条 get-url：一条命令拿全，且读出来
+// 的 fetch/push 两行取 fetch 那一行（用户写的是哪个就认哪个）。
+//
+// 读不到就返回 nil、不报错 —— 「这个仓库没有远程」不是错误，是「没有网页
+// 可看」，调用方拿空 map 就行，不该为它弹一句错。
+func (r *Repo) RemoteURLs(ctx context.Context, names []string) map[string]string {
+	if len(names) == 0 {
+		return nil
+	}
+	out, err := run(ctx, r.Root, "remote", "-v")
+	if err != nil {
+		return nil
+	}
+	urls := map[string]string{}
+	for _, line := range strings.Split(string(out), "\n") {
+		// 形如 "origin\tgit@github.com:o/r.git (fetch)"
+		tab := strings.IndexByte(line, '\t')
+		if tab < 0 {
+			continue
+		}
+		name := strings.TrimSpace(line[:tab])
+		rest := strings.TrimSpace(line[tab+1:])
+		i := strings.Index(rest, " (")
+		if i < 0 || !strings.HasSuffix(rest, "(fetch)") {
+			continue
+		}
+		if _, dup := urls[name]; !dup {
+			urls[name] = strings.TrimSpace(rest[:i])
+		}
+	}
+	return urls
+}
+
 // baseRev 返回应该拿来做 diff 基准的 revision：有提交时是 HEAD，
 // 空仓库时是空树。
 func (r *Repo) baseRev(ctx context.Context) string {

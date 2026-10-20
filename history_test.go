@@ -672,17 +672,17 @@ func TestHistoryGraphLineColorIsContinuous(t *testing.T) {
 	}
 	var got []sample
 	for _, name := range chain {
-		i, ok := idx[name]
-		if !ok {
+		x, y := nodeRingAt(t, tt, a, name)
+		i := -1
+		for idx, cm := range a.commits {
+			if cm.Subject == name {
+				i = idx
+				break
+			}
+		}
+		if i < 0 {
 			t.Fatalf("测试仓库里没有 %q", name)
 		}
-		box, ok := tt.Find(name)
-		if !ok {
-			t.Fatalf("屏幕上找不到 %q（窗口不够高？）", name)
-		}
-		// 行里的文字是垂直居中的，所以文字框的中线就是节点中心那条水平线
-		y := int(box.Y + box.H/2)
-		x := sidebarWidth + int(laneX(a.graph[i].Lane, a.maxLanes))
 		r, g, b, _ := img.At(x, y).RGBA()
 		got = append(got, sample{name, a.graph[i].Lane, r, g, b})
 	}
@@ -706,10 +706,8 @@ func TestHistoryGraphLineColorIsContinuous(t *testing.T) {
 	}
 
 	// 反面：支线得是另一个颜色，否则「同色」也可能是「全图一个颜色」
-	if i, ok := idx["支线二之二"]; ok {
-		if box, ok := tt.Find("支线二之二"); ok {
-			y := int(box.Y + box.H/2)
-			x := sidebarWidth + int(laneX(a.graph[i].Lane, a.maxLanes))
+	if _, ok := idx["支线二之二"]; ok {
+		if x, y := nodeRingAt(t, tt, a, "支线二之二"); ok {
 			r, g, b, _ := img.At(x, y).RGBA()
 			if r == first.r && g == first.g && b == first.b {
 				t.Errorf("支线二之二和主线同色 —— 两条线得分得开")

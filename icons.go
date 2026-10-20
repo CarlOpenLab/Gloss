@@ -125,6 +125,16 @@ var (
 
 	// 窗口 / 应用图标（app-window）
 	iconAppWindow = lucide(`<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 4v4"/><path d="M2 8h20"/><path d="M6 4v4"/>`)
+
+	// 作者头像里的那个人形（user）。提交详情卡用 —— 没有真人照片可放，
+	// 也不能拿用户名首字母硬凑（中文名取首字母是个字母都不是的怪东西）。
+	iconUser = lucide(`<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>`)
+
+	// 邮箱（mail）
+	iconMail = lucide(`<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>`)
+
+	// 网页链接（link）
+	iconLink = lucide(`<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>`)
 )
 
 // drawIcon 是绘制指定尺寸与颜色的矢量图标的通用控件。

@@ -154,6 +154,12 @@ func (a *app) hasDiff() bool {
 func (a *app) fileListPane(c *ui.Context, pal palette, t *ui.Theme) {
 	ui.Column(c).Width(a.filePaneWidth(c)).Shrink(0).FillHeight().
 		Background(pal.surface1).Children(func() {
+		// 历史 tab 选中了一个提交时，顶上先摆这张卡的：这是哪个提交、
+		// 谁提交的、哪一串哈希、信息写了什么（见 commitdetail.go）。
+		// 放在文件数那一行之前 —— 读的顺序是「这个提交 → 几个文件 → 列表」。
+		if a.commitDetailVisible() {
+			a.commitDetailPane(c, pal, a.commits[a.commitSel])
+		}
 		// 栏头只留「几个文件」一件必读的信息，以及左边的三态勾选框。
 		//
 		// 这一栏的宽度是定死的 300（split 下 220）。原来还并排塞着
@@ -366,6 +372,10 @@ func (a *app) treeRowIn(c *ui.Context, pal palette, r filetree.Row, o rowSpec) {
 			ui.Text(c, n.Label).FontSize(12).SingleLine().Grow(1).MinWidth(0).
 				TextColor(labelColor)
 		})
+		// 右键菜单挂在整行上（含缩进那块）：一个文件夹底下的改动一起
+		// 暂存 / 取消暂存 / 放弃，见 dir.go。读那一栏（历史、储藏、编辑器
+		// 视图）里也有菜单，但只剩读的那几项 —— 和 fileMenu 一个规矩。
+		row.ContextMenu(func(m *ui.Menu) { a.dirMenu(m, n, o) })
 		if arrow.Clicked() || row.Clicked() {
 			a.toggleDir(o.tree, n.Key, open)
 		}

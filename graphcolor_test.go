@@ -35,13 +35,7 @@ func TestGraphLaneOverrideReachesScreen(t *testing.T) {
 	if i < 0 {
 		t.Fatalf("测试仓库里没有 %q", name)
 	}
-	box, ok := tt.Find(name)
-	if !ok {
-		t.Fatalf("屏幕上找不到 %q（窗口不够高？）", name)
-	}
-	// 行里的文字是垂直居中的，所以文字框中线就是节点中心那条水平线。
-	x := sidebarWidth + int(laneX(a.graph[i].Lane, a.maxLanes))
-	y := int(box.Y + box.H/2)
+	x, y := nodeRingAt(t, tt, a, name)
 	cid := a.graph[i].Color
 
 	if before := pixelAt(tt, x, y); isMagenta(before) {
@@ -71,6 +65,33 @@ func TestGraphLaneOverrideReachesScreen(t *testing.T) {
 func pixelAt(tt *ui.Tester, x, y int) [3]uint8 {
 	r, g, b, _ := tt.Image().At(x, y).RGBA()
 	return [3]uint8{uint8(r >> 8), uint8(g >> 8), uint8(b >> 8)}
+}
+
+// nodeRingAt 返回某个提交那一行节点圆环上的取样点（窗口坐标）。
+//
+// 取样必须落在环壁上：节点是空心的，圆心里是行底色，照旧取中心读到的是
+// 选中态或悬停态的灰，两个用例都会变成「什么都没验」。
+func nodeRingAt(t *testing.T, tt *ui.Tester, a *app, name string) (int, int) {
+	t.Helper()
+	box, ok := tt.Find(name)
+	if !ok {
+		t.Fatalf("屏幕上找不到 %q（窗口不够高？）", name)
+	}
+	i := -1
+	for idx, cm := range a.commits {
+		if cm.Subject == name {
+			i = idx
+			break
+		}
+	}
+	if i < 0 || i >= len(a.graph) {
+		t.Fatalf("提交 %q 不在图里", name)
+	}
+	// 行里的文字是垂直居中的，所以文字框中线就是节点中心那条水平线；
+	// 往上挪一个半径，正好落在环的上沿。
+	x := sidebarWidth + int(laneX(a.graph[i].Lane, a.maxLanes))
+	y := int(box.Y+box.H/2) - graphNodeR
+	return x, y
 }
 
 // isMagenta 判「这个像素是那支品红」：留一点余量给抗锯齿，但红蓝都得亮、
