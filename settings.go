@@ -1071,6 +1071,23 @@ func (a *app) aboutSettingsPane(c *ui.Context, pal palette) {
 
 			ui.Box(c).Height(1).FillWidth().Background(pal.hairline)
 
+			// 外部链接按钮：官网落地宣传页与 GitHub
+			ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
+				btnWeb := secondaryAction(c, pal, T("访问官方网站", "Official Website"),
+					T("在浏览器中打开 Gloss 落地宣传页与在线演示。", "Open the Gloss landing page in your browser."), false)
+				if btnWeb.Clicked() && a.openURL != nil {
+					a.openURL("https://carlopenlab.github.io/Gloss/")
+				}
+
+				btnRepo := secondaryAction(c, pal, "GitHub",
+					T("访问 GitHub 开源项目仓库与最新发布版。", "Open the GitHub open-source repository and latest releases."), false)
+				if btnRepo.Clicked() && a.openURL != nil {
+					a.openURL("https://github.com/CarlOpenLab/Gloss")
+				}
+			})
+
+			ui.Box(c).Height(1).FillWidth().Background(pal.hairline)
+
 			// 底部版权与声明
 			ui.Row(c).AlignItems(ui.Center).FillWidth().Children(func() {
 				ui.Text(c, "Copyright © 2026 CarlOpenLab. Released under the MIT License.").

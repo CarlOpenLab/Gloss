@@ -63,6 +63,8 @@ func main() {
 		a.openPath = func(p string) { _ = mygo.Shell.OpenPath(p) }
 		// 文件行右键的「在访达中显示」：在文件管理器里亮出这个文件。
 		a.revealPath = func(p string) { mygo.Shell.ShowItemInFolder(p) }
+		// 关于界面的「访问官方网站」等：交给系统默认浏览器。
+		a.openURL = func(u string) { _ = mygo.Shell.OpenExternal(u) }
 
 		// 关窗前把提交框里还没提交的消息存成草稿，并优雅关闭所有终端会话。
 		win.OnClose(func(*mygo.CloseEvent) {

@@ -22,6 +22,7 @@
 </p>
 
 <p align="center">
+  <a href="https://carlopenlab.github.io/Gloss/">🌐 Website / Landing Page</a> •
   English • <a href="README_zh.md">简体中文</a>
 </p>
 

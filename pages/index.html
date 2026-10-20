@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gloss — Pure Go, GPU-Direct Git Client</title>
+  <meta name="description" content="A precision, software-craft Git GUI built in pure Go with GPU direct rendering. Zero WebViews, pre-flight change audits, and multi-LLM commit intelligence.">
+  <link rel="icon" type="image/png" href="assets/icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- 极简无噪导航 -->
+  <header class="top-nav">
+    <div class="nav-inner">
+      <a href="#" class="brand-link">
+        <img src="assets/logo-dark.png" alt="Gloss" class="brand-mark" id="brand-logo">
+        <span class="brand-text">Gloss</span>
+        <span class="brand-ver">v0.3.10</span>
+      </a>
+
+      <nav class="nav-menu">
+        <a href="#principles" data-i18n="nav_principles">架构理念</a>
+        <a href="#workflow" data-i18n="nav_workflow">审查流</a>
+        <a href="#benchmark" data-i18n="nav_benchmark">底层指标</a>
+        <a href="#install" data-i18n="nav_install">获取</a>
+      </nav>
+
+      <div class="nav-ctrls">
+        <button id="lang-btn" class="ctrl-btn" aria-label="Toggle language">
+          <span id="lang-label">EN</span>
+        </button>
+        <button id="theme-btn" class="ctrl-btn" aria-label="Toggle theme">
+          <span class="theme-glyph">◐</span>
+        </button>
+        <a href="https://github.com/CarlOpenLab/Gloss" target="_blank" rel="noopener" class="btn-repo">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+          </svg>
+          <span>GitHub</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Hero 宣言区：工业级排版，克制纯黑 -->
+    <section class="hero-block">
+      <div class="shell-wrap">
+        <div class="hero-header">
+          <div class="mono-label" data-i18n="hero_badge">DIRECT GPU PIPELINE · ZERO WEBVIEWS</div>
+          <h1 class="hero-manifesto" data-i18n="hero_title">
+            纯 Go 编写。<br>
+            GPU 直出渲染。<br>
+            专为审查而生。
+          </h1>
+          <p class="hero-pitch" data-i18n="hero_desc">
+            没有 Chromium，没有 Node.js，没有 400MB 的空载内存。Gloss 是一款遵循 Linear 设计系统规范的专业 Git GUI：冷启仅需 80 毫秒，代码提交前自动预检隐患，全键盘驱动。
+          </p>
+
+          <div class="hero-actions">
+            <a href="#install" class="action-key" id="main-dl-btn">
+              <span id="main-dl-label" data-i18n="btn_dl_mac">获取 macOS 通用版 (.dmg)</span>
+            </a>
+            <div class="cli-strap">
+              <code>go install github.com/CarlOpenLab/Gloss@latest</code>
+              <button class="strap-copy" id="copy-btn" title="Copy command" aria-label="Copy">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span class="copy-tag" id="copy-tag" data-i18n="copied">已复制</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 真实软件界面复刻：高密度机械美学，纯粹发丝线 -->
+        <div class="app-stage" id="showcase">
+          <div class="stage-frame">
+            <!-- 窗体顶条 -->
+            <div class="frame-bar">
+              <div class="traffic-lights">
+                <span></span><span></span><span></span>
+              </div>
+              <div class="frame-title">
+                <span class="repo-badge">carl-github/Gloss</span>
+                <span class="ref-badge">HEAD → main</span>
+              </div>
+              <div class="frame-stats">
+                <span class="frame-metric">Metal · 60fps</span>
+              </div>
+            </div>
+
+            <!-- 三栏精密工作台 -->
+            <div class="frame-grid">
+              <!-- 左：拓扑车道 -->
+              <div class="col-lane">
+                <div class="col-head" data-i18n="pane_graph">TOPOLOGY / GRAPH</div>
+                <div class="lane-rows">
+                  <div class="lane-row active">
+                    <svg class="lane-svg" width="30" height="24">
+                      <line x1="12" y1="0" x2="12" y2="24" stroke="#8a8f98" stroke-width="2"/>
+                      <circle cx="12" cy="12" r="4" fill="#f7f8f8"/>
+                    </svg>
+                    <div class="lane-meta">
+                      <div class="lane-msg">feat(auth): env secret audit</div>
+                      <div class="lane-sub"><span>Carl</span> · <span class="mono">a8f29c1</span></div>
+                    </div>
+                  </div>
+                  <div class="lane-row">
+                    <svg class="lane-svg" width="30" height="24">
+                      <line x1="12" y1="0" x2="12" y2="24" stroke="#8a8f98" stroke-width="2"/>
+                      <line x1="12" y1="12" x2="22" y2="24" stroke="#62666d" stroke-width="1.5"/>
+                      <circle cx="12" cy="12" r="3" fill="#8a8f98"/>
+                    </svg>
+                    <div class="lane-meta">
+                      <div class="lane-msg">perf(draw): font cache direct blit</div>
+                      <div class="lane-sub"><span>Carl</span> · <span class="mono">5d39e04</span></div>
+                    </div>
+                  </div>
+                  <div class="lane-row">
+                    <svg class="lane-svg" width="30" height="24">
+                      <line x1="12" y1="0" x2="12" y2="24" stroke="#8a8f98" stroke-width="2"/>
+                      <line x1="22" y1="0" x2="22" y2="24" stroke="#62666d" stroke-width="1.5"/>
+                      <circle cx="22" cy="12" r="3" fill="#62666d"/>
+                    </svg>
+                    <div class="lane-meta">
+                      <div class="lane-msg">docs: calibrate Linear design token</div>
+                      <div class="lane-sub"><span>Carl</span> · <span class="mono">b14c810</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 中：文件审查状态追踪 -->
+              <div class="col-files">
+                <div class="col-head">
+                  <span data-i18n="pane_staged">STAGED (2)</span>
+                  <span class="file-stat">1/2 REVIEWED</span>
+                </div>
+                <div class="file-rows">
+                  <div class="file-row active">
+                    <span class="badge-status status-mod">M</span>
+                    <span class="file-path">internal/auth/verifier.go</span>
+                    <span class="file-delta">+8 -2</span>
+                  </div>
+                  <div class="file-row reviewed">
+                    <span class="badge-status status-add">A</span>
+                    <span class="file-path">internal/auth/verifier_test.go</span>
+                    <span class="badge-reviewed" data-i18n="badge_viewed">VIEWED</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 右：语义 Diff 与无干扰风险提示 -->
+              <div class="col-diff">
+                <div class="diff-header">
+                  <span class="mono diff-file-title">internal/auth/verifier.go</span>
+                  <div class="diff-tools">
+                    <button class="diff-tool-btn" id="audit-toggle-btn" data-i18n="btn_toggle_audit">Pre-flight Audit (1)</button>
+                    <span class="diff-mode-btn">Split</span>
+                  </div>
+                </div>
+
+                <!-- 风险提示：严格遵循设计系统的静音警示条，无夸张发光 -->
+                <div class="audit-callout" id="audit-callout">
+                  <div class="callout-lead">
+                    <span class="callout-dot"></span>
+                    <strong data-i18n="audit_flag">SECURITY PRE-FLIGHT (LINE 42)</strong>
+                  </div>
+                  <div class="callout-body" data-i18n="audit_detail">
+                    检测到硬编码字符串 <code>sk_live_...</code>。建议迁移至 <code>os.Getenv("JWT_SECRET")</code> 并注入配置。
+                  </div>
+                </div>
+
+                <!-- 语义化 Diff 视窗：微增微减底色，词级精度加深 -->
+                <div class="diff-code-body">
+                  <div class="line ctx">
+                    <span class="ln">40</span><span class="sign">&nbsp;</span>
+                    <span class="txt">func VerifyJWT(token string) (*Claims, error) {</span>
+                  </div>
+                  <div class="line del">
+                    <span class="ln">41</span><span class="sign">-</span>
+                    <span class="txt">&nbsp;&nbsp;&nbsp;&nbsp;key := <span class="tok-del">[]byte("hardcoded_master_secret")</span></span>
+                  </div>
+                  <div class="line add">
+                    <span class="ln">41</span><span class="sign">+</span>
+                    <span class="txt">&nbsp;&nbsp;&nbsp;&nbsp;key := <span class="tok-add">[]byte(os.Getenv("AUTH_SECRET"))</span></span>
+                  </div>
+                  <div class="line ctx">
+                    <span class="ln">42</span><span class="sign">&nbsp;</span>
+                    <span class="txt">&nbsp;&nbsp;&nbsp;&nbsp;return jwt.ParseWithClaims(token, key)</span>
+                  </div>
+                  <div class="line ctx">
+                    <span class="ln">43</span><span class="sign">&nbsp;</span>
+                    <span class="txt">}</span>
+                  </div>
+                </div>
+
+                <!-- AI Commit 提示条：极度克制 -->
+                <div class="ai-commit-strip">
+                  <span class="mono-label">CONVENTIONAL COMMIT</span>
+                  <code>feat(auth): load jwt verification key from environment</code>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 三大工程原则：硬核事实，严谨结构 -->
+    <section class="section-boundary" id="principles">
+      <div class="shell-wrap">
+        <div class="section-meta">
+          <span class="mono-label" data-i18n="sec_arch">ARCHITECTURE</span>
+          <h2 data-i18n="arch_title">摒弃 Web 封装，回归单一本地可执行文件</h2>
+        </div>
+
+        <div class="tri-columns">
+          <div class="tri-col">
+            <div class="col-num">01</div>
+            <h3 data-i18n="p1_head">GPU 直接绘制通道</h3>
+            <p data-i18n="p1_body">
+              基于纯 Go 与 <code>mygo</code> 底层图形管线，直接调用系统原生 Metal / Direct3D 接口提交图元。没有 Chromium 的 DOM 解析和重排重绘，长达万行的提交历史与大型 Diff 在 60fps 下保持绝对平滑。
+            </p>
+          </div>
+
+          <div class="tri-col">
+            <div class="col-num">02</div>
+            <h3 data-i18n="p2_head">无彩色克制视觉规范</h3>
+            <p data-i18n="p2_body">
+              继承 Linear 经典的黑白两极（Achromatic）系统：深色下白键黑字，浅色下黑键白字。界面本身不使用多余杂色，将视网膜的注意力 100% 留给 Git 变动的语义增减与分支车道。
+            </p>
+          </div>
+
+          <div class="tri-col">
+            <div class="col-num">03</div>
+            <h3 data-i18n="p3_head">~35MB 极轻常驻开销</h3>
+            <p data-i18n="p3_body">
+              启动用时约 80 毫秒，待机内存占用约为 Electron 类工具的十分之一。即使开一整天、常驻后台处理庞大 Monorepo，也不会成为系统的资源黑洞。
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 核心工作流：解决代码审查的实际痛点 -->
+    <section class="section-boundary" id="workflow">
+      <div class="shell-wrap">
+        <div class="section-meta">
+          <span class="mono-label" data-i18n="sec_flow">WORKFLOW</span>
+          <h2 data-i18n="flow_title">把安全隐患与杂乱信息，拦截在提交之前</h2>
+        </div>
+
+        <div class="flow-list">
+          <div class="flow-item">
+            <div class="flow-badge">01</div>
+            <div class="flow-main">
+              <h3 data-i18n="w1_head">提交前自动风险审计 (Pre-flight Risk Scan)</h3>
+              <p data-i18n="w1_desc">
+                当你审查别人提交的 Pull Request 或准备提交本地暂存时，Gloss 一键静态扫描暂存区中的代码变动，揪出意外带入的私钥、AWS/OpenAI 凭据、SQL 注入隐患和调试断点，按文件行号精准定位。
+              </p>
+            </div>
+          </div>
+
+          <div class="flow-item">
+            <div class="flow-badge">02</div>
+            <div class="flow-main">
+              <h3 data-i18n="w2_head">直连私有大模型 (Multi-LLM Native)</h3>
+              <p data-i18n="w2_desc">
+                支持 Claude、OpenAI、DeepSeek 及本地 Ollama 实例。API Key 完全保留在本地。Gloss 深度理解代码差异块（Hunk），一键总结严谨的 Conventional Commits 格式，或根据单行需求生成规范分支名称。
+              </p>
+            </div>
+          </div>
+
+          <div class="flow-item">
+            <div class="flow-badge">03</div>
+            <div class="flow-main">
+              <h3 data-i18n="w3_head">已审查状态追踪与分块暂存 (Viewed Tracking)</h3>
+              <p data-i18n="w3_desc">
+                大文件变更不再眼花缭乱。确认无误的文件一键折叠（Viewed），文件内容变动后自动重置状态。支持按变更块（Hunk）独立暂存与丢弃，全键盘操作不依赖鼠标。
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 硬核指标对比：真实数据，拒绝吹嘘 -->
+    <section class="section-boundary" id="benchmark">
+      <div class="shell-wrap">
+        <div class="section-meta">
+          <span class="mono-label" data-i18n="sec_bench">DATA & BENCHMARK</span>
+          <h2 data-i18n="bench_title">客观指标对照</h2>
+        </div>
+
+        <div class="data-table-frame">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th data-i18n="tb_metric">指标</th>
+                <th class="active-col">Gloss</th>
+                <th>Electron / WebView 类客户端</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td data-i18n="tb_m1">技术栈</td>
+                <td class="active-col"><strong>Pure Go + GPU Direct</strong></td>
+                <td>Chromium + Node.js 跨进程</td>
+              </tr>
+              <tr>
+                <td data-i18n="tb_m2">冷启动时间</td>
+                <td class="active-col"><strong>~80 ms</strong></td>
+                <td>1,800 ~ 3,200 ms</td>
+              </tr>
+              <tr>
+                <td data-i18n="tb_m3">静默待机内存</td>
+                <td class="active-col"><strong>~35 MB</strong></td>
+                <td>280 MB ~ 550 MB</td>
+              </tr>
+              <tr>
+                <td data-i18n="tb_m4">二进制包体积</td>
+                <td class="active-col"><strong>~20 MB</strong> (单文件直接运行)</td>
+                <td>130 MB ~ 240 MB</td>
+              </tr>
+              <tr>
+                <td data-i18n="tb_m5">AI 与网络依赖</td>
+                <td class="active-col">本地优先 / 直连自有模型与本地 Ollama</td>
+                <td>多数需要云端登录或无审计能力</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 安装矩阵：全平台下载 -->
+    <section class="section-boundary" id="install">
+      <div class="shell-wrap">
+        <div class="section-meta">
+          <span class="mono-label" data-i18n="sec_install">DOWNLOADS</span>
+          <h2 data-i18n="install_title">开箱即用，支持主流操作系统</h2>
+        </div>
+
+        <div class="download-deck">
+          <!-- macOS -->
+          <div class="deck-item" id="deck-mac">
+            <div class="deck-head">
+              <span class="deck-os">macOS</span>
+              <span class="deck-tag">Universal</span>
+            </div>
+            <div class="deck-desc" data-i18n="mac_desc">Apple Silicon (M1/M2/M3/M4) 与 Intel 架构通用 DMG</div>
+            <a href="https://github.com/CarlOpenLab/Gloss/releases/latest" class="btn-deck" target="_blank" rel="noopener">
+              <span data-i18n="btn_dl_dmg">下载 .dmg 安装镜像</span>
+            </a>
+          </div>
+
+          <!-- Windows -->
+          <div class="deck-item" id="deck-win">
+            <div class="deck-head">
+              <span class="deck-os">Windows</span>
+              <span class="deck-tag">x64</span>
+            </div>
+            <div class="deck-desc" data-i18n="win_desc">提供 NSIS 官方安装包及便携免安装绿色 ZIP</div>
+            <div class="deck-split">
+              <a href="https://github.com/CarlOpenLab/Gloss/releases/latest" class="btn-deck" target="_blank" rel="noopener">
+                <span>Setup .exe</span>
+              </a>
+              <a href="https://github.com/CarlOpenLab/Gloss/releases/latest" class="btn-deck ghost" target="_blank" rel="noopener">
+                <span>便携版 .zip</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- Linux / CLI -->
+          <div class="deck-item" id="deck-linux">
+            <div class="deck-head">
+              <span class="deck-os">Linux / CLI</span>
+              <span class="deck-tag">Go Toolchain</span>
+            </div>
+            <div class="deck-desc" data-i18n="linux_desc">Linux x86_64 二进制压缩包，或通过 Go 工具链直接安装</div>
+            <div class="deck-code">
+              <code>go install github.com/CarlOpenLab/Gloss@latest</code>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 极简页脚 -->
+  <footer class="footer-wrap">
+    <div class="shell-wrap footer-inner">
+      <div class="footer-sign">
+        <span class="brand-text">Gloss</span>
+        <span class="footer-meta">Copyright © 2026 CarlOpenLab. Released under the MIT License.</span>
+      </div>
+      <div class="footer-anchors">
+        <a href="https://github.com/CarlOpenLab/Gloss" target="_blank" rel="noopener">Repository</a>
+        <a href="https://github.com/CarlOpenLab/Gloss/releases" target="_blank" rel="noopener">Releases</a>
+        <a href="https://github.com/CarlOpenLab/Gloss/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
+        <a href="https://github.com/CarlOpenLab/Gloss/issues" target="_blank" rel="noopener">Issues</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
