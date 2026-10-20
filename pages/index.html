@@ -4,26 +4,24 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gloss — Pure Go, GPU-Direct Git Client</title>
-  <meta name="description" content="A precision, software-craft Git GUI built in pure Go with GPU direct rendering. Zero WebViews, pre-flight change audits, and multi-LLM commit intelligence.">
-  <link rel="icon" type="image/png" href="assets/icon.png">
+  <meta name="description" content="A precision, distraction-free Git client built in pure Go with GPU direct rendering. Zero WebViews, pre-flight change audits, and multi-LLM commit intelligence.">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- 极简无噪导航 -->
+  <!-- Nav — 安静、透明、黏顶 -->
   <header class="top-nav">
     <div class="nav-inner">
       <a href="#" class="brand-link">
-        <img src="assets/logo-dark.png" alt="Gloss" class="brand-mark" id="brand-logo">
         <span class="brand-text">Gloss</span>
         <span class="brand-ver">v0.3.10</span>
       </a>
 
       <nav class="nav-menu">
-        <a href="#principles" data-i18n="nav_principles">架构理念</a>
-        <a href="#workflow" data-i18n="nav_workflow">审查流</a>
-        <a href="#benchmark" data-i18n="nav_benchmark">底层指标</a>
-        <a href="#install" data-i18n="nav_install">获取</a>
+        <a href="#features" data-i18n="nav_features">核心能力</a>
+        <a href="#benchmark" data-i18n="nav_benchmark">性能对比</a>
+        <a href="#shortcuts" data-i18n="nav_shortcuts">快捷键</a>
+        <a href="#install" data-i18n="nav_install">下载</a>
       </nav>
 
       <div class="nav-ctrls">
@@ -44,186 +42,142 @@
   </header>
 
   <main>
-    <!-- Hero 宣言区：工业级排版，克制纯黑 -->
-    <section class="hero-block">
-      <div class="shell-wrap">
-        <div class="hero-header">
-          <div class="mono-label" data-i18n="hero_badge">DIRECT GPU PIPELINE · ZERO WEBVIEWS</div>
-          <h1 class="hero-manifesto" data-i18n="hero_title">
-            纯 Go 编写。<br>
-            GPU 直出渲染。<br>
-            专为审查而生。
-          </h1>
-          <p class="hero-pitch" data-i18n="hero_desc">
-            没有 Chromium，没有 Node.js，没有 400MB 的空载内存。Gloss 是一款遵循 Linear 设计系统规范的专业 Git GUI：冷启仅需 80 毫秒，代码提交前自动预检隐患，全键盘驱动。
-          </p>
+    <!-- ═══════════════════════════════════════════════════════════════
+         HERO — 大字宣言 + 硬核数据胶囊 + 产品截图
+         ═══════════════════════════════════════════════════════════════ -->
+    <section class="hero">
+      <div class="hero-inner">
+        <h1 class="hero-title" data-i18n="hero_title">
+          纯 Go 编写。<br>GPU 直出渲染。<br>专为审查而生。
+        </h1>
 
-          <div class="hero-actions">
-            <a href="#install" class="action-key" id="main-dl-btn">
-              <span id="main-dl-label" data-i18n="btn_dl_mac">获取 macOS 通用版 (.dmg)</span>
-            </a>
-            <div class="cli-strap">
-              <code>go install github.com/CarlOpenLab/Gloss@latest</code>
-              <button class="strap-copy" id="copy-btn" title="Copy command" aria-label="Copy">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                </svg>
-                <span class="copy-tag" id="copy-tag" data-i18n="copied">已复制</span>
-              </button>
-            </div>
+        <p class="hero-sub" data-i18n="hero_desc">
+          没有 Chromium，没有 Node.js，没有 400MB 的空载内存。<br>
+          遵循 Linear 2.0 设计规范的跨平台 Git 客户端。
+        </p>
+
+        <!-- 三枚硬核数据胶囊 -->
+        <div class="hero-stats">
+          <div class="stat-capsule">
+            <span class="stat-num">~80</span>
+            <span class="stat-unit">ms</span>
+            <span class="stat-label" data-i18n="stat_boot">冷启动</span>
+          </div>
+          <div class="stat-capsule">
+            <span class="stat-num">~35</span>
+            <span class="stat-unit">MB</span>
+            <span class="stat-label" data-i18n="stat_mem">待机内存</span>
+          </div>
+          <div class="stat-capsule">
+            <span class="stat-num">~20</span>
+            <span class="stat-unit">MB</span>
+            <span class="stat-label" data-i18n="stat_bin">二进制体积</span>
           </div>
         </div>
 
-        <!-- 真实软件界面复刻：高密度机械美学，纯粹发丝线 -->
-        <div class="app-stage" id="showcase">
-          <div class="stage-frame">
-            <!-- 窗体顶条 -->
-            <div class="frame-bar">
-              <div class="traffic-lights">
-                <span></span><span></span><span></span>
-              </div>
-              <div class="frame-title">
-                <span class="repo-badge">carl-github/Gloss</span>
-                <span class="ref-badge">HEAD → main</span>
-              </div>
-              <div class="frame-stats">
-                <span class="frame-metric">Metal · 60fps</span>
-              </div>
-            </div>
-
-            <!-- 三栏精密工作台 -->
-            <div class="frame-grid">
-              <!-- 左：拓扑车道 -->
-              <div class="col-lane">
-                <div class="col-head" data-i18n="pane_graph">TOPOLOGY / GRAPH</div>
-                <div class="lane-rows">
-                  <div class="lane-row active">
-                    <svg class="lane-svg" width="30" height="24">
-                      <line x1="12" y1="0" x2="12" y2="24" stroke="#8a8f98" stroke-width="2"/>
-                      <circle cx="12" cy="12" r="4" fill="#f7f8f8"/>
-                    </svg>
-                    <div class="lane-meta">
-                      <div class="lane-msg">feat(auth): env secret audit</div>
-                      <div class="lane-sub"><span>Carl</span> · <span class="mono">a8f29c1</span></div>
-                    </div>
-                  </div>
-                  <div class="lane-row">
-                    <svg class="lane-svg" width="30" height="24">
-                      <line x1="12" y1="0" x2="12" y2="24" stroke="#8a8f98" stroke-width="2"/>
-                      <line x1="12" y1="12" x2="22" y2="24" stroke="#62666d" stroke-width="1.5"/>
-                      <circle cx="12" cy="12" r="3" fill="#8a8f98"/>
-                    </svg>
-                    <div class="lane-meta">
-                      <div class="lane-msg">perf(draw): font cache direct blit</div>
-                      <div class="lane-sub"><span>Carl</span> · <span class="mono">5d39e04</span></div>
-                    </div>
-                  </div>
-                  <div class="lane-row">
-                    <svg class="lane-svg" width="30" height="24">
-                      <line x1="12" y1="0" x2="12" y2="24" stroke="#8a8f98" stroke-width="2"/>
-                      <line x1="22" y1="0" x2="22" y2="24" stroke="#62666d" stroke-width="1.5"/>
-                      <circle cx="22" cy="12" r="3" fill="#62666d"/>
-                    </svg>
-                    <div class="lane-meta">
-                      <div class="lane-msg">docs: calibrate Linear design token</div>
-                      <div class="lane-sub"><span>Carl</span> · <span class="mono">b14c810</span></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 中：文件审查状态追踪 -->
-              <div class="col-files">
-                <div class="col-head">
-                  <span data-i18n="pane_staged">STAGED (2)</span>
-                  <span class="file-stat">1/2 REVIEWED</span>
-                </div>
-                <div class="file-rows">
-                  <div class="file-row active">
-                    <span class="badge-status status-mod">M</span>
-                    <span class="file-path">internal/auth/verifier.go</span>
-                    <span class="file-delta">+8 -2</span>
-                  </div>
-                  <div class="file-row reviewed">
-                    <span class="badge-status status-add">A</span>
-                    <span class="file-path">internal/auth/verifier_test.go</span>
-                    <span class="badge-reviewed" data-i18n="badge_viewed">VIEWED</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 右：语义 Diff 与无干扰风险提示 -->
-              <div class="col-diff">
-                <div class="diff-header">
-                  <span class="mono diff-file-title">internal/auth/verifier.go</span>
-                  <div class="diff-tools">
-                    <button class="diff-tool-btn" id="audit-toggle-btn" data-i18n="btn_toggle_audit">Pre-flight Audit (1)</button>
-                    <span class="diff-mode-btn">Split</span>
-                  </div>
-                </div>
-
-                <!-- 风险提示：严格遵循设计系统的静音警示条，无夸张发光 -->
-                <div class="audit-callout" id="audit-callout">
-                  <div class="callout-lead">
-                    <span class="callout-dot"></span>
-                    <strong data-i18n="audit_flag">SECURITY PRE-FLIGHT (LINE 42)</strong>
-                  </div>
-                  <div class="callout-body" data-i18n="audit_detail">
-                    检测到硬编码字符串 <code>sk_live_...</code>。建议迁移至 <code>os.Getenv("JWT_SECRET")</code> 并注入配置。
-                  </div>
-                </div>
-
-                <!-- 语义化 Diff 视窗：微增微减底色，词级精度加深 -->
-                <div class="diff-code-body">
-                  <div class="line ctx">
-                    <span class="ln">40</span><span class="sign">&nbsp;</span>
-                    <span class="txt">func VerifyJWT(token string) (*Claims, error) {</span>
-                  </div>
-                  <div class="line del">
-                    <span class="ln">41</span><span class="sign">-</span>
-                    <span class="txt">&nbsp;&nbsp;&nbsp;&nbsp;key := <span class="tok-del">[]byte("hardcoded_master_secret")</span></span>
-                  </div>
-                  <div class="line add">
-                    <span class="ln">41</span><span class="sign">+</span>
-                    <span class="txt">&nbsp;&nbsp;&nbsp;&nbsp;key := <span class="tok-add">[]byte(os.Getenv("AUTH_SECRET"))</span></span>
-                  </div>
-                  <div class="line ctx">
-                    <span class="ln">42</span><span class="sign">&nbsp;</span>
-                    <span class="txt">&nbsp;&nbsp;&nbsp;&nbsp;return jwt.ParseWithClaims(token, key)</span>
-                  </div>
-                  <div class="line ctx">
-                    <span class="ln">43</span><span class="sign">&nbsp;</span>
-                    <span class="txt">}</span>
-                  </div>
-                </div>
-
-                <!-- AI Commit 提示条：极度克制 -->
-                <div class="ai-commit-strip">
-                  <span class="mono-label">CONVENTIONAL COMMIT</span>
-                  <code>feat(auth): load jwt verification key from environment</code>
-                </div>
-              </div>
-            </div>
+        <div class="hero-actions">
+          <a href="#install" class="action-key" id="main-dl-btn">
+            <span id="main-dl-label" data-i18n="btn_dl_mac">获取 macOS 通用版 (.dmg)</span>
+          </a>
+          <div class="cli-strap">
+            <code>go install github.com/CarlOpenLab/Gloss@latest</code>
+            <button class="strap-copy" id="copy-btn" title="Copy command" aria-label="Copy">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              <span class="copy-tag" id="copy-tag" data-i18n="copied">已复制</span>
+            </button>
           </div>
+        </div>
+      </div>
+
+      <!-- 产品截图 — 真实而非模拟 -->
+      <div class="hero-shot-wrap">
+        <div class="hero-shot">
+          <img src="shots/v1-dark.png" alt="Gloss — Code diff review" class="shot-dark" loading="eager">
+          <img src="shots/v1-light.png" alt="Gloss — Code diff review (light)" class="shot-light" loading="eager">
         </div>
       </div>
     </section>
 
-    <!-- 三大工程原则：硬核事实，严谨结构 -->
-    <section class="section-boundary" id="principles">
-      <div class="shell-wrap">
-        <div class="section-meta">
-          <span class="mono-label" data-i18n="sec_arch">ARCHITECTURE</span>
-          <h2 data-i18n="arch_title">摒弃 Web 封装，回归单一本地可执行文件</h2>
-        </div>
+    <!-- ═══════════════════════════════════════════════════════════════
+         FEATURES — 用截图讲故事，左右交替布局
+         ═══════════════════════════════════════════════════════════════ -->
+    <section class="features" id="features">
 
+      <!-- Feature 1: 风险预检 -->
+      <div class="feat-row">
+        <div class="feat-text">
+          <span class="mono-label" data-i18n="f1_label">PRE-FLIGHT AUDIT</span>
+          <h2 data-i18n="f1_title">提交前自动风险审计</h2>
+          <p data-i18n="f1_desc">
+            一键静态扫描暂存区中的代码变动，揪出意外带入的私钥、AWS/OpenAI 凭据、SQL 注入隐患和调试断点。按文件行号精准定位，按严重级别分类展示。
+          </p>
+        </div>
+        <div class="feat-shot">
+          <img src="shots/v5-riskscan-dark.png" alt="Pre-flight risk scan" class="shot-dark" loading="lazy">
+          <img src="shots/v5-riskscan-light.png" alt="Pre-flight risk scan (light)" class="shot-light" loading="lazy">
+        </div>
+      </div>
+
+      <!-- Feature 2: 分支拓扑 -->
+      <div class="feat-row feat-row--reverse">
+        <div class="feat-text">
+          <span class="mono-label" data-i18n="f2_label">TOPOLOGY GRAPH</span>
+          <h2 data-i18n="f2_title">高精度贝塞尔曲线拓扑图</h2>
+          <p data-i18n="f2_desc">
+            自研贝塞尔分支车道算法，支持经典、鲜艳与全灰度三种调色盘体系。分支合并与分叉路径一目了然，双击分支芯片直接检出。
+          </p>
+        </div>
+        <div class="feat-shot">
+          <img src="shots/v1-history-dark.png" alt="Bezier branch topology" class="shot-dark" loading="lazy">
+          <img src="shots/v1-history-light.png" alt="Bezier branch topology (light)" class="shot-light" loading="lazy">
+        </div>
+      </div>
+
+      <!-- Feature 3: 多 LLM 原生 -->
+      <div class="feat-row">
+        <div class="feat-text">
+          <span class="mono-label" data-i18n="f3_label">MULTI-LLM NATIVE</span>
+          <h2 data-i18n="f3_title">直连私有大模型</h2>
+          <p data-i18n="f3_desc">
+            支持 Claude、OpenAI、DeepSeek 及本地 Ollama 实例。API Key 完全保留在本地。深度理解代码差异块（Hunk），一键总结严谨的 Conventional Commits 格式。
+          </p>
+        </div>
+        <div class="feat-shot">
+          <img src="shots/v5-tags-dark.png" alt="AI commit generation" class="shot-dark" loading="lazy">
+          <img src="shots/v3-tags-light.png" alt="AI commit generation (light)" class="shot-light" loading="lazy">
+        </div>
+      </div>
+
+      <!-- Feature 4: 内置终端 -->
+      <div class="feat-row feat-row--reverse">
+        <div class="feat-text">
+          <span class="mono-label" data-i18n="f4_label">BUILT-IN TERMINAL</span>
+          <h2 data-i18n="f4_title">多会话终端与全键盘驱动</h2>
+          <p data-i18n="f4_desc">
+            内置多标签终端，支持 OSC 标题、字体字号自定义、图片粘贴直通 Claude Code。全键盘操作行云流水，已审文件一键标记 Viewed 折叠。
+          </p>
+        </div>
+        <div class="feat-shot">
+          <img src="shots/v4-term-tabs-dark.png" alt="Built-in terminal" class="shot-dark" loading="lazy">
+          <img src="shots/v4-term-tabs-light.png" alt="Built-in terminal (light)" class="shot-light" loading="lazy">
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         三大工程原则 — 紧凑横向条
+         ═══════════════════════════════════════════════════════════════ -->
+    <section class="principles">
+      <div class="shell-wrap">
         <div class="tri-columns">
           <div class="tri-col">
             <div class="col-num">01</div>
             <h3 data-i18n="p1_head">GPU 直接绘制通道</h3>
             <p data-i18n="p1_body">
-              基于纯 Go 与 <code>mygo</code> 底层图形管线，直接调用系统原生 Metal / Direct3D 接口提交图元。没有 Chromium 的 DOM 解析和重排重绘，长达万行的提交历史与大型 Diff 在 60fps 下保持绝对平滑。
+              基于纯 Go 与 <code>mygo</code> 底层图形管线，直接调用系统原生 Metal / Direct3D 接口提交图元。没有 DOM 解析和重排重绘，万行历史与大型 Diff 在 60fps 下保持平滑。
             </p>
           </div>
 
@@ -231,7 +185,7 @@
             <div class="col-num">02</div>
             <h3 data-i18n="p2_head">无彩色克制视觉规范</h3>
             <p data-i18n="p2_body">
-              继承 Linear 经典的黑白两极（Achromatic）系统：深色下白键黑字，浅色下黑键白字。界面本身不使用多余杂色，将视网膜的注意力 100% 留给 Git 变动的语义增减与分支车道。
+              继承 Linear 经典的黑白两极系统。界面本身不使用多余杂色，将注意力 100% 留给 Git 变动的语义增减与分支车道。
             </p>
           </div>
 
@@ -239,60 +193,20 @@
             <div class="col-num">03</div>
             <h3 data-i18n="p3_head">~35MB 极轻常驻开销</h3>
             <p data-i18n="p3_body">
-              启动用时约 80 毫秒，待机内存占用约为 Electron 类工具的十分之一。即使开一整天、常驻后台处理庞大 Monorepo，也不会成为系统的资源黑洞。
+              启动约 80 毫秒，待机内存约为 Electron 类工具的十分之一。整天常驻后台处理庞大 Monorepo，也不会成为系统的资源黑洞。
             </p>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- 核心工作流：解决代码审查的实际痛点 -->
-    <section class="section-boundary" id="workflow">
-      <div class="shell-wrap">
-        <div class="section-meta">
-          <span class="mono-label" data-i18n="sec_flow">WORKFLOW</span>
-          <h2 data-i18n="flow_title">把安全隐患与杂乱信息，拦截在提交之前</h2>
-        </div>
-
-        <div class="flow-list">
-          <div class="flow-item">
-            <div class="flow-badge">01</div>
-            <div class="flow-main">
-              <h3 data-i18n="w1_head">提交前自动风险审计 (Pre-flight Risk Scan)</h3>
-              <p data-i18n="w1_desc">
-                当你审查别人提交的 Pull Request 或准备提交本地暂存时，Gloss 一键静态扫描暂存区中的代码变动，揪出意外带入的私钥、AWS/OpenAI 凭据、SQL 注入隐患和调试断点，按文件行号精准定位。
-              </p>
-            </div>
-          </div>
-
-          <div class="flow-item">
-            <div class="flow-badge">02</div>
-            <div class="flow-main">
-              <h3 data-i18n="w2_head">直连私有大模型 (Multi-LLM Native)</h3>
-              <p data-i18n="w2_desc">
-                支持 Claude、OpenAI、DeepSeek 及本地 Ollama 实例。API Key 完全保留在本地。Gloss 深度理解代码差异块（Hunk），一键总结严谨的 Conventional Commits 格式，或根据单行需求生成规范分支名称。
-              </p>
-            </div>
-          </div>
-
-          <div class="flow-item">
-            <div class="flow-badge">03</div>
-            <div class="flow-main">
-              <h3 data-i18n="w3_head">已审查状态追踪与分块暂存 (Viewed Tracking)</h3>
-              <p data-i18n="w3_desc">
-                大文件变更不再眼花缭乱。确认无误的文件一键折叠（Viewed），文件内容变动后自动重置状态。支持按变更块（Hunk）独立暂存与丢弃，全键盘操作不依赖鼠标。
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- 硬核指标对比：真实数据，拒绝吹嘘 -->
+    <!-- ═══════════════════════════════════════════════════════════════
+         BENCHMARK — 对比表
+         ═══════════════════════════════════════════════════════════════ -->
     <section class="section-boundary" id="benchmark">
       <div class="shell-wrap">
         <div class="section-meta">
-          <span class="mono-label" data-i18n="sec_bench">DATA & BENCHMARK</span>
+          <span class="mono-label" data-i18n="sec_bench">DATA &amp; BENCHMARK</span>
           <h2 data-i18n="bench_title">客观指标对照</h2>
         </div>
 
@@ -302,14 +216,14 @@
               <tr>
                 <th data-i18n="tb_metric">指标</th>
                 <th class="active-col">Gloss</th>
-                <th>Electron / WebView 类客户端</th>
+                <th>Electron / WebView</th>
               </tr>
             </thead>
             <tbody>
               <tr>
                 <td data-i18n="tb_m1">技术栈</td>
                 <td class="active-col"><strong>Pure Go + GPU Direct</strong></td>
-                <td>Chromium + Node.js 跨进程</td>
+                <td>Chromium + Node.js</td>
               </tr>
               <tr>
                 <td data-i18n="tb_m2">冷启动时间</td>
@@ -323,13 +237,13 @@
               </tr>
               <tr>
                 <td data-i18n="tb_m4">二进制包体积</td>
-                <td class="active-col"><strong>~20 MB</strong> (单文件直接运行)</td>
+                <td class="active-col"><strong>~20 MB</strong></td>
                 <td>130 MB ~ 240 MB</td>
               </tr>
               <tr>
                 <td data-i18n="tb_m5">AI 与网络依赖</td>
-                <td class="active-col">本地优先 / 直连自有模型与本地 Ollama</td>
-                <td>多数需要云端登录或无审计能力</td>
+                <td class="active-col" data-i18n="tb_v5_gloss">本地优先 / 直连自有模型</td>
+                <td data-i18n="tb_v5_other">多数需要云端登录</td>
               </tr>
             </tbody>
           </table>
@@ -337,7 +251,48 @@
       </div>
     </section>
 
-    <!-- 安装矩阵：全平台下载 -->
+    <!-- ═══════════════════════════════════════════════════════════════
+         SHORTCUTS — 两排三列
+         ═══════════════════════════════════════════════════════════════ -->
+    <section class="section-boundary" id="shortcuts">
+      <div class="shell-wrap">
+        <div class="section-meta">
+          <span class="mono-label" data-i18n="sec_shortcuts">KEYBOARD-FIRST</span>
+          <h2 data-i18n="shortcuts_title">全键盘驱动，指尖行云流水</h2>
+        </div>
+
+        <div class="shortcuts-deck">
+          <div class="shortcut-unit">
+            <div class="kbd-wrap"><kbd>Space</kbd></div>
+            <div class="sc-desc" data-i18n="sc_1">暂存 / 取消暂存当前选中文件或 Hunk 块</div>
+          </div>
+          <div class="shortcut-unit">
+            <div class="kbd-wrap"><kbd>⌘</kbd> + <kbd>K</kbd></div>
+            <div class="sc-desc" data-i18n="sc_2">呼出全局命令面板 (Palette)</div>
+          </div>
+          <div class="shortcut-unit">
+            <div class="kbd-wrap"><kbd>⌘</kbd> + <kbd>Enter</kbd></div>
+            <div class="sc-desc" data-i18n="sc_3">提交当前已暂存的变动</div>
+          </div>
+          <div class="shortcut-unit">
+            <div class="kbd-wrap"><kbd>V</kbd></div>
+            <div class="sc-desc" data-i18n="sc_4">标记当前文件为"已审查 (Viewed)"并自动折叠</div>
+          </div>
+          <div class="shortcut-unit">
+            <div class="kbd-wrap"><kbd>[</kbd> / <kbd>]</kbd></div>
+            <div class="sc-desc" data-i18n="sc_5">在前后差异块 (Hunk) 之间快速跳转</div>
+          </div>
+          <div class="shortcut-unit">
+            <div class="kbd-wrap"><kbd>R</kbd></div>
+            <div class="sc-desc" data-i18n="sc_6">一键触发暂存区代码安全预检</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         INSTALL — 三列下载卡
+         ═══════════════════════════════════════════════════════════════ -->
     <section class="section-boundary" id="install">
       <div class="shell-wrap">
         <div class="section-meta">
