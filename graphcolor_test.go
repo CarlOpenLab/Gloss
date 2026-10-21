@@ -35,7 +35,7 @@ func TestGraphLaneOverrideReachesScreen(t *testing.T) {
 	if i < 0 {
 		t.Fatalf("测试仓库里没有 %q", name)
 	}
-	x, y := nodeRingAt(t, tt, a, name)
+	x, y := nodeDotAt(t, tt, a, name)
 	cid := a.graph[i].Color
 
 	if before := pixelAt(tt, x, y); isMagenta(before) {
@@ -67,11 +67,11 @@ func pixelAt(tt *ui.Tester, x, y int) [3]uint8 {
 	return [3]uint8{uint8(r >> 8), uint8(g >> 8), uint8(b >> 8)}
 }
 
-// nodeRingAt 返回某个提交那一行节点圆环上的取样点（窗口坐标）。
+// nodeDotAt 返回某个提交那一行节点圆点上的取样点（窗口坐标）。
 //
-// 取样必须落在环壁上：节点是空心的，圆心里是行底色，照旧取中心读到的是
-// 选中态或悬停态的灰，两个用例都会变成「什么都没验」。
-func nodeRingAt(t *testing.T, tt *ui.Tester, a *app, name string) (int, int) {
+// 取样落在实心圆点里（靠上半个半径），别取正中心：正中心可能压着选中行
+// 的高亮，也可能被抗锯齿糊到边缘；圆点里离中心半个半径的位置最稳。
+func nodeDotAt(t *testing.T, tt *ui.Tester, a *app, name string) (int, int) {
 	t.Helper()
 	box, ok := tt.Find(name)
 	if !ok {
@@ -88,9 +88,9 @@ func nodeRingAt(t *testing.T, tt *ui.Tester, a *app, name string) (int, int) {
 		t.Fatalf("提交 %q 不在图里", name)
 	}
 	// 行里的文字是垂直居中的，所以文字框中线就是节点中心那条水平线；
-	// 往上挪一个半径，正好落在环的上沿。
+	// 往上挪 1px，落在实心圆点里、又避开中心那条抗锯齿最重的位置。
 	x := int(a.sidebarWidth(nil)+shellCardGap) + int(laneX(a.graph[i].Lane, a.maxLanes))
-	y := int(box.Y+box.H/2) - graphNodeR
+	y := int(box.Y+box.H/2) - 1
 	return x, y
 }
 
@@ -98,6 +98,34 @@ func nodeRingAt(t *testing.T, tt *ui.Tester, a *app, name string) (int, int) {
 // 绿得压得很低 —— 用等值比较会被边缘像素坑死。
 func isMagenta(p [3]uint8) bool {
 	return p[0] > 200 && p[1] < 80 && p[2] > 200
+}
+
+// 节点圆点外面那一圈必须是行底色：连线从上面进来、从下面出去，就是不能
+// 从圆点中间穿过去（截图里「线穿过圆点」的观感正是这么来的）。取圆点上
+// 下 5px 处：那里在圆点外、留白内，而且再往外 4px 就是竖线本身。
+func TestGraphNodeKnockout(t *testing.T) {
+	a := graphApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+	tt.Frame()
+	tt.SetTitleBar(realTitleBar)
+	a.setTab(1)
+	tt.Frame()
+	settle(t, a)
+	tt.Frame()
+
+	x, y := nodeDotAt(t, tt, a, "主线三")
+	cy := y + 1 // nodeDotAt 取的是中心上方 1px
+	dot := pixelAt(tt, x, cy)
+	line := pixelAt(tt, x, cy-9)
+	halo := pixelAt(tt, x, cy-5)
+
+	if dot != line {
+		t.Fatalf("圆点和它上面的连线应该是同一个色：dot=%v line=%v", dot, line)
+	}
+	if halo == dot {
+		t.Fatalf("圆点上方的留白被线穿了：%v（圆点色 %v）", halo, dot)
+	}
 }
 
 // scrollTo 把通用偏好里的一项滚进视野，再交给调用方去点。

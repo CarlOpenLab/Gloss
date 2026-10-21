@@ -278,12 +278,15 @@ type segmentedIconItem struct {
 }
 
 // toolbarSegmentedIcons 是工具栏上的图标分段控件（如「Unified / Split」切换）。
-// 与文字版同一套取值：轨道 md(8)、单元 sm(6)、图标用 Lucide 标准矢量。
+//
+// 轨道自己不画底、不描边：工具栏上已经有一条卡片边线，再给这一组套一圈
+// 圆角边框，屏上就多出一个「框里的框」，和旁边的幽灵图标键也不在同一档。
+// 只留每一格自己的悬停 / 选中底 —— 选中态是 Surface 3 的小胶囊，未选中的
+// 图标直接坐在工具栏上。单元 sm(6)、图标用 Lucide 标准矢量。
 func toolbarSegmentedIcons(c *ui.Context, pal palette, selected *int, off bool, items ...segmentedIconItem) ui.Element {
 	parts := ui.SegmentedBase(c, selected, len(items))
 	g := parts.Track
-	g.Height(28).AlignItems(ui.Center).Padding(2).Gap(2).Radius(radiusMD).
-		Background(pal.surface1).Border(1, pal.hairline).Disabled(off)
+	g.Height(28).AlignItems(ui.Center).Padding(2).Gap(2).Disabled(off)
 
 	g.Children(func() {
 		for i, it := range items {

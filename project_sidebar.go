@@ -106,7 +106,6 @@ func (a *app) sidebarShell(c *ui.Context, pal palette, progress float32) {
 // sessions kept alive (see switchTab). Branches remain the repository's
 // secondary navigation below the project list.
 func (a *app) projectSidebar(c *ui.Context, pal palette) {
-	sw := a.sidebarWidth(c)
 	bar := c.TitleBar()
 
 	lead := float32(12)
@@ -210,25 +209,58 @@ func (a *app) projectSidebar(c *ui.Context, pal palette) {
 		})
 
 		a.projectSidebarFooter(c, pal)
-
-		// 侧栏的右边缘：和 kero 一样，是一条 9px 宽的透明抓手，跨在
-		// 边界上（往侧栏里 5px、往主区里 4px），而不是贴着一条看得见的
-		// 蓝线。指针形状就是唯一的提示，悬停/按压都不点亮任何颜色。
-		resizer := ui.Box(c).Absolute().Top(0).Bottom(0).Right(-4).Width(9).
-			Cursor(ui.CursorResizeEW).Role(ui.RoleNone).
-			Label(T("调整侧栏宽度", "Resize sidebar"))
-		if resizer.DoubleClicked() {
-			a.resetSidebarWidth()
-		}
-		if dx, _, held := resizer.Dragged(); held && dx != 0 {
-			a.setSidebarWidth(c, sw+dx)
-			a.sidebarDragging = true
-		} else if a.sidebarDragging && !held {
-			a.sidebarDragging = false
-			a.saveViewSettings()
-		}
 	})
 }
+
+// sidebarResizer 是侧栏与主区之间那条 9px 宽的拖拽带。
+//
+// 它压在白色卡片的左沿上（往侧栏里 4px、往主区里 5px），而不是浮在侧栏
+// 与卡片之间那段 8px 留白的中间：眼睛看见的边界是卡片的边线，指针就该在
+// 那条线上变成左右箭头，拖起来也像是直接拽着卡片走。悬停 / 拖动时那条
+// 1px 的强调线同样画在卡片边上。
+//
+// 它挂在根行上、排在主区之后：主区那一层盖住侧栏的右边缘，抓手留在侧栏里
+// 的话，伸出去的那一半收不到指针。
+func (a *app) sidebarResizer(c *ui.Context) {
+	// 只在侧栏完全展开时给抓手：收起 / 展开的动画途中按住的不是一条稳定
+	// 的边线，拖起来会跳。
+	if a.sidebarShown < 0.98 {
+		return
+	}
+	t := c.Theme()
+
+	// 侧栏外壳的宽度是 round 过的（见 sidebarShell），卡片左沿按同一个
+	// 数算，抓手才不会落在边线外半个像素上。
+	shellW := float32(math.Round(float64(a.sidebarWidth(c) * clamp(a.sidebarShown, 0, 1))))
+	edge := shellW + shellCardGap
+
+	handle := ui.Box(c).Key("sidebar-resizer").Absolute().
+		Top(0).Bottom(0).Left(edge - sidebarHandleW/2).Width(sidebarHandleW).
+		Cursor(ui.CursorResizeEW).Role(ui.RoleNone).
+		Label(T("调整侧栏宽度", "Resize sidebar"))
+
+	if handle.DoubleClicked() {
+		a.resetSidebarWidth()
+	}
+	if dx, _, held := handle.Dragged(); held && dx != 0 {
+		a.setSidebarWidth(c, a.sidebarWidth(c)+dx)
+		a.sidebarDragging = true
+	} else if a.sidebarDragging && !held {
+		a.sidebarDragging = false
+		a.saveViewSettings()
+	}
+
+	handle.Draw(func(p *ui.Painter, r ui.Rect) {
+		if !handle.Hovered() && !handle.Pressed() {
+			return
+		}
+		line := t.Accent
+		p.Fill(ui.Rect{X: r.X + r.W/2 - 0.5, Y: r.Y, W: 1, H: r.H}, line, 0)
+	})
+}
+
+// sidebarHandleW 是侧栏拖拽带的宽度：一条 1px 的边线，左右各留 4px 的容错。
+const sidebarHandleW = float32(9)
 
 // projectGroups 列出所有打开的项目。项目之间没有展开关系：一条项目就是
 // 一个工作区，点一下切过去，终端会话留在各自的项目里（见 switchTab）。

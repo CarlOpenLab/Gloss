@@ -366,6 +366,11 @@ func (a *app) commitBoxOn() bool {
 // 摆在主列底部整宽，而不是塞进 300px 的文件栏里：提交信息可能是一段话，
 // 窄栏里三行就满了；而且它是「改动」这一栏的收尾动作，横贯主区才看得出
 // 「这些改动写完就去那儿」。
+//
+// 它是一张浮在卡片底部的 Composer，不是一条横贯主区的色带：四周留出
+// 10~12px 的呼吸，底色只铺在自己的圆角里。带状的版本会一路顶到主卡
+// 片的下沿，把卡片自己的圆角盖成直角，底边也只剩一条被裁断的色块；现在
+// 卡片露着四个圆角，提交栏自己有一条完整的描边。
 func (a *app) commitBox(c *ui.Context, pal palette) {
 	if !a.commitBoxOn() {
 		// 提交栏这一帧没画（切去了历史 tab 之类）：输入框不存在了，焦点
@@ -396,9 +401,7 @@ func (a *app) commitBox(c *ui.Context, pal palette) {
 	}
 
 	ui.Column(c).Key("commit-box-wrap").Shrink(0).FillWidth().
-		Padding(8, 12, 10, 12).
-		Background(pal.surface1).
-		BorderWidth(1, 0, 0, 0).BorderColor(pal.hairline).Children(func() {
+		Padding(10, 12, 12, 12).Children(func() {
 
 		var in ui.Element
 
@@ -406,6 +409,9 @@ func (a *app) commitBox(c *ui.Context, pal palette) {
 		// 卡片圆角 lg(12)；聚焦时换 1px 的焦点色描边，不再是 1.2px 的
 		// 强调色半透明 —— 描边宽度 1.2 在非整数缩放下会糊成两像素，
 		// 而 §2.2 的线只有一种粗细。
+		//
+		// Clip 是必须的：底下那条工具栏铺的是 Surface 1，不裁的话它会
+		// 从卡片圆角里方方正正地探出来，底线看着又是一条直角。
 		cardBorder := pal.hairlineStrong
 		if a.commitFocused {
 			cardBorder = t.Focus
@@ -413,7 +419,8 @@ func (a *app) commitBox(c *ui.Context, pal palette) {
 		ui.Column(c).FillWidth().Radius(radiusLG).
 			Background(pal.surface2).
 			Border(1, cardBorder).
-			Shadow(0, 2, 8, 0, ui.RGBA(0, 0, 0, 0.04)).Children(func() {
+			Shadow(0, 2, 8, 0, ui.RGBA(0, 0, 0, 0.04)).
+			Clip().Children(func() {
 
 			// 顶部：全宽输入框，充足视野
 			in = ui.TextArea(c, &a.commitMsg).Grow(1).FillWidth().MinWidth(0).

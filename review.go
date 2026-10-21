@@ -480,10 +480,6 @@ func (a *app) reviewPane(c *ui.Context, pal palette) {
 	ui.Box(c).Grow(1).MinHeight(0).FillWidth().Children(func() {
 		editor.DiffView(c, s.diff).Fill()
 	})
-
-	if s.editable {
-		a.reviewFooter(c, pal)
-	}
 }
 
 // reviewHeader 是改动区顶上那条：文件路径 + 状态 + 增删 + 整文件暂存 + 已 review。
@@ -524,7 +520,10 @@ func (a *app) reviewHeader(c *ui.Context, pal palette) {
 			}
 		}
 		if s.diff != nil && s.new != nil && s.new.Modified() {
-			ui.Text(c, T("已编辑", "Edited")).FontSize(textCaption).TextColor(t.Warning)
+			// 底栏的「保存到工作区」撤掉之后，保存这件事只剩 ⌘S；改过的
+			// 时候把键位就写在提示里，不用再翻菜单。
+			ui.Text(c, T("已编辑 · ⌘S 保存", "Edited · ⌘S to save")).
+				FontSize(textCaption).TextColor(t.Warning)
 		}
 
 		// 整文件暂存：只有工作区那一段（历史、储藏、对比、PR 检视都不能
@@ -575,6 +574,16 @@ func (a *app) reviewConflictBar(c *ui.Context, pal palette, f gitrepo.File) {
 			a.reviewBaselineButton(c, pal, T("当前分支", "Current"), baselineOurs)
 			a.reviewBaselineButton(c, pal, T("对方", "Theirs"), baselineTheirs)
 			a.reviewBaselineButton(c, pal, T("共同祖先", "Base"), baselineBase)
+			// 底栏那条「保存并标记已解决」撤掉之后，解决完的冲突得有个
+			// 落盘的地方：这里是整份文件的收尾动作，摆在基线选择之后。
+			// 只有改过才出现 —— 没动过的时候它按下去也是空操作。
+			if s := &a.review; s.new != nil && s.new.Modified() {
+				if primaryAction(c, pal, T("保存并标记已解决", "Save & Resolve"),
+					T("写入工作区并 git add，冲突才算解决", "Write and git add: that's what resolves a conflict"), busy).
+					Clicked() {
+					a.saveReview()
+				}
+			}
 		})
 	})
 }
@@ -700,8 +709,8 @@ func smallConflictAction(c *ui.Context, pal palette, label, tip string) ui.Eleme
 
 // applyRegionChoice 把某一处冲突按选择的结果改掉（只改缓冲区，不动磁盘）。
 //
-// 落盘和 git add 在底栏那颗「保存」上：和内置编辑器一个规矩 —— 看一眼
-// 结果再决定存不存，撤销（⌘Z）永远回得到刚才那一版。
+// 落盘和 git add 在冲突条那颗「保存并标记已解决」（或 ⌘S）上：和内置
+// 编辑器一个规矩 —— 看一眼结果再决定存不存，撤销（⌘Z）永远回得到刚才那一版。
 func (a *app) applyRegionChoice(i int, choice conflictChoice) {
 	s := &a.review
 	if s.new == nil {
@@ -844,44 +853,13 @@ func (a *app) stageReviewHunk(fi int, hr editor.DiffHunk, reverse bool) {
 	})
 }
 
-// reviewFooter 是改动区底下那条（只有能改的文件才有）：说清「保存会做什么」，
-// 给保存和丢弃两颗按钮。
-func (a *app) reviewFooter(c *ui.Context, pal palette) {
-	s := &a.review
-	busy := a.op != gitrepo.OpNone
-	dirty := s.new != nil && s.new.Modified()
-	ready := s.diff != nil && s.err == ""
-
-	ui.Row(c).Height(42).Shrink(0).FillWidth().Padding(0, 12).Gap(8).
-		AlignItems(ui.Center).Background(pal.surface2).
-		BorderWidth(1, 0, 0, 0).BorderColor(pal.hairline).Children(func() {
-		note := T("改完保存到工作区，不替你暂存", "Saved to the working tree, not staged")
-		if s.conflict {
-			if n := len(s.regions); n > 0 {
-				note = Tf("还有 %d 处冲突标记没处理 —— 每处上面有一排按钮", "%d conflict blocks left — each has its own buttons", n)
-			} else {
-				note = T("冲突标记都处理完了：保存并标记已解决才算数", "No markers left: save to resolve and stage it")
-			}
-		}
-		ui.Text(c, note).FontSize(textCaption).TextColor(pal.inkMuted).
-			Grow(1).MinWidth(0).SingleLine()
-
-		if secondaryAction(c, pal, T("丢弃改动", "Discard"),
-			T("重新读一份，未保存的编辑都丢掉", "Reload and drop the unsaved edits"), busy || !dirty).
-			Clicked() {
-			a.revertReview()
-		}
-		label := T("保存到工作区", "Save")
-		tip := T("写回磁盘，不自动暂存", "Write to disk without staging")
-		if s.conflict {
-			label = T("保存并标记已解决", "Save & Resolve")
-			tip = T("写入工作区并 git add，冲突才算解决", "Write and git add: that's what resolves a conflict")
-		}
-		if primaryAction(c, pal, label, tip, busy || !dirty || !ready).Clicked() {
-			a.saveReview()
-		}
-	})
-}
+// 改动区底下原来还有一条「保存到工作区 / 丢弃」的横条，现在不画了。
+//
+// 它把「看 diff」和「写 diff」两件事缝在同一条底边上：常驻的说明文字
+// （「改完保存到工作区，不替你暂存」）在每次看代码时都在重复同一句话，
+// 两颗按钮又只有在真的改过之后才有用。未保存的编辑现在由栏头的
+// 「已编辑 · ⌘S 保存」提示，⌘S 落盘（见 keys.go），切走时草稿还在
+// （见 takeReviewDraft）—— 少一条横条，diff 多出一整行的视野。
 
 // saveReview 把右侧改好的内容存下去。
 //

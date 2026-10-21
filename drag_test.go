@@ -18,18 +18,26 @@ func TestSidebarDragResize(t *testing.T) {
 		t.Fatalf("侧栏初始宽度应该是 %.0f，实际 %.0f", sidebarDefaultW, initW)
 	}
 
-	// 悬停在侧栏右边缘 4px 范围内，光标应变为东西双向箭头
-	tt.Move(sidebarDefaultW-2, 300)
+	// 抓手的中心在主卡片那条白色边线上（侧栏宽度 + 卡片留白），不是浮在
+	// 侧栏与卡片之间的粉色留白里 —— 眼睛看见的边界就是能拖的那条线。
+	sepX := a.sidebarWidth(nil) + shellCardGap
+	tt.Move(sepX, 300)
 	tt.Frame()
 	if c := tt.Cursor(); c != ui.CursorResizeEW {
-		t.Errorf("悬停在侧栏边缘光标应该是 CursorResizeEW，实际是 %v", c)
+		t.Errorf("悬停在卡片左沿光标应该是 CursorResizeEW，实际是 %v", c)
+	}
+	// 侧栏自己那条边（卡片边线往左 8px）已经不是抓手的中心了。
+	tt.Move(a.sidebarWidth(nil)-2, 300)
+	tt.Frame()
+	if c := tt.Cursor(); c == ui.CursorResizeEW {
+		t.Errorf("侧栏自己的边缘不该再是抓手中心（它现在压在卡片边线上）")
 	}
 
-	// 拖拽手柄向右拉 50px
-	tt.Press(sidebarDefaultW-2, 300)
-	tt.Move(sidebarDefaultW-2+50, 300)
+	// 从卡片边线向右拉 50px
+	tt.Press(sepX, 300)
+	tt.Move(sepX+50, 300)
 	tt.Frame()
-	tt.Release(sidebarDefaultW-2+50, 300)
+	tt.Release(sepX+50, 300)
 	tt.Frame()
 
 	newW := a.sidebarWidth(nil)
@@ -43,11 +51,11 @@ func TestSidebarDragResize(t *testing.T) {
 	}
 
 	// 拖拽手柄向左拉到超出下限，应被 clamp 保护在 sidebarMinW
-	curW := a.sidebarWidth(nil)
-	tt.Press(curW-2, 300)
-	tt.Move(curW-2-300, 300)
+	curX := a.sidebarWidth(nil) + shellCardGap
+	tt.Press(curX, 300)
+	tt.Move(curX-300, 300)
 	tt.Frame()
-	tt.Release(curW-2-300, 300)
+	tt.Release(curX-300, 300)
 	tt.Frame()
 	if minClamped := a.sidebarWidth(nil); minClamped != sidebarMinW {
 		t.Errorf("侧栏宽度向左拖动应受 clamp 保护在 %.0f，实际 %.0f", sidebarMinW, minClamped)

@@ -856,6 +856,9 @@ func (a *app) view(c *ui.Context) {
 				a.mainArea(c, pal)
 			})
 		})
+		// 侧栏的拖拽带排在主区之后：它压在卡片左沿上，而主区那一层会
+		// 盖住侧栏伸出来的那一半（见 sidebarResizer）。
+		a.sidebarResizer(c)
 	})
 	// 自绘的红绿灯压在最后：它们是窗口控件，和系统红绿灯一样浮在内容
 	// （包括设置浮层）之上，不跟着侧栏一起动。

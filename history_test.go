@@ -672,7 +672,7 @@ func TestHistoryGraphLineColorIsContinuous(t *testing.T) {
 	}
 	var got []sample
 	for _, name := range chain {
-		x, y := nodeRingAt(t, tt, a, name)
+		x, y := nodeDotAt(t, tt, a, name)
 		i := -1
 		for idx, cm := range a.commits {
 			if cm.Subject == name {
@@ -707,7 +707,7 @@ func TestHistoryGraphLineColorIsContinuous(t *testing.T) {
 
 	// 反面：支线得是另一个颜色，否则「同色」也可能是「全图一个颜色」
 	if _, ok := idx["支线二之二"]; ok {
-		if x, y := nodeRingAt(t, tt, a, "支线二之二"); ok {
+		if x, y := nodeDotAt(t, tt, a, "支线二之二"); ok {
 			r, g, b, _ := img.At(x, y).RGBA()
 			if r == first.r && g == first.g && b == first.b {
 				t.Errorf("支线二之二和主线同色 —— 两条线得分得开")

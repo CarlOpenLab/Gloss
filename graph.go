@@ -186,27 +186,29 @@ func waitingLane(lanes []string, h string) int {
 	return -1
 }
 
-// 提交图的尺寸。行高是定死的 commitH = 30，泳道宽 20 和它相配：节点是半径 5
-// 的空心环（环壁 3，外沿 6.5），左右各留 5 像素多，相邻两条线不会挨在一起。
+// 提交图的尺寸。行高是定死的 commitH = 30，泳道宽 20 和它相配：节点是半径
+// 3.5 的实心小圆点，外面再留 2 像素行底色，连线的端点落在留白外沿。
 //
 // 这组数是跟着行高一起定的：行压低到 30 之后，泳道如果还照旧的 14，图在
 // 全宽的列表里就细得像根头发。横向铺开 20 一格，一条泳道横移 20 像素只有
 // 15 像素的纵向空间（见 drawVein）—— 陡是陡了点，但换来的是几十行看下来
 // 一眼能分清哪条线是哪条。
 const (
-	graphLaneW  = 20
-	graphPad    = 10 // 图形栏左边的留白
-	graphNodeR  = 5  // 节点半径
-	graphNodeW  = 3  // 节点环壁的粗细，比线粗一档：它是一个点，不是又一条线
-	graphLineW  = 2
-	graphMaxCol = 6 // 最多铺几条泳道，再多就都挤在最右边那条上
+	graphLaneW   = 20
+	graphPad     = 10  // 图形栏左边的留白
+	graphNodeR   = 3.5 // 节点圆点的半径：一屏几十行，点是标点，不是色块
+	graphNodeGap = 2   // 圆点外那圈行底色的宽度：线在这圈外沿停住
+	graphLineW   = 2
+	graphMaxCol  = 6 // 最多铺几条泳道，再多就都挤在最右边那条上
 )
 
-// graphNodeEdge 是节点环的外沿到圆心的距离 —— 连上节点的线在这里停住。
+// graphNodeEdge 是「圆点 + 外圈留白」的外沿到圆心的距离 —— 连上节点的线
+// 在这里停住。
 //
-// 环是空心的，线要是照旧画到圆心，就会从环中间穿过去，看着像一颗实心点
-// 中间戳了根牙签。停在外沿，环壁自己把接头盖住，和以前实心点的效果一样。
-func graphNodeEdge() float32 { return graphNodeR + graphNodeW/2 }
+// 光是让线停在外沿还不够：斜线和竖线的圆头端点、缩放时的抗锯齿都可能
+// 探进圆点里，一条竖线从圆点正中穿过去的样子就来源于此。所以节点最后画，
+// 先铺一圈行底色把底下的线头盖干净，再点上实心圆点 —— 线永远进不来。
+func graphNodeEdge() float32 { return graphNodeR + graphNodeGap }
 
 // graphWidth 是图形栏的宽度。
 //
@@ -229,17 +231,18 @@ func laneX(i, maxLanes int) float32 {
 
 // drawGraphRow 画一行提交的图形：贯穿本行的线、连到节点的线、节点。
 //
-// r 是图形栏本行的矩形（窗口坐标，DIP）。只看自己这一行的数据，不参考上下
-// 邻居 —— ui.List 是虚拟化的，滚到哪行才建哪行，任何「上一行画到哪」的状态
-// 都会在滚动时错位。
-func drawGraphRow(p *ui.Painter, r ui.Rect, pal palette, row graphRow, maxLanes int) {
+// r 是图形栏本行的矩形（窗口坐标，DIP）。bg 是这一行此刻的底色 —— 节点
+// 外圈要用它把底下的线头盖掉，选中 / 悬停时行底色会变，所以由调用方给。
+// 只看自己这一行的数据，不参考上下邻居 —— ui.List 是虚拟化的，滚到哪行
+// 才建哪行，任何「上一行画到哪」的状态都会在滚动时错位。
+func drawGraphRow(p *ui.Painter, r ui.Rect, pal palette, row graphRow, maxLanes int, bg ui.Color) {
 	// laneX 算的是「相对图形栏左边缘」的 x，画到窗口坐标上还得加上 r.X。
 	// 漏掉这一下不会报错 —— 线会画到图形栏左边去（侧栏底下），而且被列表的
 	// 裁剪区裁掉，屏幕上什么都看不见。
 	at := func(l int) float32 { return r.X + laneX(l, maxLanes) }
 	mid := r.Y + r.H/2
 	nodeX := at(row.Lane)
-	// 环是空心的，线在外沿停住（见 graphNodeEdge）
+	// 线在圆点外圈留白的外沿停住（见 graphNodeEdge）
 	edge := graphNodeEdge()
 	top, bot := mid-edge, mid+edge
 
@@ -258,7 +261,7 @@ func drawGraphRow(p *ui.Painter, r ui.Rect, pal palette, row graphRow, maxLanes 
 			drawSeg(p, at(s.Lane), r.Y-1, top, pal.laneColor(s.Color))
 		} else {
 			// 斜线走 S 形，末端是竖直朝节点来的（见 drawVein），所以把终点
-			// 往里收一截就正好落在环的上沿，看不出来被剪过。
+			// 往里收一截就正好落在留白外沿。
 			drawVein(p, at(s.Lane), r.Y, nodeX, top, pal.laneColor(s.Color))
 		}
 	}
@@ -272,11 +275,15 @@ func drawGraphRow(p *ui.Painter, r ui.Rect, pal palette, row graphRow, maxLanes 
 		}
 	}
 
-	// 节点是一颗空心的环：实心点在一屏几十个提交里是一片实色块，环把
-	// 「这里有一个提交」说得一样清楚，又不跟实色的强调抢注意力（§5）。
-	var ring ui.Path
-	ring.Circle(nodeX, mid, graphNodeR)
-	p.StrokePath(&ring, graphNodeW, pal.laneColor(row.Color))
+	// 节点是一个实心小圆点，外面先铺一圈行底色：一屏几十个点看过去只是
+	// 标点，而底色圈保证任何一条线都不会从圆点中间穿出来（§2.6）。
+	var halo ui.Path
+	halo.Circle(nodeX, mid, graphNodeR+graphNodeGap)
+	p.FillPath(&halo, bg)
+
+	var dot ui.Path
+	dot.Circle(nodeX, mid, graphNodeR)
+	p.FillPath(&dot, pal.laneColor(row.Color))
 }
 
 // drawSeg 是竖直的直线段。

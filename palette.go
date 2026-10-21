@@ -17,6 +17,12 @@ type paletteState struct {
 	on    bool
 	query string
 	sel   int
+	// lastQuery 是上一帧的搜索词：词一变就把选中项拉回第一条（筛选前后
+	// 第 N 条已经不是同一条命令了）。
+	lastQuery string
+	// scrollSel 是「这一帧把选中项滚进视野」。只在上下键改过选中项时为真：
+	// 每帧都滚的话，用户用滚轮往下翻，选中项会把列表拽回去。
+	scrollSel bool
 }
 
 // command 是一条命令。hint 显示在右边，写快捷键或当前状态。
@@ -38,6 +44,12 @@ func (a *app) commands() []command {
 		{T("打开仓库…", "Open Repository…"), K("⌘O"), func(a *app) { a.chooseFolder() }},
 		{T("刷新", "Refresh"), K("⌘R"), func(a *app) { a.reload() }},
 		{T("提交", "Commit"), K("⌘⏎"), func(a *app) { a.doCommit() }},
+		{T("保存改动区的编辑", "Save Diff Edits"), K("⌘S"), func(a *app) {
+			if a.review.editable && a.review.new != nil && a.review.new.Modified() {
+				a.saveReview()
+			}
+		}},
+		{T("丢弃改动区的编辑", "Discard Diff Edits"), "", func(a *app) { a.revertReview() }},
 		{T("暂存全部改动", "Stage All Changes"), K("⌘⇧A"), func(a *app) { a.stageAll() }},
 		{T("取消暂存全部改动", "Unstage All Changes"), "", func(a *app) { a.unstageAll() }},
 		{T("预检暂存区代码风险…", "Scan Staged Changes for Risks…"), "", func(a *app) { a.startRiskScan() }},
@@ -152,13 +164,26 @@ const (
 	paletteMaxH = 360
 )
 
-// paletteListH 是命令列表该占的高度：够放下所有条目，最多到 paletteMaxH。
-func paletteListH(n int) float32 {
+// paletteListH 是命令列表该占的高度：够放下所有条目，最多到 paletteMaxH；
+// 窗口更矮时按窗口收。列表超出这个高度就自己滚 —— 以前这里只把高度夹住、
+// 条目照样一条条往下画，命令一多，后面几条就跑到面板外面去了。
+func paletteListH(n int, winH float32) float32 {
 	if n == 0 {
-		return 0
+		// 空结果也要留一行给那句「没有匹配的命令」：高度给 0 的话，
+		// 列表的裁剪会把这句提示一起裁掉。
+		return float32(paletteRowH + 2*palettePad)
 	}
-	h := n*(paletteRowH+paletteGap) + 2*palettePad
-	return float32(min(h, paletteMaxH))
+	maxH := float32(paletteMaxH)
+	if winH > 0 {
+		// 面板上面还有搜索框、上下留白和投影：至少给窗口留下这些，
+		// 列表再去分剩下的。
+		maxH = min(maxH, max(float32(paletteRowH+2*palettePad), winH-220))
+	}
+	// 能放几整行就放几整行：留半行虽然能暗示「下面还有」，但最后一行被
+	// 圆角底边切掉半截看着像画坏了；滚动条负责说「还有」。
+	rows := max(1, int((maxH-2*palettePad)/(paletteRowH+paletteGap)))
+	h := float32(min(n, rows)*(paletteRowH+paletteGap) + 2*palettePad)
+	return h
 }
 
 // paletteDialog 是命令栏本体。
@@ -168,7 +193,14 @@ func (a *app) paletteDialog(c *ui.Context, pal palette) {
 	}
 	t := c.Theme()
 	cmds := a.matchedCommands()
+	// 改词就回到第一条：筛选前后第 N 条已经不是同一条命令了。
+	if a.palette.query != a.palette.lastQuery {
+		a.palette.lastQuery = a.palette.query
+		a.palette.sel = 0
+		a.palette.scrollSel = true
+	}
 	a.palette.sel = clampSel(a.palette.sel, len(cmds))
+	_, winH := c.Size()
 
 	open := true
 	ui.DialogBase(c, &open, func(back, panel ui.Element) {
@@ -195,8 +227,10 @@ func (a *app) paletteDialog(c *ui.Context, pal palette) {
 			switch {
 			case in.Shortcut(0, ui.KeyDown):
 				a.palette.sel = min(a.palette.sel+1, max(0, len(cmds)-1))
+				a.palette.scrollSel = true
 			case in.Shortcut(0, ui.KeyUp):
 				a.palette.sel = max(a.palette.sel-1, 0)
+				a.palette.scrollSel = true
 			}
 			if in.Submitted() {
 				a.runCommand(cmds)
@@ -205,17 +239,24 @@ func (a *app) paletteDialog(c *ui.Context, pal palette) {
 				a.palette.sel = clampSel(a.palette.sel, len(cmds))
 			}
 
-			ui.Column(c).Padding(palettePad).Gap(paletteGap).
-				Height(paletteListH(len(cmds))).Children(func() {
-				if len(cmds) == 0 {
-					ui.Text(c, T("没有匹配的命令", "No matching commands")).
-						FontSize(textBodySM).TextColor(pal.inkSubtle).Padding(8)
-					return
-				}
-				for i := range cmds {
-					a.paletteRow(c, t, pal, i, cmds)
-				}
+			list := ui.Scroll(c).Key("palette-list").
+				Height(paletteListH(len(cmds), winH)).Shrink(0)
+			list.Children(func() {
+				ui.Column(c).Padding(palettePad).Gap(paletteGap).Children(func() {
+					if len(cmds) == 0 {
+						ui.Text(c, T("没有匹配的命令", "No matching commands")).
+							FontSize(textBodySM).TextColor(pal.inkSubtle).Padding(8)
+						return
+					}
+					for i := range cmds {
+						row := a.paletteRow(c, t, pal, i, cmds)
+						if i == a.palette.sel && a.palette.scrollSel {
+							row.ScrollIntoView()
+						}
+					}
+				})
 			})
+			a.palette.scrollSel = false
 		})
 	})
 	if !open {
@@ -223,7 +264,7 @@ func (a *app) paletteDialog(c *ui.Context, pal palette) {
 	}
 }
 
-func (a *app) paletteRow(c *ui.Context, t *ui.Theme, pal palette, i int, cmds []command) {
+func (a *app) paletteRow(c *ui.Context, t *ui.Theme, pal palette, i int, cmds []command) ui.Element {
 	cmd := cmds[i]
 	sel := i == a.palette.sel
 
@@ -261,6 +302,7 @@ func (a *app) paletteRow(c *ui.Context, t *ui.Theme, pal palette, i int, cmds []
 		a.palette.sel = i
 		a.runCommand(cmds)
 	}
+	return row
 }
 
 // runCommand 执行选中的那条命令并收起命令栏。

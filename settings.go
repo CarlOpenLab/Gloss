@@ -326,8 +326,8 @@ func (a *app) settingsDialog(c *ui.Context, pal palette) {
 		return
 	}
 	winW, winH := c.Size()
-	panelW := clamp(winW-40, 640, 860)
-	panelH := clamp(winH-40, 360, 660)
+	panelW := settingsPanelW(winW)
+	panelH := clamp(winH-40, 360, 680)
 
 	open := true
 	ui.DialogBase(c, &open, func(back, panel ui.Element) {
@@ -341,6 +341,12 @@ func (a *app) settingsDialog(c *ui.Context, pal palette) {
 		a.settingsOn = false
 	}
 }
+
+// settingsPanelW 是设置窗口的宽度：窗口两侧各留 20，最小 640、最大 980。
+//
+// 上限从 860 放到 980：模型设置是卡中卡（供应商清单 + 表单），860 时右边
+// 只剩 360 上下，「供应商名称」这种标签都会被截成「Provider N...」。
+func settingsPanelW(winW float32) float32 { return clamp(winW-40, 640, 980) }
 
 // settingsSidebarItem 是左栏的一条导航。选中态用表面阶梯 + 一点抬升，
 // 强调色只落在图标上：全屏同时亮着的「选中」已经够多了。
@@ -1174,12 +1180,18 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 	// 这一页是卡中卡：左边供应商清单、右边表单。窗口缩小时按卡片实际
 	// 宽度把左栏和表单一起收，别让输入框冲出卡片。
 	winW, _ := c.Size()
-	panelW := clamp(winW-40, 640, 860)
+	panelW := settingsPanelW(winW)
 	cardW := panelW - settingsNavW - 2*settingsCardGap
-	listW := clamp(cardW*0.34, 176, 224)
+	// 清单栏收窄一点：它只放「名称 + 拖动手柄 + 一个圆点」，176 就够；
+	// 多出来的宽度全给右边那张表单。
+	listW := clamp(cardW*0.34, 196, 224)
 	contentW := cardW - listW - 2*settingsPadX
 	fieldW := clamp(contentW-80, 120, 230)
-	stacked := contentW < 300
+	// 表单可用宽度小于 420 时把标签挪到控件上方：标签和 230px 的输入框
+	// 并排时只剩 100 出头，「供应商名称」都被截成「Provider N...」。
+	stacked := contentW < 420
+	// 模型一行放不下「ID + 标签 + 开关」时改成两行：ID 一行、标签一行。
+	twoLineModels := contentW < 470
 
 	ui.Row(c).FillWidth().FillHeight().Children(func() {
 		// —— 左：供应商列表 ——
@@ -1188,12 +1200,16 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 			settingsField(c, pal, &a.providerSearch,
 				T("搜索供应商", "Search providers"), false).FillWidth()
 
-			panel := ui.Column(c).Grow(1).FillWidth().MinHeight(0).
+			// 列表按内容长、最多 360：只有一家供应商时不该是一整块空面板，
+			// 「添加供应商」贴在列表下面，比钉在整栏底部更近。
+			rows := a.visibleProviders()
+			listH := float32(len(rows))*providerRowH + float32(max(0, len(rows)-1)) + 8
+			listH = clamp(listH, providerRowH+10, 360)
+			panel := ui.Column(c).Height(listH).Shrink(0).FillWidth().MinHeight(0).
 				Radius(settingsGroupR).Background(pal.chip).Clip()
 			panel.Children(func() {
 				ui.Scroll(c).Grow(1).FillWidth().Padding(3, 4).Children(func() {
 					ui.Column(c).Gap(1).FillWidth().Children(func() {
-						rows := a.visibleProviders()
 						for k, i := range rows {
 							next := len(a.editCfg.Providers)
 							if k+1 < len(rows) {
@@ -1208,6 +1224,7 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 			add := settingsButton(c, pal, T("添加供应商", "Add Provider"), false, false)
 			add.FillWidth()
 			add.Menu(func(m *ui.Menu) { a.addProviderMenu(m) })
+			ui.Spacer(c)
 		})
 
 		// —— 右：选中那家的详情 ——
@@ -1354,7 +1371,11 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 							})
 						}
 						if stacked {
-							settingsFieldRow(c, pal, T("接口协议", "Protocol"), "", protocolControl)
+							// 分段控件按内容宽收：竖排时它会沿列铺满整行，
+							// 右半截是一条空轨道，看着像没画完。
+							settingsFieldRow(c, pal, T("接口协议", "Protocol"), "", func() {
+								ui.Row(c).Children(protocolControl)
+							})
 						} else {
 							settingsRow(c, pal, T("接口协议", "Protocol"), "", protocolControl)
 						}
@@ -1390,14 +1411,31 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 									FillWidth().Clip()
 								raisedSurface(list, pal)
 								list.Children(func() {
+									// 标签挤在 ID 和开关之间时会被压成一条几个字宽的
+									// 窄条（「本 地」竖着排）。所以标签一律不收缩，
+									// 让 ID 先省略；整个一行放不下的时候，标签落到
+									// 第二行去（见 twoLineModels）。
+									tags := func(m modelTagInfo) {
+										for _, tag := range m.Tags {
+											ui.Box(c).Shrink(0).Padding(1, 5).Radius(radiusXS).
+												Background(pal.chip).Children(func() {
+												ui.Text(c, tag).FontSize(10).
+													TextColor(pal.textMuted).SingleLine()
+											})
+										}
+									}
 									for k, m := range filteredModels {
 										m := m
 										if k > 0 {
 											ui.Box(c).Height(1).FillWidth().Background(pal.rowDivider)
 										}
 										isCurrent := p.Model == m.ID
-										row := ui.ButtonBase(c).Height(34).FillWidth().Padding(0, 8).
-											Cursor(ui.CursorPointer).Label(m.ID)
+										rowH := float32(34)
+										if twoLineModels {
+											rowH = 46
+										}
+										row := ui.ButtonBase(c).Height(rowH).FillWidth().Padding(0, 8).
+											Cursor(ui.CursorPointer).Label(m.ID).Tooltip(m.ID)
 										if isCurrent {
 											row.Background(pal.selection)
 										} else if row.Hovered() {
@@ -1406,18 +1444,21 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 										fadeColors(row)
 										row.Children(func() {
 											ui.Row(c).AlignItems(ui.Center).Gap(6).Fill().Children(func() {
-												ui.Text(c, m.ID).FontSize(textBodySM).
-													TextColor(pal.text).SingleLine()
-												if !stacked {
-													for _, tag := range m.Tags {
-														ui.Box(c).Padding(1, 6).Radius(radiusXS).
-															Background(pal.chip).Children(func() {
-															ui.Text(c, tag).FontSize(10).
-																TextColor(pal.textMuted)
-														})
-													}
+												if twoLineModels {
+													ui.Column(c).Grow(1).MinWidth(0).Gap(3).Children(func() {
+														ui.Text(c, m.ID).FontSize(textBodySM).
+															TextColor(pal.text).SingleLine()
+														if len(m.Tags) > 0 {
+															ui.Row(c).Gap(4).Children(func() { tags(m) })
+														}
+													})
+												} else {
+													ui.Text(c, m.ID).FontSize(textBodySM).
+														TextColor(pal.text).SingleLine().
+														Shrink(1).MinWidth(0)
+													tags(m)
+													ui.Spacer(c)
 												}
-												ui.Spacer(c)
 												swVal := isCurrent
 												sw := settingsSwitch(c, pal,
 													Tf("使用模型 %s", "Use model %s", m.ID), &swVal)
@@ -1668,7 +1709,7 @@ func (a *app) providerRow(c *ui.Context, pal palette, t *ui.Theme, i, next int) 
 				txtCol = pal.text
 			}
 			ui.Text(c, label).FontSize(textBodySM).FontWeight(weightMedium).
-				TextColor(txtCol).SingleLine()
+				TextColor(txtCol).SingleLine().Shrink(1).MinWidth(0)
 			ui.Spacer(c)
 			// 状态圆点：只有当前生效的供应商是实心绿点，其余一律
 			// 空心描边 —— 加进来的≠启用的，别让每行都像开着。

@@ -594,6 +594,14 @@ func (a *app) commitRow(c *ui.Context, pal palette, i int) {
 	if row.Hovered() && !sel {
 		row.Background(pal.surface2)
 	}
+	// 图的底色跟着这一行的实际底色走：节点外圈铺的是它，选中 / 悬停时
+	// 行底色变了，这一圈也得跟着变，不然圆点周围会多出一块白斑。
+	nodeBg := pal.surface1
+	if sel {
+		nodeBg = pal.selection
+	} else if row.Hovered() {
+		nodeBg = pal.surface2
+	}
 	fadeColors(row)
 	// 徽章上那一下双击也要拦住整行的单击：芯片是行里的子元素，指针事件一
 	// 路冒泡到行，不拦的话双击检出的同时还会把选中切回这个提交（紧接着
@@ -605,7 +613,7 @@ func (a *app) commitRow(c *ui.Context, pal palette, i int) {
 		if i < len(a.graph) {
 			ui.Box(c).Width(graphWidth(a.maxLanes)).Height(commitH).Shrink(0).
 				Draw(func(p *ui.Painter, r ui.Rect) {
-					drawGraphRow(p, r, pal, a.graph[i], a.maxLanes)
+					drawGraphRow(p, r, pal, a.graph[i], a.maxLanes, nodeBg)
 				})
 		}
 
