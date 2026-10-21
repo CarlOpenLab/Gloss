@@ -36,6 +36,8 @@ type Config struct {
 	SidebarOff bool `json:"sidebarOff,omitempty"`
 	// SidebarWidth 是侧栏宽度，0 表示默认值。
 	SidebarWidth float32 `json:"sidebarWidth,omitempty"`
+	// ProjectsHeight 是侧栏里「项目」那一段的高度，0 表示跟着内容长。
+	ProjectsHeight float32 `json:"projectsHeight,omitempty"`
 	// FilePaneWidth 是主区文件列表栏宽度，0 表示默认值。
 	FilePaneWidth float32 `json:"filePaneWidth,omitempty"`
 	// DetailPaneWidth 是主区提交详情栏的宽度（历史 tab 里文件列表左边那一栏），

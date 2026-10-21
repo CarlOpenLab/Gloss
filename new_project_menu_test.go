@@ -8,16 +8,16 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// projectPlusRect 返回标签栏 [+] 的矩形。
+// projectPlusRect 返回「项目」分组标题右边 [+] 的矩形。
 //
 // [+] 是纯图标按钮、没有可见文字，但它的无障碍 Label 会被 Tester 记成 label
 // 节点，所以直接按标签找 —— 比从相邻标签的宽度推算坐标稳（标签有没有关闭
 // 按钮、有没有脏标记都会让推算错位）。
 func projectPlusRect(t *testing.T, tt *ui.Tester) ui.Rect {
 	t.Helper()
-	r, ok := tt.Find(T("新建项目标签页", "New Project Tab"))
+	r, ok := tt.Find(T("添加项目", "Add Project"))
 	if !ok {
-		t.Fatalf("标签栏里找不到 [+] 按钮")
+		t.Fatalf("项目分组标题上找不到 [+] 按钮")
 	}
 	return r
 }

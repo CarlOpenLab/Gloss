@@ -196,10 +196,7 @@ func (a *app) compareBar(c *ui.Context, pal palette) {
 	branches := a.comparableBranches()
 
 	winW, _ := c.Size()
-	mainW := winW
-	if a.sidebarOn {
-		mainW -= a.sidebarWidth(c)
-	}
+	mainW := winW - a.sidebarVisualWidth(c)
 	narrow := mainW < compareBarWideW
 
 	// 图标与标题。窄窗口里省掉「分支对比」四个字，把宽度让给分支按钮。

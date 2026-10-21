@@ -47,6 +47,16 @@ type palette struct {
 	hairline         ui.Color // 基础 1px 细线（§2.2）
 	hairlineStrong   ui.Color // 输入框外框、激活态卡片
 	hairlineTertiary ui.Color // 悬停态边框、弹窗外围
+	// 设置分组面板与表单控件的表面（agent-desktop-ui §2.1 / §5）。
+	// chip 是分组容器的底、rowDivider 是行与行之间那一道发丝线；
+	// control / controlHover 是次要按钮与分段轨道赖以站起来的填充。
+	chip         ui.Color
+	rowDivider   ui.Color
+	control      ui.Color
+	controlHover ui.Color
+	// overlay 是模态背后那层压暗，kbd 是快捷键提示的底色（§2.1）。
+	overlay ui.Color
+	kbd     ui.Color
 
 	ink         ui.Color // 高亮标题、正文基准（§2.3）
 	inkMuted    ui.Color // 常规正文、文件名、按钮文字
@@ -433,6 +443,12 @@ func paletteFor(t *ui.Theme, ls laneSet) palette {
 			hairline:         ui.RGBA(255, 255, 255, 0.07),
 			hairlineStrong:   ui.RGBA(255, 255, 255, 0.11),
 			hairlineTertiary: ui.RGBA(255, 255, 255, 0.16),
+			chip:             ui.RGBA(255, 255, 255, 0.07),
+			rowDivider:       ui.RGBA(255, 255, 255, 0.07),
+			control:          ui.Hex("#404047"),
+			controlHover:     ui.Hex("#4a4a52"),
+			overlay:          ui.RGBA(0, 0, 0, 0.35),
+			kbd:              ui.RGBA(255, 255, 255, 0.06),
 			// 灰阶（§2.3）
 			ink:         ui.Hex("#ececf0"),
 			inkMuted:    ui.Hex("#a9a9b4"),
@@ -487,6 +503,12 @@ func paletteFor(t *ui.Theme, ls laneSet) palette {
 		hairline:         ui.RGBA(0, 0, 0, 0.06),
 		hairlineStrong:   ui.RGBA(0, 0, 0, 0.10),
 		hairlineTertiary: ui.RGBA(0, 0, 0, 0.14),
+		chip:             ui.RGBA(0, 0, 0, 0.045),
+		rowDivider:       ui.RGBA(0, 0, 0, 0.07),
+		control:          ui.Hex("#ffffff"),
+		controlHover:     ui.Hex("#f7f7f9"),
+		overlay:          ui.RGBA(10, 10, 30, 0.12),
+		kbd:              ui.RGBA(0, 0, 0, 0.04),
 		ink:              ui.Hex("#1d1d1f"),
 		inkMuted:         ui.Hex("#6e6e78"),
 		inkSubtle:        ui.Hex("#8d8d97"),

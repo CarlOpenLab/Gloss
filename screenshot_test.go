@@ -160,6 +160,26 @@ func TestDumpScreenshot(t *testing.T) {
 	a.connectMagpie()
 	tt.Frame()
 	shot("/tmp/de-shot-settings-magpie.png")
+
+	// 设置其余几页：通用偏好、提示词、Git 配置、关于。
+	a.settingsTab = settingsTabGeneral
+	tt.SetDark(false)
+	tt.Frame()
+	shot("/tmp/de-shot-settings-general.png")
+	tt.SetDark(true)
+	tt.Frame()
+	shot("/tmp/de-shot-settings-general-dark.png")
+	tt.SetDark(false)
+	a.settingsTab = settingsTabPrompts
+	tt.Frame()
+	shot("/tmp/de-shot-settings-prompts.png")
+	a.settingsTab = settingsTabGit
+	tt.Frame()
+	shot("/tmp/de-shot-settings-git.png")
+	a.settingsTab = settingsTabAbout
+	tt.Frame()
+	shot("/tmp/de-shot-settings-about.png")
+	a.settingsTab = settingsTabModels
 	a.settingsOn = false
 
 	// 设置里的「更新」页。无头环境里 updater 插件没注册（mygo.Updater.Enabled()

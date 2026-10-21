@@ -35,23 +35,32 @@ func main() {
 		// 键在 Gloss 里另有主人。
 		mygo.App.SetMenu(buildAppMenu(a))
 
-		win := mygo.NewWindow(mygo.WindowOptions{
+		opts := mygo.WindowOptions{
 			Title:     "Gloss",
 			Width:     1280,
 			Height:    860,
 			MinWidth:  720,
 			MinHeight: 420,
 			StateKey:  "main",
-			// 标题栏不画系统的那条，改由 view 自己画（见 app.go 的 toolbar），
-			// 这样红绿灯能和工具栏内容在同一行里对齐。
+			// 标题栏不画系统的那条，改由 view 自己画（见 app.go 的 toolbar）。
 			TitleBarStyle: mygo.TitleBarHidden,
+			Vibrancy:      mygo.VibrancySidebar,
+			Content:       ui.View(a.view),
+		}
+		if isMacPlatform() {
+			// macOS：连系统红绿灯一起藏掉，由 view 自绘（见 shell_style.go
+			// 的 windowTrafficLights）。Frameless 只收走标题栏与那三颗按钮，
+			// 窗口仍是可缩放、可拖动、有阴影的普通窗口。
+			opts.Frameless = true
+		} else {
+			// 其他平台保留系统按钮，位置照旧贴着标题栏中线。
+			//
 			// 把红绿灯从系统默认的位置（贴着窗口顶边那条 32 高的带子）挪到
 			// 工具栏的正中间。系统默认位置是给「32 高的标题栏」留的，而工具栏
 			// 把红绿灯对齐到 38 高的顶栏正中间（关闭按钮高 14，12 + 14 + 12 = 38）。
-			TrafficLightPosition: &mygo.Point{X: 18, Y: 12},
-			Vibrancy:             mygo.VibrancySidebar,
-			Content:              ui.View(a.view),
-		})
+			opts.TrafficLightPosition = &mygo.Point{X: 18, Y: 12}
+		}
+		win := mygo.NewWindow(opts)
 		a.win = win
 		a.syncAppIcon()
 		// 后台 goroutine 改状态必须走这里：它把闭包投到主线程执行，

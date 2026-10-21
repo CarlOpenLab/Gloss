@@ -77,8 +77,8 @@ func TestProjectPathOnlyOnRowTooltip(t *testing.T) {
 	if !ok {
 		t.Fatalf("侧栏里找不到项目行：%q", tt.Texts())
 	}
-	if !tt.HasText(Tf("项目视图：%s", "Project view: %s", T("改动", "Changes"))) {
-		t.Fatalf("找到的 %q 不在项目侧栏里：%q", a.repoName, tt.Texts())
+	if tab.X >= a.sidebarWidth(nil) {
+		t.Fatalf("找到的 %q 不在项目侧栏里（x=%.0f）：%q", a.repoName, tab.X, tt.Texts())
 	}
 	// 完整路径不该常驻；只有悬停提示才该给出它。
 	if tt.HasText(a.repoPath) {
@@ -115,9 +115,8 @@ func TestProjectRowShowsNameOnly(t *testing.T) {
 
 // 切换激活项目时，项目行的宽高不能跟着变。
 //
-// 激活项目会在它下面展开「改动 / 历史」和分支行，所以后续项目在纵向
-// 移动是预期行为；真正的抖动是行宽变化。曾经激活态把名字换成 semibold，
-// 字宽多一个多百分点，横向边界就会跟着跳。
+// 项目行不再有展开内容，激活只换底色和文字颜色；这条盯的是横向抖动：
+// 曾经激活态把名字换成 semibold，字宽多一个多百分点，横向边界就会跟着跳。
 func TestProjectSwitchKeepsRowWidthStill(t *testing.T) {
 	a := richApp(t)
 	a.openInNewTab(a.repoPath)
@@ -144,7 +143,7 @@ func TestProjectSwitchKeepsRowWidthStill(t *testing.T) {
 	boxes := func() map[string]ui.Rect {
 		tt.Frame()
 		out := map[string]ui.Rect{}
-		for _, s := range []string{"zz-alpha", "zz-beta-longer", T("新建项目标签页", "New Project Tab")} {
+		for _, s := range []string{"zz-alpha", "zz-beta-longer", T("添加项目", "Add Project")} {
 			r, ok := tt.Find(s)
 			if !ok {
 				t.Fatalf("界面上找不到 %q：%q", s, tt.Texts())
@@ -183,8 +182,8 @@ func TestToolbarHugsSidebarEdge(t *testing.T) {
 	if !ok {
 		t.Fatalf("侧栏收起时找不到显示按钮：%q", tt.Texts())
 	}
-	if minX := realTitleBar.Left + shellCardGap; show.X < minX {
-		t.Errorf("侧栏收起时第一个工具栏控件左边 x=%.0f，该给窗口按钮留到 %.0f", show.X, minX)
+	if minX := trafficLightsRight() + shellCardGap; show.X < minX {
+		t.Errorf("侧栏收起时第一个工具栏控件左边 x=%.0f，该给自绘红绿灯留到 %.0f", show.X, minX)
 	}
 
 	seg, ok := tt.Find("改动")
@@ -347,10 +346,10 @@ func TestTreeSelectionIsPill(t *testing.T) {
 	//
 	// 判据从「偏蓝」换成亮度了：设计规范把选中底带从中性的灰阶里取色
 	// （见 palette.selection），不再用强调色淡染，所以 b-r 这条老判据
-	// 在底带上约等于 0，量不出任何东西。亮度这一头分得很开 —— 侧栏底色
-	// 约 0.035、悬停的 Surface 约 0.062、选中底带约 0.126，0.09 落在
-	// 悬停和选中之间，既认得出选中，又不会把悬停误当选中。
-	const bandLum = 0.09
+	// 在底带上约等于 0，量不出任何东西。亮度这一头分得很开 —— 侧栏在深色
+	// 渐变上的底色约 0.105、悬停约 0.15、选中底带约 0.20，0.16 落在悬停
+	// 和选中之间，既认得出选中，又不会把悬停误当选中。
+	const bandLum = 0.16
 
 	// bandRow 判断 y 这一行是不是选中底带：数整行里「够亮」的像素占比。
 	//
@@ -777,11 +776,11 @@ func TestSettingsFitsWhenNarrow(t *testing.T) {
 	}
 }
 
-// 工作区导航（改动 / 历史）和终端 / 编辑器并成工具栏那一段四选一。
+// 工作区导航（改动 / 历史 / 终端 / 编辑器）在工具栏那一段四选一。
 //
-// 项目侧栏也提供改动 / 历史入口，因此它的行使用独立的无障碍标签；工具栏
-// 四格仍叫「改动 / 历史 / 终端 / 编辑器」。判据是这四格必须落在侧栏右边缘
-// 之后，排成一行，并从左到右依次排列。哪一格缩回侧栏或顺序变了都会失败。
+// 侧栏现在只有项目与分支，不再摆改动 / 历史的入口；判据是这四格必须落在
+// 侧栏右边缘之后，排成一行，并从左到右依次排列。哪一格缩回侧栏或顺序变了
+// 都会失败。
 func TestWorkspaceNavLivesInToolbar(t *testing.T) {
 	a := richApp(t)
 
@@ -792,12 +791,6 @@ func TestWorkspaceNavLivesInToolbar(t *testing.T) {
 
 	sw := a.sidebarWidth(nil)
 	order := []string{"改动", "历史", "终端", "编辑器"}
-	for _, label := range order[:2] {
-		sidebarLabel := Tf("项目视图：%s", "Project view: %s", label)
-		if !tt.HasText(sidebarLabel) {
-			t.Errorf("项目侧栏里找不到 %q 这一行：%q", sidebarLabel, tt.Texts())
-		}
-	}
 	rects := make([]ui.Rect, 0, len(order))
 	for _, label := range order {
 		r, ok := tt.Find(label)
@@ -819,5 +812,49 @@ func TestWorkspaceNavLivesInToolbar(t *testing.T) {
 			t.Errorf("四格没排在一行：「%s」y=%.0f，「%s」y=%.0f",
 				order[i-1], rects[i-1].Y, order[i], rects[i].Y)
 		}
+	}
+}
+
+// macOS 的窗口按钮由视图自己画（main.go 用 Frameless 收走系统那三颗），
+// 位置仍是左上角：三颗都要有、排成一行、落在顶栏中线上，并且不压住卡片里
+// 的工具栏内容。
+func TestWindowTrafficLightsAreSelfDrawn(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+
+	labels := []string{
+		T("关闭窗口", "Close Window"),
+		T("最小化窗口", "Minimize Window"),
+		T("缩放窗口", "Zoom Window"),
+	}
+	var last ui.Rect
+	for i, label := range labels {
+		r, ok := tt.Find(label)
+		if !ok {
+			t.Fatalf("顶栏上找不到自绘窗口按钮 %q：%q", label, tt.Texts())
+		}
+		if r.X < 6 || r.X+r.W > trafficLightsRight()+2 {
+			t.Errorf("%q 的横坐标 x=%.0f..%.0f 不在左上角红绿灯区（6..%.0f）里",
+				label, r.X, r.X+r.W, trafficLightsRight()+2)
+		}
+		if mid := r.Y + r.H/2; mid < shellBarMid-2 || mid > shellBarMid+2 {
+			t.Errorf("%q 的中心 y=%.0f，该在顶栏中线 %.0f 上", label, mid, float32(shellBarMid))
+		}
+		if i > 0 && r.X <= last.X {
+			t.Errorf("%q 没有排在前一颗右边", label)
+		}
+		last = r
+	}
+
+	// 侧栏收起时，卡片里的工具栏要让开它们，不能从圆点底下穿过去。
+	a.setSidebar(false)
+	tt.Frame()
+	show, ok := tt.Find(T("显示侧栏", "Show Sidebar"))
+	if !ok {
+		t.Fatalf("侧栏收起后找不到显示按钮：%q", tt.Texts())
+	}
+	if show.X < trafficLightsRight() {
+		t.Errorf("显示侧栏按钮 x=%.0f 压在红绿灯（右沿 %.0f）下面", show.X, trafficLightsRight())
 	}
 }

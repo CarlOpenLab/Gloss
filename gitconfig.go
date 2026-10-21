@@ -300,20 +300,17 @@ func sortRowsByKey(rows []*gitConfigRow) {
 
 // gitSettingsPane 是「Git 配置」这一页。
 func (a *app) gitSettingsPane(c *ui.Context, pal palette) {
-	t := c.Theme()
 	a.ensureGitConfig()
 
-	ui.Scroll(c).FillWidth().FillHeight().Padding(20, 28).Children(func() {
-		ui.Column(c).Gap(18).FillWidth().Children(func() {
-			ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-				drawIcon(c, iconGitBranch, 15, t.Accent)
-				ui.Text(c, T("Git 配置", "Git Config")).FontSize(textBody).FontWeight(weightSemibold).TextColor(pal.ink)
-				ui.Spacer(c)
+	ui.Scroll(c).FillWidth().FillHeight().
+		Padding(settingsPadTop, settingsPadX, settingsPadBot, settingsPadX).Children(func() {
+		ui.Column(c).Gap(22).FillWidth().MaxWidth(620).Children(func() {
+			ui.Row(c).AlignItems(ui.Center).Gap(12).Children(func() {
+				ui.Text(c, T("改的是 git 自己的配置文件，不是 Gloss 的设置。这里只管提交时署的身份（姓名与邮箱）—— 分支、远程那些在各自的面板里改。同名项按 项目级 > 全局 > 系统级 生效；保存时只写动过的那几项，配置文件里的注释和顺序都不动。",
+					"These are git's own config files, not Gloss preferences. This page covers only the identity commits are signed with (name and email) — branches and remotes live in their own panes. For duplicate keys, local beats global beats system; saving touches only what you changed, leaving comments and ordering intact.")).
+					FontSize(textBodySM).TextColor(pal.textMuted).LineHeight(1.4).Grow(1).MinWidth(0)
 				a.gitConfigReloadButton(c, pal)
 			})
-			ui.Text(c, T("改的是 git 自己的配置文件，不是 Gloss 的设置。这里只管提交时署的身份（姓名与邮箱）—— 分支、远程那些在各自的面板里改。同名项按 项目级 > 全局 > 系统级 生效；保存时只写动过的那几项，配置文件里的注释和顺序都不动。",
-				"These are git's own config files, not Gloss preferences. This page covers only the identity commits are signed with (name and email) — branches and remotes live in their own panes. For duplicate keys, local beats global beats system; saving touches only what you changed, leaving comments and ordering intact.")).
-				FontSize(11).TextColor(t.TextMuted)
 
 			if a.gitCfg.loading && len(a.gitCfg.groups) == 0 {
 				ui.Text(c, T("正在读取配置…", "Reading config…")).FontSize(textBodySM).TextColor(pal.inkSubtle)
@@ -326,6 +323,16 @@ func (a *app) gitSettingsPane(c *ui.Context, pal palette) {
 			}
 		})
 	})
+}
+
+// gitValueWidth 是身份值那一列的宽度：宽窗口固定 320，窄窗口留出
+// 210 的名字格之后把余量让给它，再窄就收到 90。
+func (a *app) gitValueWidth(c *ui.Context) float32 {
+	winW, _ := c.Size()
+	panelW := clamp(winW-40, 640, 860)
+	cardW := panelW - settingsNavW - 2*settingsCardGap
+	contentW := cardW - 2*settingsPadX
+	return clamp(contentW-210-12, 90, 320)
 }
 
 // gitConfigReloadButton 是这一页右上角那颗「重新读取」。
@@ -365,11 +372,10 @@ func (a *app) gitConfigGroupCard(c *ui.Context, pal palette, g *gitConfigGroup) 
 	// 项目级这栏多一句「身份从哪儿来」：跟随全局，还是这个仓库单独设一份。
 	// 另外两栏没得选 —— 全局本来就是「全局那份」，系统级只读。
 	local := g.Scope == gitrepo.ScopeLocal
-	t := c.Theme()
-	ui.Column(c).Gap(6).FillWidth().Children(func() {
-		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-			drawIcon(c, g.Icon, 14, t.Accent)
-			ui.Text(c, g.Title).FontSize(textBodySM).FontWeight(weightSemibold).TextColor(pal.ink)
+	ui.Column(c).Gap(8).FillWidth().Children(func() {
+		ui.Row(c).AlignItems(ui.Center).Gap(8).Padding(0, 4).Children(func() {
+			drawIcon(c, g.Icon, 14, pal.textMuted)
+			ui.Text(c, g.Title).FontSize(textBodySM).FontWeight(weightSemibold).TextColor(pal.textMuted)
 			if g.ReadOnly {
 				specChip(c, pal, T("只读", "Read-only"), ui.Transparent, 18, textCaption)
 			}
@@ -379,11 +385,12 @@ func (a *app) gitConfigGroupCard(c *ui.Context, pal palette, g *gitConfigGroup) 
 			desc += "　" + strings.Join(g.Files, "　·　")
 		}
 		if desc != "" {
-			ui.Text(c, desc).FontSize(textCaption).TextColor(pal.inkSubtle).SingleLine()
+			ui.Text(c, desc).FontSize(textBodySM).TextColor(pal.textFaint).SingleLine().
+				LineHeight(1.35)
 		}
 
-		ui.Column(c).Radius(radiusMD).Background(pal.surface2).Border(1, pal.hairline).
-			FillWidth().Children(func() {
+		ui.Column(c).Radius(settingsGroupR).Background(pal.chip).
+			FillWidth().Padding(4, 16).Children(func() {
 			// 没打开仓库时项目级没什么可改的：摆出两个空框、点保存也不知道往
 			// 哪儿写。
 			if local && a.gitConfigDir() == "" {
@@ -431,12 +438,14 @@ func (a *app) gitIdentityScopeRow(c *ui.Context, pal palette, g *gitConfigGroup)
 		note = T("提交时用全局那份身份，这个仓库的 .git/config 里不写 user.name / user.email。",
 			"Commits use the global identity; this repository keeps no user.name / user.email of its own.")
 	}
-	ui.Column(c).Gap(5).Padding(9, 14).FillWidth().Children(func() {
-		ui.Row(c).AlignItems(ui.Center).Gap(10).FillWidth().Children(func() {
-			ui.Text(c, T("身份来源", "Identity")).Width(210).Shrink(0).
+	ui.Column(c).Gap(5).Padding(11, 0).FillWidth().Children(func() {
+		ui.Row(c).AlignItems(ui.Center).Gap(12).FillWidth().Children(func() {
+			// 名字在左、控件在右：space-between，不是把控件摆在名字后面。
+			ui.Text(c, T("身份来源", "Identity")).Grow(1).MinWidth(0).SingleLine().
 				FontSize(textBodySM).TextColor(pal.ink)
-			ui.Segmented(c, &g.scopeSel,
-				T("跟随全局", "Inherit global"), T("单独设置", "Set here")).Label(T("身份来源", "Identity"))
+			seg := settingsSegmented(c, pal, &g.scopeSel,
+				T("跟随全局", "Inherit global"), T("单独设置", "Set here"))
+			seg.Label(T("身份来源", "Identity"))
 		})
 		ui.Text(c, note).FontSize(textCaption).TextColor(pal.inkSubtle)
 	})
@@ -488,9 +497,11 @@ func (a *app) gitIdentityInheritedRow(c *ui.Context, pal palette) {
 		if val == "" {
 			val = T("未设置 —— 提交时 git 会用主机名与邮箱兜底", "Not set — git falls back to hostname and email")
 		}
-		ui.Row(c).Padding(7, 14).AlignItems(ui.Center).Gap(10).FillWidth().Children(func() {
+		ui.Row(c).Padding(11, 0).AlignItems(ui.Center).Gap(12).FillWidth().Children(func() {
 			gitIdentityKeyCell(c, pal, key, false, false)
-			ui.Text(c, val).FontSize(textBodySM).TextColor(pal.inkMuted).Grow(1).SingleLine()
+			ui.Spacer(c)
+			ui.Text(c, val).FontSize(textBodySM).TextColor(pal.inkMuted).
+				Shrink(1).SingleLine().Ellipsis("…").TextAlign(ui.End)
 		})
 	}
 }
@@ -551,7 +562,7 @@ func (a *app) gitConfigEmptyNote(g *gitConfigGroup) string {
 // 没有的就什么也不写。提示文字给的是「下面几层现在生效的值」，清空之后会用
 // 哪个名字，眼睛直接看得见。
 func (a *app) gitConfigEditorRow(c *ui.Context, pal palette, g *gitConfigGroup, r *gitConfigRow) {
-	ui.Row(c).Padding(7, 14).AlignItems(ui.Center).Gap(10).FillWidth().Children(func() {
+	ui.Row(c).Padding(11, 0).AlignItems(ui.Center).Gap(10).FillWidth().Children(func() {
 		gitIdentityKeyCell(c, pal, r.Key, r.cleared(), r.Multi)
 		if r.Deleted {
 			// 待删的行不给编辑：这一行现在唯一有意义的事是「恢复」。
@@ -564,7 +575,11 @@ func (a *app) gitConfigEditorRow(c *ui.Context, pal palette, g *gitConfigGroup, 
 		}
 		// 输入框自带一个名字：里面的字是画出来的，不进无障碍标签表 —— 不写这
 		// 一行，读屏软件念的是一串「编辑框」，说不出这是给哪个仓库、哪一项填的。
-		input := ui.TextInput(c, &r.Value).FillWidth().Grow(1).
+		// 名字在左、输入框贴右：space-between，中间的空隙由 Spacer 吃掉。
+		ui.Spacer(c)
+		// 输入框自带一个名字：里面的字是画出来的，不进无障碍标签表 —— 不写这
+		// 一行，读屏软件念的是一串「编辑框」，说不出这是给哪个仓库、哪一项填的。
+		input := ui.TextInput(c, &r.Value).Width(a.gitValueWidth(c)).Shrink(0).
 			Label(gitIdentityInputLabel(g.Scope, r.Key))
 		if inherited := a.gitIdentityInherited(r.Key, g.Scope); inherited != "" {
 			input.Placeholder(Tf("留空则用 %s", "Empty uses %s", inherited))
@@ -602,9 +617,11 @@ func gitIdentityKeyCell(c *ui.Context, pal palette, key string, dim, multi bool)
 
 // gitConfigReadOnlyRow 是只读的一行：值排在名字右边，只看得见改不了。
 func gitConfigReadOnlyRow(c *ui.Context, pal palette, r *gitConfigRow) {
-	ui.Row(c).Padding(7, 14).AlignItems(ui.Center).Gap(10).FillWidth().Children(func() {
+	ui.Row(c).Padding(11, 0).AlignItems(ui.Center).Gap(12).FillWidth().Children(func() {
 		gitIdentityKeyCell(c, pal, r.Key, false, r.Multi)
-		ui.Text(c, r.Value).FontSize(textBodySM).TextColor(pal.inkMuted).Grow(1).SingleLine()
+		ui.Spacer(c)
+		ui.Text(c, r.Value).FontSize(textBodySM).TextColor(pal.inkMuted).
+			Shrink(1).SingleLine().Ellipsis("…").TextAlign(ui.End)
 	})
 }
 

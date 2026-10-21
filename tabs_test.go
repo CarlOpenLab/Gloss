@@ -1,7 +1,6 @@
 package main
 
 import (
-	"image"
 	"io"
 	"path/filepath"
 	"strings"
@@ -702,17 +701,10 @@ func TestSectionsSwitchToolbarAndKeys(t *testing.T) {
 	}
 }
 
-// 拖着项目行的时候，得看得见「松手会插到哪儿」。
-//
-// 这条扫像素：重排和「画出插入提示线」是两条独立的线 —— 上面那条测试盯的是
-// 重排，把提示线摘掉它照样绿，用起来却成了盲拖。
-//
-// 比法上要绕开两样东西：一是悬停底色（按住拖动时指针下的标签页仍然是悬停
-// 态，两边一样，但别处会变），二是框架画的那个拖动副本 —— 它是指纹那枚
-// 行的 0.75 不透明度拷贝，跟在指针下面，画在整棵元素树之后，正好盖住
-// 目标行这一框。所以只扫目标行上、下的两条带子：副本不会画到框外，悬停
-// 底色也出不了框，那两条带子里能变的就只有提示线本身。
-func TestProjectRowDragDrawsInsertMarker(t *testing.T) {
+// 项目行拖动：落点按整张列表算，压在行与行之间的缝里也照样能插进去 ——
+// 不必先碰到某一条提示线。拖动过程中行序不动，松手才落位；落点处浮出
+// 一块浅色空位，告诉人松手会插到哪儿。
+func TestProjectRowsDropAtGapAndEnd(t *testing.T) {
 	a := newApp()
 	repo1 := filepath.Join(t.TempDir(), "repo1")
 	repo2 := filepath.Join(t.TempDir(), "repo2")
@@ -725,8 +717,8 @@ func TestProjectRowDragDrawsInsertMarker(t *testing.T) {
 	tt := ui.NewTester(a.view, 1280, 860)
 	still(tt)
 	tt.Frame()
-	tt.Frame()
 
+	// 1) 把第一页拖到最后一页下面：落在行外的空白里也算「最末」。
 	first, ok := tt.Find("repo1")
 	if !ok {
 		t.Fatalf("找不到 repo1 那一页：%q", tt.Texts())
@@ -735,116 +727,46 @@ func TestProjectRowDragDrawsInsertMarker(t *testing.T) {
 	if !ok {
 		t.Fatalf("找不到 repo3 那一页：%q", tt.Texts())
 	}
-
-	// 扫描目标行左右两端的窄条。提示线比行宽左右各多出 5px，而拖动副本
-	// 只覆盖行本身；只看这两段外沿就能避开副本和行内的悬停底色。
-	yTop0, yTop1 := int(last.Y)-4, int(last.Y)+3
-	yBot0, yBot1 := int(last.Y+last.H)-3, int(last.Y+last.H)+4
-	left0, left1 := int(last.X)-5, int(last.X)
-	right0, right1 := int(last.X+last.W)+1, int(last.X+last.W)+6
-	type px struct{ x, y int }
-	band := func() map[px]uint32 {
-		img := tt.Image()
-		out := map[px]uint32{}
-		for _, yr := range [][2]int{{yTop0, yTop1}, {yBot0, yBot1}} {
-			for y := yr[0]; y < yr[1]; y++ {
-				if y < 0 {
-					continue
-				}
-				for _, xr := range [][2]int{{left0, left1}, {right0, right1}} {
-					for x := xr[0]; x < xr[1]; x++ {
-						out[px{x, y}] = uint32At(img, x, y)
-					}
-				}
-			}
-		}
-		return out
-	}
-	// 两帧之间在带子里动了哪些像素。
-	changed := func(before, after map[px]uint32) []px {
-		var out []px
-		for k, v := range before {
-			if w, ok := after[k]; ok && v != w {
-				out = append(out, k)
-			}
-		}
-		return out
-	}
-
-	cx := last.X + last.W/2
-	topSpot := last.Y + 4             // 最后一行上半段 ⇒ 插到它前面，线贴上沿
-	bottomSpot := last.Y + last.H - 4 // 下半段 ⇒ 插到它后面，线贴下沿
-
-	// 同一位置、不按：只有悬停，没有提示线，也没有拖动副本。
-	tt.Move(cx, topSpot)
-	tt.Frame()
-	hoverTop := band()
-	tt.Move(cx, bottomSpot)
-	tt.Frame()
-	hoverBottom := band()
-
-	// 再按住第一页，停在同样两个位置。
 	tt.Press(first.X+first.W/2, first.Y+first.H/2)
 	tt.Frame()
-	tt.Move(cx, topSpot)
+	tt.Move(last.X+last.W/2, last.Y+last.H-4)
 	tt.Frame()
-	dragTop := band()
-	tt.Move(cx, bottomSpot)
+	tt.Release(last.X+last.W/2, last.Y+last.H-4)
 	tt.Frame()
-	dragBottom := band()
+	tt.Frame()
 
-	// 上落点：左右外沿都要多出像素，而且必须贴着这一行的上沿。
-	topMarks := changed(hoverTop, dragTop)
-	if len(topMarks) == 0 {
-		t.Fatal("上边落点处没多出任何像素 —— 没有插入提示线")
+	if got := []string{a.tabs[0].path, a.tabs[1].path, a.tabs[2].path}; got[0] != repo2 || got[1] != repo3 || got[2] != repo1 {
+		t.Fatalf("拖到末尾之后顺序是 %q，想要 [%s %s %s]", got, repo2, repo3, repo1)
 	}
-	topLeft, topRight := false, false
-	for _, m := range topMarks {
-		topLeft = topLeft || m.x < int(last.X)
-		topRight = topRight || m.x >= int(last.X+last.W)
-		if m.y > int(last.Y)+2 {
-			t.Errorf("落点在上半段，提示线却画到了 y=%d（这一行上沿 %.0f）—— 该贴上沿",
-				m.y, last.Y)
-			break
-		}
-	}
-	if !topLeft || !topRight {
-		t.Errorf("上沿提示线没有横跨整行：左端=%v 右端=%v", topLeft, topRight)
+	if a.currentTab().path != repo1 {
+		t.Errorf("拖完活动页是 %s，想要 repo1 —— 拖动不该改选择", a.currentTab().path)
 	}
 
-	// 下落点：同理贴下沿。
-	bottomMarks := changed(hoverBottom, dragBottom)
-	if len(bottomMarks) == 0 {
-		t.Fatal("下边落点处没多出任何像素 —— 没有插入提示线")
+	// 2) 再把它拖到第二、三行之间的缝里：插到第三行前面。
+	// 先重新量一遍行，顺序已经变了。
+	first, _ = tt.Find("repo2")
+	moved, ok := tt.Find("repo1")
+	if !ok {
+		t.Fatalf("找不到 repo1 那一页：%q", tt.Texts())
 	}
-	bottomLeft, bottomRight := false, false
-	for _, m := range bottomMarks {
-		bottomLeft = bottomLeft || m.x < int(last.X)
-		bottomRight = bottomRight || m.x >= int(last.X+last.W)
-		if m.y < int(last.Y+last.H)-3 {
-			t.Errorf("落点在下半段，提示线却画到了 y=%d（这一行下沿 %.0f）—— 该贴下沿",
-				m.y, last.Y+last.H)
-			break
-		}
-	}
-	if !bottomLeft || !bottomRight {
-		t.Errorf("下沿提示线没有横跨整行：左端=%v 右端=%v", bottomLeft, bottomRight)
+	// repo2 下沿与 repo3 上沿之间那 2px 的缝。
+	gapY := first.Y + first.H + 1
+	tt.Press(moved.X+moved.W/2, moved.Y+moved.H/2)
+	tt.Frame()
+	tt.Move(moved.X+moved.W/2, gapY)
+	tt.Frame()
+	tt.Release(moved.X+moved.W/2, gapY)
+	tt.Frame()
+	tt.Frame()
+
+	if got := []string{a.tabs[0].path, a.tabs[1].path, a.tabs[2].path}; got[0] != repo2 || got[1] != repo1 || got[2] != repo3 {
+		t.Fatalf("落在两行之间的缝里顺序是 %q，想要 [%s %s %s]", got, repo2, repo1, repo3)
 	}
 
-	// 拖到没人的地方松手：哪儿也不插。
-	tt.Move(600, 500)
-	tt.Frame()
-	tt.Release(600, 500)
-	tt.Frame()
-	tt.Frame()
-	if got := a.tabs[0].path; got != repo1 {
-		t.Errorf("落在空白处松手却重排了：第一页成了 %s，想要 %s", got, repo1)
+	// 松手才落盘：重开 store 看到的就是拖完的顺序。
+	if got := a.store.State().OpenRepos; len(got) != 3 || got[1] != repo1 {
+		t.Errorf("落盘顺序是 %q，想要第二位是 %s", got, repo1)
 	}
-}
-
-func uint32At(img *image.RGBA, x, y int) uint32 {
-	r, g, b, al := img.At(x, y).RGBA()
-	return uint32(r)<<24 | uint32(g)<<16 | uint32(b)<<8 | uint32(al>>8)
 }
 
 // pasteConn 冒充终端的对端：记下写进来的一切字节。
@@ -940,5 +862,39 @@ func TestTerminalPasteForwardsImageKey(t *testing.T) {
 	conn.mu.Unlock()
 	if strings.Contains(got, "\x16") {
 		t.Errorf("有文本时不该补发 Ctrl+V，实际写了 %q", got)
+	}
+}
+
+// 切换项目只换工作区，不碰各项目自己的终端会话。
+//
+// 会话挂在 repoTab 上（见 repoTab.terms），saveActiveTab / restoreActiveTab
+// 都不动它；这条测试把这份约定钉死：切走再切回来，会话个数、顺序和指针
+// 都必须原样，不能像重开项目那样重新起 shell。
+func TestSwitchProjectKeepsTerminals(t *testing.T) {
+	a := richApp(t)
+	a.openInNewTab(a.repoPath)
+	other := committedRepoDir(t)
+	a.openInNewTab(other)
+	settle(t, a)
+
+	first := a.tabs[0]
+	a.newTerminalSession(first)
+	a.newTerminalSession(first)
+	kept := []*termSession{first.terms[0], first.terms[1]}
+	first.termActive = 1
+
+	a.switchTab(1)
+	settle(t, a)
+	a.switchTab(0)
+	settle(t, a)
+
+	if got := len(first.terms); got != 2 {
+		t.Fatalf("切走再切回后终端会话该还是 2 个，实际 %d 个", got)
+	}
+	if first.terms[0] != kept[0] || first.terms[1] != kept[1] {
+		t.Fatalf("切项目后终端会话被换掉了：%+v，want %+v", first.terms, kept)
+	}
+	if first.termActive != 1 {
+		t.Errorf("切回项目后该还停在第二个会话，实际激活 %d", first.termActive)
 	}
 }

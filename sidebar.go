@@ -17,7 +17,7 @@ const (
 	sidebarMaxW     = float32(440)
 )
 
-// sidebar 是左侧项目栏：项目、当前项目的工作区入口，以及分支树。
+// sidebar 是左侧项目栏：项目列表（点一下切换项目）与当前仓库的分支树。
 func (a *app) sidebar(c *ui.Context, pal palette) {
 	a.projectSidebar(c, pal)
 }

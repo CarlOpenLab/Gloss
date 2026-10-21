@@ -198,13 +198,22 @@ type app struct {
 	dblAt  time.Time
 
 	// —— 主区文件栏（原来的侧栏文件树）——
-	tree             []*filetree.Node
-	filesList        ui.ListState
-	sidebarOn        bool
-	sidebarWidthVal  float32 // 侧栏宽度，0 时取默认值
-	sidebarDragging  bool
-	filePaneWidthVal float32 // 主区文件列表栏宽度，0 时取默认值
-	filePaneDragging bool
+	tree            []*filetree.Node
+	filesList       ui.ListState
+	sidebarOn       bool
+	sidebarShown    float32 // 这一帧侧栏展开了多少（0 收起，1 完全展开）
+	sidebarWidthVal float32 // 侧栏宽度，0 时取默认值
+	sidebarDragging bool
+	// projectsHeightVal 是侧栏里「项目」那一段的高度，0 表示跟着内容长。
+	// 项目与分支之间的分隔线拖动改的就是它；projectsDragging 只是收尾时
+	// 判断该不该落盘。
+	projectsHeightVal float32
+	projectsDragging  bool
+	projectsGripLastY float32
+	projectsGripUpAt  time.Time
+	projectsGripMoved bool
+	filePaneWidthVal  float32 // 主区文件列表栏宽度，0 时取默认值
+	filePaneDragging  bool
 	// detailPaneWidthVal 是提交详情那一栏的宽度（历史 tab 里文件列表左边
 	// 那一栏），0 时取默认值。和文件栏一样可拖、可双击复位、记得住。
 	detailPaneWidthVal float32
@@ -492,6 +501,7 @@ func (a *app) attachStore(s *store.Store) {
 	a.split = !cfg.Unified
 	a.sidebarOn = !cfg.SidebarOff
 	a.sidebarWidthVal = cfg.SidebarWidth
+	a.projectsHeightVal = cfg.ProjectsHeight
 	a.filePaneWidthVal = cfg.FilePaneWidth
 	a.detailPaneWidthVal = cfg.DetailPaneWidth
 	a.themeMode = cfg.ThemeMode
@@ -568,6 +578,7 @@ func (a *app) saveViewSettings() {
 	if a.sidebarWidthVal > 0 {
 		cfg.SidebarWidth = a.sidebarWidthVal
 	}
+	cfg.ProjectsHeight = a.projectsHeightVal
 	if a.filePaneWidthVal > 0 {
 		cfg.FilePaneWidth = a.filePaneWidthVal
 	}
@@ -824,12 +835,16 @@ func (a *app) view(c *ui.Context) {
 	// The window keeps one soft wash under the sidebar and the raised work
 	// card. The card itself stays opaque so code and diffs keep a stable
 	// contrast against whatever is behind the window.
+	//
+	// 侧栏的收起/展开是同一条宽度动画：进度挂在根行上（元素身份跨帧不变），
+	// 侧栏外壳按它裁切。a.sidebarShown 留给工具栏 —— 动画走到一半时，界面
+	// 该按「已经收起到哪了」摆，而不是按最终状态突然跳一下。
 	row := ui.Row(c).Fill().AlignItems(ui.Stretch)
 	shellBackdrop(c, pal, row)
+	progress := row.AnimateTo("sidebar", b2f(a.sidebarOn), sidebarMotion)
+	a.sidebarShown = clamp(progress, 0, 1)
 	row.Children(func() {
-		if a.sidebarOn {
-			a.sidebar(c, pal)
-		}
+		a.sidebarShell(c, pal, progress)
 		main := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).
 			Padding(shellCardGap).DragWindow()
 		main.Children(func() {
@@ -842,6 +857,9 @@ func (a *app) view(c *ui.Context) {
 			})
 		})
 	})
+	// 自绘的红绿灯压在最后：它们是窗口控件，和系统红绿灯一样浮在内容
+	// （包括设置浮层）之上，不跟着侧栏一起动。
+	a.windowTrafficLights(c, pal)
 	a.paletteDialog(c, pal)
 	a.settingsDialog(c, pal)
 	a.tagDialog(c, pal)
@@ -886,11 +904,15 @@ const titleMinW = 140
 // 按主区宽度算而不是窗口宽度：侧栏不归工具栏。
 func (a *app) titleWidth(c *ui.Context) float32 {
 	winW, _ := c.Size()
-	if a.sidebarOn {
-		winW -= a.sidebarWidth(c)
-	}
+	winW -= a.sidebarVisualWidth(c)
 	winW -= 2 * shellCardGap
 	return clamp(winW*0.4, titleMinW, titleMaxW)
+}
+
+// sidebarVisualWidth 是这一帧侧栏实际占的宽度：动画走到一半时，主区该按
+// 已经让出来的那一部分算，而不是按最终状态一步跳到位。
+func (a *app) sidebarVisualWidth(c *ui.Context) float32 {
+	return a.sidebarWidth(c) * clamp(a.sidebarShown, 0, 1)
 }
 
 func (a *app) sidebarWidth(c *ui.Context) float32 {
@@ -938,7 +960,15 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 	bar := c.TitleBar()
 
 	padLeft := float32(12)
-	if !a.sidebarOn && bar.Left > 0 {
+	if reserved := a.windowControlsReserved(); reserved > 0 {
+		// 侧栏收起时卡片会滑到窗口左沿，卡片里的工具栏得让开左上角那三颗
+		// 自绘红绿灯。按卡片当前左沿（不是最终状态）算，侧栏动画中途内容
+		// 才不会从红绿灯底下穿过去。
+		cardLeft := a.sidebarShown*a.sidebarWidth(c) + shellCardGap
+		if need := reserved - cardLeft; need > padLeft {
+			padLeft = need
+		}
+	} else if !a.sidebarOn && bar.Left > 0 {
 		padLeft = bar.Left + shellCardGap
 	}
 	padRight := float32(12)
@@ -947,7 +977,7 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 	}
 
 	ui.Toolbar(c, func() {
-		if !a.sidebarOn {
+		if a.sidebarShown < 0.5 {
 			shellIconButton(c, pal, T("显示侧栏", "Show Sidebar"),
 				Tf("显示项目侧栏 %s", "Show project sidebar %s", K("⌘⌥B")),
 				iconSidebar, false, func() { a.setSidebar(true) })
@@ -998,7 +1028,7 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 
 		// 侧栏未开启时在工具栏左侧展示仓库名下拉与分支；侧栏开启时这一行留给分支芯片
 		// —— 那时仓库名在窗口顶栏的项目标签页上，工具栏不必再说一遍。
-		if !a.sidebarOn {
+		if a.sidebarShown < 0.5 {
 			a.repoHeader(c, t, pal)
 		} else if a.branch != "" {
 			a.branchChip(c, t, pal)

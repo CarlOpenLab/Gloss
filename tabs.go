@@ -394,8 +394,21 @@ func reorder[T any](s []T, from, to int) []T {
 //
 // 终端会话挂在各自的 repoTab 上，所以标签页一挪，它带着自己的 shell 一起走。
 func (a *app) moveTab(from, to int) {
+	if a.reorderTab(from, to) {
+		// 打开的项目是按顺序记的（见 persistOpenRepos），所以下一次启动看到的
+		// 就是拖完的样子。
+		a.persistOpenRepos()
+	}
+}
+
+// reorderTab 只改内存里的顺序，不落盘：拖动的每一帧都在调它，每帧写一次
+// 配置文件没有必要，落盘留给松手那一下（moveTab / 拖动结束）。
+func (a *app) reorderTab(from, to int) bool {
 	if from < 0 || from >= len(a.tabs) {
-		return
+		return false
+	}
+	if to < 0 || to > len(a.tabs) || to == from || to == from+1 {
+		return false
 	}
 	active := a.currentTab()
 	a.tabs = reorder(a.tabs, from, to)
@@ -407,9 +420,17 @@ func (a *app) moveTab(from, to int) {
 			}
 		}
 	}
-	// 打开的项目是按顺序记的（见 persistOpenRepos），所以下一次启动看到的
-	// 就是拖完的样子。
-	a.persistOpenRepos()
+	return true
+}
+
+// tabIndex 找某一页现在的下标，找不到返回 -1。
+func (a *app) tabIndex(t *repoTab) int {
+	for i, x := range a.tabs {
+		if x == t {
+			return i
+		}
+	}
+	return -1
 }
 
 // removeRecentRepo 把一条项目从「最近打开的项目」里摘掉。
@@ -1109,6 +1130,9 @@ func (a *app) recentRemoveButton(c *ui.Context, pal palette, path, base string) 
 // 指针戳在哪一页上算）。
 type tabDrag struct {
 	from int
+	// tab 是拖着走的那一页本身，不只是它当初的下标：拖动过程中列表会
+	// 一边拖一边重排，下标每帧都在变，只有按对象认才追得住。
+	tab *repoTab
 }
 
 // termBarHeight 是终端会话芯片带的高度。

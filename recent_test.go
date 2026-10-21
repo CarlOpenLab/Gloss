@@ -165,7 +165,7 @@ func TestRecentRepoRemovedFromPlusMenu(t *testing.T) {
 	tt.Frame()
 
 	// 开 [+] 的下拉。
-	if err := tt.Click("新建项目标签页"); err != nil {
+	if err := tt.Click(T("添加项目", "Add Project")); err != nil {
 		t.Fatalf("点不开 [+] 的下拉：%v", err)
 	}
 	tt.Frame()

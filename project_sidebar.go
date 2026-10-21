@@ -1,14 +1,110 @@
 package main
 
 import (
-	"strconv"
+	"math"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 )
 
-// projectSidebar puts projects first, like a desktop session sidebar. The
-// selected project expands into the workspace views, while branches remain
-// the repository's secondary navigation below them.
+// sidebarMotion 是侧栏展开/收起的那条曲线。
+//
+// 用曲线而不是弹簧：弹簧的尾巴常常一帧挪不到一个像素，侧栏边缘在收尾的
+// 十几帧里会一格一格地跳；这条 260ms 的缓出曲线每一帧都在动，落点在
+// 最后一帧对齐。
+var sidebarMotion = ui.Animation{
+	Duration: 260 * time.Millisecond,
+	Ease:     ui.CubicBezier(0.25, 1, 0.5, 1),
+}
+
+func b2f(b bool) float32 {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// 项目栏的高度：默认跟着内容长，拖过分隔线之后按用户给的高度固定下来。
+// 0 表示「跟着内容」，这时内容再长也只在 max 以内滚。
+const (
+	projectsMinH    = float32(56)
+	projectsRowH    = float32(30)
+	projectsGap     = float32(2)
+	projectsHeadH   = float32(22)
+	projectsDragHit = float32(9)
+)
+
+// projectsContentHeight 是项目列表自然需要的高度：分组标题 + 每条项目。
+func (a *app) projectsContentHeight() float32 {
+	n := len(a.tabs)
+	if n == 0 {
+		n = 1
+	}
+	return projectsHeadH + projectsGap + float32(n)*(projectsRowH+projectsGap)
+}
+
+// projectsMaxHeight 是分隔线能拉到的最下面：给分支那一段留下至少
+// 一条分支的高度，项目再多也不把分支区挤没。
+func (a *app) projectsMaxHeight(c *ui.Context) float32 {
+	_, winH := c.Size()
+	reserved := float32(shellTopBar + 38 + 28 + 38 + 120)
+	return max(projectsMinH, winH-reserved)
+}
+
+// projectsPaneHeight 取这一帧项目栏该有多高：用户拖过就用用户的，
+// 没拖过就按内容，最后都夹在 [min, max] 里。
+func (a *app) projectsPaneHeight(c *ui.Context) float32 {
+	return a.projectsPaneHeightWithin(a.projectsMaxHeight(c))
+}
+
+// projectsPaneHeightWithin 是不带 Context 的那一版：拖动发生在帧与帧
+// 之间，这时候 c.Size() 已经是零，只能在建视图的那一帧先把上限算好
+// 交给回调。
+func (a *app) projectsPaneHeightWithin(maxH float32) float32 {
+	h := a.projectsHeightVal
+	if h <= 0 {
+		h = a.projectsContentHeight()
+	}
+	return clamp(h, projectsMinH, maxH)
+}
+
+// projectsDivider 是项目区与分支区之间那条静息线。它只负责「看得见」，
+// 拖动由压在上面的绝对抓手接（见 projectSidebar）。
+func projectsDivider(c *ui.Context, pal palette) {
+	ui.Box(c).Height(projectsDragHit).Shrink(0).FillWidth().Children(func() {
+		ui.Box(c).Height(1).FillWidth().Margin(4, 10, 4, 10).Background(pal.hairline)
+	})
+}
+
+// sidebarShell 画侧栏以及它展开/收起的那段宽度动画。
+//
+// progress 来自根行上的 AnimateTo（见 app.view）。侧栏的内容始终按「展开
+// 后」的宽度排版，外壳只裁掉右边多出来的部分 —— 让内容跟着宽度重排的话，
+// 收起过程里项目名会先被省略号截断、分支计数先消失，看起来像界面坏了，
+// 而不是像侧栏滑走。
+func (a *app) sidebarShell(c *ui.Context, pal palette, progress float32) {
+	shown := clamp(progress, 0, 1)
+	sideW := a.sidebarWidth(c)
+	w := float32(math.Round(float64(sideW * shown)))
+
+	ui.Row(c).Key("sidebar-shell").Width(w).Shrink(0).FillHeight().
+		AlignItems(ui.Stretch).ClipX().Children(func() {
+		if w <= 0.5 {
+			return
+		}
+		// 负的右边距让固定宽度的内容在外壳里保持左对齐：不这么做的话，
+		// 布局会去挤那根比外壳还宽的柱子，项目名在动画中途就开始折行。
+		ui.Column(c).Width(sideW).Shrink(0).FillHeight().
+			Margin(0, w-sideW, 0, 0).
+			Opacity(0.35 + 0.65*shown).
+			Children(func() { a.projectSidebar(c, pal) })
+	})
+}
+
+// projectSidebar puts projects first, like a desktop session sidebar. A
+// project is a workspace: clicking one switches to it, with its terminal
+// sessions kept alive (see switchTab). Branches remain the repository's
+// secondary navigation below the project list.
 func (a *app) projectSidebar(c *ui.Context, pal palette) {
 	sw := a.sidebarWidth(c)
 	bar := c.TitleBar()
@@ -18,7 +114,7 @@ func (a *app) projectSidebar(c *ui.Context, pal palette) {
 		lead = bar.Left + shellCardGap
 	}
 
-	ui.Column(c).Width(sw).Shrink(0).Children(func() {
+	ui.Column(c).FillHeight().Children(func() {
 		ui.Row(c).Height(shellTopBar).Shrink(0).FillWidth().
 			AlignItems(ui.Center).Padding(0, 12, 0, lead).Gap(2).
 			DragWindow().Children(func() {
@@ -28,36 +124,80 @@ func (a *app) projectSidebar(c *ui.Context, pal palette) {
 			shellIconButton(c, pal, T("隐藏侧栏", "Hide Sidebar"),
 				Tf("隐藏项目侧栏 %s", "Hide project sidebar %s", K("⌘⌥B")),
 				iconSidebar, false, func() { a.setSidebar(false) })
-
-			plus := shellIconElement(c, pal, T("新建项目标签页", "New Project Tab"),
-				Tf("打开项目或本地 Git 仓库 %s / %s", "Open a project or local Git repository %s / %s", K("⌘T"), K("⌘O")),
-				iconPlus, false)
-			if plus.Clicked() {
-				a.repoDropdownOpen = false
-				a.branchDropdownOpen = false
-				a.newTabMenuOpen = !a.newTabMenuOpen
-			}
-			if a.newTabMenuOpen {
-				ui.PopoverBase(c, plus, &a.newTabMenuOpen, func(panel ui.Element) {
-					a.newProjectMenuPanel(c, panel, pal)
-				})
-			}
 			if !isMacPlatform() {
 				ui.Spacer(c)
 			}
 		})
 
-		a.projectGroups(c, pal)
+		a.projectGroups(c, pal, a.projectsPaneHeight(c))
 
-		shellDivider(c, pal)
+		// 项目与分支之间这条缝可以拖：往上收项目区、往下放项目区。
+		// 视觉上只有一条 1px 的静息线，拖动时不画强调色 —— 指针形状
+		// 已经说了这里能拖，不需要再亮一条蓝线。
+		projectsDivider(c, pal)
+		gripTop := float32(shellTopBar) + a.projectsPaneHeight(c)
+		projectsGrip := ui.Box(c).Key("projects-resizer").Absolute().
+			Top(gripTop).Left(0).Right(0).Height(projectsDragHit).
+			Cursor(ui.CursorResizeNS).Role(ui.RoleNone).
+			Label(T("调整项目与分支的高度", "Resize projects and branches"))
+		maxH := a.projectsMaxHeight(c)
+		projectsGrip.HandleInput(func(ev ui.InputEvent) bool {
+			switch ev.Kind {
+			case ui.InputPointerDown:
+				// 双击复位：项目区回到「跟着内容长」。HandleInput 拿走
+				// 了按下事件，框架记不到「双击」，所以按两次抬起之间的
+				// 间隔自己判。
+				if !a.projectsGripUpAt.IsZero() && time.Since(a.projectsGripUpAt) < 350*time.Millisecond {
+					a.projectsHeightVal = 0
+					a.projectsDragging = false
+					a.projectsGripUpAt = time.Time{}
+					a.saveViewSettings()
+					return true
+				}
+				a.projectsDragging = true
+				a.projectsGripMoved = false
+				// 抓手本身会跟着高度一起往下走，事件里的 Y 是相对抓手的：
+				// 直接拿它算增量，第二次移动就会变成 0（元素跟着指针跑了）。
+				// 换成「抓手顶端 + 相对 Y」= 指针在侧栏里的绝对 Y。
+				a.projectsGripLastY = gripTop + ev.Y
+				return true
+			case ui.InputPointerMove:
+				if !a.projectsDragging {
+					return false
+				}
+				if abs := gripTop + ev.Y; abs != a.projectsGripLastY {
+					dy := abs - a.projectsGripLastY
+					a.projectsGripLastY = abs
+					a.projectsGripMoved = true
+					a.projectsHeightVal = clamp(
+						a.projectsPaneHeightWithin(maxH)+dy, projectsMinH, maxH)
+				}
+				return true
+			case ui.InputPointerUp:
+				if a.projectsDragging {
+					a.projectsDragging = false
+					if a.projectsGripMoved {
+						a.projectsGripUpAt = time.Time{}
+					} else {
+						a.projectsGripUpAt = time.Now()
+					}
+					a.saveViewSettings()
+				}
+				return true
+			}
+			return false
+		})
+		projectsGrip.Draw(func(p *ui.Painter, r ui.Rect) {
+			if projectsGrip.Hovered() || projectsGrip.Pressed() {
+				// 悬停时中间露出一小段抓握纹，告诉人这条缝能动。
+				p.Fill(ui.Rect{X: r.X + r.W/2 - 16, Y: r.Y + r.H/2 - 1.5, W: 32, H: 3},
+					pal.textFaint.Alpha(0.55), 1.5)
+			}
+		})
 
 		ui.Row(c).Height(28).Shrink(0).FillWidth().Padding(0, 10).Gap(6).AlignItems(ui.Center).Children(func() {
 			shellSectionLabel(c, pal, T("分支", "BRANCHES"))
 			ui.Spacer(c)
-			if a.repoReady() {
-				ui.Text(c, strconv.Itoa(len(a.refs))).FontSize(11).
-					TextColor(pal.textFaint).FontFeatures("tnum")
-			}
 		})
 
 		if a.repoReady() {
@@ -71,9 +211,12 @@ func (a *app) projectSidebar(c *ui.Context, pal palette) {
 
 		a.projectSidebarFooter(c, pal)
 
-		grip := float32(8)
-		resizer := ui.Box(c).Absolute().Top(0).Bottom(0).Right(-2).Width(grip).
-			Cursor(ui.CursorResizeEW).Role(ui.RoleNone)
+		// 侧栏的右边缘：和 kero 一样，是一条 9px 宽的透明抓手，跨在
+		// 边界上（往侧栏里 5px、往主区里 4px），而不是贴着一条看得见的
+		// 蓝线。指针形状就是唯一的提示，悬停/按压都不点亮任何颜色。
+		resizer := ui.Box(c).Absolute().Top(0).Bottom(0).Right(-4).Width(9).
+			Cursor(ui.CursorResizeEW).Role(ui.RoleNone).
+			Label(T("调整侧栏宽度", "Resize sidebar"))
 		if resizer.DoubleClicked() {
 			a.resetSidebarWidth()
 		}
@@ -84,52 +227,127 @@ func (a *app) projectSidebar(c *ui.Context, pal palette) {
 			a.sidebarDragging = false
 			a.saveViewSettings()
 		}
-		resizer.Draw(func(p *ui.Painter, r ui.Rect) {
-			if resizer.Hovered() || resizer.Pressed() {
-				p.Fill(ui.Rect{X: r.X + r.W/2 - 0.5, Y: r.Y, W: 1, H: r.H}, pal.accent.Alpha(0.7), 0)
-			}
-		})
 	})
 }
 
-func (a *app) projectGroups(c *ui.Context, pal palette) {
-	n := len(a.tabs)
-	if n == 0 {
-		n = 1
-	}
-
-	h := float32(22 + 30 + (n-1)*46)
-	if a.currentTab() != nil && a.currentTab().path != "" {
-		h += 20 + 2*(shellRowH+1)
-	}
-	h = min(h, 300)
+// projectGroups 列出所有打开的项目。项目之间没有展开关系：一条项目就是
+// 一个工作区，点一下切过去，终端会话留在各自的项目里（见 switchTab）。
+//
+// 拖动排序由这一层统一接：指针落在整个列表的哪一段，就插到哪儿 ——
+// 不是「必须压在某一行的上半条/下半条」，更不需要先去碰那条蓝线。
+// 拖动过程中被拖的那行留在原位压淡，落点处浮出一块浅色的「空位」。
+func (a *app) projectGroups(c *ui.Context, pal palette, h float32) {
+	var rowEls []ui.Element
 
 	projects := func() {
 		ui.Row(c).Height(22).FillWidth().Padding(0, 2).AlignItems(ui.Center).Children(func() {
 			shellSectionLabel(c, pal, T("项目", "PROJECTS"))
 			ui.Spacer(c)
+
+			plus := ui.ButtonBase(c).Size(22, 22).Radius(radiusXS).Center().
+				Cursor(ui.CursorPointer).Label(T("添加项目", "Add Project")).
+				Tooltip(Tf("打开项目或本地 Git 仓库 %s / %s", "Open a project or local Git repository %s / %s", K("⌘T"), K("⌘O")))
+			if plus.Hovered() {
+				plus.Background(pal.rowHover)
+			}
+			fadeColors(plus)
+			plus.Children(func() { drawIcon(c, iconPlus, 14, pal.textMuted) })
+			if plus.Clicked() {
+				a.repoDropdownOpen = false
+				a.branchDropdownOpen = false
+				a.newTabMenuOpen = !a.newTabMenuOpen
+			}
+			if a.newTabMenuOpen {
+				ui.PopoverBase(c, plus, &a.newTabMenuOpen, func(panel ui.Element) {
+					a.newProjectMenuPanel(c, panel, pal)
+				})
+			}
 		})
 
 		if len(a.tabs) == 0 {
 			fallback := &repoTab{path: a.repoPath, name: a.repoName, dirtyCount: len(a.workFiles)}
-			a.projectGroup(c, pal, 0, fallback, true)
+			a.projectGroup(c, pal, 0, fallback, true, &rowEls)
 			return
 		}
-		for i, tab := range a.tabs {
-			a.projectGroup(c, pal, i, tab, i == a.activeTab)
+		ui.Column(c).Gap(projectsGap).FillWidth().Children(func() {
+			for i, tab := range a.tabs {
+				a.projectGroup(c, pal, i, tab, i == a.activeTab, &rowEls)
+			}
+		})
+	}
+	scroll := ui.Scroll(c).Key("projects-scroll").Height(h).Shrink(0).FillWidth().
+		Padding(0, 10, 2, 10)
+	scroll.Children(func() {
+		ui.Column(c).Gap(projectsGap).FillWidth().Children(projects)
+	})
+
+	// 落点按整张列表算：指针在哪两行之间，就插在那儿。行与行之间那
+	// 2px 的缝也算数，不用精确压到某一行的一半。
+	if d, over := ui.DragOver[tabDrag](scroll); over && d.tab != nil {
+		at := a.projectDropIndex(scroll, rowEls)
+		if at >= 0 {
+			drawProjectDropSlot(scroll, rowEls, at, pal)
 		}
 	}
-	if h < 300 {
-		ui.Column(c).Shrink(0).FillWidth().Padding(0, 10, 2, 10).Children(projects)
+	if d, ok := ui.Drop[tabDrag](scroll); ok && d.tab != nil {
+		from := a.tabIndex(d.tab)
+		at := a.projectDropIndex(scroll, rowEls)
+		if from >= 0 && at >= 0 {
+			a.moveTab(from, at)
+		}
+	}
+}
+
+// projectDropIndex 把指针在项目列表里的纵向位置折成插入下标：从 0 到
+// len(rows)，等于「插到第几行前面」。
+func (a *app) projectDropIndex(scroll ui.Element, rows []ui.Element) int {
+	_, py, over := scroll.PointerPosition()
+	if !over {
+		return -1
+	}
+	sb := scroll.Bounds()
+	for i, row := range rows {
+		b := row.Bounds()
+		if py < b.Y+b.H/2-sb.Y {
+			return i
+		}
+	}
+	return len(rows)
+}
+
+// drawProjectDropSlot 在落点处画一块浅色的「空位」。
+//
+// 不是一道 2px 的蓝线：一条线只说「这里有条缝」，而一块和行同高的
+// 圆角浅色块说的是「这一行会挪到这里」，和 kero 的分栏落点预览同一个说法。
+func drawProjectDropSlot(scroll ui.Element, rows []ui.Element, at int, pal palette) {
+	if len(rows) == 0 {
 		return
 	}
-	ui.Scroll(c).Key("projects-scroll").Height(h).Shrink(0).FillWidth().
-		Padding(0, 10, 2, 10).Children(func() {
-		ui.Column(c).FillWidth().Children(projects)
+	var y float32
+	switch {
+	case at <= 0:
+		b := rows[0].Bounds()
+		y = b.Y
+	case at >= len(rows):
+		b := rows[len(rows)-1].Bounds()
+		y = b.Y + b.H
+	default:
+		y = rows[at].Bounds().Y
+	}
+	scroll.DrawOver(func(p *ui.Painter, r ui.Rect) {
+		h := float32(28)
+		// DrawOver 的画笔坐标和 Bounds 一样已经在窗口坐标系里，行边界
+		// 可以直接用，不用再减 Scroll 的 y。
+		slot := ui.Rect{X: r.X + 8, Y: y - h/2, W: r.W - 16, H: h}
+		p.Fill(slot, pal.accent.Alpha(0.10), radiusSM)
+		// 左端一颗短胶囊：落点在哪一侧一眼看得出来，又不用横贯整行。
+		p.Fill(ui.Rect{X: slot.X + 4, Y: slot.Y + 6, W: 3, H: h - 12},
+			pal.accent.Alpha(0.75), 1.5)
 	})
 }
 
-func (a *app) projectGroup(c *ui.Context, pal palette, idx int, tab *repoTab, active bool) {
+// projectGroup 画一条项目。rowEls 收集这一帧的行，供整张列表算落点。
+func (a *app) projectGroup(c *ui.Context, pal palette, idx int, tab *repoTab, active bool, rowEls *[]ui.Element) {
 	if tab == nil {
 		return
 	}
@@ -137,15 +355,20 @@ func (a *app) projectGroup(c *ui.Context, pal palette, idx int, tab *repoTab, ac
 	if name == "" {
 		name = "Gloss"
 	}
-	top := float32(shellSectionGap)
-	if idx == 0 {
-		top = 2
-	}
 
-	row := ui.Row(c).Height(28).FillWidth().Margin(top, 0, 2, 0).
-		Padding(0, 6, 0, 10).Gap(6).AlignItems(ui.Center).Radius(radiusSM).
+	row := ui.Row(c).Height(projectsRowH).FillWidth().
+		Padding(0, 8).Gap(8).AlignItems(ui.Center).Radius(radiusMD).
 		Cursor(ui.CursorPointer).Label(name).Tooltip(tab.path)
-	if row.Hovered() {
+	if rowEls != nil {
+		*rowEls = append(*rowEls, row)
+	}
+	switch {
+	case active:
+		row.Background(pal.rowSelected)
+		if !pal.dark {
+			selectedSurface(row, pal)
+		}
+	case row.Hovered():
 		row.Background(pal.rowHover)
 	}
 	fadeColors(row)
@@ -159,24 +382,15 @@ func (a *app) projectGroup(c *ui.Context, pal palette, idx int, tab *repoTab, ac
 		}
 	})
 	row.Children(func() {
+		fg := pal.textMuted
+		if active {
+			fg = pal.ink
+		}
 		ui.Text(c, name).FontSize(12.5).FontWeight(weightSemibold).
-			TextColor(pal.textMuted).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).
+			TextColor(fg).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).
 			Tooltip(tab.path)
 
-		dirty := tab.dirtyCount
-		if active {
-			dirty = len(a.workFiles)
-		}
-		if dirty > 0 {
-			ui.Text(c, strconv.Itoa(dirty)).FontSize(12).FontFeatures("tnum").
-				TextColor(pal.textFaint)
-		}
 		ui.Spacer(c)
-		if active {
-			drawIcon(c, iconChevronDown, 11, pal.textFaint)
-		} else {
-			drawIcon(c, iconChevronRight, 11, pal.textFaint.Alpha(0.65))
-		}
 		if row.Hovered() && len(a.tabs) > 1 {
 			close := ui.ButtonBase(c).Size(20, 20).Radius(radiusXS).Center().
 				Cursor(ui.CursorPointer).Label(T("关闭项目", "Close Project")).
@@ -197,82 +411,18 @@ func (a *app) projectGroup(c *ui.Context, pal palette, idx int, tab *repoTab, ac
 	}
 
 	if idx >= 0 && idx < len(a.tabs) {
-		row.Drag(tabDrag{from: idx})
-		after := dragAfterY(row)
-		if _, over := ui.DragOver[tabDrag](row); over {
-			drawRowDropMarker(row, after, pal.accent)
+		row.Drag(tabDrag{from: idx, tab: tab})
+		if row.Dragging() {
+			// 被拖的那一行留在原位但压淡：看得见「从哪儿拿起」，
+			// 又不会在原地留下一个洞。
+			row.Cursor(ui.CursorGrabbing).Opacity(0.45)
 		}
-		if d, ok := ui.Drop[tabDrag](row); ok {
-			at := idx
-			if after {
-				at = idx + 1
-			}
-			if d.from != idx && d.from != at {
-				a.moveTab(d.from, at)
-			}
-		}
-	}
-
-	if !active || tab.path == "" {
-		return
-	}
-	if tab.branch != "" {
-		ui.Row(c).Height(20).FillWidth().Padding(0, 10, 0, 25).Gap(5).
-			AlignItems(ui.Center).Children(func() {
-			drawIcon(c, iconGitBranch, 11, pal.textFaint)
-			ui.Text(c, tab.branch).FontSize(11.5).TextColor(pal.textFaint).
-				SingleLine().Ellipsis("…")
-		})
-	}
-	a.workspaceRow(c, pal, sectionChanges, T("改动", "Changes"), iconFileDiff, len(a.workFiles))
-	a.workspaceRow(c, pal, sectionHistory, T("历史", "History"), iconGitCommit, 0)
-}
-
-func (a *app) workspaceRow(c *ui.Context, pal palette, section int, label string, icon *ui.SVG, badge int) {
-	selected := a.section() == section && a.repoReady()
-	accessible := Tf("项目视图：%s", "Project view: %s", label)
-	row := ui.Row(c).Height(shellRowH).FillWidth().Padding(0, 10, 0, 12).
-		Gap(10).AlignItems(ui.Center).Radius(radiusMD).Margin(0, 0, 1, 0).
-		Cursor(ui.CursorPointer).Label(accessible)
-	if pal.dark {
-		row.Border(1, ui.Transparent)
-	}
-	bg := ui.Transparent
-	fg := pal.textMuted
-	switch {
-	case selected:
-		bg = pal.rowSelected
-		fg = pal.text
-		selectedSurface(row, pal)
-	case row.Hovered():
-		bg = pal.rowHover
-		fg = pal.text
-	}
-	row.Background(bg)
-	fadeColors(row)
-	row.Children(func() {
-		drawIcon(c, icon, 15, fg)
-		txt := ui.Text(c, label).Label(accessible).FontSize(13.5).SingleLine().Grow(1).
-			MinWidth(0).TextColor(fg)
-		if selected {
-			txt.FontWeight(weightMedium)
-		}
-		if badge > 0 {
-			ui.Text(c, strconv.Itoa(badge)).FontSize(12).FontFeatures("tnum").
-				TextColor(pal.textFaint)
-		}
-	})
-	if row.Clicked() && a.repoReady() {
-		a.setSection(section)
 	}
 }
 
 func (a *app) projectSidebarFooter(c *ui.Context, pal palette) {
 	ui.Row(c).Height(38).Shrink(0).FillWidth().Padding(0, 12, 4, 12).
 		Gap(2).AlignItems(ui.Center).DragWindow().Children(func() {
-		shellIconButton(c, pal, T("打开项目", "Open Project"),
-			Tf("打开本地 Git 仓库 %s", "Open a local Git repository %s", K("⌘O")),
-			iconFolder, false, a.chooseFolder)
 		shellIconButton(c, pal, T("命令面板", "Command Palette"),
 			Tf("搜索命令与项目 %s", "Search commands and projects %s", K("⌘K")),
 			iconSearch, false, a.openPalette)

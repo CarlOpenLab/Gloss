@@ -31,9 +31,7 @@ func (a *app) filePaneWidth(c *ui.Context) float32 {
 	maxW := float32(1000)
 	if c != nil {
 		avail, _ := c.Size()
-		if a.sidebarOn {
-			avail -= a.sidebarWidth(c)
-		}
+		avail -= a.sidebarVisualWidth(c)
 		avail -= 2 * shellCardGap
 		maxW = max(filePaneMinW, avail-240)
 	}
@@ -49,9 +47,7 @@ func (a *app) setFilePaneWidth(c *ui.Context, w float32) {
 	maxW := float32(1000)
 	if c != nil {
 		avail, _ := c.Size()
-		if a.sidebarOn {
-			avail -= a.sidebarWidth(c)
-		}
+		avail -= a.sidebarVisualWidth(c)
 		avail -= 2 * shellCardGap
 		maxW = max(filePaneMinW, avail-240)
 	}
@@ -118,9 +114,7 @@ func (a *app) mainAvailW(c *ui.Context) float32 {
 		return 0
 	}
 	avail, _ := c.Size()
-	if a.sidebarOn {
-		avail -= a.sidebarWidth(c)
-	}
+	avail -= a.sidebarVisualWidth(c)
 	return avail - 2*shellCardGap
 }
 

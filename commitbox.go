@@ -378,10 +378,7 @@ func (a *app) commitBox(c *ui.Context, pal palette) {
 	}
 	t := c.Theme()
 	winW, winH := c.Size()
-	mainW := winW
-	if a.sidebarOn {
-		mainW -= a.sidebarWidth(c)
-	}
+	mainW := winW - a.sidebarVisualWidth(c)
 	stackedBar := mainW < commitBarStackW
 	// 两档都是同一个 TextArea，只把高度夹紧 —— 不换成单行输入框。
 	//

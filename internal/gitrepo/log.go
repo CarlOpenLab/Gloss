@@ -193,7 +193,11 @@ func (r *Repo) StashDiff(ctx context.Context, name string) ([]File, error) {
 		"-c", "core.quotePath=false",
 		"stash", "show", "-p", "--include-untracked",
 		"--no-color", "--no-ext-diff", "--no-textconv",
-		"--src-prefix=a/", "--dst-prefix=b/",
+		// 不传 --src-prefix / --dst-prefix：git 2.54 的 stash show
+		// 接上这两个参数会偶发把路径拼成随机字节（"a.txt ributesa.txt"），
+		// 同一份储藏时好时坏。stash show 本来就不认这两个前缀，输出
+		// 是 a.txt / b.txt 不带前缀的形式，FilesFromDiff 从 --- / +++
+		// 行取路径，照样读得对。
 		"-M", "-U3", name)
 	if err != nil {
 		return nil, err
