@@ -47,19 +47,15 @@ func main() {
 			Vibrancy:      mygo.VibrancySidebar,
 			Content:       ui.View(a.view),
 		}
-		if isMacPlatform() {
-			// macOS：连系统红绿灯一起藏掉，由 view 自绘（见 shell_style.go
-			// 的 windowTrafficLights）。Frameless 只收走标题栏与那三颗按钮，
-			// 窗口仍是可缩放、可拖动、有阴影的普通窗口。
-			opts.Frameless = true
-		} else {
-			// 其他平台保留系统按钮，位置照旧贴着标题栏中线。
-			//
-			// 把红绿灯从系统默认的位置（贴着窗口顶边那条 32 高的带子）挪到
-			// 工具栏的正中间。系统默认位置是给「32 高的标题栏」留的，而工具栏
-			// 把红绿灯对齐到 38 高的顶栏正中间（关闭按钮高 14，12 + 14 + 12 = 38）。
-			opts.TrafficLightPosition = &mygo.Point{X: 18, Y: 12}
-		}
+		// 系统那套窗口按钮全部收走，由 view 自己画（见 shell_style.go 的
+		// windowControls）：macOS 是左上角三颗红绿灯，Windows / Linux 是
+		// 右上角的最小化 / 最大化 / 关闭。系统按钮在这两个位置上都会压在
+		// 主卡片右上角的圆角和控件上，画法也不跟卡片里的控件同一套。
+		//
+		// Frameless 只收走标题栏和按钮：阴影、圆角、左右下三条可缩放的边
+		// 都还在（Windows 上顶边不再可缩放，这是无边框窗口的代价），窗口
+		// 仍由工具栏的 DragWindow 拖动。
+		opts.Frameless = true
 		win := mygo.NewWindow(opts)
 		a.win = win
 		a.syncAppIcon()

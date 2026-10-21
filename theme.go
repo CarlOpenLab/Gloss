@@ -54,9 +54,8 @@ type palette struct {
 	rowDivider   ui.Color
 	control      ui.Color
 	controlHover ui.Color
-	// overlay 是模态背后那层压暗，kbd 是快捷键提示的底色（§2.1）。
-	overlay ui.Color
-	kbd     ui.Color
+	// kbd 是快捷键提示的底色（§2.1）。
+	kbd ui.Color
 
 	ink         ui.Color // 高亮标题、正文基准（§2.3）
 	inkMuted    ui.Color // 常规正文、文件名、按钮文字
@@ -447,7 +446,6 @@ func paletteFor(t *ui.Theme, ls laneSet) palette {
 			rowDivider:       ui.RGBA(255, 255, 255, 0.07),
 			control:          ui.Hex("#404047"),
 			controlHover:     ui.Hex("#4a4a52"),
-			overlay:          ui.RGBA(0, 0, 0, 0.35),
 			kbd:              ui.RGBA(255, 255, 255, 0.06),
 			// 灰阶（§2.3）
 			ink:         ui.Hex("#ececf0"),
@@ -507,7 +505,6 @@ func paletteFor(t *ui.Theme, ls laneSet) palette {
 		rowDivider:       ui.RGBA(0, 0, 0, 0.07),
 		control:          ui.Hex("#ffffff"),
 		controlHover:     ui.Hex("#f7f7f9"),
-		overlay:          ui.RGBA(10, 10, 30, 0.12),
 		kbd:              ui.RGBA(0, 0, 0, 0.04),
 		ink:              ui.Hex("#1d1d1f"),
 		inkMuted:         ui.Hex("#6e6e78"),

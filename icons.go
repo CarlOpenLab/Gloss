@@ -95,6 +95,11 @@ var (
 	// 关闭/清空（x）
 	iconX = lucide(`<path d="M18 6 6 18"/><path d="m6 6 12 12"/>`)
 
+	// 窗口按钮（Windows / Linux）：最小化、最大化、还原。
+	iconMinimize = lucide(`<path d="M5 12h14"/>`)
+	iconMaximize = lucide(`<rect width="14" height="14" x="5" y="5" rx="2"/>`)
+	iconRestore  = lucide(`<rect width="10" height="10" x="9" y="9" rx="1.5"/><path d="M6 15H5.5A1.5 1.5 0 0 1 4 13.5v-8A1.5 1.5 0 0 1 5.5 4h8A1.5 1.5 0 0 1 15 5.5V6"/>`)
+
 	// 终端（terminal）
 	iconTerminal = lucide(`<polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>`)
 

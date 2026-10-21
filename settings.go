@@ -321,6 +321,9 @@ func findExistingPreset(providers []llm.Provider, ps preset) int {
 // 左边 212px 的导航栏，右边一块与四周都留 8px 的浮起卡片（14px 圆角）。
 // 卡片自己带 44px 顶栏和 52px 底栏，中间那页滚动 —— 页与页之间只换内容，
 // 不换版式。
+// settingsMargin 是拖开的设置窗口离窗口边缘留的缝。
+const settingsMargin = float32(12)
+
 func (a *app) settingsDialog(c *ui.Context, pal palette) {
 	if !a.settingsOn {
 		return
@@ -328,14 +331,26 @@ func (a *app) settingsDialog(c *ui.Context, pal palette) {
 	winW, winH := c.Size()
 	panelW := settingsPanelW(winW)
 	panelH := clamp(winH-40, 360, 680)
+	// 拖动量是从中心（对话框的起始位置）算起的：边界就是让它整块留在
+	// 窗口里、离四边留 settingsMargin 的那段余量。
+	bounds := ui.Rect{
+		X: settingsMargin - (winW-panelW)/2,
+		Y: settingsMargin - (winH-panelH)/2,
+		W: max(0, winW-panelW-2*settingsMargin),
+		H: max(0, winH-panelH-2*settingsMargin),
+	}
 
 	open := true
 	ui.DialogBase(c, &open, func(back, panel ui.Element) {
-		back.Background(pal.overlay)
+		// 不再压暗整页：设置是浮在页面上的窗口，不是盖住页面的幕布 ——
+		// 改外观、字号、终端配色能当场在底下的终端里看到；按住它的导航栏
+		// 或卡片顶栏就能把它挪开。
+		back.Background(ui.Transparent)
 		window := panel.Width(panelW).Height(panelH).Radius(radiusXL).
 			Background(pal.sideBg).Clip()
 		floatingSurface(window, pal)
-		a.settingsBody(c, pal)
+		window.Draggable(&a.settingsDrag, ui.DraggableOptions{Bounds: &bounds, Rigid: true}).
+			Children(func() { a.settingsBody(c, pal) })
 	})
 	if !open {
 		a.settingsOn = false

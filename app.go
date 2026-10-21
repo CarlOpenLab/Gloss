@@ -306,7 +306,10 @@ type app struct {
 	commitLang string
 	// settingsOn 是「模型设置」对话框是否打开；editCfg 是编辑中的副本，
 	// 点确定之前不动真配置。
-	settingsOn    bool
+	settingsOn bool
+	// settingsDrag 是设置窗口被拖到的位置（相对窗口中心）。它是一块浮在
+	// 页面上的窗口，不是盖住页面的幕布：可以挪开看底下的终端。
+	settingsDrag  ui.Point
 	settingsTab   settingsTab
 	editCfg       store.Config
 	editIdx       int
@@ -860,9 +863,6 @@ func (a *app) view(c *ui.Context) {
 		// 盖住侧栏伸出来的那一半（见 sidebarResizer）。
 		a.sidebarResizer(c)
 	})
-	// 自绘的红绿灯压在最后：它们是窗口控件，和系统红绿灯一样浮在内容
-	// （包括设置浮层）之上，不跟着侧栏一起动。
-	a.windowTrafficLights(c, pal)
 	a.paletteDialog(c, pal)
 	a.settingsDialog(c, pal)
 	a.tagDialog(c, pal)
@@ -877,6 +877,10 @@ func (a *app) view(c *ui.Context) {
 	a.riskScanDialog(c, pal)
 	a.fileHistDialog(c, pal)
 	a.codeEditorDialog(c, pal)
+
+	// 窗口按钮最后画：它们是窗口控件，和系统按钮一样浮在内容（包括设置这类
+	// 浮层）之上，不跟着侧栏、卡片或对话框一起动。
+	a.windowControls(c, pal)
 
 	// Esc 退出分支对比/PR 检视。放在最后，让对话框里正在编辑的输入框先有机会处理它。
 	if a.compare.on && !a.modalOn() && c.Shortcut(0, ui.KeyEscape) {
@@ -977,6 +981,10 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 	padRight := float32(12)
 	if bar.Right > 0 {
 		padRight = bar.Right + 12
+	}
+	// 窗口按钮画在卡片右上角（Windows / Linux），工具栏右端要让开它们。
+	if reserved := a.windowControlsReservedRight(); reserved > padRight {
+		padRight = reserved
 	}
 
 	ui.Toolbar(c, func() {
