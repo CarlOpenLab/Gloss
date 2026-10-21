@@ -117,7 +117,7 @@ func TestNewProjectMenuOpensRecentProjectInNewTab(t *testing.T) {
 	if len(a.tabs) != 1 {
 		t.Fatalf("选中的项目应成为一个项目标签页，实际 %d 个", len(a.tabs))
 	}
-	if a.repoPath != other {
+	if !sameRepo(a.repoPath, other) {
 		t.Fatalf("选中的项目应被打开 %q，实际 %q", other, a.repoPath)
 	}
 }

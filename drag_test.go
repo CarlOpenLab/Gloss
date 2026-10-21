@@ -72,8 +72,8 @@ func TestFilePaneDragResize(t *testing.T) {
 		t.Fatalf("文件列表栏初始宽度不应为空")
 	}
 
-	// 分隔条在 sidebarWidth + initW 位置
-	sepX := a.sidebarWidth(nil) + initW
+	// 主卡与侧栏之间留了 shellCardGap，文件栏从卡片内沿开始。
+	sepX := a.sidebarWidth(nil) + shellCardGap + initW
 
 	// 悬停在文件列表分隔条上，光标应变为东西双向箭头
 	tt.Move(sepX, 500)
@@ -101,7 +101,7 @@ func TestFilePaneDragResize(t *testing.T) {
 
 	// 拖拽向左拉到超出下限，应被 clamp 保护在 filePaneMinW
 	curW := a.filePaneWidth(nil)
-	curSep := a.sidebarWidth(nil) + curW
+	curSep := a.sidebarWidth(nil) + shellCardGap + curW
 	tt.Press(curSep, 500)
 	tt.Move(curSep-300, 500)
 	tt.Frame()

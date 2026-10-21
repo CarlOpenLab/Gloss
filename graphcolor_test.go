@@ -89,7 +89,7 @@ func nodeRingAt(t *testing.T, tt *ui.Tester, a *app, name string) (int, int) {
 	}
 	// 行里的文字是垂直居中的，所以文字框中线就是节点中心那条水平线；
 	// 往上挪一个半径，正好落在环的上沿。
-	x := sidebarWidth + int(laneX(a.graph[i].Lane, a.maxLanes))
+	x := int(a.sidebarWidth(nil)+shellCardGap) + int(laneX(a.graph[i].Lane, a.maxLanes))
 	y := int(box.Y+box.H/2) - graphNodeR
 	return x, y
 }

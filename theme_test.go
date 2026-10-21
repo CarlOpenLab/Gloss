@@ -113,16 +113,12 @@ func isViolet(c ui.Color) bool {
 	return float64(c.R) >= 0.85*float64(c.G)
 }
 
-// TestAccentIsAchromatic 断言强调色不带色相 —— 黑与白说话，彩度让给语义。
+// TestAccentPalette pins the blue accent shared by both appearances.
 //
-// 这是照着「界面整体还是紫色」这条反馈加的闸：强调色一旦又混进某个品牌彩，
-// 主按钮、焦点环、导航指示条、当前分支圆点会同时跟着变，而那几处散在
-// theme.go、palette.go、sidebar.go、history.go 四个文件里，评审时逐处盯着
-// 色值看不出问题，只有把「不许有色相」写成断言才拦得住。
-func TestAccentIsAchromatic(t *testing.T) {
-	// 闸的自查：它得真的拦得住上一版那几个紫。一道对 #5e6ad2 放行的闸拦不住
-	// 任何东西，而 isViolet 的判据不是显眼的「色相区间」，日后更容易被改松 ——
-	// 把反例钉在这里，改判据的人会立刻看到自己放跑了什么。
+// The main action, focus ring, selection and navigation cues all read this
+// value, so a small drift here changes the whole shell at once.
+func TestAccentPalette(t *testing.T) {
+	// Keep the violet guard: the blue may change depth, but not drift back.
 	for _, old := range []string{"#5e6ad2", "#828fff", "#5e69d1", "#9d8df1", "#7e6cd8"} {
 		if !isViolet(ui.Hex(old)) {
 			t.Errorf("自查失败：%s 是上一版的紫，这道闸却放行了", old)
@@ -133,35 +129,41 @@ func TestAccentIsAchromatic(t *testing.T) {
 		th := themeFor(dark, ui.Preferences{})
 		pal := paletteFor(th, laneSet{})
 
+		wantAccent := ui.Hex("#3b6cf6")
+		wantHover := ui.Hex("#527ef7")
+		wantPressed := ui.Hex("#2f5ddb")
+		wantFocus := ui.RGBA(59, 108, 246, 0.55)
+		wantSelection := ui.RGBA(59, 108, 246, 0.25)
+		if dark {
+			wantAccent = ui.Hex("#6b93ff")
+			wantHover = ui.Hex("#82a3ff")
+			wantPressed = ui.Hex("#5b82ee")
+			wantFocus = ui.RGBA(107, 147, 255, 0.65)
+			wantSelection = ui.RGBA(107, 147, 255, 0.25)
+		}
+
 		for _, tc := range []struct {
 			name string
-			c    ui.Color
+			got  ui.Color
+			want ui.Color
 		}{
-			{"Accent", th.Accent},
-			{"AccentHover", th.AccentHover},
-			{"AccentPressed", th.AccentPressed},
-			{"AccentText", th.AccentText},
-			{"Focus", th.Focus},
-			{"Selection", th.Selection},
-			{"pal.selection", pal.selection},
+			{"Accent", th.Accent, wantAccent},
+			{"AccentHover", th.AccentHover, wantHover},
+			{"AccentPressed", th.AccentPressed, wantPressed},
+			{"Focus", th.Focus, wantFocus},
+			{"Selection", th.Selection, wantSelection},
+			{"pal.accent", pal.accent, wantAccent},
 		} {
-			if spread(tc.c) > 16 {
-				t.Errorf("dark=%v: %s 带色相（RGB 极差 %d，彩度 %.2f）—— 强调色只有黑白两极",
-					dark, tc.name, spread(tc.c), saturation(tc.c))
+			if tc.got != tc.want {
+				t.Errorf("dark=%v: %s = %#v, want %#v", dark, tc.name, tc.got, tc.want)
+			}
+			if isViolet(tc.got) {
+				t.Errorf("dark=%v: %s 漂回紫色（彩度 %.2f）", dark, tc.name, saturation(tc.got))
 			}
 		}
 
-		// 深浅互为反相：深色下是白键黑字，浅色下是黑键白字。反了的话，
-		// 主按钮在自己那套底色上要么糊成一块、要么刺得没法看。
-		lum := luma(th.Accent)
-		if dark && lum < 0.7 {
-			t.Errorf("深色模式的强调色应当是白的，当前亮度 %.2f", lum)
-		}
-		if !dark && lum > 0.3 {
-			t.Errorf("浅色模式的强调色应当是黑的，当前亮度 %.2f", lum)
-		}
-		if lumText := luma(th.AccentText); abs(lum-lumText) < 0.5 {
-			t.Errorf("dark=%v: 强调键与键上的字亮度太近（%.2f / %.2f），读不出来", dark, lum, lumText)
+		if th.AccentText != ui.Hex("#ffffff") {
+			t.Errorf("dark=%v: 强调键上的文字应为白色，实际 %#v", dark, th.AccentText)
 		}
 	}
 }

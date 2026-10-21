@@ -34,6 +34,7 @@ func (a *app) filePaneWidth(c *ui.Context) float32 {
 		if a.sidebarOn {
 			avail -= a.sidebarWidth(c)
 		}
+		avail -= 2 * shellCardGap
 		maxW = max(filePaneMinW, avail-240)
 	}
 
@@ -51,6 +52,7 @@ func (a *app) setFilePaneWidth(c *ui.Context, w float32) {
 		if a.sidebarOn {
 			avail -= a.sidebarWidth(c)
 		}
+		avail -= 2 * shellCardGap
 		maxW = max(filePaneMinW, avail-240)
 	}
 	clamped := clamp(w, filePaneMinW, maxW)
@@ -119,7 +121,7 @@ func (a *app) mainAvailW(c *ui.Context) float32 {
 	if a.sidebarOn {
 		avail -= a.sidebarWidth(c)
 	}
-	return avail
+	return avail - 2*shellCardGap
 }
 
 func (a *app) setDetailPaneWidth(c *ui.Context, w float32) {

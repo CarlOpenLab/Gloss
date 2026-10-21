@@ -13,6 +13,23 @@ import (
 // 但 diff 需要的是它没有的一层：行背景、行号栏底色、增删色条、未改动区间。
 // 深浅两套跟随系统，取值贴近 Web 版那套 GitHub 配色，观感能对上。
 type palette struct {
+	// Shell materials. These are the values the card, sidebar rows and menus
+	// read directly; the surface ladder below maps the older components onto
+	// the same set so both layers stay visually consistent.
+	dark        bool
+	text        ui.Color
+	textMuted   ui.Color
+	textFaint   ui.Color
+	rowHover    ui.Color
+	rowSelected ui.Color
+	card        ui.Color
+	cardBorder  ui.Color
+	cardShadow  ui.Color
+	cardShadow2 ui.Color
+	floatShadow ui.Color
+	popover     ui.Color
+	accent      ui.Color
+
 	// 表面阶梯与发丝线、灰阶（§2.1~2.3）。
 	//
 	// 这四档以前是拿 t.Surface / t.Background 凑的：mygo 的主题只有「控件面」
@@ -297,11 +314,9 @@ func hexOf(c ui.Color) string {
 	return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B)
 }
 
-// glossTheme 把 mygo 的通用控件配色换成 Gloss 对齐 Linear 设计体系的那一套。
-//
-// 参见 DESIGN.md：以 #010102 深邃画布为基准，采用四级表面明度阶梯（Surface 1~4）、
-// 1px Hairline 发丝边框（#23252a），强调色是黑白两极的 Ink —— 深色下白键黑字，
-// 浅色下黑键白字。整套界面不含色相，彩色只留给语义。
+// glossTheme gives the framework-drawn controls the same soft, blue-accented
+// material as the shell. Surfaces stand apart by fill and a restrained edge;
+// semantic colors remain available for diffs, warnings and destructive actions.
 func glossTheme(dark bool) *ui.Theme {
 	t := ui.LightTheme()
 	if dark {
@@ -309,68 +324,43 @@ func glossTheme(dark bool) *ui.Theme {
 	}
 
 	if dark {
-		// Linear 规范深色系统：
-		// 画布底色由 pal.appBg (#010102) 铺陈；
-		// t.Background 是浮层/弹窗底，即 Surface 3 (#18191a) —— 规范把
-		// 「浮层、下拉菜单、右键菜单」都放在这一级（§2.1），而框架自绘的
-		// 右键菜单、tooltip、toast 读的正是它，改这一处就等于把三样一起摆正。
-		// Surface 阶梯：Surface 1 (#0f1011)，SurfaceHover (#141516)，SurfacePressed (#18191a)。
-		// 边框采用 Linear 1px Hairline (#23252a)。
-		// 文本采用 Ink 灰阶：#f7f8f8 (正文), #8a8f98 (次要)。
-		//
-		// 强调色是 **白**（Ink #f7f8f8），不是某个品牌彩 —— 主按钮就是一颗
-		// 白键、上面写黑字，和 Linear 现版一致。深浅两侧互为反相：深色下白键
-		// 黑字，浅色下黑键白字。彩度全部让给语义（diff 红绿、告警琥珀），
-		// 界面本身不含色相。
-		//
-		// t.Radius 是框架**全部**自绘控件的圆角（按钮、输入框、TextArea、
-		// 下拉框、列表），§3 把它们统一归到 md(8)。规范另外点名要给 6 的
-		// （工具/幽灵按钮、芯片、分段单元）在调用点显式写 radiusSM。
-		t.Background = ui.Hex("#18191a")
-		t.Surface = ui.Hex("#0f1011")
-		t.SurfaceHover = ui.Hex("#141516")
-		t.SurfacePressed = ui.Hex("#18191a")
-		t.Border = ui.Hex("#23252a")
-		t.Text = ui.Hex("#f7f8f8")
-		t.TextMuted = ui.Hex("#8a8f98")
-		t.Accent = ui.Hex("#f7f8f8")
-		t.AccentHover = ui.Hex("#ffffff")
-		t.AccentPressed = ui.Hex("#d0d6e0")
-		t.AccentText = ui.Hex("#08090a")
-		t.Danger = ui.Hex("#e5484d")
-		t.Warning = ui.Hex("#e09f3e")
+		t.Background = ui.Hex("#232328")
+		t.Surface = ui.Hex("#404047")
+		t.SurfaceHover = ui.Hex("#4a4a52")
+		t.SurfacePressed = ui.Hex("#52525a")
+		t.Border = ui.Transparent
+		t.Text = ui.Hex("#ececf0")
+		t.TextMuted = ui.Hex("#a9a9b4")
+		t.Accent = ui.Hex("#6b93ff")
+		t.AccentHover = ui.Hex("#82a3ff")
+		t.AccentPressed = ui.Hex("#5b82ee")
+		t.AccentText = ui.Hex("#ffffff")
+		t.Danger = ui.Hex("#ff6961")
+		t.Warning = ui.Hex("#f0a33a")
 		t.Success = ui.Hex("#27a644")
-		t.Selection = ui.RGBA(255, 255, 255, 0.20)
-		t.Focus = ui.RGBA(247, 248, 248, 0.60)
+		t.Selection = ui.RGBA(107, 147, 255, 0.25)
+		t.Focus = ui.RGBA(107, 147, 255, 0.65)
 		t.Scrollbar = ui.RGBA(255, 255, 255, 0.16)
 		t.Radius = radiusMD
 		return t
 	}
 
-	// 浅色模式对齐 Linear Inverse 规范。
-	//
-	// 有一处刻意不照搬：规范给的 inverse-surface-3 (#e4e7eb) 比画布和 Surface 1
-	// 都暗，拿它铺浮层会让菜单和模态看着是**凹**下去的。浅色下的「浮起来」靠的是
-	// 往白走（对比深色下的往亮走），所以浮层与模态用 inverse-canvas 的白，
-	// 卡片与容器才用那三级灰。
-	//
-	// 强调色同理取反相：近黑的 Ink 实心键 + 白字。
 	t.Background = ui.Hex("#ffffff")
-	t.Surface = ui.Hex("#f7f8f9")
-	t.SurfaceHover = ui.Hex("#f0f2f5")
-	t.SurfacePressed = ui.Hex("#e4e7eb")
-	t.Border = ui.Hex("#e1e4e8")
-	t.Text = ui.Hex("#0f1115")
-	t.TextMuted = ui.Hex("#6e7781")
-	t.Accent = ui.Hex("#0f1115")
-	t.AccentHover = ui.Hex("#2b2f36")
-	t.AccentPressed = ui.Hex("#000000")
+	t.Surface = ui.Hex("#ffffff")
+	t.SurfaceHover = ui.Hex("#f7f7f9")
+	t.SurfacePressed = ui.Hex("#eeeef1")
+	t.Border = ui.Transparent
+	t.Text = ui.Hex("#1d1d1f")
+	t.TextMuted = ui.Hex("#6e6e78")
+	t.Accent = ui.Hex("#3b6cf6")
+	t.AccentHover = ui.Hex("#527ef7")
+	t.AccentPressed = ui.Hex("#2f5ddb")
 	t.AccentText = ui.Hex("#ffffff")
-	t.Danger = ui.Hex("#e5484d")
-	t.Warning = ui.Hex("#d97706")
-	t.Success = ui.Hex("#27a644")
-	t.Selection = ui.RGBA(15, 17, 21, 0.12)
-	t.Focus = ui.RGBA(15, 17, 21, 0.40)
+	t.Danger = ui.Hex("#d93a35")
+	t.Warning = ui.Hex("#c27b0f")
+	t.Success = ui.Hex("#22863a")
+	t.Selection = ui.RGBA(59, 108, 246, 0.25)
+	t.Focus = ui.RGBA(59, 108, 246, 0.55)
 	t.Scrollbar = ui.RGBA(0, 0, 0, 0.18)
 	t.Radius = radiusMD
 	return t
@@ -421,36 +411,49 @@ func paletteFor(t *ui.Theme, ls laneSet) palette {
 	lanes := ls.lanes(t.Dark)
 	if t.Dark {
 		return palette{
+			dark:        true,
+			text:        ui.Hex("#ececf0"),
+			textMuted:   ui.Hex("#a9a9b4"),
+			textFaint:   ui.Hex("#83838f"),
+			rowHover:    ui.RGBA(255, 255, 255, 0.05),
+			rowSelected: ui.RGBA(255, 255, 255, 0.10),
+			card:        ui.Hex("#232328"),
+			cardBorder:  ui.RGBA(255, 255, 255, 0.08),
+			cardShadow:  ui.RGBA(0, 0, 0, 0.35),
+			cardShadow2: ui.RGBA(0, 0, 0, 0.20),
+			floatShadow: ui.RGBA(0, 0, 0, 0.45),
+			popover:     ui.Hex("#232327"),
+			accent:      ui.Hex("#6b93ff"),
 			// 表面阶梯（§2.1）
-			surface1: ui.Hex("#0f1011"),
-			surface2: ui.Hex("#141516"),
-			surface3: ui.Hex("#18191a"),
-			surface4: ui.Hex("#191a1b"),
+			surface1: ui.Hex("#232328"),
+			surface2: ui.Hex("#2c2c32"),
+			surface3: ui.Hex("#232327"),
+			surface4: ui.Hex("#2b2b31"),
 			// 发丝线（§2.2）
-			hairline:         ui.Hex("#23252a"),
-			hairlineStrong:   ui.Hex("#34343a"),
-			hairlineTertiary: ui.Hex("#3e3e44"),
+			hairline:         ui.RGBA(255, 255, 255, 0.07),
+			hairlineStrong:   ui.RGBA(255, 255, 255, 0.11),
+			hairlineTertiary: ui.RGBA(255, 255, 255, 0.16),
 			// 灰阶（§2.3）
-			ink:         ui.Hex("#f7f8f8"),
-			inkMuted:    ui.Hex("#d0d6e0"),
-			inkSubtle:   ui.Hex("#8a8f98"),
-			inkTertiary: ui.Hex("#62666d"),
+			ink:         ui.Hex("#ececf0"),
+			inkMuted:    ui.Hex("#a9a9b4"),
+			inkSubtle:   ui.Hex("#83838f"),
+			inkTertiary: ui.Hex("#656570"),
 			// 选中底带：Surface 2 与 3 之间的一档灰，比悬停的 SurfaceHover
 			// 重一档，才压得住「选中的是这一行」。
-			selection: ui.Hex("#1f2023"),
-			appBg:     ui.Hex("#010102"), // Linear Canvas: 极致纯净深黑
-			codeBg:    ui.Hex("#0f1011"), // Surface 1：代码主区从画布上抬一档
-			code:      ui.Hex("#f7f8f8"), // Linear Ink
-			addBar:    ui.Hex("#27a644"), // Linear 语义绿发丝条
-			delBar:    ui.Hex("#e5484d"), // 校准红发丝条
-			gapBg:     ui.Hex("#0f1011"), // Surface 1
-			sideBg:    ui.Hex("#0f1011"), // Surface 1：侧栏是一块面，不是画布的影子
-			ref:       ui.Hex("#d0d6e0"), // 中性 Ink Muted
-			viewed:    ui.Hex("#27a644"),
+			selection: ui.RGBA(107, 147, 255, 0.14),
+			appBg:     ui.Hex("#17141f"), // 窗口柔和底色的最低一档
+			codeBg:    ui.Hex("#232328"),
+			code:      ui.Hex("#ececf0"),
+			addBar:    ui.Hex("#4fd17a"),
+			delBar:    ui.Hex("#ff6961"),
+			gapBg:     ui.Hex("#232328"),
+			sideBg:    ui.Hex("#141418"),
+			ref:       ui.Hex("#a9a9b4"),
+			viewed:    ui.Hex("#4fd17a"),
 			// 小标签亮色（§2.5）：三支都取自下面那 8 色谱系，别单独调，
 			// 调了图里和图外的同一种颜色就对不上了。
-			accentAmber: ui.Hex("#e09f3e"), // = lanes[2]，也是 t.Warning 那一支
-			accentBlue:  ui.Hex("#4c86e8"), // = lanes[3]
+			accentAmber: ui.Hex("#f0a33a"), // = t.Warning 那一支
+			accentBlue:  ui.Hex("#6b93ff"),
 			accentTeal:  ui.Hex("#38b2ac"), // = lanes[6]
 			// 语义三色从主题取：glossTheme 是唯一定义处，别在这里另写一遍 hex。
 			success: t.Success,
@@ -464,34 +467,46 @@ func paletteFor(t *ui.Theme, ls laneSet) palette {
 		}
 	}
 	return palette{
+		text:        ui.Hex("#1d1d1f"),
+		textMuted:   ui.Hex("#6e6e78"),
+		textFaint:   ui.Hex("#a3a3ad"),
+		rowHover:    ui.RGBA(0, 0, 0, 0.04),
+		rowSelected: ui.Hex("#ffffff"),
+		card:        ui.Hex("#ffffff"),
+		cardBorder:  ui.RGBA(0, 0, 0, 0.07),
+		cardShadow:  ui.RGBA(0, 0, 0, 0.07),
+		cardShadow2: ui.RGBA(0, 0, 0, 0.035),
+		floatShadow: ui.RGBA(20, 20, 40, 0.14),
+		popover:     ui.Hex("#ffffff"),
+		accent:      ui.Hex("#3b6cf6"),
 		// 浅色下的表面阶梯：容器用灰、浮层往白走（理由见 glossTheme 里那段）。
-		surface1:         ui.Hex("#f7f8f9"),
-		surface2:         ui.Hex("#f0f2f5"),
+		surface1:         ui.Hex("#ffffff"),
+		surface2:         ui.Hex("#f7f7f9"),
 		surface3:         ui.Hex("#ffffff"),
 		surface4:         ui.Hex("#ffffff"),
-		hairline:         ui.Hex("#e1e4e8"),
-		hairlineStrong:   ui.Hex("#c9ced6"),
-		hairlineTertiary: ui.Hex("#b8bec7"),
-		ink:              ui.Hex("#0f1115"),
-		inkMuted:         ui.Hex("#4b535d"),
-		inkSubtle:        ui.Hex("#6e7781"),
-		inkTertiary:      ui.Hex("#8c959f"),
-		selection:        ui.Hex("#e4e7eb"),
-		appBg:            ui.Hex("#ffffff"),
+		hairline:         ui.RGBA(0, 0, 0, 0.06),
+		hairlineStrong:   ui.RGBA(0, 0, 0, 0.10),
+		hairlineTertiary: ui.RGBA(0, 0, 0, 0.14),
+		ink:              ui.Hex("#1d1d1f"),
+		inkMuted:         ui.Hex("#6e6e78"),
+		inkSubtle:        ui.Hex("#8d8d97"),
+		inkTertiary:      ui.Hex("#a3a3ad"),
+		selection:        ui.RGBA(59, 108, 246, 0.12),
+		appBg:            ui.Hex("#f7eee4"),
 		codeBg:           ui.Hex("#ffffff"),
-		code:             ui.Hex("#0f1115"),
-		addBar:           ui.Hex("#27a644"),
-		delBar:           ui.Hex("#e5484d"),
-		gapBg:            ui.Hex("#f7f8f9"),
-		sideBg:           ui.Hex("#efeff0"), // 侧栏实色：比主区白底暗一档，是「窗口」不是「内容」
-		ref:              ui.Hex("#4b535d"),
-		viewed:           ui.Hex("#27a644"),
+		code:             ui.Hex("#1d1d1f"),
+		addBar:           ui.Hex("#22863a"),
+		delBar:           ui.Hex("#d93a35"),
+		gapBg:            ui.Hex("#ffffff"),
+		sideBg:           ui.Hex("#eceef4"),
+		ref:              ui.Hex("#6e6e78"),
+		viewed:           ui.Hex("#22863a"),
 		// 小标签亮色（§2.5）：与深色同源，压深一档对应下面 lanes 的浅色版。
 		// 琥珀取的是**告警琥珀**（#d97706，和 t.Warning 同一支），不是下面
 		// lanes[2] 那支暖琥珀沙（#c9822b）：标签、改动标记与告警说的是同一件
 		// 「留神看一眼」的事，一屏里出现两种琥珀比一种更糟。
-		accentAmber: ui.Hex("#d97706"), // = t.Warning
-		accentBlue:  ui.Hex("#2f6fd0"), // = lanes[3]
+		accentAmber: ui.Hex("#c27b0f"), // = t.Warning
+		accentBlue:  ui.Hex("#3b6cf6"),
 		accentTeal:  ui.Hex("#288c87"), // = lanes[6]
 		// 语义三色从主题取，理由见深色那段。
 		success: t.Success,

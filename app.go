@@ -821,18 +821,22 @@ func (a *app) view(c *ui.Context) {
 	// 指纹变了就重读两侧（这一帧先看到旧的，读盘回来自己刷新）。
 	a.syncReview()
 
-	// 窗口开了 vibrancy：根节点不铺底色，让系统的毛玻璃材质透上来；
-	// 只有主区不透明，保证代码区域的对比度稳定、不受壁纸颜色影响。
-	c.Root().Background(ui.Transparent)
-
-	ui.Column(c).Fill().AlignItems(ui.Stretch).Children(func() {
-		a.projectTabBar(c, pal)
-
-		ui.Row(c).Grow(1).FillWidth().MinHeight(0).AlignItems(ui.Stretch).Children(func() {
-			if a.sidebarOn {
-				a.sidebar(c, pal)
-			}
-			ui.Column(c).Grow(1).MinWidth(0).Background(pal.appBg).Children(func() {
+	// The window keeps one soft wash under the sidebar and the raised work
+	// card. The card itself stays opaque so code and diffs keep a stable
+	// contrast against whatever is behind the window.
+	row := ui.Row(c).Fill().AlignItems(ui.Stretch)
+	shellBackdrop(c, pal, row)
+	row.Children(func() {
+		if a.sidebarOn {
+			a.sidebar(c, pal)
+		}
+		main := ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).
+			Padding(shellCardGap).DragWindow()
+		main.Children(func() {
+			card := ui.Column(c).Grow(1).FillWidth().MinHeight(0).
+				Radius(shellCardRadius).Background(pal.card).Clip()
+			raisedSurface(card, pal)
+			card.Children(func() {
 				a.toolbar(c, pal)
 				a.mainArea(c, pal)
 			})
@@ -885,6 +889,7 @@ func (a *app) titleWidth(c *ui.Context) float32 {
 	if a.sidebarOn {
 		winW -= a.sidebarWidth(c)
 	}
+	winW -= 2 * shellCardGap
 	return clamp(winW*0.4, titleMinW, titleMaxW)
 }
 
@@ -923,7 +928,7 @@ func (a *app) resetSidebarWidth() {
 // toolbarHeight 是工具栏那条带子的高度。toolbar 用的是同一个公式 ——
 // 分成两处算的话，主区的高度就会和实际差几个像素，分隔条的夹逼跟着错。
 func (a *app) toolbarHeight(c *ui.Context) float32 {
-	return 46
+	return shellHeaderH
 }
 
 // toolbar 是二级工具栏：提供 [改动 | 历史 | 终端 | 编辑器] 四选一的切换及
@@ -933,8 +938,21 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 	bar := c.TitleBar()
 
 	padLeft := float32(12)
+	if !a.sidebarOn && bar.Left > 0 {
+		padLeft = bar.Left + shellCardGap
+	}
+	padRight := float32(12)
+	if bar.Right > 0 {
+		padRight = bar.Right + 12
+	}
 
 	ui.Toolbar(c, func() {
+		if !a.sidebarOn {
+			shellIconButton(c, pal, T("显示侧栏", "Show Sidebar"),
+				Tf("显示项目侧栏 %s", "Show project sidebar %s", K("⌘⌥B")),
+				iconSidebar, false, func() { a.setSidebar(true) })
+		}
+
 		// 「现在看哪一块」的四个选择都在这一处：改动 / 历史 / 终端 / 编辑器。
 		//
 		// 改动与历史原先长在侧栏顶部（一行文字 + 图标），终端与编辑器在这里
@@ -1042,16 +1060,14 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 		if toolIconButton(c, pal, T("打开仓库…", "Open…"), Tf("打开本地 Git 仓库 %s", "Open Local Git Repository %s", K("⌘O")), false, false, drawFolderIcon) {
 			a.chooseFolder()
 		}
-		// 设置图标不在这里 —— 它已经在上方标签栏的右上角（projectTabBar）。
-		// 两处同时摆一枚一模一样的齿轮、相隔 48px，看着像画重了；而且终端
-		// 模式下这条工具栏右侧换成了清屏 / 重启 / 打开，设置只会在标签栏那
-		// 一枚上固定出现。⌘, 两条路都通。
+		// 设置固定在项目侧栏底部；这条工具栏只服务当前视图。
 	}).Height(a.toolbarHeight(c)).Shrink(0).
-		Padding(0, bar.Right+12, 0, padLeft).
+		Padding(0, padRight, 0, padLeft).
 		Gap(10).
 		DragWindow().
-		Background(pal.appBg).
-		Border(0, pal.hairline).
+		Background(ui.Transparent).
+		BorderWidth(0, 0, 1, 0).
+		BorderColor(pal.hairline).
 		Label(T("工具栏", "Toolbar"))
 }
 
@@ -1104,8 +1120,7 @@ func (a *app) repoHeader(c *ui.Context, t *ui.Theme, pal palette) {
 // 分层交给这一档明度差和一道 hairline；投影只留一点收边，不再是原来那圈
 // 30px 的大模糊 —— 暗色模式里粗重投影糊在深色底上，只会显脏。
 func (a *app) repoDropdownPanel(c *ui.Context, panel ui.Element, pal palette) {
-	panel.Radius(radiusLG).Background(pal.surface3).Border(1, pal.hairline).
-		Shadow(0, 4, 12, 0, ui.RGBA(0, 0, 0, 0.16)).
+	popoverSurface(panel, pal).Radius(radiusLG).
 		Margin(4, 0, 0, 0).Padding(6).MinWidth(340).MaxWidth(440).Gap(2)
 
 	recent := a.store.State().RecentRepos
@@ -1302,8 +1317,7 @@ func (a *app) branchChip(c *ui.Context, t *ui.Theme, pal palette) {
 
 // branchDropdownPanel 呈现本地分支快速切换卡片。
 func (a *app) branchDropdownPanel(c *ui.Context, panel ui.Element, pal palette) {
-	panel.Radius(radiusLG).Background(pal.surface3).Border(1, pal.hairline).
-		Shadow(0, 4, 12, 0, ui.RGBA(0, 0, 0, 0.16)).
+	popoverSurface(panel, pal).Radius(radiusLG).
 		Margin(4, 0, 0, 0).Padding(6).MinWidth(220).MaxWidth(340).Gap(2)
 
 	local, _, _, _ := splitRefs(a.refs)

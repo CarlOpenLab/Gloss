@@ -126,6 +126,9 @@ var (
 	// 窗口 / 应用图标（app-window）
 	iconAppWindow = lucide(`<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 4v4"/><path d="M2 8h20"/><path d="M6 4v4"/>`)
 
+	// 侧栏开关（panel-left）
+	iconSidebar = lucide(`<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>`)
+
 	// 作者头像里的那个人形（user）。提交详情卡用 —— 没有真人照片可放，
 	// 也不能拿用户名首字母硬凑（中文名取首字母是个字母都不是的怪东西）。
 	iconUser = lucide(`<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>`)

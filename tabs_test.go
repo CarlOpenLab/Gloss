@@ -542,10 +542,10 @@ func TestMoveTabKeepsActiveAndPersistsOrder(t *testing.T) {
 	}
 }
 
-// 项目标签页拖一下就能换位置：按住第一页拖到第三页的右半边，它就插到最末。
+// 项目行拖一下就能换位置：按住第一项拖到第三项的下半段，它就插到最末。
 // 这是拿走鼠标那一下真会发生的事 —— reorder 算得对不代表接得上（落点怎么
-// 算、Drop 落在哪一页上，都是另一码事）。
-func TestProjectTabsDragToReorder(t *testing.T) {
+// 算、Drop 落在哪一行上，都是另一码事）。
+func TestProjectRowsDragToReorder(t *testing.T) {
 	a := newApp()
 	repo1 := filepath.Join(t.TempDir(), "repo1")
 	repo2 := filepath.Join(t.TempDir(), "repo2")
@@ -568,8 +568,8 @@ func TestProjectTabsDragToReorder(t *testing.T) {
 	if !ok {
 		t.Fatalf("顶栏上找不到 repo3 那一页：%q", tt.Texts())
 	}
-	// 落到最后一页的右半边 = 插到它后面。
-	dragBetween(tt, first.X+first.W/2, first.Y+first.H/2, last.X+last.W-3, last.Y+last.H/2)
+	// 落到最后一行的下半段 = 插到它后面。
+	dragBetween(tt, first.X+first.W/2, first.Y+first.H/2, last.X+last.W/2, last.Y+last.H-3)
 	tt.Frame()
 
 	got := []string{a.tabs[0].path, a.tabs[1].path, a.tabs[2].path}
@@ -702,17 +702,17 @@ func TestSectionsSwitchToolbarAndKeys(t *testing.T) {
 	}
 }
 
-// 拖着项目标签页的时候，得看得见「松手会插到哪儿」。
+// 拖着项目行的时候，得看得见「松手会插到哪儿」。
 //
 // 这条扫像素：重排和「画出插入提示线」是两条独立的线 —— 上面那条测试盯的是
 // 重排，把提示线摘掉它照样绿，用起来却成了盲拖。
 //
 // 比法上要绕开两样东西：一是悬停底色（按住拖动时指针下的标签页仍然是悬停
 // 态，两边一样，但别处会变），二是框架画的那个拖动副本 —— 它是指纹那枚
-// 标签的 0.75 不透明度拷贝，跟在指针下面，画在整棵元素树之后，正好盖住
-// 目标标签这一框。所以只扫标签框上、下的两条带子：副本不会画到框外，悬停
+// 行的 0.75 不透明度拷贝，跟在指针下面，画在整棵元素树之后，正好盖住
+// 目标行这一框。所以只扫目标行上、下的两条带子：副本不会画到框外，悬停
 // 底色也出不了框，那两条带子里能变的就只有提示线本身。
-func TestProjectTabDragDrawsInsertMarker(t *testing.T) {
+func TestProjectRowDragDrawsInsertMarker(t *testing.T) {
 	a := newApp()
 	repo1 := filepath.Join(t.TempDir(), "repo1")
 	repo2 := filepath.Join(t.TempDir(), "repo2")
@@ -736,10 +736,12 @@ func TestProjectTabDragDrawsInsertMarker(t *testing.T) {
 		t.Fatalf("找不到 repo3 那一页：%q", tt.Texts())
 	}
 
-	// 标签框上、下各 6px 的两条带子（框内那 28px 归拖动副本，不扫）。
-	yTop0, yTop1 := int(last.Y)-6, int(last.Y)
-	yBot0, yBot1 := int(last.Y+last.H)+1, int(last.Y+last.H)+6
-	x0, x1 := int(last.X)-8, int(last.X+last.W)+8
+	// 扫描目标行左右两端的窄条。提示线比行宽左右各多出 5px，而拖动副本
+	// 只覆盖行本身；只看这两段外沿就能避开副本和行内的悬停底色。
+	yTop0, yTop1 := int(last.Y)-4, int(last.Y)+3
+	yBot0, yBot1 := int(last.Y+last.H)-3, int(last.Y+last.H)+4
+	left0, left1 := int(last.X)-5, int(last.X)
+	right0, right1 := int(last.X+last.W)+1, int(last.X+last.W)+6
 	type px struct{ x, y int }
 	band := func() map[px]uint32 {
 		img := tt.Image()
@@ -749,8 +751,10 @@ func TestProjectTabDragDrawsInsertMarker(t *testing.T) {
 				if y < 0 {
 					continue
 				}
-				for x := x0; x < x1; x++ {
-					out[px{x, y}] = uint32At(img, x, y)
+				for _, xr := range [][2]int{{left0, left1}, {right0, right1}} {
+					for x := xr[0]; x < xr[1]; x++ {
+						out[px{x, y}] = uint32At(img, x, y)
+					}
 				}
 			}
 		}
@@ -767,52 +771,64 @@ func TestProjectTabDragDrawsInsertMarker(t *testing.T) {
 		return out
 	}
 
-	cy := last.Y + last.H/2
-	leftSpot := last.X + 4           // 最后一页左半边 ⇒ 插到它前面，线贴左沿
-	rightSpot := last.X + last.W - 4 // 右半边 ⇒ 插到它后面，线贴右沿
+	cx := last.X + last.W/2
+	topSpot := last.Y + 4             // 最后一行上半段 ⇒ 插到它前面，线贴上沿
+	bottomSpot := last.Y + last.H - 4 // 下半段 ⇒ 插到它后面，线贴下沿
 
 	// 同一位置、不按：只有悬停，没有提示线，也没有拖动副本。
-	tt.Move(leftSpot, cy)
+	tt.Move(cx, topSpot)
 	tt.Frame()
-	hoverLeft := band()
-	tt.Move(rightSpot, cy)
+	hoverTop := band()
+	tt.Move(cx, bottomSpot)
 	tt.Frame()
-	hoverRight := band()
+	hoverBottom := band()
 
 	// 再按住第一页，停在同样两个位置。
 	tt.Press(first.X+first.W/2, first.Y+first.H/2)
 	tt.Frame()
-	tt.Move(leftSpot, cy)
+	tt.Move(cx, topSpot)
 	tt.Frame()
-	dragLeft := band()
-	tt.Move(rightSpot, cy)
+	dragTop := band()
+	tt.Move(cx, bottomSpot)
 	tt.Frame()
-	dragRight := band()
+	dragBottom := band()
 
-	// 左落点：多出来的像素必须贴着这一页的左沿（线宽 2、居中在沿上），
-	// 一带子里别处一个像素都不该动。
-	leftMarks := changed(hoverLeft, dragLeft)
-	if len(leftMarks) == 0 {
-		t.Fatal("左边落点处没多出任何像素 —— 没有插入提示线")
+	// 上落点：左右外沿都要多出像素，而且必须贴着这一行的上沿。
+	topMarks := changed(hoverTop, dragTop)
+	if len(topMarks) == 0 {
+		t.Fatal("上边落点处没多出任何像素 —— 没有插入提示线")
 	}
-	for _, m := range leftMarks {
-		if m.x > int(last.X)+1 {
-			t.Errorf("落点在左半边，提示线却画到了 x=%d（这一页左沿 %.0f）—— 该贴左沿",
-				m.x, last.X)
+	topLeft, topRight := false, false
+	for _, m := range topMarks {
+		topLeft = topLeft || m.x < int(last.X)
+		topRight = topRight || m.x >= int(last.X+last.W)
+		if m.y > int(last.Y)+2 {
+			t.Errorf("落点在上半段，提示线却画到了 y=%d（这一行上沿 %.0f）—— 该贴上沿",
+				m.y, last.Y)
 			break
 		}
 	}
-	// 右落点：同理贴右沿。
-	rightMarks := changed(hoverRight, dragRight)
-	if len(rightMarks) == 0 {
-		t.Fatal("右边落点处没多出任何像素 —— 没有插入提示线")
+	if !topLeft || !topRight {
+		t.Errorf("上沿提示线没有横跨整行：左端=%v 右端=%v", topLeft, topRight)
 	}
-	for _, m := range rightMarks {
-		if m.x < int(last.X+last.W)-1 {
-			t.Errorf("落点在右半边，提示线却画到了 x=%d（这一页右沿 %.0f）—— 该贴右沿",
-				m.x, last.X+last.W)
+
+	// 下落点：同理贴下沿。
+	bottomMarks := changed(hoverBottom, dragBottom)
+	if len(bottomMarks) == 0 {
+		t.Fatal("下边落点处没多出任何像素 —— 没有插入提示线")
+	}
+	bottomLeft, bottomRight := false, false
+	for _, m := range bottomMarks {
+		bottomLeft = bottomLeft || m.x < int(last.X)
+		bottomRight = bottomRight || m.x >= int(last.X+last.W)
+		if m.y < int(last.Y+last.H)-3 {
+			t.Errorf("落点在下半段，提示线却画到了 y=%d（这一行下沿 %.0f）—— 该贴下沿",
+				m.y, last.Y+last.H)
 			break
 		}
+	}
+	if !bottomLeft || !bottomRight {
+		t.Errorf("下沿提示线没有横跨整行：左端=%v 右端=%v", bottomLeft, bottomRight)
 	}
 
 	// 拖到没人的地方松手：哪儿也不插。

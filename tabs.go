@@ -959,119 +959,20 @@ func (a *app) tabBarHeight(c *ui.Context) float32 {
 	return max(c.TitleBar().Height, 38)
 }
 
-// titleBarInset 是顶栏和第一个标签之间要留出的距离。
-//
-// bar.Left 量到的是 macOS 红绿灯里绿灯按钮的右沿。左内边距原先写死 80：本机上
-// 绿灯右沿已经在 78 上下，两边只剩两三个像素 —— 第一个标签的圆角底色贴着窗口
-// 按钮，鼠标一扫过去两个圆角凑在一起，像连成了一片。留到 18 这样一块完整的
-// 气口，两块才是两块。Linux / Windows 上 bar.Left 是 0（它们的窗口按钮在
-// 右上），走的是顶栏自己的 12。
-const titleBarInset = 18
-
-// projectTabBar 呈现 Zed 风格的窗口顶栏：给窗口控制按钮留出安全边距、多项目
-// 标签页、新建项目 [+]、窗口拖拽区。
-func (a *app) projectTabBar(c *ui.Context, pal palette) {
-	bar := c.TitleBar()
-	t := c.Theme()
-
-	// 窗口控制按钮让出来的两边内边距。bar 的 Left/Right 量的是它们各自的
-	// 右沿/左沿：macOS 是左上角的红绿灯，Linux 和 Windows 是右上角那一组
-	// （框架给的，见 ui.Context.TitleBar）。两者都归零时（全屏下控制按钮收
-	// 起来）顶栏自己留 12。
-	padLeft := float32(12)
-	if bar.Left > 0 {
-		padLeft = bar.Left + titleBarInset
-	}
-	padRight := float32(12)
-	if bar.Right > 0 {
-		padRight = bar.Right + 12
-	}
-
-	h := a.tabBarHeight(c)
-
-	ui.Row(c).Height(h).FillWidth().Shrink(0).
-		Padding(3, padRight, 3, padLeft).
-		Gap(4).
-		AlignItems(ui.Center).
-		// 顶栏和侧栏同色同材质：一并从半透明改回实色，理由见 sidebar 里那段
-		// —— 两个面的明度差本来就小，再各乘一个 α 就是两片糊在一起的白/黑。
-		Background(pal.sideBg).
-		Border(0, pal.hairline).
-		DragWindow().
-		Children(func() {
-			if len(a.tabs) == 0 {
-				// 一个标签页都还没建起来（直接 load 一个仓库就是这种状态），
-				// 顶栏也该是「当前打开的项目」，而不是写死的 Gloss —— 仓库
-				// 开着、顶栏却报另一个名字，是这一栏里最刺眼的一种错。
-				a.renderProjectTab(c, 0, &repoTab{
-					path:       a.repoPath,
-					name:       a.repoName,
-					dirtyCount: len(a.workFiles),
-				}, pal, t)
-			} else {
-				// 拖动落点等这一圈画完再落：拖到一半就重排 a.tabs，后面的
-				// 标签会整体前移一格，这一帧剩下那几枚就画成别人了 ——
-				// 和下面终端芯片带是同一个道理。
-				from, to := -1, -1
-				for i, tab := range a.tabs {
-					if f, at := a.renderProjectTab(c, i, tab, pal, t); f >= 0 {
-						from, to = f, at
-					}
-				}
-				if from >= 0 {
-					a.moveTab(from, to)
-				}
-			}
-
-			// [+] 新建项目标签页：先给一份「打开过的项目」，末位才是打开本地文件夹。
-			newBtn := ui.ButtonBase(c).Size(26, 26).Radius(radiusSM).
-				Cursor(ui.CursorPointer).Label(T("新建项目标签页", "New Project Tab")).
-				Tooltip(Tf("打开项目或本地 Git 仓库 %s / %s", "Open a project or local Git repository %s / %s", K("⌘T"), K("⌘O")))
-			if newBtn.Hovered() || a.newTabMenuOpen {
-				newBtn.Background(pal.surface2)
-			}
-			fadeColors(newBtn)
-			newBtn.Children(func() {
-				ui.Row(c).AlignItems(ui.Center).Justify(ui.Center).Fill().Children(func() {
-					drawIcon(c, iconPlus, 13, pal.inkSubtle)
-				})
-			})
-			if newBtn.Clicked() {
-				// 同一时刻只留一个顶栏下拉，否则两个浮层会叠在一起。
-				a.repoDropdownOpen = false
-				a.branchDropdownOpen = false
-				a.newTabMenuOpen = !a.newTabMenuOpen
-			}
-			if a.newTabMenuOpen {
-				ui.PopoverBase(c, newBtn, &a.newTabMenuOpen, func(panel ui.Element) {
-					a.newProjectMenuPanel(c, panel, pal)
-				})
-			}
-
-			ui.Spacer(c).DragWindow()
-
-			// 右侧快捷工具
-			if toolIconButton(c, pal, T("模型设置…", "Settings…"), Tf("偏好与设置 %s", "Preferences & Settings %s", K("⌘,")), false, false, drawSettingsIcon) {
-				a.openSettings()
-			}
-		})
-}
-
-// newProjectMenuPanel 是顶栏 [+] 的下拉：先列「打开过的项目」，末位才是
+// newProjectMenuPanel 是项目侧栏 [+] 的下拉：先列「打开过的项目」，末位才是
 // 「打开本地文件夹…」。
 //
 // 参照 Zed：在项目之间来回跳时，第一步应该是「从认识的名字里挑一个」，
 // 而不是每次都被推去系统文件夹选择器、重走一遍路径。所以历史列表在前，
 // 系统选择器退到末位。
 //
-// 高度是这块的主要约束。面板从窗口最顶端往下展开，而最近项目最多记 10 条：
+// 高度是这块的主要约束。面板从侧栏顶部往下展开，而最近项目最多记 10 条：
 // 窗口一矮，长历史就会把末尾的「打开本地文件夹…」顶到可视区外面 —— 它偏偏
 // 是唯一没法靠滚动找到的项（它在滚动列表之外）。所以列表高度按当前窗口高度
 // 现算，并给标题、分隔线、末项预留固定空间；行高也比工具栏那份压一档，
 // 因为这里只需要认出项目名。
 func (a *app) newProjectMenuPanel(c *ui.Context, panel ui.Element, pal palette) {
-	panel.Radius(radiusLG).Background(pal.surface3).Border(1, pal.hairline).
-		Shadow(0, 6, 16, 0, ui.RGBA(0, 0, 0, 0.18)).
+	popoverSurface(panel, pal).Radius(radiusLG).
 		Margin(6, 0, 0, 0).Padding(6).MinWidth(300).MaxWidth(420).Gap(2)
 
 	recent := make([]string, 0, len(a.store.State().RecentRepos))
@@ -1135,7 +1036,7 @@ func (a *app) newProjectMenuPanel(c *ui.Context, panel ui.Element, pal palette) 
 	}
 }
 
-// newProjectRecentRow 画 [+] 下拉里的一行最近项目：选中即在新标签页打开
+// newProjectRecentRow 画 [+] 下拉里的一行最近项目：选中即在新项目行打开
 // （已经在标签页里的会切过去，而不是开出第二份）。
 func (a *app) newProjectRecentRow(c *ui.Context, path string, pal palette) {
 	base := filepath.Base(path)
@@ -1180,7 +1081,7 @@ func (a *app) newProjectRecentRow(c *ui.Context, path string, pal palette) {
 }
 
 // recentRemoveButton 画最近项目行尾那枚「从最近列表移除」的 ×，返回这一帧
-// 它有没有被点中。两处最近项目列表（顶栏 [+] 的下拉、工具栏的仓库下拉）共用
+// 它有没有被点中。两处最近项目列表（侧栏 [+] 的下拉、工具栏的仓库下拉）共用
 // 这一枚：同一份记录，一处能删、另一处删不掉，就成了两处不一致。
 //
 // × 一直挂着，不跟着悬停才出现：一颗只在悬停时长出来的 × 会让行宽（跟着
@@ -1208,119 +1109,6 @@ func (a *app) recentRemoveButton(c *ui.Context, pal palette, path, base string) 
 // 指针戳在哪一页上算）。
 type tabDrag struct {
 	from int
-}
-
-// renderProjectTab 呈现单个项目标签页，返回这一帧这一页被拖到了哪个落点
-// （-1 = 没有），由调用方在这一圈画完之后再重排 —— 理由见 projectTabBar。
-//
-// 拖一下换个位置就是这里的 .Drag 加落点那一块：按住的哪一页算「从哪来」，
-// 指针落在目标页的左半 / 右半就插到它前面 / 后面，和设置里供应商那份拖动
-// （settings.go 的 providerRow）是同一套算法。
-func (a *app) renderProjectTab(c *ui.Context, idx int, tab *repoTab, pal palette, t *ui.Theme) (from, to int) {
-	isActive := idx == a.activeTab
-	name := tab.name
-	if name == "" {
-		if tab.path != "" {
-			name = filepath.Base(tab.path)
-		} else {
-			name = "Gloss"
-		}
-	}
-
-	tabBtn := ui.ButtonBase(c).Height(28).Radius(radiusSM).
-		Padding(0, 6, 0, 8).
-		Cursor(ui.CursorPointer).Label(name).
-		Tooltip(tab.path)
-
-	// 只有真标签页才拖得动：len(a.tabs) == 0 时画的那一枚是替身（直接 load
-	// 一个仓库的状态），它背后没有可重排的顺序。
-	draggable := idx >= 0 && idx < len(a.tabs)
-	if draggable {
-		tabBtn.Drag(tabDrag{from: idx})
-		if tabBtn.Dragging() {
-			tabBtn.Cursor(ui.CursorGrabbing)
-		}
-	}
-
-	if isActive {
-		tabBtn.Background(pal.surface2).Border(1, pal.hairlineStrong)
-	} else if tabBtn.Hovered() {
-		tabBtn.Background(pal.surface1).Border(1, ui.Transparent)
-	} else {
-		tabBtn.Background(ui.Transparent).Border(1, ui.Transparent)
-	}
-	fadeColors(tabBtn)
-
-	tabBtn.Children(func() {
-		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-			// 图标
-			drawIcon(c, iconFolder, 12, pal.inkSubtle)
-
-			// 仓库名。标签只回答「这是哪个项目」—— 一个标签里名字后面再
-			// 跟一段被截掉一半的分支名，多项目并排时反而谁都不好认；分支
-			// 归下面工具栏的分支徽章（侧栏开着时是侧栏的分支树）。
-			//
-			// 激活态只换颜色，不动几何：边框三态一律 1px（只在透明与
-			// hairlineStrong 之间换色），字重也保持 regular —— semibold 的
-			// 字宽比 regular 宽一个多百分点，切一次标签这个框就胖一点，
-			// 右边所有标签连同 [+] 跟着一起挪，点一下、晃一下。
-			txt := ui.Text(c, name).FontSize(textCaption).SingleLine().MaxWidth(180)
-			if isActive {
-				txt.TextColor(pal.ink)
-			} else {
-				txt.TextColor(pal.inkMuted)
-			}
-
-			// 待提交改动标记
-			if tab.dirtyCount > 0 {
-				ui.Box(c).Size(6, 6).Radius(radiusPill).Background(pal.addBar)
-			}
-
-			// 关闭按钮 ×
-			closeBtn := ui.ButtonBase(c).Size(16, 16).Radius(radiusXS).
-				Cursor(ui.CursorPointer).Label(T("关闭标签页", "Close Tab")).
-				Tooltip(Tf("关闭标签页 %s", "Close Tab %s", K("⌘W")))
-			if closeBtn.Hovered() {
-				closeBtn.Background(pal.surface3)
-			}
-			fadeColors(closeBtn)
-			closeBtn.Children(func() {
-				ui.Row(c).AlignItems(ui.Center).Justify(ui.Center).Fill().Children(func() {
-					drawIcon(c, iconX, 10, pal.inkSubtle)
-				})
-			})
-			if closeBtn.Clicked() {
-				a.closeTab(idx)
-			}
-		})
-	})
-
-	if tabBtn.Clicked() {
-		a.switchTab(idx)
-	}
-
-	if !draggable {
-		return -1, -1
-	}
-	// 落点：指针在这一页的右半边 = 插到它后面。半宽取上一帧的实测宽度
-	// （Bounds），标签宽度是跟着项目名走的，没有常数可用。
-	after := dragAfter(tabBtn)
-	if _, over := ui.DragOver[tabDrag](tabBtn); over {
-		drawDropMarker(tabBtn, after, t.Accent)
-	}
-	// 落点只在这一帧算得出来（半宽是上一帧实测的），但「谁被拖走了」得从
-	// 拖拽载荷里读 —— 载荷里的 from 才是源，本帧的下标只是被落在谁头上。
-	// 早先把这里写成了「源 = 本帧下标」，于是拖到哪儿都变成原地挪一格。
-	if d, ok := ui.Drop[tabDrag](tabBtn); ok {
-		at := idx
-		if after {
-			at = idx + 1
-		}
-		if d.from != idx && d.from != at {
-			return d.from, at
-		}
-	}
-	return -1, -1
 }
 
 // termBarHeight 是终端会话芯片带的高度。
@@ -1419,7 +1207,7 @@ func (a *app) renderTerminalChip(c *ui.Context, pal palette, tab *repoTab, idx i
 	chip.Background(bg).Border(1, bd)
 	fadeColors(chip)
 
-	// 拖一下换位置：和项目标签页那一排是同一套（见 renderProjectTab）。
+	// 拖一下换位置。
 	chip.Drag(chipDrag{from: idx})
 	if chip.Dragging() {
 		chip.Cursor(ui.CursorGrabbing)

@@ -11,63 +11,15 @@ import (
 )
 
 const (
-	sidebarWidth    = 280
+	sidebarWidth    = 268
 	sidebarDefaultW = float32(sidebarWidth)
-	sidebarMinW     = float32(180)
-	sidebarMaxW     = float32(600)
+	sidebarMinW     = float32(200)
+	sidebarMaxW     = float32(440)
 )
 
-// sidebar 是左侧栏：工作区导航（改动/历史）+ 分支/远程/标签/储藏树。
-//
-// 参照 Fork 布局规范，侧栏顶部承载工作区导航。
+// sidebar 是左侧项目栏：项目、当前项目的工作区入口，以及分支树。
 func (a *app) sidebar(c *ui.Context, pal palette) {
-	t := c.Theme()
-	sw := a.sidebarWidth(c)
-
-	// 侧栏底色是**不透明**的。
-	//
-	// 这里原来铺的是 pal.sideBg.Alpha(0.55)：窗口开了 VibrancySidebar，想让
-	// 系统毛玻璃透上来。代价是侧栏的明度交给了壁纸 —— 侧栏和画布本来就只差
-	// 7~8 个灰阶（#0f1011 对 #010102、#efeff0 对 #ffffff），乘 0.55 之后只剩
-	// 4 个，深色下和近黑画布、浅色下和白画布都糊成一片，换张壁纸又是另一副样子。
-	// Linear 的侧栏是一块实色的面（深色 #0f1011，浅色 #efeff0），层次交给明度
-	// 阶梯和 1px 发丝线，不交给半透明。
-	ui.Column(c).Width(sw).Shrink(0).
-		Background(pal.sideBg).
-		Children(func() {
-			// 侧栏顶部不再有工作区导航。改动 / 历史 已经并进工具栏那段
-			// 「改动 / 历史 / 终端 / 编辑器」的图标切换（见 app.toolbar）：
-			// 四个「现在看哪一块」的选择本该在一处，而侧栏这一栏本来就是
-			// 分支 / 远程 / 标签 / 储藏树，多出来的两行导航只是把它往下压。
-			if a.repoReady() {
-				ui.Box(c).Key("ref-filter-wrap").Padding(8, 8, 6, 8).Shrink(0).Children(func() {
-					a.refFilterInput(c, pal)
-				})
-			}
-			ui.Box(c).Key("sidebar-refs-wrap").Grow(1).FillWidth().Children(func() {
-				a.refsView(c, pal)
-			})
-
-			// 侧栏右边缘拖动手柄：鼠标悬停显示双向箭头，可拖拽实时调节侧栏宽度，双击复位默认
-			grip := float32(6)
-			resizer := ui.Box(c).Absolute().Top(0).Bottom(0).Right(0).Width(grip).
-				Cursor(ui.CursorResizeEW).Role(ui.RoleNone)
-			if resizer.DoubleClicked() {
-				a.resetSidebarWidth()
-			}
-			if dx, _, held := resizer.Dragged(); held && dx != 0 {
-				a.setSidebarWidth(c, sw+dx)
-				a.sidebarDragging = true
-			} else if a.sidebarDragging && !held {
-				a.sidebarDragging = false
-				a.saveViewSettings()
-			}
-			resizer.Draw(func(p *ui.Painter, r ui.Rect) {
-				if resizer.Hovered() || resizer.Pressed() {
-					p.Fill(ui.Rect{X: r.X + r.W - 1, Y: r.Y, W: 1, H: r.H}, t.Accent, 0)
-				}
-			})
-		})
+	a.projectSidebar(c, pal)
 }
 
 // refFilterInput 是侧栏的筛选框。

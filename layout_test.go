@@ -34,37 +34,39 @@ func TestSidebarClearsTitleBar(t *testing.T) {
 	}
 }
 
-// 红绿灯浮在顶栏那条带子上，项目标签就挨着它 —— 左边要让开绿灯按钮的
-// 右沿，而且不能只让一两个像素：两个圆角凑在一起，标签的悬停底色一出来
-// 就像和窗口按钮连成了一片。
-func TestProjectTabClearsTrafficLights(t *testing.T) {
+// 红绿灯浮在窗口左上角。侧栏自己的顶栏控件要让开它们，项目行则从标题栏
+// 下沿开始，不能和窗口按钮抢同一块地方。
+func TestSidebarChromeClearsTrafficLights(t *testing.T) {
 	a := richApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
 	tt.SetTitleBar(realTitleBar)
 	tt.Frame()
 	tt.Frame()
 
+	hide, ok := tt.Find("隐藏侧栏")
+	if !ok {
+		t.Fatalf("侧栏顶栏上找不到隐藏按钮：%q", tt.Texts())
+	}
+	if minX := realTitleBar.Left + 8; hide.X < minX {
+		t.Errorf("侧栏顶栏按钮左边 x=%.0f，离窗口按钮（右沿 x=%.0f）太近了，至少该到 %.0f",
+			hide.X, realTitleBar.Left, minX)
+	}
+
 	tab, ok := tt.Find(a.repoName)
 	if !ok {
-		t.Fatalf("顶栏上找不到项目标签：%q", tt.Texts())
+		t.Fatalf("侧栏里找不到项目行：%q", tt.Texts())
 	}
-	if tab.Y > realTitleBar.Height {
-		t.Fatalf("找到的 %q 不在顶栏上：y=%.0f", a.repoName, tab.Y)
-	}
-	if minX := realTitleBar.Left + 12; tab.X < minX {
-		t.Errorf("项目标签左边 x=%.0f，离窗口按钮（右沿 x=%.0f）太近了，至少该到 %.0f",
-			tab.X, realTitleBar.Left, minX)
+	if tab.Y < realTitleBar.Height {
+		t.Errorf("项目行顶边 y=%.0f 压在标题栏里（高 %.0f）", tab.Y, realTitleBar.Height)
 	}
 }
 
-// 项目路径不占顶栏的常驻位置。
+// 项目路径不占侧栏的常驻位置。
 //
-// 从前侧栏收起时，工具栏那块仓库名下面还压着一行压短的路径 —— 项目标签
-// 刚报过名字，下一行又是一条路径，同一个项目在几像素之内自我介绍两遍。
-// 现在路径只在标签的悬停提示里：不占地方，想看时悬停就有。
-func TestProjectPathOnlyOnTabTooltip(t *testing.T) {
+// 常驻显示完整路径会让侧栏项目行变得很长，也会把项目名挤到看不清。现在
+// 路径只在项目行的悬停提示里：不占地方，想看时悬停就有。
+func TestProjectPathOnlyOnRowTooltip(t *testing.T) {
 	a := richApp(t)
-	a.sidebarOn = false // 仓库名那块摆出来 —— 从前那行路径就贴在它下面
 
 	tt := ui.NewTester(a.view, 1280, 860)
 	tt.SetTitleBar(realTitleBar)
@@ -73,27 +75,14 @@ func TestProjectPathOnlyOnTabTooltip(t *testing.T) {
 
 	tab, ok := tt.Find(a.repoName)
 	if !ok {
-		t.Fatalf("顶栏上找不到项目标签：%q", tt.Texts())
+		t.Fatalf("侧栏里找不到项目行：%q", tt.Texts())
 	}
-	if tab.Y > realTitleBar.Height {
-		t.Fatalf("找到的 %q 不在顶栏上（y=%.0f）—— 别拿工具栏那块仓库名当标签",
-			a.repoName, tab.Y)
+	if !tt.HasText(Tf("项目视图：%s", "Project view: %s", T("改动", "Changes"))) {
+		t.Fatalf("找到的 %q 不在项目侧栏里：%q", a.repoName, tt.Texts())
 	}
-	chip, ok := tt.Find(a.branch)
-	if !ok {
-		t.Fatalf("工具栏上找不到分支徽章：%q", tt.Texts())
-	}
-
-	// 顶栏到工具栏这一整块里不该有任何带斜杠的文字 —— 光比完整路径还不
-	// 够：从前那行是压短的（「…/T/xxx/001」），完整路径本来就不会出现。
-	band := chip.Y + chip.H
-	for _, s := range tt.Texts() {
-		if !strings.Contains(s, "/") {
-			continue
-		}
-		if r, found := tt.Find(s); found && r.Y <= band {
-			t.Errorf("顶栏这条带子里不该有路径，却有 %q（y=%.0f）", s, r.Y)
-		}
+	// 完整路径不该常驻；只有悬停提示才该给出它。
+	if tt.HasText(a.repoPath) {
+		t.Errorf("项目路径不该常驻显示：%q", tt.Texts())
 	}
 
 	tt.Move(tab.X+tab.W/2, tab.Y+tab.H/2)
@@ -105,34 +94,31 @@ func TestProjectPathOnlyOnTabTooltip(t *testing.T) {
 	}
 }
 
-// 标签上只有项目名，没有分支名 —— 名字后面缀一段截掉一半的分支，多项目
-// 并排时谁都不好认。分支归下面工具栏的分支徽章（侧栏开着时归侧栏的分支树）。
-func TestProjectTabShowsNameOnly(t *testing.T) {
+// 项目行上只有项目名。分支属于下面的独立行和分支树，不该被拼进项目名里。
+func TestProjectRowShowsNameOnly(t *testing.T) {
 	a := richApp(t)
-	a.sidebarOn = false // 关掉侧栏，分支名就只剩工具栏徽章那一处
 
 	tt := ui.NewTester(a.view, 1280, 860)
 	tt.SetTitleBar(realTitleBar)
 	tt.Frame()
 	tt.Frame()
 
+	if _, ok := tt.Find(a.repoName); !ok {
+		t.Fatalf("侧栏里找不到项目行：%q", tt.Texts())
+	}
 	for _, s := range tt.Texts() {
-		// 「main」和从前的「· main」都算：后缀比对把分隔符一并盖住
-		if s != a.branch && !strings.HasSuffix(s, " "+a.branch) {
-			continue
-		}
-		if r, found := tt.Find(s); found && r.Y <= realTitleBar.Height {
-			t.Errorf("标签上不该出现分支名，实际 %q（y=%.0f）", s, r.Y)
+		if strings.Contains(s, a.repoName) && strings.Contains(s, a.branch) {
+			t.Errorf("项目行不该把分支名拼进项目名，实际 %q", s)
 		}
 	}
 }
 
-// 切换激活标签，整条带子不能有任何东西挪窝。
+// 切换激活项目时，项目行的宽高不能跟着变。
 //
-// 激活态一律只换颜色 —— 底色、边框、文字明度，宽度都是零。曾经激活态
-// 把名字换成 semibold：字宽比 regular 多一个多百分点，点一下标签，这个
-// 框就宽一点点，右边所有标签连同 [+] 跟着一起挪，看着像整条带子在抖。
-func TestTabSwitchKeepsLayoutStill(t *testing.T) {
+// 激活项目会在它下面展开「改动 / 历史」和分支行，所以后续项目在纵向
+// 移动是预期行为；真正的抖动是行宽变化。曾经激活态把名字换成 semibold，
+// 字宽多一个多百分点，横向边界就会跟着跳。
+func TestProjectSwitchKeepsRowWidthStill(t *testing.T) {
 	a := richApp(t)
 	a.openInNewTab(a.repoPath)
 
@@ -158,7 +144,7 @@ func TestTabSwitchKeepsLayoutStill(t *testing.T) {
 	boxes := func() map[string]ui.Rect {
 		tt.Frame()
 		out := map[string]ui.Rect{}
-		for _, s := range []string{"zz-alpha", "zz-beta-longer", "新建项目标签页"} {
+		for _, s := range []string{"zz-alpha", "zz-beta-longer", T("新建项目标签页", "New Project Tab")} {
 			r, ok := tt.Find(s)
 			if !ok {
 				t.Fatalf("界面上找不到 %q：%q", s, tt.Texts())
@@ -173,16 +159,17 @@ func TestTabSwitchKeepsLayoutStill(t *testing.T) {
 		a.activeTab = active
 		after := boxes()
 		for name, r := range before {
-			if after[name] != r {
-				t.Errorf("激活第 %d 个标签后 %q 挪了窝：%+v → %+v",
-					active, name, r, after[name])
+			got := after[name]
+			if got.X != r.X || got.W != r.W || got.H != r.H {
+				t.Errorf("激活第 %d 个项目后 %q 横向尺寸变了：%+v → %+v",
+					active, name, r, got)
 			}
 		}
 	}
 }
 
-// 红绿灯那条带子归顶栏管（见上），工具栏在它下面，不必再让位 —— 侧栏
-// 收起时它贴着窗口左边缘，侧栏开着时贴着侧栏右边缘。
+// 工具栏在主工作卡片里：侧栏收起时要给红绿灯留出位置，侧栏开着时则贴着
+// 侧栏右边缘，不再额外缩进。
 func TestToolbarHugsSidebarEdge(t *testing.T) {
 	a := richApp(t)
 	a.sidebarOn = false
@@ -192,19 +179,23 @@ func TestToolbarHugsSidebarEdge(t *testing.T) {
 	tt.Frame()
 	tt.Frame()
 
-	// 拿视图切换那几枚图标按钮里最左边的一格（改动）定位工具栏的左沿：
-	// 带文字的控件（仓库名、分支徽章）在这两种状态里位置会变，只有它一直
-	// 排在头一个。
+	show, ok := tt.Find(T("显示侧栏", "Show Sidebar"))
+	if !ok {
+		t.Fatalf("侧栏收起时找不到显示按钮：%q", tt.Texts())
+	}
+	if minX := realTitleBar.Left + shellCardGap; show.X < minX {
+		t.Errorf("侧栏收起时第一个工具栏控件左边 x=%.0f，该给窗口按钮留到 %.0f", show.X, minX)
+	}
+
 	seg, ok := tt.Find("改动")
 	if !ok {
 		t.Fatalf("找不到工具栏的视图切换：%q", tt.Texts())
 	}
-	if seg.X > 40 {
-		t.Errorf("侧栏收起时工具栏第一个控件左边 x=%.0f，该贴着窗口左边缘", seg.X)
+	if seg.X <= show.X {
+		t.Errorf("视图切换 x=%.0f 没有排在显示侧栏按钮 x=%.0f 右边", seg.X, show.X)
 	}
 
-	// 反过来：侧栏开着的时候工具栏跟在侧栏后面，不该再多缩一次 ——
-	// 左边贴着侧栏右边缘就行，不该再加上 bar.Left。
+	// 侧栏开着的时候，显示按钮让位，视图切换直接贴着侧栏右边缘。
 	a.sidebarOn = true
 	tt.Frame()
 	tt.Frame()
@@ -254,13 +245,13 @@ func TestForkLayoutPanesStack(t *testing.T) {
 		t.Errorf("文件列表探到提交列表左边去了（%.0f < %.0f）—— 那是左右分",
 			fileBox.X, cmBox.X)
 	}
-	if want := float32(sidebarWidth) + 12; cmBox.X != want {
-		t.Errorf("主区左边缘 x=%.0f, want %.0f（侧栏 %d + 内边距 12）",
-			cmBox.X, want, sidebarWidth)
+	if want := float32(sidebarWidth) + shellCardGap + 12; cmBox.X != want {
+		t.Errorf("主区左边缘 x=%.0f, want %.0f（侧栏 %d + 卡片间距 %d + 内边距 12）",
+			cmBox.X, want, sidebarWidth, shellCardGap)
 	}
 	// 文件列表右移的那一栏正是提交详情，中间隔着那条 1px 分隔条
-	if want := float32(sidebarWidth) + 12 + detailPaneW + paneSplitterW; fileBox.X != want {
-		t.Errorf("文件列表左边缘 x=%.0f, want %.0f（侧栏 + 详情栏 %v + 分隔条 %v + 内边距 12）",
+	if want := float32(sidebarWidth) + shellCardGap + 12 + detailPaneW + paneSplitterW; fileBox.X != want {
+		t.Errorf("文件列表左边缘 x=%.0f, want %.0f（侧栏 + 卡片间距 + 详情栏 %v + 分隔条 %v + 内边距 12）",
 			fileBox.X, want, detailPaneW, paneSplitterW)
 	}
 
@@ -786,16 +777,11 @@ func TestSettingsFitsWhenNarrow(t *testing.T) {
 	}
 }
 
-// 工作区导航（改动 / 历史）和终端 / 编辑器并成工具栏那一段四选一，侧栏
-// 顶部不再有它。
+// 工作区导航（改动 / 历史）和终端 / 编辑器并成工具栏那一段四选一。
 //
-// 侧栏那一栏整片留给分支 / 远程 / 标签 / 储藏树；四格挤回侧栏里的话，
-// 「现在看哪一块」又在屏幕两端各说一遍（⌘1 ⌘2 也就跟着要按当前模式分两
-// 种意思，见 keys.go）。
-//
-// 判据：四格的左沿必须落在侧栏右边缘之后，而且排成一行、从左到右是
-// 改动 → 历史 → 终端 → 编辑器。要么哪一格缩回侧栏里，要么顺序变了，这条
-// 都会红。
+// 项目侧栏也提供改动 / 历史入口，因此它的行使用独立的无障碍标签；工具栏
+// 四格仍叫「改动 / 历史 / 终端 / 编辑器」。判据是这四格必须落在侧栏右边缘
+// 之后，排成一行，并从左到右依次排列。哪一格缩回侧栏或顺序变了都会失败。
 func TestWorkspaceNavLivesInToolbar(t *testing.T) {
 	a := richApp(t)
 
@@ -806,6 +792,12 @@ func TestWorkspaceNavLivesInToolbar(t *testing.T) {
 
 	sw := a.sidebarWidth(nil)
 	order := []string{"改动", "历史", "终端", "编辑器"}
+	for _, label := range order[:2] {
+		sidebarLabel := Tf("项目视图：%s", "Project view: %s", label)
+		if !tt.HasText(sidebarLabel) {
+			t.Errorf("项目侧栏里找不到 %q 这一行：%q", sidebarLabel, tt.Texts())
+		}
+	}
 	rects := make([]ui.Rect, 0, len(order))
 	for _, label := range order {
 		r, ok := tt.Find(label)

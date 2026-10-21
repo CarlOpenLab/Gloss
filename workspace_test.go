@@ -166,24 +166,24 @@ func TestWorkspaceTreeRowsArePlain(t *testing.T) {
 
 	// 上色：a.go 改过是琥珀（暖），new.go 未跟踪是绿，README.md 没动过是中性灰。
 	// 三种都验到才算「按改动上色」在画 —— 只验改过的那一个的话，全屏一个色
-	// 也能蒙混过关。
+	// 也能蒙混过关。取这一行里最深的像素：字形边缘带 LCD 次像素抗锯齿，
+	// 直接扫整行会把灰字边缘的彩色条纹误当成文字底色。
 	hue := func(name string) (warm, green bool) {
 		box, ok := tt.Find(name)
 		if !ok {
 			t.Fatalf("找不到 %q 好取色", name)
 		}
 		y := int(box.Y + box.H/2)
+		core := [3]uint8{255, 255, 255}
+		coreSum := 3 * 255
 		for x := int(box.X); x < int(box.X+box.W); x++ {
 			p := pixelAt(tt, x, y)
-			// 比较前转 int：uint8 上加 20 会绕回，237 > 219 就成了
-			// 「237 > 3」，满屏背景色都算命中。
-			if int(p[0]) > int(p[2])+20 {
-				warm = true
-			}
-			if int(p[1]) > int(p[0])+20 && int(p[1]) > int(p[2])+20 {
-				green = true
+			if sum := int(p[0]) + int(p[1]) + int(p[2]); sum < coreSum {
+				core, coreSum = p, sum
 			}
 		}
+		warm = int(core[0]) > int(core[2])+20
+		green = int(core[1]) > int(core[0])+20 && int(core[1]) > int(core[2])+20
 		return warm, green
 	}
 	if warm, _ := hue("a.go"); !warm {
