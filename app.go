@@ -861,7 +861,7 @@ func (a *app) view(c *ui.Context) {
 		})
 		// 侧栏的拖拽带排在主区之后：它压在卡片左沿上，而主区那一层会
 		// 盖住侧栏伸出来的那一半（见 sidebarResizer）。
-		a.sidebarResizer(c)
+		a.sidebarResizer(c, pal)
 	})
 	a.paletteDialog(c, pal)
 	a.settingsDialog(c, pal)

@@ -216,18 +216,18 @@ func (a *app) projectSidebar(c *ui.Context, pal palette) {
 //
 // 它压在白色卡片的左沿上（往侧栏里 4px、往主区里 5px），而不是浮在侧栏
 // 与卡片之间那段 8px 留白的中间：眼睛看见的边界是卡片的边线，指针就该在
-// 那条线上变成左右箭头，拖起来也像是直接拽着卡片走。悬停 / 拖动时那条
-// 1px 的强调线同样画在卡片边上。
+// 那条线上变成左右箭头，拖起来也像是直接拽着卡片走。悬停 / 按下时那条
+// 1px 的线同样画在卡片边上（只提亮一档中性发丝线）；真正拖动时整条收掉
+// —— 宽度自己跟着指针在变，不需要再描一条跟着跑的边。
 //
 // 它挂在根行上、排在主区之后：主区那一层盖住侧栏的右边缘，抓手留在侧栏里
 // 的话，伸出去的那一半收不到指针。
-func (a *app) sidebarResizer(c *ui.Context) {
+func (a *app) sidebarResizer(c *ui.Context, pal palette) {
 	// 只在侧栏完全展开时给抓手：收起 / 展开的动画途中按住的不是一条稳定
 	// 的边线，拖起来会跳。
 	if a.sidebarShown < 0.98 {
 		return
 	}
-	t := c.Theme()
 
 	// 侧栏外壳的宽度是 round 过的（见 sidebarShell），卡片左沿按同一个
 	// 数算，抓手才不会落在边线外半个像素上。
@@ -251,11 +251,17 @@ func (a *app) sidebarResizer(c *ui.Context) {
 	}
 
 	handle.Draw(func(p *ui.Painter, r ui.Rect) {
+		// 拖动时整条线收掉：侧栏宽度自己跟着指针在变，这条线再跟一遍
+		// 只是把「卡片边线」描成一条跟着跑的游标。
+		if a.sidebarDragging {
+			return
+		}
 		if !handle.Hovered() && !handle.Pressed() {
 			return
 		}
-		line := t.Accent
-		p.Fill(ui.Rect{X: r.X + r.W/2 - 0.5, Y: r.Y, W: 1, H: r.H}, line, 0)
+		// 和文件栏那条分隔线同一套：悬停 / 按下提亮一档中性发丝线，
+		// 不铺强调蓝。
+		p.Fill(ui.Rect{X: r.X + r.W/2 - 0.5, Y: r.Y, W: 1, H: r.H}, pal.hairlineStrong, 0)
 	})
 }
 

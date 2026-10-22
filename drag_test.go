@@ -128,6 +128,99 @@ func TestFilePaneDragResize(t *testing.T) {
 	}
 }
 
+// 两条栏分隔线悬停 / 拖动时只提亮中性发丝线，不铺强调蓝。
+//
+// 蓝线是「可点击的主 CTA」那一档的强调（DESIGN §5）；调栏宽时它跟着指针
+// 满屏走，一次普通的拖动就变成在卡片边上划一道彩色高亮。这条测试盯像素：
+// 分隔线附近任何一个像素都不该偏蓝，同时线本身还得看得见（不能干脆不画）。
+func TestSplitterLineIsNeutral(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+	tt.Frame()
+	settle(t, a)
+	tt.Frame()
+
+	check := func(name string, x float32) {
+		t.Helper()
+		tt.Move(x, 420)
+		tt.Frame()
+		img := tt.Image()
+		darkest := 255
+		for dx := -3; dx <= 3; dx++ {
+			r, g, b, _ := img.At(int(x)+dx, 420).RGBA()
+			r8, g8, b8 := int(r>>8), int(g>>8), int(b>>8)
+			if b8 > r8+20 && b8 > g8+20 {
+				t.Errorf("%s分隔线在 x=%d 处偏蓝：rgb(%d,%d,%d)", name, int(x)+dx, r8, g8, b8)
+			}
+			darkest = min(darkest, r8)
+		}
+		if darkest >= 250 {
+			t.Errorf("%s分隔线悬停时该可见（扫到的像素全是背景）", name)
+		}
+	}
+
+	check("侧栏", a.sidebarWidth(nil)+shellCardGap)
+	check("文件栏", a.sidebarWidth(nil)+shellCardGap+a.filePaneWidth(nil))
+}
+
+// 拖动时整条分隔线收掉：栏宽自己跟着指针在变，那条位移就是反馈，
+// 再画一条跟着指针满屏跑的线只是噪音。
+func TestSplitterLineHiddenWhileDragging(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+	tt.Frame()
+	settle(t, a)
+	tt.Frame()
+
+	near := func(v, want int) bool { d := v - want; return d >= -2 && d <= 2 }
+	// lineAt 说这一带有没有一条中性线（r≈g≈b，且明显暗于白底）。
+	lineAt := func(x float32, y int) bool {
+		img := tt.Image()
+		for dx := -2; dx <= 2; dx++ {
+			r, g, b, _ := img.At(int(x)+dx, y).RGBA()
+			r8, g8, b8 := int(r>>8), int(g>>8), int(b>>8)
+			if r8 < 245 && near(r8, g8) && near(g8, b8) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// 侧栏：悬停有细线，按住拖动时消失。
+	sep := a.sidebarWidth(nil) + shellCardGap
+	tt.Move(sep, 420)
+	tt.Frame()
+	if !lineAt(sep, 420) {
+		t.Fatal("侧栏悬停时该有分隔线")
+	}
+	tt.Press(sep, 420)
+	tt.Move(sep+50, 420)
+	tt.Frame()
+	if lineAt(a.sidebarWidth(nil)+shellCardGap, 420) {
+		t.Error("拖动侧栏时线该完全消失")
+	}
+	tt.Release(sep+50, 420)
+	tt.Frame()
+
+	// 文件栏：同一套。
+	paneSep := a.sidebarWidth(nil) + shellCardGap + a.filePaneWidth(nil)
+	tt.Move(paneSep, 500)
+	tt.Frame()
+	if !lineAt(paneSep, 500) {
+		t.Fatal("文件栏悬停时该有分隔线")
+	}
+	tt.Press(paneSep, 500)
+	tt.Move(paneSep+40, 500)
+	tt.Frame()
+	if lineAt(a.sidebarWidth(nil)+shellCardGap+a.filePaneWidth(nil), 500) {
+		t.Error("拖动文件栏时线该完全消失")
+	}
+	tt.Release(paneSep+40, 500)
+	tt.Frame()
+}
+
 // 项目与分支之间那条分割线可以拖：往下拖，项目区变高，分支区让出位置；
 // 高度记进配置，重开还在；双击回到「跟着内容」。
 func TestProjectsDividerDragAndPersist(t *testing.T) {

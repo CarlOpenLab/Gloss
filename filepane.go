@@ -169,7 +169,6 @@ type paneSplit struct {
 //
 // 命中区比那 1px 宽（左右各探出 3px）—— 一条发丝线是世界上最难点中的东西。
 func (a *app) paneSplitter(c *ui.Context, pal palette, s paneSplit) {
-	t := c.Theme()
 	grip := float32(6)
 
 	ui.Box(c).Width(paneSplitterW).Shrink(0).FillHeight().Children(func() {
@@ -188,9 +187,16 @@ func (a *app) paneSplitter(c *ui.Context, pal palette, s paneSplit) {
 			a.saveViewSettings()
 		}
 		handle.Draw(func(p *ui.Painter, r ui.Rect) {
+			// 拖动时整条线收掉：栏宽自己跟着指针在变，那条位移就是反馈，
+			// 再画一条跟着指针满屏跑的线只是噪音。
+			if *s.drag {
+				return
+			}
+			// 悬停 / 按下只把发丝线提亮一档，不用强调蓝：这条线是两栏的
+			// 边界，不是可点击的主 CTA（见 DESIGN §5 的强调预算）。
 			line := pal.hairline
 			if handle.Hovered() || handle.Pressed() {
-				line = t.Accent
+				line = pal.hairlineStrong
 			}
 			p.Fill(ui.Rect{X: r.X + (grip-1)/2, Y: r.Y, W: 1, H: r.H}, line, 0)
 		})
