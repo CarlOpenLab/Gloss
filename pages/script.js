@@ -195,4 +195,20 @@
       row.classList.add("is-on");
     });
   });
+
+  var projRows = Array.prototype.slice.call(document.querySelectorAll(".sb-proj-row"));
+  projRows.forEach(function (row) {
+    row.addEventListener("click", function () {
+      projRows.forEach(function (other) { other.classList.remove("is-on"); });
+      row.classList.add("is-on");
+    });
+  });
+
+  var viewTabs = Array.prototype.slice.call(document.querySelectorAll(".tb-view-tab"));
+  viewTabs.forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      viewTabs.forEach(function (other) { other.classList.remove("is-on"); });
+      tab.classList.add("is-on");
+    });
+  });
 })();

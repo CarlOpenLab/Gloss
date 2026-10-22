@@ -9,260 +9,249 @@
 <h1 align="center">Gloss</h1>
 
 <p align="center">
-  <strong>Cross-platform Git client with AI change audits and commit messages.</strong><br>
-  <em>Pure Go · GPU Direct Rendering · Zero WebViews</em>
+  <strong>Next-generation native Git client with AI change auditing and commit intelligence.</strong><br>
+  <em>Pure Go · GPU Direct Rendering · Zero WebViews · Single ~20MB Binary</em>
 </p>
 
 <p align="center">
+  <a href="https://github.com/CarlOpenLab/Gloss/releases/latest"><img src="https://img.shields.io/badge/Release-v0.3.17-4F46E5?style=flat-square" alt="Release v0.3.17"></a>
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.27+-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go 1.27+"></a>
-  <img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-000000?style=flat-square&logo=apple&logoColor=white" alt="macOS | Linux | Windows">
+  <img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-000000?style=flat-square&logo=apple&logoColor=white" alt="macOS | Windows | Linux">
   <a href="https://github.com/egoist/mygo"><img src="https://img.shields.io/badge/GUI-mygo%20(GPU%20Direct)-4F46E5?style=flat-square" alt="mygo"></a>
-  <img src="https://img.shields.io/badge/AI-Claude%20%7C%20DeepSeek%20%7C%20Ollama%20%7C%20OpenAI-6366F1?style=flat-square" alt="Multi-LLM">
   <img src="https://img.shields.io/badge/Architecture-Zero%20WebView-10B981?style=flat-square" alt="Zero WebView">
+  <img src="https://img.shields.io/badge/AI-Claude%20%7C%20OpenAI%20%7C%20DeepSeek%20%7C%20Ollama-6366F1?style=flat-square" alt="Multi-LLM">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License: MIT"></a>
 </p>
 
 <p align="center">
-  <a href="https://carlopenlab.github.io/Gloss/">🌐 Website / Landing Page</a> •
-  English • <a href="README_zh.md">简体中文</a>
+  <a href="https://carlopenlab.github.io/Gloss/">🌐 Official Website</a> •
+  <a href="https://github.com/CarlOpenLab/Gloss/releases">📦 Download Releases</a> •
+  <a href="#key-features">✨ Key Features</a> •
+  <a href="#keyboard-shortcuts">⌨️ Shortcuts</a> •
+  English • <a href="README.zh_CN.md">简体中文</a>
+</p>
+
+---
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="pages/assets/shot-history-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="pages/assets/shot-history-light.png">
+    <img alt="Gloss Main Interface Preview" src="pages/assets/shot-history-dark.png" width="100%">
+  </picture>
 </p>
 
 ---
 
 ## Why Gloss?
 
-When reviewing large pull requests or AI-generated diffs, the biggest bottleneck isn't looking at lines of code—it's understanding **why** each hunk was changed, what the author intended, and whether there are hidden pitfalls.
+> **"Inspect clearly before you merge."**
 
-**Gloss** is a cross-platform Git client (macOS, Linux, Windows) crafted for swift code review and safe everyday Git operations:
+In the era of AI coding assistants and rapid iteration, code changes are generated faster than ever. When reviewing a pull request or inspecting dirty worktrees, the bottleneck is rarely reading lines of code—it is understanding **why** changes were made, what the author intended, and whether dangerous edge cases or hardcoded secrets are lurking in the diff.
 
-- **Catch risky changes early**: One click scans the staged diff and lists suspicious spots—hardcoded secrets, injection risks, and the like—ranked by severity and anchored to file and line.
-- **Blazing native performance**: Powered by [mygo](https://github.com/egoist/mygo), rendered directly via GPU. **Zero WebViews, zero JavaScript runtimes, single native binary**. Instant startup, silky smooth 60fps scrolling, minimal memory footprint.
+Traditional Git GUIs are often bloated Electron applications that consume hundreds of megabytes of RAM and stutter when rendering large diffs, or legacy tools that lack modern AI-assisted code intelligence.
 
----
+**Gloss** is built from scratch in pure Go to deliver a featherweight, lightning-fast native desktop experience:
 
-## Features
-
-- ⚡ **GPU Direct Rendering**: Pure Go native interface built with `mygo`, styled around GitHub's visual palette.
-- 🛡 **Pre-flight Risk Scan**: One click scans the staged diff for hardcoded secrets, injection risks, and other suspicious changes, grouped by severity and anchored to file and line.
-- 🤖 **AI Commit Messages & Branch Names**: Generate Conventional Commits messages from the staged diff (optionally steered by an intent hint), and name new branches from a one-line description.
-- 🌲 **Fork-Style Layout & Topology Graph**: Custom commit topology graph to visualize branching histories, with three built-in lane palettes (Classic / Vivid / Grayscale) and per-lane color overrides for dark and light; the review pane shows one file at a time with split / unified layouts, word-level inline highlighting and syntax highlighting.
-- 🔍 **Viewed Tracking**: Mark files as reviewed to collapse them into clean headers; automatically resets when file contents change.
-- 🛠 **Full Git Workflow**:
-  - **Staging & Commits**: Whole-file staging, **per-hunk staging**, persistent drafts, and Amend (`--amend`).
-  - **Branches & Remotes**: Switch/create/rename/delete branches, safe merge and rebase, push tags, and `--force-with-lease` protected force push.
-  - **Stash Management**: Modal stash dialog with message and untracked files (`-u`); right-click to inspect diff, Apply, Pop, or Drop with confirmation.
-- 🦺 **Human-Friendly Error & Conflict Resolution**:
-  - Plain-language explanations for hook rejections, lock contention, missing credentials, or detached HEAD states.
-  - Dedicated amber banner during active rebase/merge conflicts with two-way side picking and deletion handling.
-- ⌨️ **Keyboard-Driven & Command Palette**: Press `⌘K` for the command palette, `J` / `K` to jump across diff hunks, and full macOS native menu shortcuts.
-- 🤖 **Universal LLM Compatibility**: Built-in presets for Anthropic Claude, DeepSeek, Kimi, Qwen, GLM, OpenRouter, Ollama, and any OpenAI-compatible API.
+* **⚡ Native GPU Direct Rendering**: Built on [mygo](https://github.com/egoist/mygo). Zero WebViews, zero JavaScript runtimes, zero Electron overhead. Instant launch (<100ms), 60 FPS silky-smooth scrolling, and low memory consumption in a single ~20MB executable.
+* **🛡️ Pre-Flight AI Risk Auditing**: One-click scanning of your staged diff. LLMs highlight hardcoded credentials, injection vulnerabilities, and regression risks grouped by severity, anchored directly to file and line numbers.
+* **🤖 AI Commit & Branch Intelligence**: Automatically draft Conventional Commits messages from staged diffs with optional intent hints, and name git branches from a simple one-line objective.
+* **🌲 Fork-Style Topology & Dual-Pane Review**: Intuitive branching graph, single-file focused diffs with word-level inline highlights, line-range and hunk staging, image diff previews, and progress tracking.
+* **🦺 Human-Friendly Error Explanations**: No more cryptic git errors or raw HTTP dumps. Hook rejections, lock contention, and conflicts are translated into plain-language explanations with actionable advice.
 
 ---
 
-## Detailed Capabilities
+## Visual Showcase & Features
 
-- **Local Repositories**: Open any working copy to inspect uncommitted changes. The sidebar organizes Branches, Remotes, Tags, and Stashes. Click a branch to focus on its commit history; click a stash to view its exact changes.
-- **"All Branches" and upstream counters**: The first row of the sidebar's local group is **All Branches** — it shows the history of every ref in the repository (local + remote + tags) as one graph, so branches HEAD cannot reach are on screen too. Local branches that track an upstream carry `↑n ↓n` next to their name (how many commits they are ahead / behind, read in the same `for-each-ref` call rather than one `rev-list` per branch); a deleted upstream says "upstream gone". Local and remote read as one line of work instead of two unrelated lists.
-- **Filter the commit list**: The box on top of the History tab matches commit messages, hashes, authors and the branches / tags pointing at a commit as you type (`/` focuses it). It filters what this batch has loaded, and the header says "Filtered X of Y". When nothing matches and earlier commits are still unread, loading continues until something turns up.
-- **Staging & Commits**: Stage entire files or individual hunks via dedicated buttons on hunk headers. Work is cleanly divided between "Staged" and "Unstaged" areas. Draft messages are preserved per repository even when switching contexts (`⌘⏎` to commit).
-- **File Row Context Menu**: Right-click any file row in the Changes, History, or Stash views — stage / unstage (conflict rows get "Use Ours / Use Theirs" plus "Mark Resolved" instead), discard changes… (untracked files say "Delete File…"; both ask first), open in editor, reveal in Finder, copy path / relative path / file name, view file history…, mark as reviewed, and add to `.gitignore`. Rows in History and Stash views are read-only, so actions that would touch the working tree simply aren't there.
-- **View File History…**: Lists the commits that touched this file (`git log --follow`, so it follows renames) and jumps straight to the selected commit in the History tab — no digging through the whole branch history to find which commits it appeared in.
-- **Branch Switching, Checkout & Tags**: Double-click branches or tags in the sidebar to check them out. Checking out remote branches automatically sets up local tracking branches. Detached HEAD states trigger warning badges in the toolbar.
-- **Branch Integration & Remote Management**:
-  - Right-click local branches to merge or rebase onto target branches (with safety confirmations and conflict assistance).
-  - Deleting a branch is always two separate actions: **Delete Branch** removes the local branch (with a confirmation, and a second one if it isn't merged), **Delete Remote Branch** deletes the remote copy and leaves the local branch alone. Local branches that track an upstream offer both, right where you right-clicked.
-  - Right-click remote branches to checkout or safely delete them with confirmation.
-  - Push tags to `origin` with a single click.
-  - Protected force pushing via `--force-with-lease` prevents overwriting teammates' work.
-- **Stash Management & Amend**:
-  - Save dirty working tree states with custom messages and untracked files (`-u`).
-  - Inspect stash diffs directly; apply, pop, or drop stashes with confirmation dialogs.
-  - Amend commits with pre-filled previous commit messages, supporting message-only adjustments or staged additions.
-- **Fetch, Pull & Push**: Dedicated toolbar actions with intelligent disable states for detached HEAD or repos without remotes. Provides plain-language translations for push rejections, divergences, and authentication requirements.
-- **Background auto-fetch (opt-in, off by default)**: Settings → Preferences → Remote Sync. Every 5 minutes all remotes are fetched, so remote branches and each local branch's `↑n ↓n` keep themselves current. **Fetch only, never pull**: fetching moves remote-tracking refs and cannot produce a conflict halfway through; pulling merges into the current branch, so that click always belongs to you. Failures are silent until the next interval — fetch by hand when you want the reason.
-- **One File at a Time Diff View**: The left pane navigates, the right pane renders the selected file with MyGo's diff viewer — red/green highlighting, dual-side line numbers, word-level inline changes, collapsible unchanged regions, and syntax highlighting. The unstaged side is editable (saving writes the working tree only, never the index).
-- **Built-in Editor Lists the Whole Workspace**: The editor view's file pane lists every file in the working tree (`git ls-files`), not just the ones you changed. The tree opens fully collapsed, and changed files are tinted by their status the way VS Code does it (directories take the most urgent colour underneath) — so "has colour" is itself the signal. That pane draws **no status letters, no +N −N counts and no staging checkbox** in front of the names: almost nothing in a whole-workspace list is dirty, so a letter, two numbers and a box that rewrites the index on every changed file is noise (stage — and read letters and counts — in the Changes pane; the right-click menu still has those actions). Unchanged files open with a clean gutter. That pane has its own filter box and selection, so moving between views never carries one pane's filter into the other; its footer tells you how many files are dirty.
-- **Pre-flight Risk Scan**: The 🛡 Audit Changes button hands the full staged diff to your model and lists suspicious spots (hardcoded secrets, injection risks, …) grouped by severity—critical / high / medium / low—each anchored to a file and line. Provider failures are translated into plain language instead of raw HTTP errors.
-- **AI Commit Messages & Branch Names**: The AI button in the commit box drafts a Conventional Commits message from the staged diff, treating your notes in the message box as an intent hint; a zh/EN toggle picks the language. The new-branch dialog can generate a branch name from a one-line description.
-- **Fork-Style Commit Graph**: Top pane displays commits alongside a calculated topology graph; bottom pane displays the file tree on the left and the selected file's diff on the right.
-- **File Tree & Viewed Marks**: Collapsible directory tree with single-child path flattening and fuzzy search (`⌘P`). Marking a file as `Reviewed` dims it in the file list and invalidates on content changes.
-- **Find in Diff (`⌘F`)**: The find bar belongs to the diff viewer — `⌘F` while the diff has focus, `⌘F` / `⇧⌘G` to walk matches. Finding content and finding files are separate: `⌘F` for content, `⌘P` for files.
-- **Stage by Hunk**: Hovering a change (or parking the caret on it) reveals `Stage` / `Unstage` for exactly that change — the blocks are the viewer's own, so one click stages that block only and leaves the other changes in the file alone.
-- **Conflict Resolution Inline**: Selecting a conflicted file shows the worktree text with its markers (the left side switches between current / theirs / merge base). Every conflict block has its own "keep X / keep Y / keep both / keep neither", the top bar resolves the whole file either way, and the right side is editable: "Save & Resolve" writes the file and runs `git add` in one step.
-- **Command Palette (`⌘K`)**: Quick access to all application actions with keyboard-first workflows.
+### 1. Pre-Flight AI Risk Auditing
+Catch potential security risks and inadvertent mistakes *before* committing. Gloss feeds your staged diff to your chosen LLM and generates a structured audit report categorized into **Critical**, **High**, **Medium**, and **Low** risks with exact file anchors and line numbers.
+
+<p align="center">
+  <img src="pages/assets/shot-riskscan-dark.png" alt="Pre-flight Risk Scan" width="100%">
+</p>
+
+### 2. Fork-Style Commit Topology & Ref Intelligence
+Visualize the entire project branching structure with a high-density, GPU-rendered topology graph:
+* **All Branches Overview**: View the unified history of all refs (local, remote, and tags) at a glance.
+* **Upstream Sync Trackers**: Every tracking branch displays real-time `↑n ↓n` ahead/behind commit counts extracted in a single efficient query, alerting you if the upstream has been deleted on remote.
+* **Instant Filtering (`/`)**: Real-time filtering across commit messages, hashes, authors, and ref names with streaming background loading.
+* **Custom Lane Palettes**: Choose from Classic, Vivid, or Monochromatic schemes with per-lane custom color overrides.
+
+### 3. Precision Code Review & Granular Staging
+Review diffs one file at a time without cognitive clutter:
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="pages/assets/shot-diff-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="pages/assets/shot-diff-light.png">
+    <img alt="Gloss Diff View" src="pages/assets/shot-diff-dark.png" width="100%">
+  </picture>
+</p>
+
+* **Word-Level Inline Highlighting**: Spot exact character and word alterations at a glance with dual-side line numbering and collapsible unchanged regions.
+* **Per-Hunk & Line-Range Staging**: Hover over any diff block or selection to stage or unstage exactly that hunk.
+* **Raster Image Diff Review**: Native side-by-side previews for **PNG, JPEG, GIF, WebP, and BMP** files, displaying dimensions, color depth, and file size comparisons.
+* **Reviewed (`Viewed`) Tracking**: Mark files as reviewed to collapse them and keep your focus on pending files; automatically resets when file contents change.
+* **In-Diff Search (`⌘F`)**: High-speed search inside the diff viewer, separated from fuzzy file searching (`⌘P`).
+
+### 4. Inline Conflict Resolution & Safe Workflows
+* **Visual Conflict Solving**: Open conflicted files directly in the review pane with side-by-side pickers: *Keep Ours*, *Keep Theirs*, *Keep Both*, or *Keep Neither*. The right side is directly editable, and clicking **Save & Resolve** writes the file and runs `git add` in a single step.
+* **Persistent Amber Conflict Bar**: Active rebase, merge, or cherry-pick states surface an amber status bar with clear *Continue*, *Skip*, or *Abort* actions and remaining conflict counters.
+* **Protected Force Push**: Safe force-pushing via `--force-with-lease` prevents accidentally overwriting teammates' remote commits.
+* **Two-Step Branch Deletion**: Separate local branch deletion from remote branch deletion with dedicated confirmation dialogs.
+
+### 5. Integrated Workspace & Multi-Session Terminal
+* **Whole-Workspace File Explorer**: The built-in editor mode lists your entire repository tree (`git ls-files`) with status-based semantic coloring (VS Code style).
+* **Ghostty-Powered Terminal**: Open multiple shell tabs per project repository with customizable monospace/Nerd fonts.
+* **AI CLI Image Paste Bridge**: Seamlessly paste images (`⌘V`) into AI terminal CLIs (like Claude Code) by automatically translating clipboard image payloads.
+
+### 6. 3-Layer Git Config & Multi-LLM Management
+* **Git Identity Inspector**: Manage `user.name` and `user.email` across **System**, **Global** (`~/.gitconfig`), and **Local** (`.git/config`) scopes in one clean panel. Gloss preserves all comments, includes, and custom directives without full-file rewrites.
+* **Multi-Provider AI Engine**: Built-in presets for **Anthropic Claude**, **OpenAI**, **DeepSeek**, **Kimi (Moonshot)**, **Qwen**, **Zhipu GLM**, **OpenRouter**, and local **Ollama** models. Reorder providers via drag-and-drop.
+
+---
+
+## Download & Installation
+
+Pre-built binaries are available for macOS, Windows, and Linux.
+
+### Pre-built Releases
+
+Download the latest release from the [GitHub Releases](https://github.com/CarlOpenLab/Gloss/releases/latest) page:
+
+| Platform | Format | Description |
+| :--- | :--- | :--- |
+| **macOS** | `.dmg` | Apple Silicon (`arm64`) & Intel (`x86_64`) |
+| **Windows** | `.exe` / `.zip` | Setup Installer or Portable Zip (Zero admin rights, AMD64) |
+| **Linux** | `tar.gz` | Portable 64-bit binary |
+
+> [!NOTE]
+> **Windows Defender False Positive Note:**
+> Microsoft Defender's ML heuristics occasionally flag freshly compiled, unsigned installers as `Trojan:Script/Wacatac.C!ml`. Gloss contains zero obfuscation, zero telemetry, and zero installer-time downloads.
+> * **Recommended quick option**: Download `gloss-<version>-windows-amd64-portable.zip`, unpack it, and run `Gloss.exe` directly.
+> * **Or allow in Defender**: Open *Windows Security* → *Protection history* → Select detection → *Actions* → *Allow on device*.
+
+---
+
+## Build from Source
+
+Gloss requires **Go 1.27+** (managed automatically via `mise`).
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/CarlOpenLab/Gloss.git
+cd Gloss
+
+# 2. Install the required toolchain
+mise install
+
+# 3. Run development mode with live hot-reload
+go tool mygo dev
+
+# 4. Build production release binaries (.app / .dmg)
+go tool mygo build
+
+# 5. Run headless test suite
+go test ./...
+```
 
 ---
 
 ## Keyboard Shortcuts
 
-| Shortcut | Action |
-|---|---|
-| `⌘K` | Open Command Palette |
-| `J` / `K` | Jump to Next / Previous hunk (Changes) or commit (History) |
-| `↓` / `↑` | Select Next / Previous commit (History) or file (Changes) |
-| `⌘F` | Find in the diff (opens the viewer's own find bar when it has focus) |
-| `↵` / `⇧↵` | Next / previous match (in the find box) |
-| `⌘G` / `⌘⇧G` | Next / previous match |
-| `Esc` | Close the find bar |
-| `⌘P` | Focus file filter input |
-| `⌘S` | Save the edited side of the diff / editor (a conflict also runs `git add`) |
-| `⌘⏎` | Commit staged changes |
-| `⌘O` | Open repository |
-| `⌘1` / `⌘2` / `⌘3` / `⌘4` | Changes / History / Terminal / Editor (the four toolbar segments — clicking them does the same) |
-| `⌘⇧B` | Toggle Sidebar |
-| `⌘R` | Refresh repository status |
-| `⌘⇧F` / `⌘⇧P` / `⌘⇧U` | Fetch / Pull / Push |
-| `⌘+` / `⌘−` / `⌘0` | Zoom in / Zoom out / Reset font size |
-| `⌘,` | Settings (Preferences / Models / Prompts / Git config …) |
-| `Esc` | Exit branch compare / PR review |
+Gloss is engineered for keyboard-first efficiency:
 
-The table uses macOS notation. **On Linux and Windows, ⌘ means `Ctrl`** — the same key does the same thing, and the app displays `Ctrl+…` there (see `keys_i18n.go`). ⌥ becomes `Alt`, ⌫ becomes `Backspace`, ⏎ becomes `Enter`.
-
-> Menu items (`menu.go`) share identical shortcut mappings with `keys.go` to keep the native menu and the in-app shortcuts in sync.
-
----
-
-## Build & Run
-
-Requires **Go 1.27+** (enforced by `mygo`, pre-configured in `mise.toml`).
-
-```bash
-# 1. Install toolchain via mise
-mise install                 # Installs Go 1.27.1
-
-# 2. Local development with live reload
-go tool mygo dev             # Hot reload on code changes
-
-# 3. Production release
-go tool mygo build           # Builds .app and .dmg into build/darwin-arm64/
-
-# 4. Automated tests
-go test ./...                # Headless rendering tests, no display required
-```
-
-### Windows: Defender flags the installer (false positive)
-
-Microsoft Defender's ML heuristics — usually as `Trojan:Script/Wacatac.C!ml` — report `Gloss.Setup.<version>.amd64.exe`. It is a false positive: nothing here is packed, obfuscated, or downloaded at install time. An unsigned installer with a brand-new hash every release is simply the profile those heuristics score worst.
-
-**Two ways through while it is flagged:**
-
-1. **Install nothing.** Download `gloss-<version>-windows-amd64-portable.zip`, extract it, run `Gloss.exe`. It is the same build as the archive the installer puts down (same `Gloss.exe` and `ghostty-vt.dll`), needs no admin rights and writes nothing outside its own folder.
-2. **Allow it.** Defender → *Protection history* → the detection → *Actions* → *Allow on device*, or add your download folder to the exclusions.
-
-**Report it.** Detections are per file hash, so a fresh release starts flagged again — report the file once per release (takes a few hours): <https://www.microsoft.com/en-us/wdsi/filesubmission> → *Software developer* → upload the flagged `Gloss.Setup.<version>.amd64.exe` → *Incorrectly detected as malware*. Microsoft clears that hash and feeds the result back into the model.
-
-The durable fix is code signing: a signed build carries a publisher, so the same bytes stop being scored as an anonymous binary.
+| Shortcut (macOS) | Shortcut (Win / Linux) | Action |
+| :--- | :--- | :--- |
+| `⌘K` | `Ctrl+K` | Open Command Palette |
+| `J` / `K` | `J` / `K` | Jump to next / previous hunk (Changes) or commit (History) |
+| `↓` / `↑` | `↓` / `↑` | Select next / previous file (Changes) or commit (History) |
+| `⌘F` | `Ctrl+F` | Find in active diff view |
+| `↵` / `⇧↵` | `Enter` / `Shift+Enter` | Navigate to next / previous diff search match |
+| `⌘P` | `Ctrl+P` | Fuzzy find and filter files |
+| `/` | `/` | Focus commit search box in History |
+| `⌘S` | `Ctrl+S` | Save edited file (auto `git add` for conflict files) |
+| `⌘⏎` | `Ctrl+Enter` | Commit staged changes |
+| `⌘O` | `Ctrl+O` | Open repository |
+| `⌘1` / `⌘2` | `Ctrl+1` / `Ctrl+2` | Switch to **Changes** / **History** view |
+| `⌘3` / `⌘4` | `Ctrl+3` / `Ctrl+4` | Switch to **Terminal** / **Editor** view |
+| `⌘⇧B` | `Ctrl+Shift+B` | Toggle Sidebar |
+| `⌘R` | `Ctrl+R` | Refresh repository status |
+| `⌘⇧F` | `Ctrl+Shift+F` | Fetch all remotes |
+| `⌘⇧P` | `Ctrl+Shift+P` | Pull from remote tracking branch |
+| `⌘⇧U` | `Ctrl+Shift+U` | Push to remote branch |
+| `⌘+` / `⌘-` / `⌘0` | `Ctrl++` / `Ctrl+-` / `Ctrl+0` | Zoom in / Zoom out / Reset interface scale |
+| `⌘,` | `Ctrl+,` | Open Settings |
+| `Esc` | `Esc` | Close search bar or dismiss modal overlay |
 
 ---
 
 ## LLM Configuration
 
-Open **Settings (`⌘,`)** from the top right menu to configure your API provider and key. The configuration is securely stored at `~/Library/Application Support/Gloss/config.json` (permissions `0600`).
-
-The provider column lists only the providers you've added; drag the handle at the start of a row to reorder them (the order is part of the draft — it lands on Save, and Cancel throws it away). New ones come from the **Add Provider** button's menu, which also shows built-in presets for Anthropic Claude, DeepSeek, Kimi, Qwen, GLM, OpenRouter and Ollama, plus custom OpenAI-compatible endpoints; providers already in the list are greyed out there.
-
-Alternatively, Gloss falls back to standard environment variables:
+Configure your AI provider directly in **Settings (`⌘,` / `Ctrl+,`) → Models**, or set standard environment variables:
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-# Optional: export ANTHROPIC_MODEL=claude-sonnet-5-5
-# Optional: export ANTHROPIC_BASE_URL=https://...
+# Anthropic Claude
+export ANTHROPIC_API_KEY="sk-ant-..."
+export ANTHROPIC_MODEL="claude-sonnet-4-5" # Optional
+
+# OpenAI / Compatible API
+export OPENAI_API_KEY="sk-..."
+export OPENAI_BASE_URL="https://api.openai.com/v1" # Optional
 ```
 
-## Git Configuration
-
-**Settings → Git Config** shows all three layers of git's own configuration in one page: **global** (`~/.gitconfig`, every repository on this machine), **local** (`.git/config`, this repository only), and **system** (`/etc/gitconfig` and vendor files, shown read-only).
-
-The page covers one question — **who git says you are when you commit** — so it lists exactly `user.name` and `user.email`. Structural settings (`branch.*`, `remote.*`, `core.*`) are deliberately absent: they have proper homes in the branch and remote panes, and turning them into editable rows is how a repository gets broken by a typo. At the local layer you pick whether this repository **inherits the global identity** or **sets its own**; inheriting means the local keys are dropped on save so the global ones apply. Clearing a field means "this layer no longer sets it" (the key is removed rather than written as an empty value), and the placeholder shows the value that would apply instead.
-
-**Only the rows you changed are written.** Comments, `include` ordering, and anything Gloss does not understand are left exactly as they are — no full rewrite. Reads and writes both go through the `git` CLI, so `includeIf` conditions and subsections behave here exactly as they do on the command line.
-
-Needs git ≥ 2.26 (reading uses `--show-scope`). On older git the page shows git's own message instead of silently degrading — a half-read config is worse than a clear "your git is too old".
+Configuration files are stored locally with strict permissions (`0600`) at `~/Library/Application Support/Gloss/config.json` (macOS) or platform config directories.
 
 ---
 
-## Architecture
+## Architecture Overview
 
 ```
-main.go / app.go         Window, menus, app state, root frame layout
-  sidebar.go             Sidebar: branches / remotes / tags / stashes tree
-  branchops.go           Branch & remote operations: merge, rebase, delete, force push
-  renamebranchdialog.go  Branch rename dialog with name validation
-  stashdialog.go         Stash modal dialog (save dirty state with optional message)
-  stashops.go            Stash actions: apply, pop, drop with confirmation
-  history.go             Top pane: commit table and column headers
-  commitops.go           Commit row actions: cherry-pick, revert, checkout, copy hash
-  resetdialog.go         Branch reset dialog (soft / mixed / hard with warning)
-  newbranchdialog.go     Create branch from selected commit
-  graph.go               Topology graph: layout computation & line drawing
-  filepane.go            Bottom pane left: file list & staging controls
-  workspace.go           Editor view's file pane: the whole working tree, not just the changes
-  filemenu.go            File row context menu: stage / discard / copy / history / ignore
-  filehist.go            "View File History…" dialog: this file's own commits, jump to one
-  review.go              Review pane: single-file diff viewer (both sides, hunk staging, conflict side picking)
-  conflict_region.go     Parsing and rewriting conflict markers in the worktree text
-  files.go               File list identity (fileKey / pathOf / displayPath)
-  commitbox.go           Staging checkboxes, hunk staging buttons, commit box
-  checkout.go            Checkout handlers, double-click, cleanup
-  tagdialog.go           Tag creation dialog (lightweight & annotated)
-  remote.go              Toolbar remote actions: fetch, pull, push
-  opbanner.go            Operation feedback banners (error bar / success toast)
-  pendingbar.go          Amber conflict status bar: continue / skip / abort
-  confirmdialog.go       Destructive action confirmation dialogs
-  resolve.go             Conflict resolution: two-way side picking & cards (menu lives in filemenu.go)
-  treeview.go            Shared tree rows (indentation, arrows, selection capsules)
-  refs.go                The sidebar's ref tree: the "All Branches" row, upstream ↑n ↓n, grouping & filtering
-  palette.go / keys.go   Command palette & shortcut bindings
-  menu.go                macOS native menu bar commands
-  settings.go            Settings dialog (sidebar + Preferences / Models / Prompts / Updates / About)
-  gitconfig.go           Settings → Git Config page: read, edit and save all three layers (writes live in internal/gitrepo/config.go)
-  theme.go               GitHub-aligned theme palette (light / dark)
-
-internal/
-  gitrepo/               Git CLI wrapper (status / diff / log / refs / write ops)
-    write.go             Staging, hunk staging, commit, amend
-    stash.go             Stash operations (push / apply / pop / drop)
-    commitops.go         Cherry-pick, revert, reset (--soft / --mixed / --hard)
-    branch.go            Create, rename, delete branch, merge, rebase
-    remote.go            Fetch, pull, push (with --force-with-lease, tags, delete)
-    pending.go           In-progress operation detection + continue / skip / abort
-    conflict.go          Conflict side resolution (ours / theirs, delete-modify)
-    failure.go           Plain-language git error translator
-    config.go            git config read/write: all three layers in one call, writes scoped to --global/--local
-  diff/                  Unified diff parser
-    slice.go             Slice hunk patches for hunk-level staging
-    range.go             Build a patch for a line range (context only where both sides agree)
-  explain/               Prompt construction for commit messages, branch names, PR review, and risk scans (pure functions)
-  llm/                   Streaming client for Anthropic & OpenAI-compatible APIs
-    failure.go           Plain-language provider error translator
-  store/                 Config and state persistence
-  filetree/              Tree building, flattening, and fuzzy filtering
+Gloss/
+├── main.go / app.go         Application lifecycle, window management, event loop & frame dispatch
+├── sidebar.go               Ref tree: branches, remotes, tags, and stashes
+├── history.go               Commit list, column layouts, and selection tracking
+├── graph.go                 GPU-rendered commit topology graph layout engine
+├── review.go                Diff review pane: single-file viewer, hunk staging & conflict editor
+├── imagereview.go           Raster image preview & visual diff engine (PNG, JPEG, GIF, WebP, BMP)
+├── commitbox.go             Composer card: staged files, hunk actions & AI commit generation
+├── workspace.go             Whole-repository file explorer for editor mode
+├── palette.go / keys.go     Command palette and keyboard shortcut mappings
+├── settings.go / theme.go   macOS-style floating settings panel & GitHub-aligned design system
+├── gitconfig.go             3-Layer Git configuration inspector & editor
+└── internal/
+    ├── gitrepo/             Robust git CLI wrapper (status, diff, log, refs, write operations)
+    ├── diff/                Unified diff parser, slice generator, and hunk patch range calculator
+    ├── llm/                 Streaming multi-provider client (Anthropic, OpenAI, Ollama)
+    ├── explain/             Prompt generation for commit messages, branch naming & risk scans
+    └── filetree/            Fuzzy-filterable directory tree data structures
 ```
 
-> **Threading Invariant** (see top of `app.go`): All app field mutations occur strictly on the main thread. Background goroutines receive value parameters and dispatch results back to the main thread.
+> [!IMPORTANT]
+> **Threading Invariant**: All mutations to application state occur strictly on the main thread. Background goroutines process disk and network tasks asynchronously and dispatch immutable result payloads back to the main thread.
 
 ---
 
 ## Roadmap
 
-- [x] Staging + Commits (file-level + hunk-level)
-- [x] Branching / Checkout / Tags (double-click + context menu)
-- [x] Remotes: Fetch / Pull / Push
-- [x] Conflict management: Amber status bar + Continue / Skip / Abort
-- [x] Conflict side picking: Use ours / Use theirs / Mark resolved
-- [x] Commit context menu: Cherry-pick / Revert / Reset / Branch from here
-- [x] Local branch operations: New branch (`⌘⇧N`), rename, safe deletion
-- [x] Remote branch & integration: Delete remote branch, merge/rebase, force-with-lease push
-- [x] Draggable sidebar resizing
-- [x] Keyboard navigation for the file list: `J` / `K` and `↑` / `↓` move the selected commit on the history tab; on the changes tab `↑` / `↓` move the selection in the changed-files list while `J` / `K` jump between hunks
-- [x] AI commit message & branch generation
-- [x] GitHub PR: list open PRs and review PR diffs
-- [x] Pre-flight risk scan: Full-diff scan highlighting potential vulnerabilities
-- [x] File row context menu: stage / discard (delete for untracked) / reveal in Finder / copy path three ways / view file history / mark reviewed / add to `.gitignore`
-- [x] Drag-to-reorder providers, with presets moved into the Add Provider menu
-- [x] Native text selection in the diff: the review pane is a real editor, so drag-select, `⌘C` and undo are its own behavior
+- [x] High-performance GPU direct rendering interface
+- [x] Pre-flight AI risk audit for staged diffs
+- [x] Conventional Commits & branch naming generator
+- [x] GPU topology graph with custom lane palettes
+- [x] File-level and hunk-level / line-range staging
+- [x] Raster image diff preview (PNG, JPEG, GIF, WebP, BMP)
+- [x] Reviewed (`Viewed`) file tracking and auto-collapse
+- [x] Human-friendly git error translations
+- [x] Inline visual conflict resolver with one-click side picking
+- [x] Multi-session Ghostty terminal with AI CLI image clipboard bridge
+- [x] 3-layer Git config identity editor (System / Global / Local)
+- [x] Opt-in background auto-fetch (fetch only, never pull)
+- [x] Draggable floating settings dialog & multi-repo tabs
+- [ ] Interactive rebase GUI with visual commit squash/reorder
+- [ ] Built-in GitHub PR review & comment creation
 
 ---
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+This project is open-source software licensed under the [MIT License](LICENSE).

@@ -37,13 +37,14 @@
         <img class="brand-logo is-dark" src="assets/logo-dark.png" alt="" width="22" height="22">
         <img class="brand-logo is-light" src="assets/logo.png" alt="" width="22" height="22">
         <span class="brand-name">Gloss</span>
-        <span class="brand-ver">0.3.16</span>
+        <span class="brand-ver">0.3.17</span>
       </a>
 
       <nav class="nav-links" aria-label="主导航">
         <a href="#review">审查</a>
         <a href="#graph">图谱</a>
         <a href="#intelligence">智能</a>
+        <a href="#terminal">终端</a>
         <a href="#keyboard">键盘</a>
         <a href="#download">下载</a>
       </nav>
@@ -98,93 +99,141 @@
         <figure class="stage" data-stage>
           <div class="stage-cap">
             <span class="mono">HISTORY — 提交详情 · 文件清单 · 逐行差异</span>
-            <span class="mono stage-cap-right">v0.3.16 / macOS</span>
+            <span class="mono stage-cap-right">v0.3.17 / macOS</span>
           </div>
 
           <div class="frame">
             <div class="win" aria-hidden="true">
-              <div class="win-bar">
-                <span class="tl tl-r"></span><span class="tl tl-y"></span><span class="tl tl-g"></span>
-                <div class="win-tabs">
-                  <span class="wtab">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
-                    atlas-web
-                    <span class="wx">×</span>
-                  </span>
-                  <span class="wtab">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
-                    core-api
-                    <span class="wx">×</span>
-                  </span>
-                  <span class="wtab is-on">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
-                    atlas-client
-                    <span class="wx">×</span>
-                  </span>
-                  <span class="wtab-add">＋</span>
+              <!-- Left: Project Sidebar -->
+              <aside class="win-sidebar">
+                <div class="sb-header">
+                  <div class="tl-group">
+                    <span class="tl tl-r"></span>
+                    <span class="tl tl-y"></span>
+                    <span class="tl tl-g"></span>
+                  </div>
+                  <button class="sb-toggle-btn" type="button" aria-label="收起侧栏" title="隐藏项目侧栏 (⌘⌥B)">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <rect x="3" y="3" width="18" height="18" rx="3"></rect>
+                      <path d="M9 3v18"></path>
+                    </svg>
+                  </button>
                 </div>
-                <span class="win-bar-pad"></span>
-                <svg class="win-gear" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.08a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.08a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.08a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-              </div>
 
-              <div class="win-tb">
-                <span class="tb-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M9 4v16"></path></svg></span>
-                <span class="tb-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 17l6-5-6-5M12 19h8"></path></svg></span>
-                <span class="tb-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 6l-5 6 5 6M16 6l5 6-5 6"></path></svg></span>
-                <span class="tb-sep"></span>
-                <span class="tb-branch">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="6" cy="6" r="2.4"></circle><circle cx="6" cy="18" r="2.4"></circle><path d="M6 8.4v7.2M15 6a3 3 0 0 1 3 3v6a2.4 2.4 0 1 1-2.4-2.4"></path></svg>
-                  <span>beta</span>
-                  <span class="caret">▾</span>
-                </span>
-                <span class="tb-count"><span class="up">↑2</span> <span class="down">↓0</span></span>
-                <span class="tb-spacer"></span>
-                <span class="tb-hint"><kbd>⌘</kbd><kbd>K</kbd></span>
-                <span class="tb-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 9h18M9 9v11"></path></svg></span>
-                <span class="tb-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 9h18M12 9v11"></path></svg></span>
-                <span class="tb-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"></path></svg></span>
-              </div>
+                <div class="sb-sec-head">
+                  <span>PROJECTS</span>
+                  <span class="sb-add-btn" title="添加项目">＋</span>
+                </div>
+                <div class="sb-projects">
+                  <div class="sb-proj-row">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+                    <span class="sb-proj-name">atlas-web</span>
+                  </div>
+                  <div class="sb-proj-row">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+                    <span class="sb-proj-name">core-api</span>
+                  </div>
+                  <div class="sb-proj-row is-on">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+                    <span class="sb-proj-name">atlas-client</span>
+                  </div>
+                </div>
 
-              <div class="win-body">
-          <aside class="sb">
-            <div class="sb-filter">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
-              Filter branches
-            </div>
-            <div class="sb-scroll">
-              <div class="sb-group"><span class="sb-group-label">Local Branches</span><span class="sb-chev">⌄</span></div>
-              <div class="sb-row"><span class="sb-ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="6" r="2.2"></circle><circle cx="6" cy="18" r="2.2"></circle><circle cx="18" cy="18" r="2.2"></circle><path d="M6 8.2v7.6M8.2 6H14a4 4 0 0 1 4 4v5.8"></path></svg></span><span class="sb-name">All branches</span></div>
-              <div class="sb-row"><span class="sb-ic"></span><span class="sb-name">master</span></div>
-              <div class="sb-row"><span class="sb-ic"></span><span class="sb-name">optimize/dy-auth-flow</span></div>
-              <div class="sb-row"><span class="sb-ic"></span><span class="sb-name">feat/search-auto-complete</span></div>
-              <div class="sb-row"><span class="sb-ic"></span><span class="sb-name">feat/private-msg-theme</span></div>
-              <div class="sb-row is-on"><span class="sb-dot"></span><span class="sb-name">beta</span><span class="sb-chip">HEAD</span><span class="sb-ab"><i class="up">↑2</i></span></div>
-              <div class="sb-row sb-dim"><span class="sb-ic"></span><span class="sb-name">refactor/publish-infra</span></div>
+                <div class="sb-divider" title="调整项目与分支高度">
+                  <span class="sb-divider-line"></span>
+                </div>
 
-              <div class="sb-group"><span class="sb-group-label">Remote Branches</span><span class="sb-chev">⌄</span></div>
-              <div class="sb-row sb-row--ind"><span class="sb-ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 6h16M4 12h16M4 18h16"></path></svg></span><span class="sb-name">origin</span><span class="sb-chev">⌄</span></div>
-              <div class="sb-row sb-row--ind2"><span class="sb-name">master</span></div>
-              <div class="sb-row sb-row--ind2"><span class="sb-name">optimize/dy-auth-flow</span></div>
-              <div class="sb-row sb-row--ind2"><span class="sb-name">beta</span><span class="sb-ab"><i class="up">↑2</i></span></div>
-              <div class="sb-row sb-row--ind2"><span class="sb-name">panel-optimize</span></div>
-              <div class="sb-row sb-row--ind"><span class="sb-ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 6h16M4 12h16M4 18h16"></path></svg></span><span class="sb-name">shared-lib</span><span class="sb-chev">⌄</span></div>
-              <div class="sb-row sb-row--ind2"><span class="sb-name">feat/search-auto-complete</span></div>
-              <div class="sb-row sb-row--ind2"><span class="sb-name">master</span></div>
+                <div class="sb-sec-head">
+                  <span>BRANCHES</span>
+                </div>
+                <div class="sb-filter">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
+                  Filter branches
+                </div>
+                <div class="sb-scroll">
+                  <div class="sb-group"><span class="sb-group-label">Local Branches</span><span class="sb-chev">⌄</span></div>
+                  <div class="sb-row"><span class="sb-ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="6" r="2.2"></circle><circle cx="6" cy="18" r="2.2"></circle><circle cx="18" cy="18" r="2.2"></circle><path d="M6 8.2v7.6M8.2 6H14a4 4 0 0 1 4 4v5.8"></path></svg></span><span class="sb-name">All branches</span></div>
+                  <div class="sb-row"><span class="sb-ic"></span><span class="sb-name">master</span></div>
+                  <div class="sb-row"><span class="sb-ic"></span><span class="sb-name">optimize/dy-auth-flow</span></div>
+                  <div class="sb-row"><span class="sb-ic"></span><span class="sb-name">feat/search-auto-complete</span></div>
+                  <div class="sb-row"><span class="sb-ic"></span><span class="sb-name">feat/private-msg-theme</span></div>
+                  <div class="sb-row is-on"><span class="sb-dot"></span><span class="sb-name">beta</span><span class="sb-chip">HEAD</span><span class="sb-ab"><i class="up">↑2</i></span></div>
+                  <div class="sb-row sb-dim"><span class="sb-ic"></span><span class="sb-name">refactor/publish-infra</span></div>
 
-              <div class="sb-group"><span class="sb-group-label">Tags</span><span class="sb-chev">⌄</span></div>
-              <div class="sb-row"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.9.0</span><span class="sb-tag">latest</span></div>
-              <div class="sb-row"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.8.4</span></div>
-              <div class="sb-row"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.8.0</span></div>
-              <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.7.6</span></div>
-              <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.7.2</span></div>
-              <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.7.0</span></div>
-              <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.6.4</span></div>
+                  <div class="sb-group"><span class="sb-group-label">Remote Branches</span><span class="sb-chev">⌄</span></div>
+                  <div class="sb-row sb-row--ind"><span class="sb-ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 6h16M4 12h16M4 18h16"></path></svg></span><span class="sb-name">origin</span><span class="sb-chev">⌄</span></div>
+                  <div class="sb-row sb-row--ind2"><span class="sb-name">master</span></div>
+                  <div class="sb-row sb-row--ind2"><span class="sb-name">optimize/dy-auth-flow</span></div>
+                  <div class="sb-row sb-row--ind2"><span class="sb-name">beta</span><span class="sb-ab"><i class="up">↑2</i></span></div>
+                  <div class="sb-row sb-row--ind2"><span class="sb-name">panel-optimize</span></div>
+                  <div class="sb-row sb-row--ind"><span class="sb-ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 6h16M4 12h16M4 18h16"></path></svg></span><span class="sb-name">shared-lib</span><span class="sb-chev">⌄</span></div>
+                  <div class="sb-row sb-row--ind2"><span class="sb-name">feat/search-auto-complete</span></div>
+                  <div class="sb-row sb-row--ind2"><span class="sb-name">master</span></div>
 
-              <div class="sb-group"><span class="sb-group-label">Stashes</span><span class="sb-chev">⌄</span></div>
-              <div class="sb-row"><span class="sb-ic sb-ic--stash"></span><span class="sb-name">wip: tab relay</span></div>
-              <div class="sb-row sb-dim"><span class="sb-ic sb-ic--stash"></span><span class="sb-name">wip: lane palette</span></div>
-            </div>
-          </aside>
+                  <div class="sb-group"><span class="sb-group-label">Tags</span><span class="sb-chev">⌄</span></div>
+                  <div class="sb-row"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.3.17</span><span class="sb-tag">latest</span></div>
+                  <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.3.16</span></div>
+                  <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.3.15</span></div>
+                  <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.3.14</span></div>
+
+                  <div class="sb-group"><span class="sb-group-label">Stashes</span><span class="sb-chev">⌄</span></div>
+                  <div class="sb-row"><span class="sb-ic sb-ic--stash"></span><span class="sb-name">wip: image review</span></div>
+                  <div class="sb-row sb-dim"><span class="sb-ic sb-ic--stash"></span><span class="sb-name">wip: lane palette</span></div>
+                </div>
+
+                <div class="sb-footer">
+                  <span class="sb-foot-btn" title="设置 (⌘,)">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.08a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.08a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.08a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                    <span>设置</span>
+                  </span>
+                  <span class="sb-foot-kbd">⌘,</span>
+                </div>
+              </aside>
+
+              <!-- Right: Raised Card Container -->
+              <main class="win-card-container">
+                <div class="win-card">
+                  <!-- Toolbar Inside Card -->
+                  <div class="card-tb">
+                    <div class="tb-views">
+                      <span class="tb-view-tab"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6M9 15h6M12 12v6"></path></svg>改动</span>
+                      <span class="tb-view-tab is-on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"></circle><line x1="3" y1="12" x2="9" y2="12"></line><line x1="15" y1="12" x2="21" y2="12"></line></svg>历史</span>
+                      <span class="tb-view-tab"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>终端</span>
+                      <span class="tb-view-tab"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>编辑器</span>
+                    </div>
+
+                    <span class="tb-sep"></span>
+
+                    <span class="tb-branch-chip">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="6" r="2.4"></circle><circle cx="6" cy="18" r="2.4"></circle><path d="M6 8.4v7.2M15 6a3 3 0 0 1 3 3v6a2.4 2.4 0 1 1-2.4-2.4"></path></svg>
+                      <span class="tb-branch-name">beta</span>
+                      <span class="tb-chip-head">HEAD</span>
+                      <span class="tb-chip-ab"><i class="up">↑2</i></span>
+                    </span>
+
+                    <span class="tb-spacer"></span>
+
+                    <div class="tb-seg-icons">
+                      <span class="tb-seg-icon" title="Unified (单栏)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line></svg></span>
+                      <span class="tb-seg-icon is-on" title="Split (分栏)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="12" y1="4" x2="12" y2="20"></line></svg></span>
+                    </div>
+
+                    <span class="tb-sep"></span>
+
+                    <div class="tb-remotes">
+                      <span class="tb-icon-btn" title="抓取 (Fetch ⌘⇧F)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"></path></svg></span>
+                      <span class="tb-icon-btn" title="拉取 (Pull ⌘⇧P)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg></span>
+                      <span class="tb-icon-btn" title="推送 (Push ⌘⇧U)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg></span>
+                    </div>
+
+                    <span class="tb-sep"></span>
+
+                    <span class="tb-icon-btn" title="刷新仓库 (⌘R)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></span>
+                    <span class="tb-icon-btn" title="打开本地仓库 (⌘O)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg></span>
+                  </div>
+
+                  <!-- Card Body -->
+                  <div class="card-body">
 
                 <section class="cl">
                   <div class="cl-head">
@@ -201,20 +250,20 @@
               <path d="M12 16V432" stroke="var(--app-lane0)" stroke-width="1.4"></path>
               <path d="M12 80C12 96 28 94 28 112V160C28 176 12 174 12 190" stroke="var(--app-lane1)" stroke-width="1.4"></path>
               <path d="M28 176C28 192 44 190 44 208V256C44 272 12 270 12 286" stroke="var(--app-lane2)" stroke-width="1.4"></path>
-              <circle cx="12" cy="16" r="4.5" fill="var(--app-lane0)"></circle>
-              <circle cx="12" cy="48" r="3.5" fill="var(--app-lane0)"></circle>
-              <circle cx="12" cy="80" r="3.5" fill="var(--app-lane0)"></circle>
-              <circle cx="28" cy="112" r="3.5" fill="var(--app-lane1)"></circle>
-              <circle cx="28" cy="144" r="3.5" fill="var(--app-lane1)"></circle>
-              <circle cx="28" cy="176" r="3.5" fill="var(--app-lane1)"></circle>
-              <circle cx="44" cy="208" r="3.5" fill="var(--app-lane2)"></circle>
-              <circle cx="44" cy="240" r="3.5" fill="var(--app-lane2)"></circle>
-              <circle cx="44" cy="272" r="3.5" fill="var(--app-lane2)"></circle>
-              <circle cx="12" cy="304" r="3.5" fill="var(--app-lane0)"></circle>
-              <circle cx="12" cy="336" r="3.5" fill="var(--app-lane0)"></circle>
-              <circle cx="28" cy="368" r="3.5" fill="var(--app-lane1)"></circle>
-              <circle cx="12" cy="400" r="3.5" fill="var(--app-lane0)"></circle>
-              <circle cx="12" cy="432" r="3.5" fill="var(--app-lane0)"></circle>
+              <circle cx="12" cy="16" r="3.5" fill="var(--app-lane0)" stroke="var(--app-card)" stroke-width="2"></circle>
+              <circle cx="12" cy="48" r="3.5" fill="var(--app-lane0)" stroke="var(--app-card)" stroke-width="2"></circle>
+              <circle cx="12" cy="80" r="3.5" fill="var(--app-lane0)" stroke="var(--app-card)" stroke-width="2"></circle>
+              <circle cx="28" cy="112" r="3.5" fill="var(--app-lane1)" stroke="var(--app-card)" stroke-width="2"></circle>
+              <circle cx="28" cy="144" r="3.5" fill="var(--app-lane1)" stroke="var(--app-card)" stroke-width="2"></circle>
+              <circle cx="28" cy="176" r="3.5" fill="var(--app-lane1)" stroke="var(--app-card)" stroke-width="2"></circle>
+              <circle cx="44" cy="208" r="3.5" fill="var(--app-lane2)" stroke="var(--app-card)" stroke-width="2"></circle>
+              <circle cx="44" cy="240" r="3.5" fill="var(--app-lane2)" stroke="var(--app-card)" stroke-width="2"></circle>
+              <circle cx="44" cy="272" r="3.5" fill="var(--app-lane2)" stroke="var(--app-card)" stroke-width="2"></circle>
+              <circle cx="12" cy="304" r="3.5" fill="var(--app-lane0)" stroke="var(--app-card)" stroke-width="2"></circle>
+              <circle cx="12" cy="336" r="3.5" fill="var(--app-lane0)" stroke="var(--app-card)" stroke-width="2"></circle>
+              <circle cx="28" cy="368" r="3.5" fill="var(--app-lane1)" stroke="var(--app-card)" stroke-width="2"></circle>
+              <circle cx="12" cy="400" r="3.5" fill="var(--app-lane0)" stroke="var(--app-card)" stroke-width="2"></circle>
+              <circle cx="12" cy="432" r="3.5" fill="var(--app-lane0)" stroke="var(--app-card)" stroke-width="2"></circle>
             </svg>
             <div class="cl-row is-on">
               <span class="cl-msg">Merge 'feat/audit-log' into beta</span>
@@ -404,7 +453,7 @@
                 </section>
               </div>
 
-              <div class="win-status">
+              <div class="card-status">
                 <span class="st-branch">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="6" cy="6" r="2.4"></circle><circle cx="6" cy="18" r="2.4"></circle><path d="M6 8.4v7.2M15 6a3 3 0 0 1 3 3v6a2.4 2.4 0 1 1-2.4-2.4"></path></svg>
                   beta
@@ -417,7 +466,9 @@
                 <span>GPU 60 fps</span>
               </div>
             </div>
-          </div>
+          </main>
+        </div>
+      </div>
         </figure>
 
         <div class="spec-strip">
@@ -435,15 +486,15 @@
         <header class="sec-head" data-reveal>
           <p class="sec-label"><span class="idx">01</span>REVIEW</p>
           <div class="sec-titles">
-            <h2>改动不止要看见，<br>要读得懂。</h2>
-            <p>一次 PR 往往有几十个文件。提交信息、文件清单与逐行差异并排在同一屏；每一处可疑变更都被标在它所在的那一行，而不是藏进另一个窗口。</p>
+            <h2>改动不止要看见，<br>更要读得懂。</h2>
+            <p>一次改动往往涉及代码与静态资源。单文件专注审查、词级内联高亮、按块/按行暂存；原生支持 PNG、JPEG、GIF、WebP、BMP 图片差异对比。每一处可疑风险都被标在它所在的那一行，而不是藏进深层弹窗。</p>
           </div>
         </header>
 
         <figure class="figure" data-reveal>
           <div class="fig-cap">
             <span class="mono">FIG. 01 — 差异阅读器</span>
-            <span class="mono">逐 hunk 暂存 · 词级高亮 · 行内风险标注</span>
+            <span class="mono">逐 hunk 暂存 · 词级高亮 · 栅格图片对比 · 行内风险标注</span>
           </div>
 
           <div class="panel dp">
@@ -453,7 +504,10 @@
                 internal/review/state.go
                 <span class="dp-tab-x">×</span>
               </span>
-              <span class="dp-tab">internal/review/store.go</span>
+              <span class="dp-tab">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                hero-banner.png
+              </span>
               <span class="dp-tab">review_test.go</span>
               <span class="dp-tabs-pad"></span>
               <span class="seg"><i class="is-on">Split</i><i>Unified</i></span>
@@ -493,7 +547,7 @@
 
             <div class="dp-foot">
               <span class="prog"><i style="width:66%"></i></span>
-              <span class="dp-prog-t">已审查 4 / 6 文件</span>
+              <span class="dp-prog-t">已审查 4 / 6 文件 · 支持栅格图片对照</span>
               <span class="dp-spacer"></span>
               <span class="dp-act"><kbd>R</kbd> 风险扫描</span>
               <span class="dp-act is-primary"><kbd>⌘</kbd><kbd>↩</kbd> 提交</span>
@@ -653,11 +707,71 @@
       </div>
     </section>
 
-    <!-- ══════════ 04 KEYBOARD ══════════ -->
+    <!-- ══════════ 04 TERMINAL ══════════ -->
+    <section class="sec sec--band" id="terminal">
+      <div class="shell">
+        <header class="sec-head" data-reveal>
+          <p class="sec-label"><span class="idx">04</span>TERMINAL &amp; WORKSPACE</p>
+          <div class="sec-titles">
+            <h2>极速内置终端，<br>代码触手可及。</h2>
+            <p>基于 Ghostty 的原生多会话终端，支持自定义等宽/Nerd 字体；向 Claude Code 等 AI CLI 粘贴图片（<kbd class="inline-kbd">⌘</kbd><kbd class="inline-kbd">V</kbd>）时自动转发剪贴板序列。左侧全量工作区文件树按状态优雅着色，Git 身份配置三层合一。</p>
+          </div>
+        </header>
+
+        <figure class="figure figure--inset" data-reveal>
+          <div class="fig-cap">
+            <span class="mono">FIG. 04 — 原生终端与工作区</span>
+            <span class="mono">多会话芯片 · Nerd Font · AI 剪贴板直通</span>
+          </div>
+
+          <div class="panel tp">
+            <div class="tp-head">
+              <span class="tp-tab">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                atlas-client: zsh
+                <span class="tp-tab-close">×</span>
+              </span>
+              <span class="tp-tab is-on">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                claude-code
+                <span class="tp-tab-close">×</span>
+              </span>
+              <span class="tp-tab">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                test-runner
+                <span class="tp-tab-close">×</span>
+              </span>
+              <span class="tp-add-btn" title="新建终端 (⌘⇧T)">＋</span>
+              <span class="tp-spacer"></span>
+              <span class="tp-meta">Ghostty Engine · JetBrainsMono Nerd Font 13px</span>
+            </div>
+
+            <div class="tp-body">
+              <div class="tp-line"><span class="tp-prompt">carl@mbp</span> <span class="tp-dim">~/dev/Gloss</span> <span class="tp-prompt">(beta)</span> <span class="tp-cmd">$ claude</span></div>
+              <div class="tp-line tp-dim">Claude Code CLI v1.0.8 (connected to Claude 3.7 Sonnet)</div>
+              <div class="tp-line">&gt; 优化图片预览逻辑，增加 2400 万像素防 OOM 上限</div>
+              <div class="tp-line tp-pill"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg> 已粘贴剪贴板图片：1280×860 PNG (⌘V 直通转发)</div>
+              <div class="tp-line"><span class="tp-dim">● 分析 imagereview.go 与 editor_pane.go...</span></div>
+              <div class="tp-line tp-success">✔ 写入 maxPreviewImagePixels = 24_000_000 像素级上限防护</div>
+              <div class="tp-line tp-success">✔ 补齐 5 种栅格格式（PNG/JPEG/GIF/WebP/BMP）双侧位图解码测试</div>
+            </div>
+
+            <div class="tp-foot">
+              <span>会话：3 个激活</span>
+              <span>编码：UTF-8</span>
+              <span class="tp-spacer"></span>
+              <span>⌘1~⌘4 随手切换 Git 审查与终端</span>
+            </div>
+          </div>
+        </figure>
+      </div>
+    </section>
+
+    <!-- ══════════ 05 KEYBOARD ══════════ -->
     <section class="sec" id="keyboard">
       <div class="shell">
         <header class="sec-head" data-reveal>
-          <p class="sec-label"><span class="idx">04</span>KEYBOARD</p>
+          <p class="sec-label"><span class="idx">05</span>KEYBOARD</p>
           <div class="sec-titles">
             <h2>手不离键。</h2>
             <p><kbd class="inline-kbd">⌘</kbd><kbd class="inline-kbd">K</kbd> 呼出命令面板，空格暂存当前 hunk，<kbd class="inline-kbd">V</kbd> 标记已读，<kbd class="inline-kbd">R</kbd> 发起风险扫描。完整 macOS 原生菜单快捷键，按下即有回应。</p>
@@ -666,7 +780,7 @@
 
         <figure class="figure figure--inset" data-reveal>
           <div class="fig-cap">
-            <span class="mono">FIG. 04 — 命令面板</span>
+            <span class="mono">FIG. 05 — 命令面板</span>
             <span class="mono">按 Esc 收起 · ⌘K 呼出</span>
           </div>
 
@@ -733,11 +847,11 @@
       </div>
     </section>
 
-    <!-- ══════════ 05 SPEC ══════════ -->
+    <!-- ══════════ 06 SPEC ══════════ -->
     <section class="sec sec--band" id="spec">
       <div class="shell">
         <header class="sec-head" data-reveal>
-          <p class="sec-label"><span class="idx">05</span>SPEC</p>
+          <p class="sec-label"><span class="idx">06</span>SPEC</p>
           <div class="sec-titles">
             <h2>性能不是感觉，<br>是数字。</h2>
             <p>同一台机器、同一个仓库的对照。没有 Chromium，没有 Node 运行时，也没有一个只在后台待命就吃掉半 GB 的进程。</p>
@@ -792,11 +906,11 @@
       </div>
     </section>
 
-    <!-- ══════════ DOWNLOAD ══════════ -->
+    <!-- ══════════ 07 DOWNLOAD ══════════ -->
     <section class="sec sec--download" id="download">
       <div class="shell">
         <header class="sec-head" data-reveal>
-          <p class="sec-label"><span class="idx">06</span>DOWNLOAD</p>
+          <p class="sec-label"><span class="idx">07</span>DOWNLOAD</p>
           <div class="sec-titles">
             <h2>一条命令，<br>或一个安装包。</h2>
             <p>三个平台，同一个原生二进制。不捆绑浏览器内核，不需要额外运行时。</p>
@@ -806,7 +920,7 @@
         <div class="dl-wrap" data-reveal>
           <div class="dl-lead">
             <span class="mono">LATEST RELEASE</span>
-            <p class="dl-ver">v0.3.16</p>
+            <p class="dl-ver">v0.3.17</p>
             <a class="btn btn-primary btn-lg" href="https://github.com/CarlOpenLab/Gloss/releases/latest" target="_blank" rel="noopener" id="main-dl-2">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"></path>
