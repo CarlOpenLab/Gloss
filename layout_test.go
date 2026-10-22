@@ -174,6 +174,10 @@ func TestToolbarHugsSidebarEdge(t *testing.T) {
 	a.sidebarOn = false
 
 	tt := ui.NewTester(a.view, 1280, 860)
+	// 侧栏宽度是一条 260ms 的动画：这里量的是「摆定之后」的位置，不是
+	// 动画的半途。无头渲染每帧的耗时随内容变，靠「画两帧」等它落定不成立，
+	// 直接关掉动效。
+	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
 	tt.SetTitleBar(realTitleBar)
 	tt.Frame()
 	tt.Frame()

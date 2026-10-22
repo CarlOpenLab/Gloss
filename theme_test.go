@@ -93,6 +93,33 @@ func TestDesignTokensArePreferenceIndependent(t *testing.T) {
 	}
 }
 
+// TestLightShellGroundIsNeutral 断言浅色「窗口」那一层没有色相。
+//
+// 窗口底是屏上面积最大的一块颜色，一旦带上粉紫，白卡片旁边就浮着一层洗不掉
+// 的染色 —— 之前那版粉紫到奶油的渐变就是这个问题。现在只有一层中性冷灰
+// （和 term-fleet 的 plain 同档），和 §2「界面不含色相」一致：颜色留给 diff
+// 的增删与拓扑图，底色不参与表达。
+//
+// 不用 saturation() 判：那是给中间明度的强调色用的，HSL 饱和度在接近白色时
+// 会被明度放大 —— #eceef4 这种只差 8 个通道值的冷灰也能算出 0.27。这里看
+// 通道间距（max−min），十几级以内才算「灰」。
+func TestLightShellGroundIsNeutral(t *testing.T) {
+	pal := paletteFor(themeFor(false, ui.Preferences{}), laneSet{})
+	for _, tc := range []struct {
+		name string
+		c    ui.Color
+	}{
+		{"sideBg", pal.sideBg},
+		{"appBg", pal.appBg},
+	} {
+		spread := int(max(tc.c.R, tc.c.G, tc.c.B)) - int(min(tc.c.R, tc.c.G, tc.c.B))
+		if spread > 12 {
+			t.Errorf("浅色 %s = %s，通道间距 %d —— 窗口底应当是中性灰，不能带粉紫",
+				tc.name, hexOf(tc.c), spread)
+		}
+	}
+}
+
 // isViolet 判断一个颜色是不是落在紫 / 靛 / 鸢尾那一系。
 //
 // 判据不能是色相角。上一版的主色 #5e6ad2 色相 233°，而一道明确的钢青蓝

@@ -44,6 +44,9 @@ func TestRecentReposPersistenceAndPalette(t *testing.T) {
 func TestHeaderRepoMenuAndBranchQuickMenu(t *testing.T) {
 	a := richApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
+	// 收起侧栏后的落位要等 260ms 的宽度动画走完才量得准；无头渲染每帧
+	// 的耗时不稳定，画两帧不保证到终点。这个用例验的是布局，关掉动效。
+	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
 	tt.Frame()
 	settle(t, a)
 	tt.Frame()

@@ -135,14 +135,19 @@ func (a *app) windowButton(c *ui.Context, pal palette, key string, svg *ui.SVG,
 	}
 }
 
-// shellBackdrop paints the window wash. The cards and sidebar sit directly
-// on it, so the gradient gives the shell depth without adding another panel.
+// shellBackdrop paints the window wash the cards and sidebar sit on: a flat
+// neutral in light, a gradient in dark, so the shell has depth without another
+// panel.
+//
+// 浅色不铺渐变：那套粉紫到奶油的染色（借自 term-fleet 早期的 rex）落在
+// 白卡片旁边会读成一层脏色，也违了 §2「界面不含色相」。现在浅色只有一层
+// 中性冷灰 —— 和 term-fleet 的 plain 一样：窗口是「灰的」，卡片才是「白的」。
+// 侧栏是 Vibrant 材质，这里填不透明色：半透明会让壁纸的颜色透上来，又变成
+// 一层说不清的染色，「纯白」就守不住了。
 func shellBackdrop(c *ui.Context, pal palette, row ui.Element) {
-	from, to := ui.Hex("#ebe0f3"), ui.Hex("#f6efcf")
-	glow := ui.RGBA(247, 220, 241, 0.75)
-	if pal.dark {
-		from, to = ui.Hex("#17141f"), ui.Hex("#1b1916")
-		glow = ui.RGBA(120, 70, 120, 0.22)
+	if !pal.dark {
+		c.Root().Background(pal.sideBg)
+		return
 	}
 
 	alpha := float32(1)
@@ -152,9 +157,10 @@ func shellBackdrop(c *ui.Context, pal palette, row ui.Element) {
 	c.Root().LinearGradient(ui.LinearGradient{
 		Angle: 180,
 		Oklab: true,
-		From:  from.Alpha(alpha),
-		To:    to.Alpha(alpha),
+		From:  ui.Hex("#17141f").Alpha(alpha),
+		To:    ui.Hex("#1b1916").Alpha(alpha),
 	})
+	glow := ui.RGBA(120, 70, 120, 0.22)
 	row.LinearGradient(ui.LinearGradient{
 		Angle: 225,
 		Oklab: true,

@@ -62,7 +62,9 @@ type palette struct {
 	inkSubtle   ui.Color // 行号、辅助元信息、未激活图标
 	inkTertiary ui.Color // 快捷键提示、占位符、禁用态
 
-	appBg  ui.Color // 窗口底色
+	// appBg 是卡片里挖出来的那条槽（终端芯片带）的底色：浅色下比卡片白
+	// 暗一档，深色下比卡片沉一档，靠一道发丝线和正文分开。
+	appBg  ui.Color
 	codeBg ui.Color // 普通代码行背景
 	code   ui.Color // 代码文字
 	addBar ui.Color // 新增行左侧色条
@@ -72,7 +74,10 @@ type palette struct {
 	// hunkHover 是 hunk 行上那颗幽灵按钮悬停时的底色。它落在 hunk 带上，
 	// 所以不能直接用 codeBg：深色下那是比带子更暗的一档，鼠标一指上去
 	// 按钮反而沉下去。浅色下要的是提亮（白），深色下要的是抬高一档的蓝灰。
-	sideBg ui.Color // 删除侧留白（split 模式下对面没有对应行）
+	// sideBg 是「窗口」那一层的中性底：主窗口铺在侧栏和卡片下面（§1），
+	// 设置窗口的外壳也用它，浅色取值与 term-fleet 的 plain 同一支冷灰。
+	// 拆分 diff 里对面没有对应行的留白也读它 —— 那里要的是同一档「不是内容」。
+	sideBg ui.Color
 	ref    ui.Color // 分支名、commit hash 的强调色
 	viewed ui.Color // 已 review 的勾与文字
 
@@ -511,7 +516,7 @@ func paletteFor(t *ui.Theme, ls laneSet) palette {
 		inkSubtle:        ui.Hex("#8d8d97"),
 		inkTertiary:      ui.Hex("#a3a3ad"),
 		selection:        ui.RGBA(59, 108, 246, 0.12),
-		appBg:            ui.Hex("#f7eee4"),
+		appBg:            ui.Hex("#f7f7f9"),
 		codeBg:           ui.Hex("#ffffff"),
 		code:             ui.Hex("#1d1d1f"),
 		addBar:           ui.Hex("#22863a"),

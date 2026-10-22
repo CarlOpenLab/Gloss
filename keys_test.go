@@ -139,6 +139,10 @@ func TestCodeSizePersists(t *testing.T) {
 func TestSidebarToggleShortcut(t *testing.T) {
 	a := richApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
+	// 收放是一条 260ms 的曲线，而无头渲染每帧的耗时取决于这一帧画了
+	// 多少东西；只画一帧就断言，等于拿「渲染快不快」赌动画走没走完。
+	// 这个用例验的是状态和落盘，不是曲线，所以关掉动效让它一步到位。
+	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
 
 	if !a.sidebarOn {
 		t.Fatal("侧栏默认是开着的")

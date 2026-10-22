@@ -403,7 +403,7 @@ func (a *app) settingsBody(c *ui.Context, pal palette) {
 			Padding(0, 12, 0, 12).Gap(2).Children(func() {
 			ui.Row(c).Height(settingsBarH).Shrink(0).FillWidth().
 				Padding(0, 8).Gap(8).AlignItems(ui.Center).Children(func() {
-				drawIcon(c, iconSettings, 15, pal.textMuted)
+				// drawIcon(c, iconSettings, 15, pal.textMuted)
 				ui.Text(c, T("设置", "Settings")).FontSize(14).
 					FontWeight(weightSemibold).TextColor(pal.text)
 			})
