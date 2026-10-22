@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
@@ -24,6 +23,11 @@ type codeEditorState struct {
 	buffer *editor.Buffer
 	base   *editor.Buffer // 行号槽里画改动标记的参照版本，没有基线时为 nil
 	code   *editor.State
+
+	// img 是图片文件的预览。图片没有可编辑的文本缓冲区，这里摆位图；
+	// 保存/取消那一栏也不出现（看一眼就关掉，收尾动作只有关闭）。
+	img     *ui.Bitmap
+	imgMeta string
 }
 
 // openCodeEditor 打开工作区里的一个文件，用 MyGo 的 editor.View 整文件编辑。
@@ -37,28 +41,43 @@ func (a *app) openCodeEditor(f gitrepo.File) {
 	}
 	path := pathOf(f)
 	section := f.Section
+	image := isImagePreview(f)
 	a.codeEdit = codeEditorState{on: true, loading: true, path: path}
 	root := a.repoPath
 	a.run(func() {
 		ctx := context.Background()
 		repo, err := gitrepo.Open(ctx, root)
 		var data, base []byte
+		var side imageSide
 		if err == nil {
 			data, err = repo.Contents(path)
 		}
-		if err == nil && !utf8.Valid(data) {
+		if err == nil && image {
+			// 图片没有「编辑代码」可言：摆出画面，收尾只有关闭。
+			side = decodeImageSide(data)
+		}
+		if err == nil && !image && looksBinary(data) {
 			err = fmt.Errorf("%s 不是可编辑的文本文件", path)
 		}
-		if err == nil {
+		if err == nil && !image {
 			base = codeEditorBaseline(ctx, repo, path, section)
 		}
 		a.dispatch(func() {
-			if !a.codeEdit.on || a.codeEdit.path != path {
+			s := &a.codeEdit
+			if !s.on || s.path != path {
 				return
 			}
+			s.loading = false
 			if err != nil {
-				a.codeEdit.loading = false
-				a.codeEdit.err = err.Error()
+				s.err = err.Error()
+				return
+			}
+			if image {
+				if side.err != "" {
+					s.err = side.err
+					return
+				}
+				s.img, s.imgMeta = side.bitmap, side.meta
 				return
 			}
 			lang := editor.LanguageFor(path)
@@ -68,16 +87,15 @@ func (a *app) openCodeEditor(f gitrepo.File) {
 			if len(base) > 0 {
 				b := editor.NewBuffer(string(base))
 				b.SetLanguage(lang)
-				a.codeEdit.base = b
+				s.base = b
 				st.DiffBase = b
 			}
 			// Cmd+S 交给 Gloss 自己处理：编辑器把它认走就没机会保存了。
 			st.Bindings = []editor.Binding{
 				{Mods: ui.Cmd, Key: ui.KeyS, Command: editor.NoCommand},
 			}
-			a.codeEdit.buffer = buf
-			a.codeEdit.code = st
-			a.codeEdit.loading = false
+			s.buffer = buf
+			s.code = st
 		})
 	})
 }
@@ -142,11 +160,15 @@ func (a *app) codeEditorDialog(c *ui.Context, pal palette) {
 func (a *app) codeEditorBody(c *ui.Context, pal palette) {
 	t := c.Theme()
 	s := &a.codeEdit
+	title := "编辑代码"
+	if s.img != nil {
+		title = "图片预览"
+	}
 	ui.Column(c).Fill().Children(func() {
 		ui.Row(c).Height(48).Shrink(0).Padding(0, 14).Gap(8).AlignItems(ui.Center).
 			BorderWidth(0, 0, 1, 0).BorderColor(pal.hairline).Children(func() {
 			ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
-				ui.Text(c, "编辑代码").FontSize(textHeadline).FontWeight(weightSemibold).
+				ui.Text(c, title).FontSize(textHeadline).FontWeight(weightSemibold).
 					TextColor(pal.ink)
 				ui.Text(c, s.path).Font("monospace").FontSize(textCaption).
 					SingleLine().TextColor(pal.inkMuted)
@@ -171,11 +193,26 @@ func (a *app) codeEditorBody(c *ui.Context, pal palette) {
 			})
 			return
 		}
-		if s.err != "" || s.code == nil {
+		if s.err != "" || (s.code == nil && s.img == nil) {
 			ui.Column(c).Grow(1).Center().Gap(10).Padding(24).Children(func() {
 				headline(c, pal, "无法打开内置编辑器")
 				ui.Text(c, s.err).Font("monospace").FontSize(textBodySM).
 					TextColor(t.TextMuted)
+				if secondaryAction(c, pal, "关闭", "", false).Clicked() {
+					a.closeCodeEditor()
+				}
+			})
+			return
+		}
+
+		// 图片：摆画面，没有保存可做。看完关掉，要放大或用别的工具，
+		// 文件列表右键「在编辑器打开」交给系统看图应用。
+		if s.img != nil {
+			imagePanel(c, pal, "", imageSide{bitmap: s.img, meta: s.imgMeta})
+			ui.Row(c).Height(48).Shrink(0).Padding(0, 12).Gap(8).AlignItems(ui.Center).
+				BorderWidth(1, 0, 0, 0).BorderColor(pal.hairline).Children(func() {
+				ui.Text(c, "图片不能在这里编辑；右键「在编辑器打开」可用系统看图应用查看原图").
+					FontSize(textCaption).TextColor(pal.inkMuted).Grow(1).MinWidth(0)
 				if secondaryAction(c, pal, "关闭", "", false).Clicked() {
 					a.closeCodeEditor()
 				}

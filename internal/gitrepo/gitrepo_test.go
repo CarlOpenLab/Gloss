@@ -1,6 +1,7 @@
 package gitrepo
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"os/exec"
@@ -274,6 +275,114 @@ func TestFingerprintChangesWithContent(t *testing.T) {
 
 	if m1.Files[0].Fingerprint == m2.Files[0].Fingerprint {
 		t.Error("内容变了，指纹却没变")
+	}
+}
+
+// 二进制文件没有 hunk，指纹得靠对象哈希 —— 否则换一张图，界面还会
+// 认为「内容没变」，图片预览和「已 review」标记都停在上一个版本。
+func TestBinaryFingerprintChangesWithContent(t *testing.T) {
+	r := tempRepo(t)
+	ctx := context.Background()
+	p := filepath.Join(r.Root, "logo.png")
+	png := func(tag string) []byte {
+		return append([]byte("\x89PNG\r\n\x1a\n\x00"), []byte(tag)...)
+	}
+
+	if err := os.WriteFile(p, png("v1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, r.Root, "add", "logo.png")
+	git(t, r.Root, "commit", "-m", "add logo")
+
+	if err := os.WriteFile(p, png("v2"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m1, err := r.Load(ctx)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	f1 := fileByPath(t, m1, "logo.png")
+	if !f1.Binary {
+		t.Fatalf("带 NUL 的文件该认成二进制")
+	}
+
+	if err := os.WriteFile(p, png("v3"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m2, err := r.Load(ctx)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	f2 := fileByPath(t, m2, "logo.png")
+	if f1.Fingerprint == f2.Fingerprint {
+		t.Errorf("二进制内容变了，指纹却没变（%q）", f1.Fingerprint)
+	}
+
+	// 暂存之后又改工作区：两段都在，指纹要各不相同（index 里是 v3、
+	// 工作区是 v4），否则改一个会带着另一个一起重画/失效。
+	git(t, r.Root, "add", "logo.png")
+	if err := os.WriteFile(p, png("v4"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m3, err := r.Load(ctx)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	staged, unstaged := fileByPath(t, m3, "logo.png"), lastFileByPath(t, m3, "logo.png")
+	if staged.Fingerprint == unstaged.Fingerprint {
+		t.Errorf("暂存区和工作区是两个版本，指纹不该一样")
+	}
+}
+
+// fileByPath 取该路径的第一条（已暂存段优先），lastFileByPath 取最后一条。
+func fileByPath(t *testing.T, m *Model, path string) File {
+	t.Helper()
+	for _, f := range m.Files {
+		if f.Path() == path {
+			return f
+		}
+	}
+	t.Fatalf("文件列表里没有 %s", path)
+	return File{}
+}
+
+func lastFileByPath(t *testing.T, m *Model, path string) File {
+	t.Helper()
+	var out File
+	found := false
+	for _, f := range m.Files {
+		if f.Path() == path {
+			out, found = f, true
+		}
+	}
+	if !found {
+		t.Fatalf("文件列表里没有 %s", path)
+	}
+	return out
+}
+
+// 未跟踪的图片超过文本读取上限也要完整收进来：常见的截图就 1~3 MB，
+// 按 1 MB 截断的话指纹只算半截，解码也只剩前半张。
+func TestLoadUntrackedImageBeyondTextCap(t *testing.T) {
+	r := tempRepo(t)
+	data := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{0x00}, 2<<20)...)
+	if err := os.WriteFile(filepath.Join(r.Root, "big.png"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m, err := r.Load(context.Background())
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	f := fileByPath(t, m, "big.png")
+	if !f.Binary {
+		t.Errorf("PNG 该标成二进制")
+	}
+	if f.TooLarge {
+		t.Errorf("图片不是「文本太大读不下」，不该标 TooLarge")
+	}
+	if f.AddCount != 0 || len(f.Hunks) != 0 {
+		t.Errorf("二进制文件不该有 hunk/增删行（hunks=%d add=%d）", len(f.Hunks), f.AddCount)
 	}
 }
 

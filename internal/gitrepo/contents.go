@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -19,6 +20,48 @@ func (r *Repo) ContentsAt(ctx context.Context, rev, path string) ([]byte, error)
 		rev = "HEAD"
 	}
 	return run(ctx, r.Root, "show", rev+":"+path)
+}
+
+// SizeAt 返回某个版本里文件的字节数，不把内容读出来。
+//
+// 给「先看多大再决定读不读」用（图片预览）：一张几十 MB 的图读完再发现
+// 超限，内存已经花掉了。cat-file -s 只查对象头，代价和一次 stat 差不多。
+func (r *Repo) SizeAt(ctx context.Context, rev, path string) (int64, error) {
+	if rev == "" {
+		rev = "HEAD"
+	}
+	out, err := run(ctx, r.Root, "cat-file", "-s", rev+":"+path)
+	if err != nil {
+		return 0, err
+	}
+	return strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
+}
+
+// BlobHash 返回某个版本里文件的 blob 哈希，不读内容。
+//
+// 二进制文件的指纹靠它（见 model.go 的 binaryFingerprint）：没有 hunk
+// 可读，只有对象哈希能说明「内容换没换」。
+func (r *Repo) BlobHash(ctx context.Context, rev, path string) (string, error) {
+	if rev == "" {
+		rev = "HEAD"
+	}
+	out, err := run(ctx, r.Root, "rev-parse", "--verify", rev+":"+path)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// WorktreeHash 返回工作区文件的 blob 哈希（git 的哈希算法）。
+//
+// 走 git hash-object 而不是在这里读文件：它按流算，几百 MB 的文件不会
+// 整份进内存；路径里有什么字符也不用担心，-- 之后一律当路径。
+func (r *Repo) WorktreeHash(ctx context.Context, path string) (string, error) {
+	out, err := run(ctx, r.Root, "hash-object", "--", path)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 // ConflictContents returns the three useful texts for a conflicted path:

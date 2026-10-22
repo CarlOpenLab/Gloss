@@ -4,13 +4,30 @@ package diff
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 )
+
+// imageExts 是界面按「图片」预览的扩展名。
+//
+// 只收栅格图：SVG 是文本，diff 本身就能读，mygo 的 DecodeBitmap 也不收它。
+// 这一份同时给文件模型用 —— 未跟踪的图片不必按「文本」读进来切行，界面
+// 也不需要看到它的乱码。
+var imageExts = map[string]bool{
+	".png": true, ".jpg": true, ".jpeg": true, ".gif": true,
+	".webp": true, ".bmp": true,
+}
+
+// IsImagePath 说这个路径是不是一张可以直接摆上屏幕的图片。
+func IsImagePath(path string) bool {
+	return imageExts[strings.ToLower(filepath.Ext(path))]
+}
 
 // LineType 表示 diff 中一行的类型。
 type LineType string
@@ -244,6 +261,19 @@ func Parse(raw string) []FileDiff {
 	return files
 }
 
+// IsBinaryContent 按 git 的判据说一份内容是不是二进制：前 8000 字节里
+// 有没有 NUL。普通文本（哪怕不是 UTF-8）没有，图片、压缩包、可执行文件都有。
+//
+// 不能用 utf8.Valid 代替：NUL 是合法的 UTF-8，二进制内容能整份通过校验，
+// 然后被当成文本画成一屏乱码。
+func IsBinaryContent(content []byte) bool {
+	head := content
+	if len(head) > 8000 {
+		head = head[:8000]
+	}
+	return bytes.IndexByte(head, 0) >= 0
+}
+
 // NewFileFromContent 把一个全新文件的内容合成成「整文件新增」的 FileDiff。
 //
 // 未跟踪的文件不会出现在 `git diff` 的输出里（git 根本不认为它属于版本控制），
@@ -251,6 +281,12 @@ func Parse(raw string) []FileDiff {
 func NewFileFromContent(path string, content []byte) FileDiff {
 	f := FileDiff{NewPath: path, Status: "added"}
 	if len(content) == 0 {
+		return f
+	}
+	// 二进制内容按行切开只会得到一堆乱码，再塞进 diff 视图就是几屏没法读
+	// 的东西。标成二进制之后，图片由 preview 画，其余显示「二进制文件已变更」。
+	if IsBinaryContent(content) {
+		f.Binary = true
 		return f
 	}
 	// 末尾的换行只是文件结束标记，不构成一个空行

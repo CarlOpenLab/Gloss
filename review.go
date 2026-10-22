@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -68,6 +69,19 @@ type reviewState struct {
 	// hunkIdx 是 J / K 跳到的那一段在 Hunks() 里的下标。换文件时归 -1：
 	// 「还没跳过」和「停在第 0 段」是两件事，前者往前该落到第一段。
 	hunkIdx int
+
+	// —— 图片专用（见 imagereview.go）——
+	//
+	// image 说这个文件按图片预览画：diff 里没有可读的行，两侧读回来的
+	// 是字节而不是文本。imgOld/imgNew 是解好的位图，meta 是格式 + 尺寸 +
+	// 体积那一行；两个 err 分开存，一侧坏了不该把另一侧也藏起来。
+	image      bool
+	imgOld     *ui.Bitmap
+	imgNew     *ui.Bitmap
+	imgOldMeta string
+	imgNewMeta string
+	imgOldErr  string
+	imgNewErr  string
 }
 
 // conflictBaseline 是冲突文件的左侧基线。
@@ -151,7 +165,9 @@ func (a *app) syncReview() {
 	}
 	// PR 检视只有 diff 文本（gh 给的 patch），两侧原文不在本地，按 patch 画。
 	if a.prReview.on {
-		if a.review.key == fileKey(*f) && a.review.patchOnly {
+		// 失败也算「这一版试过了」：二进制文件的 patch 没有行可画，
+		// 不认它会每帧重新解析一次。
+		if a.review.key == fileKey(*f) && (a.review.patchOnly || a.review.err != "") {
 			return
 		}
 		a.setupPatchReview(*f)
@@ -160,7 +176,10 @@ func (a *app) syncReview() {
 	if a.review.loading {
 		return
 	}
-	if a.review.key == fileKey(*f) && a.review.fp == f.Fingerprint && a.review.diff != nil {
+	// 装好的三种收尾：文本 diff、图片预览、加载失败。失败也要算「这一版
+	// 试过了」—— 否则每帧都会重读同一个烧不进界面的二进制文件。
+	if a.review.key == fileKey(*f) && a.review.fp == f.Fingerprint &&
+		(a.review.diff != nil || a.review.image || a.review.err != "") {
 		return
 	}
 	a.loadReview(*f)
@@ -171,15 +190,26 @@ func (a *app) syncReview() {
 // 只有 diff 文本时看不了「这个文件全长什么样」，但一段一段的改动本身是
 // 齐的：mygo 的 SetPatch 正是为这种输入准备的（每个 hunk 顶着自己的头）。
 func (a *app) setupPatchReview(f gitrepo.File) {
-	patch, err := editor.ParsePatch(filePatchText(f))
 	s := &a.review
-	*s = reviewState{key: fileKey(f), fp: f.Fingerprint, path: pathOf(f)}
+	*s = reviewState{key: fileKey(f), fp: f.Fingerprint, path: pathOf(f), hunkIdx: -1}
+	// 二进制文件在 patch 里只有一句「Binary files … differ」，没有行可画。
+	// 图片尤其要说清楚：别处都能看到画面，只有这里看不到，是 PR 检视的
+	// 数据源只有 patch 文本，不是文件本身坏了。
+	if f.Binary {
+		if isImagePreview(f) {
+			s.err = T("PR 检视里只有 patch 文本，看不到这张图片的内容",
+				"PR review only has the patch text, so this image's content isn't available")
+		} else {
+			s.err = T("二进制文件没有可以用行显示的内容", "A binary file has no lines to show")
+		}
+		return
+	}
+	patch, err := editor.ParsePatch(filePatchText(f))
 	if err != nil || len(patch) == 0 {
 		s.err = T("这个文件的改动读不出来", "This file's changes can't be read")
 		return
 	}
 	s.patchOnly = true
-	s.hunkIdx = -1
 	s.diff = &editor.DiffState{}
 	s.diff.SetPatch(patch[0])
 }
@@ -228,6 +258,23 @@ func (a *app) loadReview(f gitrepo.File) {
 		return
 	}
 	oldPath, newPath := f.OldPath, f.NewPath
+
+	// 图片走另一条路：没有行可切，两侧读回来的是字节（见 imagereview.go）。
+	if isImagePreview(f) {
+		a.loadReviewImage(f)
+		return
+	}
+
+	// 其余二进制文件（压缩包、可执行文件、字体……）没有「行」可画。
+	// 这里必须按标记拦下来，不能指望后面那道 utf8 检查：NUL 是合法的
+	// UTF-8，二进制内容能整份通过 utf8.ValidString，画出来是一屏乱码。
+	if f.Binary {
+		*s = reviewState{key: key, fp: fp, path: path}
+		s.err = Tf("%s 是二进制文件，改动区没有可显示的内容 —— 文件列表里可以整份暂存或丢弃",
+			"%s is a binary file, so there are no lines to show — stage or discard it whole from the file list",
+			path)
+		return
+	}
 
 	*s = reviewState{key: key, fp: fp, path: path, loading: true}
 
@@ -281,6 +328,80 @@ func (a *app) loadReview(f gitrepo.File) {
 			a.fillReview(f, oldText, newText, ours, theirs, base)
 		})
 	})
+}
+
+// loadReviewImage 读选中图片的两侧字节，解成位图摆进改动区。
+//
+// 和 loadReview 是同一套「哪两个版本在比」（reviewRevs），只是读回来的是
+// 字节、产出的是位图。冲突图片没有可挑的「块」：两侧摆的是我们和对方，
+// 怎么落盘还是文件列表里那条整文件动作（或冲突条上的挑一边）。
+func (a *app) loadReviewImage(f gitrepo.File) {
+	s := &a.review
+	key, path, fp := fileKey(f), pathOf(f), f.Fingerprint
+	// 图片不可编辑，草稿只可能是之前当文本编辑过的那一份；照样先收起来，
+	// 换回来时还在（reviewDrafts 按 key 存）。
+	a.stashReviewDraft()
+	root := a.repoPath
+	oldRev, newRev, diskNew, ok := a.reviewRevs(f)
+	if !ok {
+		a.setupPatchReview(f)
+		return
+	}
+	oldPath, newPath := f.OldPath, f.NewPath
+	conflict := f.Status == gitrepo.StatusConflict
+
+	*s = reviewState{key: key, fp: fp, path: path, loading: true, image: true, conflict: conflict}
+
+	a.run(func() {
+		ctx := context.Background()
+		repo, err := gitrepo.Open(ctx, root)
+		var oldSide, newSide imageSide
+		if err == nil {
+			if conflict {
+				// 冲突的图片读不了「基线 vs 工作区」：工作区里那份通常就是
+				// 我们这边，摆出来和左边重复。三方里只取有用的一对。
+				_, ours, theirs, _, cerr := repo.ConflictContents(ctx, path)
+				if cerr != nil {
+					err = cerr
+				} else {
+					oldSide, newSide = decodeImageSide(ours), decodeImageSide(theirs)
+				}
+			} else {
+				oldData, oldReadErr := readReviewImageSide(ctx, repo, oldRev, oldPath, false)
+				newData, newReadErr := readReviewImageSide(ctx, repo, newRev, newPath, diskNew)
+				oldSide, newSide = decodeImageSide(oldData), decodeImageSide(newData)
+				// 读之前的大小检查失败要单独说：没有数据不是「这一侧没有
+				// 这个文件」，是「有，但太大」。读失败（文件不在这个版本里）
+				// 继续按空处理，和文本那条路一致。
+				if errors.Is(oldReadErr, errImageTooLarge) {
+					oldSide = imageSide{err: oversizedImageMessage()}
+				}
+				if errors.Is(newReadErr, errImageTooLarge) {
+					newSide = imageSide{err: oversizedImageMessage()}
+				}
+			}
+		}
+		a.dispatch(func() {
+			if a.review.path != path || a.review.key != key {
+				return // 读盘期间又切走了，这份结果作废
+			}
+			s := &a.review
+			s.loading = false
+			if err != nil {
+				s.err = err.Error()
+				return
+			}
+			s.imgOld, s.imgOldMeta, s.imgOldErr = oldSide.bitmap, oldSide.meta, oldSide.err
+			s.imgNew, s.imgNewMeta, s.imgNewErr = newSide.bitmap, newSide.meta, newSide.err
+		})
+	})
+}
+
+// oversizedImageMessage 是「先查大小发现超限」那句话。decodeImageSide 里
+// 也有一份同样意思的说明（读到内容之后才超限），措辞保持一致。
+func oversizedImageMessage() string {
+	return Tf("图片超过 %s 的预览上限", "The image is over the %s preview limit",
+		humanBytes(maxPreviewImageBytes))
 }
 
 // maxReviewBytes 是摆进改动区的文件大小上限。
@@ -426,12 +547,12 @@ func (a *app) reviewPane(c *ui.Context, pal palette) {
 	a.reviewHeader(c, pal)
 
 	f := a.reviewTarget()
-	if f != nil && s.conflict && s.diff != nil {
+	if f != nil && s.conflict && (s.diff != nil || s.image) {
 		a.reviewConflictBar(c, pal, *f)
 	}
 
 	switch {
-	case s.loading || (s.diff == nil && s.err == ""):
+	case s.loading || (s.diff == nil && !s.image && s.err == ""):
 		ui.Box(c).Grow(1).FillWidth().Children(func() {
 			ui.Column(c).Fill().Center().Gap(8).Children(func() {
 				ui.Spinner(c).Size(18, 18)
@@ -448,6 +569,11 @@ func (a *app) reviewPane(c *ui.Context, pal palette) {
 					SingleLine().TextColor(pal.inkMuted)
 			})
 		})
+		return
+	case s.image:
+		if f != nil {
+			a.reviewImageBody(c, pal, f)
+		}
 		return
 	}
 
@@ -506,6 +632,9 @@ func (a *app) reviewHeader(c *ui.Context, pal palette) {
 		path := displayPath(*f)
 		ui.Text(c, path).Font("monospace").FontSize(textBodySM).Shrink(2).
 			SingleLine().TextColor(pal.ink)
+		if s.image {
+			specChip(c, pal, T("图片", "Image"), ui.Transparent, 20, textCaption)
+		}
 		ui.Spacer(c)
 
 		if s.diff != nil && !s.patchOnly {
@@ -569,11 +698,15 @@ func (a *app) reviewConflictBar(c *ui.Context, pal palette, f gitrepo.File) {
 				a.openInEditor(f)
 			}
 			ui.Spacer(c)
-			ui.Text(c, T("左侧基线", "Compare with")).FontSize(textCaption).
-				TextColor(pal.inkSubtle)
-			a.reviewBaselineButton(c, pal, T("当前分支", "Current"), baselineOurs)
-			a.reviewBaselineButton(c, pal, T("对方", "Theirs"), baselineTheirs)
-			a.reviewBaselineButton(c, pal, T("共同祖先", "Base"), baselineBase)
+			// 图片没有「左侧基线」可选：两边摆的就是两份文件本身，
+			// 逐块挑边那套不适用，整份落盘走上面两颗按钮。
+			if !a.review.image {
+				ui.Text(c, T("左侧基线", "Compare with")).FontSize(textCaption).
+					TextColor(pal.inkSubtle)
+				a.reviewBaselineButton(c, pal, T("当前分支", "Current"), baselineOurs)
+				a.reviewBaselineButton(c, pal, T("对方", "Theirs"), baselineTheirs)
+				a.reviewBaselineButton(c, pal, T("共同祖先", "Base"), baselineBase)
+			}
 			// 底栏那条「保存并标记已解决」撤掉之后，解决完的冲突得有个
 			// 落盘的地方：这里是整份文件的收尾动作，摆在基线选择之后。
 			// 只有改过才出现 —— 没动过的时候它按下去也是空操作。

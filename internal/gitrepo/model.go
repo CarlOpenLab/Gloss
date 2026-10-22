@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/CarlOpenLab/Gloss/internal/diff"
 )
@@ -15,6 +16,13 @@ import (
 // maxUntrackedBytes 是未跟踪文件读进来渲染的上限。超过就不渲染内容，
 // 只标注「文件过大」——几 MB 的日志文件塞进 diff 视图对谁都没好处。
 const maxUntrackedBytes = 1 << 20
+
+// maxUntrackedImageBytes 是未跟踪图片读进来的上限。
+//
+// 比文本那一档宽得多：图片本来就不是拿来「按行看」的，读它只为判二进制和
+// 算内容指纹；1 MB 会把常见的截图截断，指纹也就跟着半截算。真正的解码
+// 上限在界面那边（见 imagereview.go），这里只求指纹完整。
+const maxUntrackedImageBytes = 32 << 20
 
 // maxUntracked 是未跟踪文件的处理条数上限。
 //
@@ -195,7 +203,14 @@ func (r *Repo) Load(ctx context.Context) (*Model, error) {
 				continue
 			}
 			untracked++
-			content, err := readCapped(filepath.Join(r.Root, ch.Path), maxUntrackedBytes)
+			// 图片按预览上限读：1 MB 的截图很常见，用文本那一档会把大半
+			// 图片截断，解出来就是「图片已损坏」。反正内容只用来判二进制和
+			// 算指纹，截断的部分不影响这两件事。
+			limit := maxUntrackedBytes
+			if diff.IsImagePath(ch.Path) {
+				limit = maxUntrackedImageBytes
+			}
+			content, err := readCapped(filepath.Join(r.Root, ch.Path), limit)
 			if err != nil {
 				continue // 读不到（权限、目录、刚好被删）就跳过，不打断整体加载
 			}
@@ -206,7 +221,8 @@ func (r *Repo) Load(ctx context.Context) (*Model, error) {
 				Unstaged:    true,
 				Fingerprint: fingerprint(ch.Path, string(content)),
 			}
-			if f.AddCount == 0 && len(content) > 0 {
+			// 二进制的 AddCount 本来就是 0，那不是「读不下」。
+			if !f.Binary && f.AddCount == 0 && len(content) > 0 {
 				f.TooLarge = true
 			}
 			appendFile(f)
@@ -228,7 +244,51 @@ func (r *Repo) Load(ctx context.Context) (*Model, error) {
 			appendFile(fileFromDiff(ch, unstaged[ch.Path], ch.UnstagedStatus, ch.Path, ch.OldPath, SectionUnstaged))
 		}
 	}
+
+	// 二进制文件的内容指纹得另外补：hunk 里没有内容，光靠 patch 文本
+	// 认不出「换了一张图」。不补这一步，图片改了界面还显示上一张，
+	// 「已 review」也不会失效。
+	for i := range m.Files {
+		f := &m.Files[i]
+		if !f.Binary || f.Status == StatusUntracked {
+			continue
+		}
+		if h := r.binaryFingerprint(ctx, *f); h != "" {
+			f.Fingerprint = fingerprint(strconv.Itoa(int(f.Section))+"/"+string(f.Status)+"/"+pathKey(*f), h)
+		}
+	}
 	return m, nil
+}
+
+// binaryFingerprint 取二进制文件在该段里「新的一侧」的 blob 哈希。
+//
+// 只走 git 的对象哈希，不把内容读进内存：几百 MB 的视频文件也只是一次
+// 哈希计算。取不到（文件刚好被删、权限不对）就返回空，调用方保留原来的
+// 指纹 —— 界面显示旧内容，总比整次加载失败好。
+func (r *Repo) binaryFingerprint(ctx context.Context, f File) string {
+	path := f.Path()
+	switch {
+	case f.Section == SectionStaged && f.Status == StatusDeleted:
+		h, _ := r.BlobHash(ctx, "HEAD", f.OldPath)
+		return h
+	case f.Section == SectionStaged:
+		h, _ := r.BlobHash(ctx, ":0", path)
+		return h
+	case f.Status == StatusDeleted:
+		h, _ := r.BlobHash(ctx, ":0", path)
+		return h
+	default:
+		h, _ := r.WorktreeHash(ctx, path)
+		return h
+	}
+}
+
+// pathKey 是给指纹用的路径：已删除的文件没有 NewPath，退回旧的。
+func pathKey(f File) string {
+	if f.NewPath != "" {
+		return f.NewPath
+	}
+	return f.OldPath
 }
 
 // fileFromDiff 组装分段后的一个 File：优先用该段 patch 解析出的内容，

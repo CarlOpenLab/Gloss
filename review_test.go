@@ -31,13 +31,17 @@ func settleReview(t *testing.T, a *app) *ui.Tester {
 }
 
 // waitReview 等改动区把当前选中的文件装好（跑几帧、等后台）。
+//
+// 「装好」有三种收尾：文本 diff、图片预览、加载失败（二进制文件之类）。
+// 三者之外继续等，免得把「读不出来」误当成「还没读完」。
 func waitReview(t *testing.T, a *app, tt *ui.Tester) {
 	t.Helper()
 	for range 6 {
 		tt.Frame()
 		settle(t, a)
 		f := a.reviewTarget()
-		if f != nil && a.review.key == fileKey(*f) && !a.review.loading && a.review.diff != nil {
+		done := a.review.diff != nil || a.review.image || a.review.err != ""
+		if f != nil && a.review.key == fileKey(*f) && !a.review.loading && done {
 			// 再画一帧：读盘是在上一帧之后完成的，就绪的画面得这一帧才有。
 			tt.Frame()
 			return

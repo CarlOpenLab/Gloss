@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
@@ -25,6 +24,10 @@ type editorPaneState struct {
 	buffer  *editor.Buffer
 	base    *editor.Buffer
 	code    *editor.State
+	// img 是图片文件的预览（见 imagereview.go）。图片进不了编辑器：
+	// 没有文本缓冲区，这里摆的是解好的位图，保存/还原都不适用。
+	img     *ui.Bitmap
+	imgMeta string
 }
 
 // editorTarget 取编辑器该显示哪个文件：左栏当前选中的那个，没选就退到第一个。
@@ -70,6 +73,7 @@ func (a *app) syncEditorPane() {
 func (a *app) loadEditorPane(f gitrepo.File) {
 	path, section := pathOf(f), f.Section
 	root := a.repoPath
+	image := isImagePreview(f)
 	a.editorPane.loading = true
 	a.editorPane.path = path
 	a.editorPane.err = ""
@@ -77,25 +81,41 @@ func (a *app) loadEditorPane(f gitrepo.File) {
 		ctx := context.Background()
 		repo, err := gitrepo.Open(ctx, root)
 		var data, base []byte
+		var side imageSide
 		if err == nil {
 			data, err = repo.Contents(path)
 		}
-		if err == nil && !utf8.Valid(data) {
+		if err == nil && image {
+			// 图片不进编辑器：解成位图摆出来。超过上限的连解都不解，
+			// 直接把说明当错误显示（见 decodeImageSide）。
+			side = decodeImageSide(data)
+		}
+		if err == nil && !image && looksBinary(data) {
 			err = fmt.Errorf("%s 看起来不是文本文件", path)
 		}
-		if err == nil {
+		if err == nil && !image {
 			base = codeEditorBaseline(ctx, repo, path, section)
 		}
 		a.dispatch(func() {
 			if a.editorPane.path != path {
 				return // 读盘期间又切走了，这份结果作废
 			}
-			a.editorPane.loading = false
+			s := &a.editorPane
+			s.loading = false
 			if err != nil {
-				a.editorPane.err = err.Error()
-				a.editorPane.code = nil
-				a.editorPane.buffer = nil
-				a.editorPane.base = nil
+				s.err = err.Error()
+				s.code, s.buffer, s.base, s.img = nil, nil, nil, nil
+				return
+			}
+			if image {
+				if side.err != "" {
+					s.err = side.err
+					s.code, s.buffer, s.base, s.img = nil, nil, nil, nil
+					return
+				}
+				s.img, s.imgMeta = side.bitmap, side.meta
+				s.code, s.buffer, s.base = nil, nil, nil
+				s.err = ""
 				return
 			}
 			lang := editor.LanguageFor(path)
@@ -106,14 +126,15 @@ func (a *app) loadEditorPane(f gitrepo.File) {
 				b := editor.NewBuffer(string(base))
 				b.SetLanguage(lang)
 				st.DiffBase = b
-				a.editorPane.base = b
+				s.base = b
 			}
 			st.Bindings = []editor.Binding{
 				{Mods: ui.Cmd, Key: ui.KeyS, Command: editor.NoCommand},
 			}
-			a.editorPane.buffer = buf
-			a.editorPane.code = st
-			a.editorPane.err = ""
+			s.buffer = buf
+			s.code = st
+			s.img, s.imgMeta = nil, ""
+			s.err = ""
 		})
 	})
 }
@@ -191,7 +212,7 @@ func (a *app) editorPaneView(c *ui.Context, pal palette) {
 	a.editorPaneHeader(c, pal)
 
 	switch {
-	case s.loading || (s.code == nil && s.err == ""):
+	case s.loading || (s.code == nil && s.img == nil && s.err == ""):
 		ui.Box(c).Grow(1).FillWidth().Children(func() {
 			ui.Column(c).Fill().Center().Gap(8).Children(func() {
 				ui.Spinner(c).Size(18, 18)
@@ -207,6 +228,9 @@ func (a *app) editorPaneView(c *ui.Context, pal palette) {
 					SingleLine().TextColor(pal.inkMuted)
 			})
 		})
+		return
+	case s.img != nil:
+		imagePanel(c, pal, "", imageSide{bitmap: s.img, meta: s.imgMeta})
 		return
 	}
 
@@ -235,8 +259,10 @@ func (a *app) editorPaneHeader(c *ui.Context, pal palette) {
 		ui.Text(c, label).Font("monospace").FontSize(textBodySM).
 			SingleLine().TextColor(pal.ink)
 		ui.Spacer(c)
-		if f := a.editorTarget(); f != nil && s.code != nil {
-			if f.Section == gitrepo.SectionStaged {
+		if f := a.editorTarget(); f != nil && (s.code != nil || s.img != nil) {
+			if s.img != nil {
+				specChip(c, pal, T("图片", "Image"), ui.Transparent, 20, textCaption)
+			} else if f.Section == gitrepo.SectionStaged {
 				specChip(c, pal, T("已暂存", "Staged"), ui.Transparent, 20, textCaption)
 			} else {
 				specChip(c, pal, T("未暂存", "Unstaged"), ui.Transparent, 20, textCaption)
