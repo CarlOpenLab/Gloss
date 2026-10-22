@@ -435,6 +435,15 @@ type app struct {
 	// amend 记录是否勾选了「修改上次提交（Amend）」。
 	amend   bool
 	hasHead bool
+
+	// —— 终端芯片的拖动（tabs.go）——
+	// chipDrag 是正在拖的那枚芯片：拖动期间芯片带画的是预览顺序，松手才落
+	// 到 tab.terms；chipX / chipSettle 记着每枚芯片上一帧被画在哪、还欠几帧
+	// 弹簧，让被挤开的芯片滑过去而不是跳过去。按会话指针认，不按下标。
+	chipDrag   *chipDragState
+	chipX      map[*termSession]float32
+	chipSettle map[*termSession]int
+	chipWidth  map[*termSession]float32
 }
 
 func newApp() *app {

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/plugins/terminal"
 	"github.com/egoist/mygo/ui"
@@ -542,11 +543,127 @@ func (a *app) persistOpenRepos() {
 	a.persist()
 }
 
-// chipDrag 是一次终端芯片的拖动（值本身只用得上「从哪一枚来」，落点由
+// chipDrag 是一次终端芯片的拖动（值本身只用得上「拖的是哪一枚」，落点由
 // 指针戳在哪一枚上算）。
 type chipDrag struct {
 	from int
 }
+
+// chipDragState 是一次拖动在窗口里的状态：拖的是哪个标签页的哪一枚，它从
+// 原来的第几位来、现在预览在第几位。芯片带只画预览，松手才落到 tab.terms。
+type chipDragState struct {
+	tab  *repoTab
+	term *termSession
+	from int
+	at   int
+	// active 说这一帧还有芯片在报拖动。没被 drop 接管就不再报，预览收回。
+	active bool
+}
+
+// chipSlide 是芯片被挤开时滑过去的那一下：短弹簧、不回弹。回弹的弹簧会让
+// 一条正在排序的芯片带看起来在互相弹；取消回弹之后，第二次换位仍会从芯片
+// 当前的位置接着走，不会重新起跳。
+var chipSlide = ui.Animation{Spring: ui.SpringOptions{Duration: 220 * time.Millisecond}}
+
+// chipKey 给芯片一个跨帧稳定的身份：拖到别的下标之后，它的状态（以及拖动
+// 中的副本）还认得是同一枚。ord 在一个标签页里唯一，指针用来区分标签页。
+type chipKey struct {
+	tab *repoTab
+	ord int
+}
+
+// chipPreview 是拖动期间芯片带的绘制顺序：被拖的那枚已经放在它将要落下的
+// 位置，其余芯片保持原顺序。tab.terms 本身不动，松手才改。
+func chipPreview(tab *repoTab, d *chipDragState) []*termSession {
+	if d == nil || d.tab != tab || !d.active {
+		return tab.terms
+	}
+	from := termIndex(tab, d.term)
+	if from < 0 {
+		return tab.terms
+	}
+	rest := make([]*termSession, 0, len(tab.terms)-1)
+	rest = append(rest, tab.terms[:from]...)
+	rest = append(rest, tab.terms[from+1:]...)
+	at := min(max(d.at, 0), len(rest))
+	out := make([]*termSession, 0, len(tab.terms))
+	out = append(out, rest[:at]...)
+	out = append(out, tab.terms[from])
+	out = append(out, rest[at:]...)
+	return out
+}
+
+// termIndex 是会话在标签页里的下标；关掉和挪动都按会话本身认回来，不按
+// 预览顺序里那个会变的下标。
+func termIndex(tab *repoTab, s *termSession) int {
+	if tab == nil || s == nil {
+		return -1
+	}
+	for i, o := range tab.terms {
+		if o == s {
+			return i
+		}
+	}
+	return -1
+}
+
+// chipDropIndex 把指针在芯片带里的横向位置折成插入下标：第一枚中线右边的
+// 那枚之前。被拖的那枚不参与 —— 它自己就是那个空位，问它会答自己。
+func chipDropIndex(pointerX float32, terms []*termSession, xs, widths []float32, drag *termSession) int {
+	at := 0
+	for i, s := range terms {
+		if s == drag || widths[i] <= 0 {
+			continue
+		}
+		if pointerX < chipBarPad+xs[i]+widths[i]/2 {
+			return at
+		}
+		at++
+	}
+	return at
+}
+
+// placeChip 把一枚芯片放在它这一帧该在的位置，顺序变了就从上一帧的位置滑
+// 过去。被拖的那枚不滑：它自己不可见，指针上那份副本才是动的那个。
+func (a *app) placeChip(chip ui.Element, s *termSession, x float32, animate bool) {
+	if a.chipX == nil {
+		a.chipX = make(map[*termSession]float32)
+		a.chipSettle = make(map[*termSession]int)
+	}
+	prev, seen := a.chipX[s]
+	a.chipX[s] = x
+	if !animate {
+		a.chipSettle[s] = 0
+		return
+	}
+	if seen {
+		if delta := prev - x; delta > 0.5 || delta < -0.5 {
+			chip.AnimatePose(ui.Pose{X: delta}, chipSlide)
+			a.chipSettle[s] = 24
+			return
+		}
+	}
+	if frames := a.chipSettle[s]; frames > 0 {
+		chip.AnimatePose(ui.Pose{}, chipSlide)
+		a.chipSettle[s] = frames - 1
+	}
+}
+
+// requestRedraw 请框架再画一帧。拖动静止在松手那一帧时，状态是在这一帧
+// 里清掉的：不再要一帧，芯片就会停在预览里（被拖的那枚还是透明的）。
+func (a *app) requestRedraw() {
+	if a.dispatch != nil {
+		a.dispatch(func() {})
+	}
+}
+
+// 芯片带的内边距与芯片间距，和 terminalTabBar 里画的一致：落点、槽位和
+// 指针换算都按这几个数走。
+const (
+	chipBarPad = 8.0
+	chipBarGap = 4.0
+	chipHeight = 28.0
+)
 
 // moveTerminalSession 挪一枚终端芯片的位置。当前展示的那一枚跟着它自己
 // 走 —— 挪的是顺序，不是「现在看哪个 shell」（按指针认回来，而不是按老
@@ -1149,45 +1266,115 @@ const termBarHeight = 34
 // 从这里开始」：正文那一块是内容面 codeBg，两者深浅只差一档，没有这条线
 // 芯片带和终端就是糊在一起的一片。
 func (a *app) terminalTabBar(c *ui.Context, pal palette, tab *repoTab) {
-	ui.Row(c).Height(termBarHeight).FillWidth().Shrink(0).
-		Padding(0, 8).Gap(4).AlignItems(ui.Center).
+	// 被拖的那枚芯片留出的空位：这一帧在预览顺序里的 x 和宽。画在带子
+	// 自己的 Draw 里（先于芯片），被拖的芯片本身是透明的，只剩这个槽。
+	var slotX, slotW float32
+	bar := ui.Row(c).Height(termBarHeight).FillWidth().Shrink(0).
+		Padding(0, chipBarPad).Gap(chipBarGap).AlignItems(ui.Center).
 		Background(pal.appBg).
 		// 只画下沿那一条：Border(0, …) 是零宽，画不出线，得用 BorderWidth
 		// （连框架自己注释里推荐的都是这一种）。
-		BorderWidth(0, 0, 1, 0).BorderColor(pal.hairline).
-		Children(func() {
-			// 关会话等这一圈走完再落（见 renderTerminalChip 的返回值）：× 是
-			// 在画到一半时被点中的，就地删掉一个会让 append 把后面的会话整体
-			// 前移一格 —— 剩下那几枚芯片这一帧就画成别人了。拖动同理。
-			closeIdx := -1
-			from, to := -1, -1
-			for i, s := range tab.terms {
-				closeClicked, f, at := a.renderTerminalChip(c, pal, tab, i, s)
-				if closeClicked {
-					closeIdx = i
+		BorderWidth(0, 0, 1, 0).BorderColor(pal.hairline)
+	bar.Draw(func(p *ui.Painter, r ui.Rect) {
+		if slotW <= 0 {
+			return
+		}
+		p.Fill(ui.Rect{
+			X: r.X + chipBarPad + slotX,
+			Y: r.Y + (termBarHeight-chipHeight)/2,
+			W: slotW,
+			H: chipHeight,
+		}, pal.surface1, radiusSM)
+	})
+	bar.Children(func() {
+		// 拖动期间画的是预览顺序：被拖的芯片已经挪到它将要落下的位置，
+		// tab.terms 一根手指都不动，松手才提交。
+		terms := chipPreview(tab, a.chipDrag)
+		var dragTerm *termSession
+		if d := a.chipDrag; d != nil && d.tab == tab && d.active {
+			dragTerm = d.term
+		}
+		widths := make([]float32, len(terms))
+		xs := make([]float32, len(terms))
+		known := true
+		x := float32(0)
+		for i, s := range terms {
+			widths[i] = a.chipWidth[s]
+			if widths[i] <= 0 {
+				// 标签页刚打开的头两帧还没量到宽度：这一帧不摆位、不判落点，
+				// 否则所有芯片会从 x=0 滑到自己的位置，看起来像开场乱弹。
+				known = false
+			}
+			xs[i] = x
+			x += widths[i] + chipBarGap
+		}
+		// 关会话等这一圈走完再落（见 renderTerminalChip 的返回值）：× 是
+		// 在画到一半时被点中的，就地删掉一个会让 append 把后面的会话整体
+		// 前移一格 —— 剩下那几枚芯片这一帧就画成别人了。拖动同理。
+		var closeSession *termSession
+		var dragging, dropped bool
+		for i, s := range terms {
+			closeClicked, rowDragging, rowDropped := a.renderTerminalChip(c, pal, tab, i, s, xs[i], s == dragTerm, known)
+			if closeClicked {
+				closeSession = s
+			}
+			if rowDragging {
+				dragging = true
+				d := a.chipDrag
+				if d == nil || d.tab != tab || d.term != s {
+					// 刚起拖：从列表里的原位开始预览，第一帧不动任何芯片。
+					if from := termIndex(tab, s); from >= 0 {
+						d = &chipDragState{tab: tab, term: s, from: from, at: from}
+						a.chipDrag = d
+					}
 				}
-				if f >= 0 {
-					from, to = f, at
+				if d != nil {
+					d.active = true
 				}
 			}
-			if closeIdx >= 0 {
-				dropTerminalSession(tab, closeIdx)
-			} else if from >= 0 {
-				// 关掉一枚、又拖走另一枚，这两件事不会同时发生：拖要按住不放，
-				// 点 × 是一次点击。真撞上了让关闭优先，另一个等下一帧。
+			if rowDropped {
+				dropped = true
+			}
+			if s == dragTerm {
+				slotX, slotW = xs[i], widths[i]
+			}
+		}
+		if closeSession != nil {
+			if idx := termIndex(tab, closeSession); idx >= 0 {
+				dropTerminalSession(tab, idx)
+			}
+		} else if d := a.chipDrag; d != nil && d.tab == tab {
+			// 落点按这一帧的预览和指针算；宽度还没量到（标签页刚打开的第一
+			// 帧）就先不动，否则会把芯片甩到末尾。
+			if known && (dragging || dropped) {
+				px, _, _ := bar.PointerPosition()
+				d.at = chipDropIndex(px, terms, xs, widths, d.term)
+			}
+			if dropped {
+				from, to := d.from, d.at
+				a.chipDrag = nil
+				if to > from {
+					to++
+				}
 				moveTerminalSession(tab, from, to)
+				a.requestRedraw()
+			} else if !dragging {
+				// 松在芯片带以外：预览退回原来的顺序。
+				a.chipDrag = nil
+				a.requestRedraw()
 			}
-			if toolIconButton(c, pal, T("新建终端标签页", "New Terminal Tab"),
-				Tf("在项目目录里再开一个 shell %s", "Open another shell in the project %s", K("⌘⇧T")),
-				false, false, drawPlusIcon) {
-				a.newTerminalSession(tab)
-			}
-		})
+		}
+		if toolIconButton(c, pal, T("新建终端标签页", "New Terminal Tab"),
+			Tf("在项目目录里再开一个 shell %s", "Open another shell in the project %s", K("⌘⇧T")),
+			false, false, drawPlusIcon) {
+			a.newTerminalSession(tab)
+		}
+	})
 }
 
 // renderTerminalChip 画一枚终端会话芯片，返回这一帧它的 × 有没有被点中、
-// 以及它被拖到了哪个落点（-1 = 没拖）。两件事都由调用方在这一圈走完之后
-// 再做，理由见 terminalTabBar。
+// 它是不是正在被拖、以及它有没有接到一次 drop。三件事都由调用方在这一圈
+// 芯片都画完之后再做，理由见 terminalTabBar。
 //
 // 芯片上写 shell 自己报的标题（OSC 0/2），它不报就用「终端 N」兜底 —— 一屏
 // 里两个 shell 都叫「终端」，认不出哪一个是刚在跑构建的那个。
@@ -1195,8 +1382,7 @@ func (a *app) terminalTabBar(c *ui.Context, pal palette, tab *repoTab) {
 // 激活态只换颜色（底 surface2、边 hairlineStrong、字 ink），几何一律不动：
 // 边框两态都是 1px，内边距、字号、字重也都一样。切一次会话整条芯片带跟着
 // 重排的话，第二下就点不准了。
-func (a *app) renderTerminalChip(c *ui.Context, pal palette, tab *repoTab, idx int, s *termSession) (closeClicked bool, dropFrom, dropAt int) {
-	dropFrom, dropAt = -1, -1
+func (a *app) renderTerminalChip(c *ui.Context, pal palette, tab *repoTab, idx int, s *termSession, x float32, dragged, known bool) (closeClicked, dragging, dropped bool) {
 	title := ""
 	if s != nil && s.term != nil {
 		title = strings.TrimSpace(s.term.Title())
@@ -1217,24 +1403,43 @@ func (a *app) renderTerminalChip(c *ui.Context, pal palette, tab *repoTab, idx i
 		}
 	}
 
-	active := idx == tab.termActive
-	chip := ui.ButtonBase(c).Height(28).Shrink(0).Radius(radiusSM).
+	// 按会话本身认「当前在看哪一枚」：拖动期间下标是预览顺序里的，拿它去
+	// 比 tab.termActive 会把激活态画到别人身上。
+	active := s != nil && tab.termActive >= 0 && tab.termActive < len(tab.terms) && tab.terms[tab.termActive] == s
+	key := chipKey{tab: tab, ord: idx}
+	if s != nil {
+		key.ord = s.ord
+	}
+	chip := ui.ButtonBase(c.Key(key)).Height(chipHeight).Shrink(0).Radius(radiusSM).
 		Padding(0, 6).Gap(5).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).Label(title).Tooltip(tip)
 	bg, fg, bd := ui.Transparent, pal.inkSubtle, pal.hairline
-	if active {
+	switch {
+	case dragged:
+		// 原位的芯片不可见，只留空位；框架画在指针上的那份副本才是「拿
+		// 起来」的那一枚，所以底色和阴影给的是它。
+		bg, fg, bd = pal.surface3, pal.ink, pal.hairlineStrong
+	case active:
 		bg, fg, bd = pal.surface2, pal.ink, pal.hairlineStrong
-	} else if chip.Hovered() {
+	case chip.Hovered() && a.chipDrag == nil:
 		// 悬停只提一档底（§5）：非激活芯片本来就是透明底，指上去得有点动静。
+		// 拖动期间别的芯片从指针下经过，不许闪。
 		bg = pal.surface1
 	}
 	chip.Background(bg).Border(1, bd)
+	if dragged {
+		chip.Opacity(0).Shadow(0, 6, 18, -6, ui.RGBA(0, 0, 0, 0.24))
+	}
 	fadeColors(chip)
 
 	// 拖一下换位置。
 	chip.Drag(chipDrag{from: idx})
 	if chip.Dragging() {
 		chip.Cursor(ui.CursorGrabbing)
+		dragging = true
+	}
+	if _, ok := ui.Drop[chipDrag](chip); ok {
+		dropped = true
 	}
 
 	// × 的点击只记下来、不在这里动手：调用方要等这一圈芯片都画完再关
@@ -1248,7 +1453,7 @@ func (a *app) renderTerminalChip(c *ui.Context, pal palette, tab *repoTab, idx i
 		// §5 说的「布局不许跟着状态抖」。
 		closeBtn := ui.ButtonBase(c).Size(16, 16).Radius(radiusXS).
 			Cursor(ui.CursorPointer).Label(T("关闭终端标签页", "Close Terminal Tab"))
-		if closeBtn.Hovered() {
+		if closeBtn.Hovered() && a.chipDrag == nil {
 			closeBtn.Background(pal.surface3)
 		}
 		fadeColors(closeBtn)
@@ -1263,23 +1468,23 @@ func (a *app) renderTerminalChip(c *ui.Context, pal palette, tab *repoTab, idx i
 	})
 
 	if chip.Clicked() {
-		tab.termActive = idx
-	}
-
-	after := dragAfter(chip)
-	if _, over := ui.DragOver[chipDrag](chip); over {
-		drawDropMarker(chip, after, c.Theme().Accent)
-	}
-	if d, ok := ui.Drop[chipDrag](chip); ok {
-		at := idx
-		if after {
-			at = idx + 1
-		}
-		if d.from != idx && d.from != at {
-			dropFrom, dropAt = d.from, at
+		// 点击按会话认回真实下标：预览里的 idx 只在拖动时有意义。
+		if i := termIndex(tab, s); i >= 0 {
+			tab.termActive = i
 		}
 	}
-	return closeClicked, dropFrom, dropAt
+	if w := chip.Bounds().W; w > 0 {
+		if a.chipWidth == nil {
+			a.chipWidth = make(map[*termSession]float32)
+		}
+		a.chipWidth[s] = w
+	}
+	// 只在拖动期间让芯片滑动：关掉或新开一枚是几何变化，不该让旁边的芯片
+	// 一边滑一边等人点它的 ×。
+	if known {
+		a.placeChip(chip, s, x, !dragged && a.chipDrag != nil)
+	}
+	return closeClicked, dragging, dropped
 }
 
 // terminalArea 呈现内置终端的主区全屏视图：顶上一条会话芯片，下面是当前会话。

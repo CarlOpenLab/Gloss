@@ -898,3 +898,98 @@ func TestSwitchProjectKeepsTerminals(t *testing.T) {
 		t.Errorf("切回项目后该还停在第二个会话，实际激活 %d", first.termActive)
 	}
 }
+
+// 拖芯片时芯片带已经是预览：被拖的那枚画在将要落下的位置，tab.terms 还
+// 没动；松手才提交。项目标签页那边也有同样的一段。
+func TestDraggingATerminalChipPreviewsItsPlace(t *testing.T) {
+	stubTerminal(t)
+	a := newApp()
+	a.openInNewTab(filepath.Join(t.TempDir(), "repo1"))
+	a.setSection(sectionTerminal)
+	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+	tt.Frame()
+
+	tab := a.currentTab()
+	for i := 0; i < 3; i++ {
+		a.newTerminalSession(tab)
+	}
+	tt.Frame()
+	tab.termActive = 0
+	tt.Frame()
+
+	first, ok := tt.Find("终端 1")
+	if !ok {
+		t.Fatalf("找不到第一枚芯片：%q", tt.Texts())
+	}
+	last, ok := tt.Find("终端 3")
+	if !ok {
+		t.Fatalf("找不到第三枚芯片：%q", tt.Texts())
+	}
+	tt.Press(first.X+first.W/2, first.Y+first.H/2)
+	for k := 1; k <= 5; k++ {
+		f := float32(k) / 5
+		tt.Move(first.X+first.W/2+(last.X+last.W-first.X-first.W/2)*f, first.Y+first.H/2)
+		tt.Frame()
+	}
+
+	// 预览：芯片一已经画到最右，但会话列表还是原来的顺序。
+	moved, _ := tt.Find("终端 1")
+	third, _ := tt.Find("终端 3")
+	if moved.X < third.X {
+		t.Fatalf("拖动中芯片一在 x=%.1f，想要它已经到最右（芯片三在 %.1f）", moved.X, third.X)
+	}
+	ords := []int{tab.terms[0].ord, tab.terms[1].ord, tab.terms[2].ord}
+	if ords[0] != 1 || ords[1] != 2 || ords[2] != 3 {
+		t.Fatalf("拖动还没松手，会话顺序已经变成 %v", ords)
+	}
+
+	tt.Release(last.X+last.W-4, last.Y+last.H/2)
+	tt.Frame()
+	if tab.terms[0].ord != 2 || tab.terms[1].ord != 3 || tab.terms[2].ord != 1 {
+		t.Fatalf("松手后的顺序是 %d,%d,%d，想要 2,3,1",
+			tab.terms[0].ord, tab.terms[1].ord, tab.terms[2].ord)
+	}
+}
+
+// Escape 放下一次芯片拖动：预览收回，顺序不动。
+func TestEscapePutsATerminalChipBack(t *testing.T) {
+	stubTerminal(t)
+	a := newApp()
+	a.openInNewTab(filepath.Join(t.TempDir(), "repo1"))
+	a.setSection(sectionTerminal)
+	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+	tt.Frame()
+
+	tab := a.currentTab()
+	for i := 0; i < 3; i++ {
+		a.newTerminalSession(tab)
+	}
+	tt.Frame()
+	tab.termActive = 0
+	tt.Frame()
+
+	first, _ := tt.Find("终端 1")
+	last, _ := tt.Find("终端 3")
+	tt.Press(first.X+first.W/2, first.Y+first.H/2)
+	for k := 1; k <= 5; k++ {
+		f := float32(k) / 5
+		tt.Move(first.X+first.W/2+(last.X+last.W-first.X-first.W/2)*f, first.Y+first.H/2)
+		tt.Frame()
+	}
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	tt.Release(last.X+last.W-4, last.Y+last.H/2)
+	tt.Frame()
+
+	ords := []int{tab.terms[0].ord, tab.terms[1].ord, tab.terms[2].ord}
+	if ords[0] != 1 || ords[1] != 2 || ords[2] != 3 {
+		t.Fatalf("Escape 之后顺序变成了 %v", ords)
+	}
+	back, _ := tt.Find("终端 1")
+	second, _ := tt.Find("终端 2")
+	if back.X > second.X {
+		t.Fatalf("Escape 之后芯片一还在 x=%.1f，没有回到芯片二左边（%.1f）", back.X, second.X)
+	}
+}
