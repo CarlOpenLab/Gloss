@@ -12,18 +12,13 @@ const (
 	shellCardRadius = 14
 )
 
-// 自绘红绿灯的尺寸：三颗 12px 的圆点，各带 16px 的点击区、4px 间隔。
-// 左起 12px，右沿 68px —— 工具栏与侧栏顶栏都按这个右沿让位。
+// 系统红绿灯的位置：关闭按钮的左上角离窗口左上角 18，灯心落在 30px 中线上
+// （mygo 会把灯放在这个位置上方 1 像素，按钮 14 高，于是顶栏正好 60 高，
+// 和侧栏、卡片头同一套节奏）。
 const (
-	trafficDot  = 12
-	trafficHit  = 16
-	trafficGap  = 4
-	trafficLeft = 12
+	trafficLightX = 18
+	trafficLightY = shellBarMid - 7
 )
-
-func trafficLightsRight() float32 {
-	return trafficLeft + 3*trafficHit + 2*trafficGap
-}
 
 // 窗口右侧三颗按钮（Windows / Linux）：28x26、间隔 2，右沿 18px（卡片右边
 // 留白 8 + 内缩 10），和标题栏、侧栏共用同一条 30px 中线。
@@ -44,18 +39,6 @@ func windowButtonsReserved() float32 { return windowButtonsWidth() + 18 }
 // （macOS 的红绿灯）。做成变量是为了让测试能画另一边平台的样子。
 var windowControlsAtRight = !isMacPlatform()
 
-// windowControlsReserved 是窗口左上角留给自绘红绿灯的宽度（含与内容的
-// 间距）。非 macOS 上原生按钮不在这里，返回 0；全屏时红绿灯隐藏，也不留。
-func (a *app) windowControlsReserved() float32 {
-	if windowControlsAtRight {
-		return 0
-	}
-	if a.win != nil && a.win.IsFullScreen() {
-		return 0
-	}
-	return trafficLightsRight() + shellCardGap
-}
-
 // windowControlsReservedRight 是卡片右上角留给自绘窗口按钮的宽度：macOS 的
 // 按钮在左上，返回 0；全屏时按钮隐藏，也不留。
 func (a *app) windowControlsReservedRight() float32 {
@@ -68,18 +51,18 @@ func (a *app) windowControlsReservedRight() float32 {
 	return windowButtonsReserved()
 }
 
-// windowControls 画窗口自己的按钮，画在平台放它们的那一角：macOS 的红绿灯
-// 在左上，Windows / Linux 是最小化、最大化、关闭三颗平按钮在右上。
+// windowControls 画窗口自己的按钮，只在 Windows / Linux 上：macOS 的三颗
+// 红绿灯交给系统（main.go 用 TitleBarHiddenInset + TrafficLightPosition），
+// 视图不画，只按 c.TitleBar() 报出来的宽度让位。
 //
 // 画在 overlay 里：窗口按钮和系统的一样浮在内容（包括设置这类浮层）之上，
 // 不跟着侧栏、卡片或对话框一起动。
 func (a *app) windowControls(c *ui.Context, pal palette) {
+	if !windowControlsAtRight {
+		return
+	}
 	ui.Overlay(c, func() {
-		if windowControlsAtRight {
-			a.windowButtons(c, pal)
-			return
-		}
-		a.windowTrafficLights(c, pal)
+		a.windowButtons(c, pal)
 	})
 }
 
@@ -150,85 +133,6 @@ func (a *app) windowButton(c *ui.Context, pal palette, key string, svg *ui.SVG,
 	if b.Clicked() {
 		run()
 	}
-}
-
-// windowTrafficLights 画 macOS 的红黄绿三颗窗口按钮。
-//
-// 系统那三颗在 main.go 里由 Frameless 藏掉，改由视图自己画：它们和侧栏、
-// 卡片共用同一条 30px 中线，颜色、悬停符号、失焦时的灰阶都照 AppKit 的
-// 那一套来。点红关窗（走 OnClose，提交草稿和终端照常收尾），点黄最小化，
-// 点绿缩放。
-func (a *app) windowTrafficLights(c *ui.Context, pal palette) {
-	if windowControlsAtRight {
-		return
-	}
-	if a.win != nil && a.win.IsFullScreen() {
-		return
-	}
-
-	focused := true
-	if a.win != nil {
-		focused = a.win.IsFocused()
-	}
-
-	// 整行是一个透明的容器：指针落在三颗之间的空隙上也算「悬停红绿灯」，
-	// 三颗一起露出符号，和 macOS 一样。
-	row := ui.Row(c).Key("window-traffic-lights").Absolute().
-		Left(trafficLeft).Top(0).Height(shellTopBar).
-		Gap(trafficGap).AlignItems(ui.Center).PassThrough()
-	row.Children(func() {
-		closeDot := ui.Hex("#ff5f57")
-		minDot := ui.Hex("#febc2e")
-		zoomDot := ui.Hex("#28c840")
-		if !focused {
-			closeDot, minDot, zoomDot = ui.Hex("#c8c8cc"), ui.Hex("#c8c8cc"), ui.Hex("#c8c8cc")
-			if pal.dark {
-				closeDot, minDot, zoomDot = ui.Hex("#4a4a50"), ui.Hex("#4a4a50"), ui.Hex("#4a4a50")
-			}
-		}
-
-		const (
-			trafficClose = iota
-			trafficMinimize
-			trafficZoom
-		)
-		trafficButton := func(dot ui.Color, label string, glyphKind int, action func()) {
-			btn := ui.ButtonBase(c).Size(trafficHit, trafficHit).Radius(radiusPill).
-				Center().Cursor(ui.CursorPointer).Label(label).FocusRing(false)
-			btn.Children(func() {
-				ui.Box(c).Size(trafficHit, trafficHit).Draw(func(p *ui.Painter, r ui.Rect) {
-					d := float32(trafficDot)
-					cx, cy := r.X+r.W/2, r.Y+r.H/2
-					dotRect := ui.Rect{X: cx - d/2, Y: cy - d/2, W: d, H: d}
-					p.Fill(dotRect, dot, d/2)
-					if !row.Hovered() {
-						return
-					}
-					glyph := ui.RGBA(0, 0, 0, 0.62)
-					switch glyphKind {
-					case trafficClose:
-						p.Line(cx-2.6, cy-2.6, cx+2.6, cy+2.6, 1.25, glyph)
-						p.Line(cx+2.6, cy-2.6, cx-2.6, cy+2.6, 1.25, glyph)
-					case trafficMinimize:
-						p.Line(cx-3, cy, cx+3, cy, 1.25, glyph)
-					default:
-						// 缩放：两个相对的三角，AppKit 的样子。
-						p.Line(cx-3, cy, cx, cy-3, 1.25, glyph)
-						p.Line(cx, cy-3, cx, cy, 1.25, glyph)
-						p.Line(cx, cy, cx+3, cy+3, 1.25, glyph)
-						p.Line(cx+3, cy+3, cx, cy+3, 1.25, glyph)
-					}
-				})
-			})
-			if btn.Clicked() && a.win != nil {
-				action()
-			}
-		}
-
-		trafficButton(closeDot, T("关闭窗口", "Close Window"), trafficClose, func() { a.win.Close() })
-		trafficButton(minDot, T("最小化窗口", "Minimize Window"), trafficMinimize, func() { a.win.Minimize() })
-		trafficButton(zoomDot, T("缩放窗口", "Zoom Window"), trafficZoom, func() { a.win.ToggleMaximize() })
-	})
 }
 
 // shellBackdrop paints the window wash. The cards and sidebar sit directly

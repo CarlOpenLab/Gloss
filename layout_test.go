@@ -182,8 +182,8 @@ func TestToolbarHugsSidebarEdge(t *testing.T) {
 	if !ok {
 		t.Fatalf("侧栏收起时找不到显示按钮：%q", tt.Texts())
 	}
-	if minX := trafficLightsRight() + shellCardGap; show.X < minX {
-		t.Errorf("侧栏收起时第一个工具栏控件左边 x=%.0f，该给自绘红绿灯留到 %.0f", show.X, minX)
+	if minX := realTitleBar.Left + shellCardGap; show.X < minX {
+		t.Errorf("侧栏收起时第一个工具栏控件左边 x=%.0f，该给系统红绿灯留到 %.0f", show.X, minX)
 	}
 
 	seg, ok := tt.Find("改动")
@@ -812,49 +812,5 @@ func TestWorkspaceNavLivesInToolbar(t *testing.T) {
 			t.Errorf("四格没排在一行：「%s」y=%.0f，「%s」y=%.0f",
 				order[i-1], rects[i-1].Y, order[i], rects[i].Y)
 		}
-	}
-}
-
-// macOS 的窗口按钮由视图自己画（main.go 用 Frameless 收走系统那三颗），
-// 位置仍是左上角：三颗都要有、排成一行、落在顶栏中线上，并且不压住卡片里
-// 的工具栏内容。
-func TestWindowTrafficLightsAreSelfDrawn(t *testing.T) {
-	a := richApp(t)
-	tt := ui.NewTester(a.view, 1280, 860)
-	tt.Frame()
-
-	labels := []string{
-		T("关闭窗口", "Close Window"),
-		T("最小化窗口", "Minimize Window"),
-		T("缩放窗口", "Zoom Window"),
-	}
-	var last ui.Rect
-	for i, label := range labels {
-		r, ok := tt.Find(label)
-		if !ok {
-			t.Fatalf("顶栏上找不到自绘窗口按钮 %q：%q", label, tt.Texts())
-		}
-		if r.X < 6 || r.X+r.W > trafficLightsRight()+2 {
-			t.Errorf("%q 的横坐标 x=%.0f..%.0f 不在左上角红绿灯区（6..%.0f）里",
-				label, r.X, r.X+r.W, trafficLightsRight()+2)
-		}
-		if mid := r.Y + r.H/2; mid < shellBarMid-2 || mid > shellBarMid+2 {
-			t.Errorf("%q 的中心 y=%.0f，该在顶栏中线 %.0f 上", label, mid, float32(shellBarMid))
-		}
-		if i > 0 && r.X <= last.X {
-			t.Errorf("%q 没有排在前一颗右边", label)
-		}
-		last = r
-	}
-
-	// 侧栏收起时，卡片里的工具栏要让开它们，不能从圆点底下穿过去。
-	a.setSidebar(false)
-	tt.Frame()
-	show, ok := tt.Find(T("显示侧栏", "Show Sidebar"))
-	if !ok {
-		t.Fatalf("侧栏收起后找不到显示按钮：%q", tt.Texts())
-	}
-	if show.X < trafficLightsRight() {
-		t.Errorf("显示侧栏按钮 x=%.0f 压在红绿灯（右沿 %.0f）下面", show.X, trafficLightsRight())
 	}
 }

@@ -16,10 +16,11 @@ import (
 	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
 )
 
-// realTitleBar 是真实窗口里红绿灯占的地方（在本机量出来的：窗口用
-// TitleBarHidden + TrafficLightPosition{X:20,Y:19}）。无头渲染默认没有
-// 窗口控件，不摆上它就看不出侧栏顶上会不会被关闭按钮压住。
-var realTitleBar = ui.TitleBar{Height: 52, Left: 80}
+// realTitleBar 是真实窗口里系统红绿灯占的地方（照 main.go 的
+// TitleBarHiddenInset + TrafficLightPosition{18, 23} 估的：灯心在 30px 线上，
+// 右到缩放键右沿）。无头渲染默认没有窗口控件，不摆上它就看不出侧栏顶上会不会
+// 被关闭按钮压住。
+var realTitleBar = ui.TitleBar{Height: 60, Left: 80}
 
 // still 关掉这个 tester 上的动效。
 //

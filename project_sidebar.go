@@ -114,7 +114,7 @@ func (a *app) projectSidebar(c *ui.Context, pal palette) {
 	}
 
 	ui.Column(c).FillHeight().Children(func() {
-		ui.Row(c).Height(shellTopBar).Shrink(0).FillWidth().
+		ui.Row(c).Height(max(float32(shellTopBar), bar.Height)).Shrink(0).FillWidth().
 			AlignItems(ui.Center).Padding(0, 12, 0, lead).Gap(2).
 			DragWindow().Children(func() {
 			if isMacPlatform() {

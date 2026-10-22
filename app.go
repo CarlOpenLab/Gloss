@@ -967,16 +967,14 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 	bar := c.TitleBar()
 
 	padLeft := float32(12)
-	if reserved := a.windowControlsReserved(); reserved > 0 {
-		// 侧栏收起时卡片会滑到窗口左沿，卡片里的工具栏得让开左上角那三颗
-		// 自绘红绿灯。按卡片当前左沿（不是最终状态）算，侧栏动画中途内容
-		// 才不会从红绿灯底下穿过去。
+	if bar.Left > 0 {
+		// 侧栏收起时卡片会滑到窗口左沿，卡片里的工具栏得让开系统红绿灯。
+		// 按卡片当前左沿（不是最终状态）算，侧栏动画中途内容才不会从灯底下
+		// 穿过去。
 		cardLeft := a.sidebarShown*a.sidebarWidth(c) + shellCardGap
-		if need := reserved - cardLeft; need > padLeft {
+		if need := bar.Left + shellCardGap - cardLeft; need > padLeft {
 			padLeft = need
 		}
-	} else if !a.sidebarOn && bar.Left > 0 {
-		padLeft = bar.Left + shellCardGap
 	}
 	padRight := float32(12)
 	if bar.Right > 0 {

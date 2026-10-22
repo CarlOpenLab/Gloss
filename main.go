@@ -42,20 +42,26 @@ func main() {
 			MinWidth:  720,
 			MinHeight: 420,
 			StateKey:  "main",
-			// 标题栏不画系统的那条，改由 view 自己画（见 app.go 的 toolbar）。
+			// 标题栏不画系统的那条，内容一直铺到窗口顶（见 app.go 的
+			// toolbar）。窗口按钮按平台在下面决定：macOS 用系统的红绿灯，
+			// Windows / Linux 由视图画在右上角。
 			TitleBarStyle: mygo.TitleBarHidden,
 			Vibrancy:      mygo.VibrancySidebar,
 			Content:       ui.View(a.view),
 		}
-		// 系统那套窗口按钮全部收走，由 view 自己画（见 shell_style.go 的
-		// windowControls）：macOS 是左上角三颗红绿灯，Windows / Linux 是
-		// 右上角的最小化 / 最大化 / 关闭。系统按钮在这两个位置上都会压在
-		// 主卡片右上角的圆角和控件上，画法也不跟卡片里的控件同一套。
-		//
-		// Frameless 只收走标题栏和按钮：阴影、圆角、左右下三条可缩放的边
-		// 都还在（Windows 上顶边不再可缩放，这是无边框窗口的代价），窗口
-		// 仍由工具栏的 DragWindow 拖动。
-		opts.Frameless = true
+		if isMacPlatform() {
+			// macOS：保留系统红绿灯，只把它们挪到 30px 中线上；标题栏藏掉，
+			// 视图按 c.TitleBar() 报出来的宽度让位，不再自己画三颗圆点
+			// （自绘的圆点、符号和失焦灰永远差 AppKit 那一点）。
+			opts.TitleBarStyle = mygo.TitleBarHiddenInset
+			opts.TrafficLightPosition = &mygo.Point{X: trafficLightX, Y: trafficLightY}
+		} else {
+			// Windows / Linux：系统按钮收走，由视图画在右上角（见
+			// shell_style.go 的 windowButtons）。Frameless 只收走标题栏和
+			// 按钮：阴影、圆角、左右下三条可缩放的边都还在（Windows 上顶边
+			// 不再可缩放，这是无边框窗口的代价），窗口仍由工具栏拖动。
+			opts.Frameless = true
+		}
 		win := mygo.NewWindow(opts)
 		a.win = win
 		a.syncAppIcon()
