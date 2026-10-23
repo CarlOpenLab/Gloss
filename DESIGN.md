@@ -245,6 +245,9 @@ Gloss 是一个面向工程师的现代 Git GUI 客户端。本项目的设计�
 | `rounded.xl` | `16px` | 模态弹窗（Settings, PR, Branch 对话框） |
 | `rounded.pill`| `9999px` | 数量计数器（Count Badges）、状态圆角药丸 |
 
+- **内外同心 (Concentric Corners)**：一块圆角面往里缩 `g` 再放一块圆角面，内圆必须取 `外圆 − g` —— 圆心落在同一点，两圈弧才平行，那条留白在角上才和边上一样宽。工作卡就守这一条：窗口那圈圆角由系统画（macOS 26 约 `28`、Windows 11 `8`、Linux `12`），卡片按 `内 = 外 − 8` 取值（`shellCardRadius`）。写死一个不跟外圈走的数，曲率就差一倍，角上的灰带先被挤薄，两个角读起来像两张不相干的卡片。
+- **浅色卡片也给 1px 硬边**：窗口那圈是系统画的硬线，卡片若只靠阴影，角上就成了一团软灰 —— 弧度对上了、质感还是两套。描边取 `palette.cardBorder`（`raisedSurface`）；深色那套本来就是这么做的（`litSurfaceEdge`）。
+
 ---
 
 ## 4. 组件规范 (Component Specifications)

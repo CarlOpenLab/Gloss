@@ -861,7 +861,7 @@ func (a *app) view(c *ui.Context) {
 			Padding(shellCardGap).DragWindow()
 		main.Children(func() {
 			card := ui.Column(c).Grow(1).FillWidth().MinHeight(0).
-				Radius(shellCardRadius).Background(pal.card).Clip()
+				Radius(shellCardRadius()).Background(pal.card).Clip()
 			raisedSurface(card, pal)
 			card.Children(func() {
 				a.toolbar(c, pal)

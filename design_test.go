@@ -199,3 +199,24 @@ func exprText(fset *token.FileSet, e ast.Expr) string {
 	}
 	return b.String()
 }
+
+// TestShellCardRadiusIsConcentric 守 §3 的「内外同心」：工作卡的圆角必须等于
+// 窗口自己那圈圆角减去四周的留白，两圈弧才平行、8px 的灰带在角上和边上才
+// 一样宽。
+//
+// 这条关系最容易在换机器 / 升系统之后悄悄失效：macOS 26（Tahoe）把窗口角从
+// 10 拉到了 28，卡片要是还写死 14，角上的灰带就被挤到 5px —— 差三个像素，
+// 整张截图上看不出来，但那个角读起来像两张不相干的卡片叠在一起。所以这里
+// 钉的是关系，不是某个具体的数。
+func TestShellCardRadiusIsConcentric(t *testing.T) {
+	for _, goos := range []string{"darwin", "windows", "linux"} {
+		win, card := shellWindowRadiusFor(goos), shellCardRadiusFor(goos)
+		if want := win - shellCardGap; card != want {
+			t.Errorf("%s: 工作卡圆角 %.0f ≠ 窗口圆角 %.0f − 间距 %d —— 两圈弧不平行",
+				goos, card, win, shellCardGap)
+		}
+		if card < 0 {
+			t.Errorf("%s: 工作卡圆角算成了负数（%.0f）", goos, card)
+		}
+	}
+}

@@ -26,6 +26,12 @@ const (
 	settingsGroupR   = 12
 	settingsRowV     = 11
 	settingsControlH = 26
+
+	// settingsCardRadius 是设置窗口里那张卡的圆角。它不再跟着主窗口的
+	// shellCardRadius 走：这个浮窗的外框是 radiusXL(16)，按「内 = 外 − 间距」
+	// 算，内卡该是 8 —— 那张卡片会比现在方得多，是另一次版式决定。眼下先
+	// 留住 14，和主工作卡分开取值。
+	settingsCardRadius = 14
 )
 
 // settingsGroupRows counts the rows of the group being built so that the

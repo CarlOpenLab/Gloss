@@ -441,7 +441,7 @@ func (a *app) settingsBody(c *ui.Context, pal palette) {
 		ui.Column(c).Grow(1).MinWidth(0).FillHeight().
 			Padding(settingsCardGap).Children(func() {
 			card := ui.Column(c).Grow(1).FillWidth().MinHeight(0).
-				Radius(shellCardRadius).Background(pal.card).Clip()
+				Radius(settingsCardRadius).Background(pal.card).Clip()
 			raisedSurface(card, pal)
 			card.Children(func() {
 				settingsCardHeader(c, pal, a.settingsTitle(), func() {

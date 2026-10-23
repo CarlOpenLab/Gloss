@@ -1,16 +1,52 @@
 package main
 
-import "github.com/egoist/mygo/ui"
+import (
+	"runtime"
+
+	"github.com/egoist/mygo/ui"
+)
 
 // The shell follows a soft, layered desktop rhythm: the window chrome, the
 // sidebar controls and each card header share one 30px center line.
 const (
-	shellBarMid     = 30
-	shellTopBar     = 2 * shellBarMid
-	shellHeaderH    = 2 * (shellBarMid - shellCardGap)
-	shellCardGap    = 8
-	shellCardRadius = 14
+	shellBarMid  = 30
+	shellTopBar  = 2 * shellBarMid
+	shellHeaderH = 2 * (shellBarMid - shellCardGap)
+	shellCardGap = 8
 )
+
+// shellWindowRadiusFor 是窗口自己那一圈圆角的半径。它不归我们画 —— macOS /
+// Windows 由系统画，Linux 交给桌面主题 —— 但工作卡贴着它内缩 shellCardGap，
+// 所以这个数必须写下来：卡片不知道窗口有多圆，就只能各圆各的（见
+// shellCardRadiusFor）。
+//
+// 这三个数属于操作系统，不是 §3 那六级设计圆角，改不了，只能跟。
+func shellWindowRadiusFor(goos string) float32 {
+	switch goos {
+	case "darwin":
+		// macOS 26（Tahoe）把窗口角做得比上一代明显更圆。按截图量，窗口那圈
+		// 弧的半径是工作卡（14）的 2.1 倍，28 / 13.5 正好对得上；macOS 15
+		// 及更早是 10。
+		return 28
+	case "windows":
+		// Windows 11 的 DWM 圆角。
+		return 8
+	default:
+		// Linux 各家 CSD 常见的那一档（GNOME 的 Adwaita）。
+		return 12
+	}
+}
+
+// shellCardRadiusFor 是工作卡的圆角：内圆 = 外圆 − 间距。
+//
+// 同心是这条留白唯一的读法。写死一个不跟外圈走的数（原来是 14），在 macOS 26
+// 那种 28 的窗口角里，8px 的灰带会在角上挤薄到 5px —— 眼睛看见的是两条曲率
+// 差一倍的弧，像两张不相干的卡片叠在一起，而不是一张卡片浮在窗口里。
+func shellCardRadiusFor(goos string) float32 {
+	return max(0, shellWindowRadiusFor(goos)-shellCardGap)
+}
+
+func shellCardRadius() float32 { return shellCardRadiusFor(runtime.GOOS) }
 
 // 系统红绿灯的位置：关闭按钮的左上角离窗口左上角 18，灯心落在 30px 中线上
 // （mygo 会把灯放在这个位置上方 1 像素，按钮 14 高，于是顶栏正好 60 高，
@@ -174,7 +210,15 @@ func raisedSurface(e ui.Element, pal palette) ui.Element {
 	if pal.dark {
 		return darkSurfaceShadow(litSurfaceEdge(e, pal))
 	}
-	return e.Shadow(0, 1, 2, 0, pal.cardShadow).
+	// 浅色卡片也描一圈 1px 硬边。窗口自己那圈是系统画的硬线，卡片只靠阴影的
+	// 话，角上是一团软灰、窗口是一根硬线 —— 同一个角两种质感，看着不像一套
+	// 东西（§3 的内外同心讲的是弧度，这条讲的是描边）。
+	//
+	// 用 0 模糊 / 1 扩散的外阴影，不用 Border：Border 会像内边距一样把卡片里的
+	// 内容往里挤 1px（文件栏那几条「卡片间距 8 + 内边距 12」就全偏了）；外阴影
+	// 只画在卡片外面，贴出一条 1px 的硬边，不动布局。
+	return e.Shadow(0, 0, 0, 1, pal.cardBorder).
+		Shadow(0, 1, 2, 0, pal.cardShadow).
 		Shadow(0, 1, 6, 0, pal.cardShadow2)
 }
 

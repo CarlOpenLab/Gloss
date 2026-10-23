@@ -187,19 +187,35 @@ func TestSplitterLineHiddenWhileDragging(t *testing.T) {
 		}
 		return false
 	}
+	// darkest 是这一带最暗的中性像素。侧栏那条边界上本来就有卡片自己的
+	// 1px 硬边（见 raisedSurface），分隔线是压在它上面再深一档的发丝线 ——
+	// 都在同一个像素上，只能比亮度，不能问「有没有线」。
+	darkest := func(x float32, y int) int {
+		img := tt.Image()
+		out := 255
+		for dx := -2; dx <= 2; dx++ {
+			r, g, b, _ := img.At(int(x)+dx, y).RGBA()
+			r8, g8, b8 := int(r>>8), int(g>>8), int(b>>8)
+			if r8 < out && near(r8, g8) && near(g8, b8) {
+				out = r8
+			}
+		}
+		return out
+	}
 
-	// 侧栏：悬停有细线，按住拖动时消失。
+	// 侧栏：悬停有细线（比卡片边深一档），按住拖动时收回到卡片边的亮度。
 	sep := a.sidebarWidth(nil) + shellCardGap
+	rest := darkest(sep, 420)
 	tt.Move(sep, 420)
 	tt.Frame()
-	if !lineAt(sep, 420) {
-		t.Fatal("侧栏悬停时该有分隔线")
+	if hover := darkest(sep, 420); hover >= rest {
+		t.Fatalf("侧栏悬停时该有分隔线：最暗 %d 不比静止时的卡片边 %d 深", hover, rest)
 	}
 	tt.Press(sep, 420)
 	tt.Move(sep+50, 420)
 	tt.Frame()
-	if lineAt(a.sidebarWidth(nil)+shellCardGap, 420) {
-		t.Error("拖动侧栏时线该完全消失")
+	if drag := darkest(a.sidebarWidth(nil)+shellCardGap, 420); drag < rest {
+		t.Errorf("拖动侧栏时线该完全消失：最暗 %d 比静止时的卡片边 %d 还深", drag, rest)
 	}
 	tt.Release(sep+50, 420)
 	tt.Frame()
