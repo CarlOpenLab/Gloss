@@ -37,13 +37,18 @@ func shellWindowRadiusFor(goos string) float32 {
 	}
 }
 
-// shellCardRadiusFor 是工作卡的圆角：内圆 = 外圆 − 间距。
+// shellCardRadiusFor 是工作卡的圆角：内圆 = 外圆 − 间距，但不低于卡片自己的
+// 那一档（radiusLG）。
 //
 // 同心是这条留白唯一的读法。写死一个不跟外圈走的数（原来是 14），在 macOS 26
 // 那种 28 的窗口角里，8px 的灰带会在角上挤薄到 5px —— 眼睛看见的是两条曲率
 // 差一倍的弧，像两张不相干的卡片叠在一起，而不是一张卡片浮在窗口里。
+//
+// 下限是必须的：窗口角本来就小的平台（Windows 11 是 8），严格同心算出来是 0 ——
+// 一张没有圆角的卡片读起来不是「跟着窗口走」，是「圆角丢了」。宁可让那条灰带
+// 在角上宽 4px，也不能把卡片的圆角抹平。
 func shellCardRadiusFor(goos string) float32 {
-	return max(0, shellWindowRadiusFor(goos)-shellCardGap)
+	return max(radiusLG, shellWindowRadiusFor(goos)-shellCardGap)
 }
 
 func shellCardRadius() float32 { return shellCardRadiusFor(runtime.GOOS) }
