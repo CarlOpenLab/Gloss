@@ -1,15 +1,15 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="dark">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gloss — 先看清，再合并</title>
-  <meta name="description" content="Gloss 是一款纯 Go 编写的原生 Git 客户端。风险标注、分支拓扑与提交信息，都在按下 ⌘↩ 之前就绪。">
-  <meta name="theme-color" content="#070809" media="(prefers-color-scheme: dark)">
-  <meta name="theme-color" content="#f5f4f0" media="(prefers-color-scheme: light)">
+  <title>Gloss — Look before you merge</title>
+  <meta name="description" content="Gloss is a native Git client written in pure Go. Risk annotations, branch topology and commit context — all in place before you press ⌘↩.">
+  <meta name="theme-color" content="#0c0b10" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f2f3f5" media="(prefers-color-scheme: light)">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="Gloss — 先看清，再合并。">
-  <meta property="og:description" content="纯 Go 编写的原生 Git 客户端：风险标注、分支拓扑与提交信息，都在按下 ⌘↩ 之前就绪。">
+  <meta property="og:title" content="Gloss — Look before you merge.">
+  <meta property="og:description" content="A native Git client in pure Go: risk annotations, branch topology and commit context, ready before you press ⌘↩.">
   <meta property="og:url" content="https://carlopenlab.github.io/Gloss/">
   <meta property="og:image" content="https://carlopenlab.github.io/Gloss/shots/v1-dark.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -33,24 +33,28 @@
 
   <header class="nav">
     <div class="shell nav-in">
-      <a class="brand" href="#top" aria-label="Gloss 首页">
+      <a class="brand" href="#top" aria-label="Gloss home">
         <img class="brand-logo is-dark" src="assets/logo-dark.png" alt="" width="22" height="22">
         <img class="brand-logo is-light" src="assets/logo.png" alt="" width="22" height="22">
         <span class="brand-name">Gloss</span>
         <span class="brand-ver">0.3.20</span>
       </a>
 
-      <nav class="nav-links" aria-label="主导航">
-        <a href="#review">审查</a>
-        <a href="#graph">图谱</a>
-        <a href="#intelligence">智能</a>
-        <a href="#terminal">终端</a>
-        <a href="#keyboard">键盘</a>
-        <a href="#download">下载</a>
+      <nav class="nav-links" aria-label="Primary">
+        <a href="#review" data-i18n="nav.review">Review</a>
+        <a href="#graph" data-i18n="nav.graph">Graph</a>
+        <a href="#intelligence" data-i18n="nav.ai">Intelligence</a>
+        <a href="#terminal" data-i18n="nav.term">Terminal</a>
+        <a href="#keyboard" data-i18n="nav.keys">Keys</a>
+        <a href="#download" data-i18n="nav.dl">Download</a>
       </nav>
 
       <div class="nav-end">
-        <button class="icon-btn" id="theme-btn" type="button" aria-label="切换深浅外观">
+        <div class="lang-switch" role="group" aria-label="Language">
+          <button class="lang-btn is-on" id="lang-en" type="button" aria-label="Switch to English">EN</button>
+          <button class="lang-btn" id="lang-zh" type="button" aria-label="切换到中文">中</button>
+        </div>
+        <button class="icon-btn" id="theme-btn" type="button" aria-label="Toggle light/dark appearance">
           <svg class="i-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
             <circle cx="12" cy="12" r="4"></circle>
             <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path>
@@ -77,29 +81,29 @@
         <div class="hero-grid">
           <div class="hero-copy">
             <p class="eyebrow"><span class="dot" aria-hidden="true"></span>NATIVE GIT CLIENT — PURE GO · GPU DIRECT</p>
-            <h1 class="display">先看清，再合并。</h1>
+            <h1 class="display" data-i18n="hero.display">Look, then<br>merge.</h1>
           </div>
 
           <div class="hero-side">
-            <p class="lead">Gloss 把一次代码审查压缩进一屏：提交详情、逐行差异、风险标注与审查进度，都在你按下 <kbd class="inline-kbd">⌘</kbd><kbd class="inline-kbd">↩</kbd> 之前就绪。</p>
+            <p class="lead" data-i18n-html="hero.lead">Gloss puts a whole code review on one screen — commit details, line diffs, risk flags and review progress, ready before you press <kbd class="inline-kbd">⌘</kbd><kbd class="inline-kbd">↩</kbd>.</p>
             <div class="actions">
               <a class="btn btn-primary" href="https://github.com/CarlOpenLab/Gloss/releases/latest" target="_blank" rel="noopener" id="main-dl">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"></path>
                 </svg>
-                <span id="main-dl-label">下载 macOS 版</span>
+                <span id="main-dl-label">Download for macOS</span>
                 <span class="btn-meta" id="main-dl-meta">.dmg</span>
               </a>
-              <a class="btn btn-ghost" href="https://github.com/CarlOpenLab/Gloss" target="_blank" rel="noopener">在 GitHub 上查看</a>
+              <a class="btn btn-ghost" href="https://github.com/CarlOpenLab/Gloss" target="_blank" rel="noopener" data-i18n="hero.gh">View on GitHub</a>
             </div>
-            <p class="fine">macOS · Windows · Linux　—　单文件，约 20 MB</p>
+            <p class="fine" data-i18n="hero.fine">macOS · Windows · Linux — one binary, ~20 MB</p>
           </div>
         </div>
 
         <figure class="stage" data-stage>
           <div class="stage-cap">
-            <span class="mono">HISTORY — 提交详情 · 文件清单 · 逐行差异</span>
-            <span class="mono stage-cap-right">v0.3.18 / macOS</span>
+            <span class="mono" data-i18n="stage.cap">HISTORY — commit details · file list · line diffs</span>
+            <span class="mono stage-cap-right">v0.3.20 / macOS</span>
           </div>
 
           <div class="frame">
@@ -112,7 +116,7 @@
                     <span class="tl tl-y"></span>
                     <span class="tl tl-g"></span>
                   </div>
-                  <button class="sb-toggle-btn" type="button" aria-label="收起侧栏" title="隐藏项目侧栏 (⌘⌥B)">
+                  <button class="sb-toggle-btn" type="button" aria-label="Hide sidebar" title="Hide project sidebar (⌘⌥B)" data-i18n-title="sb.hide">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                       <rect x="3" y="3" width="18" height="18" rx="3"></rect>
                       <path d="M9 3v18"></path>
@@ -121,72 +125,65 @@
                 </div>
 
                 <div class="sb-sec-head">
-                  <span>PROJECTS</span>
-                  <span class="sb-add-btn" title="添加项目">＋</span>
+                  <span data-i18n="sb.projects">Projects</span>
+                  <span class="sb-add-btn" title="Add project" data-i18n-title="sb.add">＋</span>
                 </div>
                 <div class="sb-projects">
                   <div class="sb-proj-row">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
                     <span class="sb-proj-name">atlas-web</span>
                   </div>
-                  <div class="sb-proj-row">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
-                    <span class="sb-proj-name">core-api</span>
-                  </div>
                   <div class="sb-proj-row is-on">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
                     <span class="sb-proj-name">atlas-client</span>
                   </div>
+                  <div class="sb-proj-row">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+                    <span class="sb-proj-name">core-api</span>
+                  </div>
                 </div>
 
-                <div class="sb-divider" title="调整项目与分支高度">
+                <div class="sb-divider" title="Drag to resize projects vs branches" data-i18n-title="sb.divider">
                   <span class="sb-divider-line"></span>
                 </div>
 
                 <div class="sb-sec-head">
-                  <span>BRANCHES</span>
+                  <span data-i18n="sb.branches">Branches</span>
                 </div>
                 <div class="sb-filter">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
-                  Filter branches
+                  <span data-i18n="sb.filter">Filter branches</span>
                 </div>
                 <div class="sb-scroll">
-                  <div class="sb-group"><span class="sb-group-label">Local Branches</span><span class="sb-chev">⌄</span></div>
-                  <div class="sb-row"><span class="sb-ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="6" r="2.2"></circle><circle cx="6" cy="18" r="2.2"></circle><circle cx="18" cy="18" r="2.2"></circle><path d="M6 8.2v7.6M8.2 6H14a4 4 0 0 1 4 4v5.8"></path></svg></span><span class="sb-name">All branches</span></div>
-                  <div class="sb-row"><span class="sb-ic"></span><span class="sb-name">master</span></div>
-                  <div class="sb-row"><span class="sb-ic"></span><span class="sb-name">optimize/dy-auth-flow</span></div>
-                  <div class="sb-row"><span class="sb-ic"></span><span class="sb-name">feat/search-auto-complete</span></div>
-                  <div class="sb-row"><span class="sb-ic"></span><span class="sb-name">feat/private-msg-theme</span></div>
-                  <div class="sb-row is-on"><span class="sb-dot"></span><span class="sb-name">beta</span><span class="sb-chip">HEAD</span><span class="sb-ab"><i class="up">↑2</i></span></div>
+                  <div class="sb-group"><span class="sb-group-label" data-i18n="sb.local">Local</span><span class="sb-chev">⌄</span></div>
+                  <div class="sb-row"><span class="sb-ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="6" r="2.2"></circle><circle cx="6" cy="18" r="2.2"></circle><circle cx="18" cy="18" r="2.2"></circle><path d="M6 8.2v7.6M8.2 6H14a4 4 0 0 1 4 4v5.8"></path></svg></span><span class="sb-name" data-i18n="sb.all">All branches</span></div>
+                  <div class="sb-row is-cur"><span class="sb-dot"></span><span class="sb-name">main</span><span class="sb-chip"><i class="sb-chip-dot"></i>HEAD</span></div>
+                  <div class="sb-row"><span class="sb-ic"></span><span class="sb-name">feat/audit-log</span></div>
+                  <div class="sb-row"><span class="sb-ic"></span><span class="sb-name">feat/panel-optimize</span><span class="sb-ab">↑2</span></div>
                   <div class="sb-row sb-dim"><span class="sb-ic"></span><span class="sb-name">refactor/publish-infra</span></div>
 
-                  <div class="sb-group"><span class="sb-group-label">Remote Branches</span><span class="sb-chev">⌄</span></div>
+                  <div class="sb-group"><span class="sb-group-label" data-i18n="sb.remote">Remote</span><span class="sb-chev">⌄</span></div>
                   <div class="sb-row sb-row--ind"><span class="sb-ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 6h16M4 12h16M4 18h16"></path></svg></span><span class="sb-name">origin</span><span class="sb-chev">⌄</span></div>
-                  <div class="sb-row sb-row--ind2"><span class="sb-name">master</span></div>
-                  <div class="sb-row sb-row--ind2"><span class="sb-name">optimize/dy-auth-flow</span></div>
-                  <div class="sb-row sb-row--ind2"><span class="sb-name">beta</span><span class="sb-ab"><i class="up">↑2</i></span></div>
+                  <div class="sb-row sb-row--ind2"><span class="sb-name">main</span></div>
+                  <div class="sb-row sb-row--ind2"><span class="sb-name">feat/audit-log</span></div>
                   <div class="sb-row sb-row--ind2"><span class="sb-name">panel-optimize</span></div>
-                  <div class="sb-row sb-row--ind"><span class="sb-ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 6h16M4 12h16M4 18h16"></path></svg></span><span class="sb-name">shared-lib</span><span class="sb-chev">⌄</span></div>
-                  <div class="sb-row sb-row--ind2"><span class="sb-name">feat/search-auto-complete</span></div>
-                  <div class="sb-row sb-row--ind2"><span class="sb-name">master</span></div>
 
-                  <div class="sb-group"><span class="sb-group-label">Tags</span><span class="sb-chev">⌄</span></div>
-                  <div class="sb-row"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.3.18</span><span class="sb-tag">latest</span></div>
-                  <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.3.17</span></div>
-                  <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.3.15</span></div>
-                  <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.3.14</span></div>
+                  <div class="sb-group"><span class="sb-group-label" data-i18n="sb.tags">Tags</span><span class="sb-chev">⌄</span></div>
+                  <div class="sb-row"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.3.20</span><span class="sb-tag">latest</span></div>
+                  <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.3.19</span></div>
+                  <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.3.18</span></div>
 
-                  <div class="sb-group"><span class="sb-group-label">Stashes</span><span class="sb-chev">⌄</span></div>
+                  <div class="sb-group"><span class="sb-group-label" data-i18n="sb.stashes">Stashes</span><span class="sb-chev">⌄</span></div>
                   <div class="sb-row"><span class="sb-ic sb-ic--stash"></span><span class="sb-name">wip: image review</span></div>
-                  <div class="sb-row sb-dim"><span class="sb-ic sb-ic--stash"></span><span class="sb-name">wip: lane palette</span></div>
                 </div>
 
                 <div class="sb-footer">
-                  <span class="sb-foot-btn" title="设置 (⌘,)">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.08a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.08a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.08a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-                    <span>设置</span>
+                  <span class="sb-foot-btn" title="Search (⌘F)" data-i18n-title="sb.search">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
                   </span>
-                  <span class="sb-foot-kbd">⌘,</span>
+                  <span class="sb-foot-btn" title="Settings (⌘,)" data-i18n-title="sb.settings">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.08a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.08a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.08a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                  </span>
                 </div>
               </aside>
 
@@ -196,40 +193,39 @@
                   <!-- Toolbar Inside Card -->
                   <div class="card-tb">
                     <div class="tb-views">
-                      <span class="tb-view-tab"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6M9 15h6M12 12v6"></path></svg>改动</span>
-                      <span class="tb-view-tab is-on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"></circle><line x1="3" y1="12" x2="9" y2="12"></line><line x1="15" y1="12" x2="21" y2="12"></line></svg>历史</span>
-                      <span class="tb-view-tab"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>终端</span>
-                      <span class="tb-view-tab"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>编辑器</span>
+                      <span class="tb-view-tab" title="Changes (⌘1)" data-i18n-title="tb.changes"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6M9 15h6M12 12v6"></path></svg></span>
+                      <span class="tb-view-tab is-on" title="History (⌘2)" data-i18n-title="tb.history"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="6" r="2.4"></circle><circle cx="6" cy="18" r="2.4"></circle><circle cx="18" cy="12" r="2.4"></circle><path d="M6 8.4v7.2M8.4 6h4.6a3 3 0 0 1 3 3v.6M8.4 18h4.6a3 3 0 0 0 3-3v-.6"></path></svg></span>
+                      <span class="tb-view-tab" title="Terminal (⌘3)" data-i18n-title="tb.term"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg></span>
+                      <span class="tb-view-tab" title="Editor (⌘4)" data-i18n-title="tb.editor"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg></span>
                     </div>
 
                     <span class="tb-sep"></span>
 
                     <span class="tb-branch-chip">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="6" r="2.4"></circle><circle cx="6" cy="18" r="2.4"></circle><path d="M6 8.4v7.2M15 6a3 3 0 0 1 3 3v6a2.4 2.4 0 1 1-2.4-2.4"></path></svg>
-                      <span class="tb-branch-name">beta</span>
-                      <span class="tb-chip-head">HEAD</span>
-                      <span class="tb-chip-ab"><i class="up">↑2</i></span>
+                      <span class="tb-branch-name">main</span>
+                      <span class="chev">⌄</span>
                     </span>
 
                     <span class="tb-spacer"></span>
 
                     <div class="tb-seg-icons">
-                      <span class="tb-seg-icon" title="Unified (单栏)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line></svg></span>
-                      <span class="tb-seg-icon is-on" title="Split (分栏)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="12" y1="4" x2="12" y2="20"></line></svg></span>
+                      <span class="tb-seg-icon" title="Unified view" data-i18n-title="tb.unified"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line></svg></span>
+                      <span class="tb-seg-icon is-on" title="Split view" data-i18n-title="tb.split"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="12" y1="4" x2="12" y2="20"></line></svg></span>
                     </div>
 
                     <span class="tb-sep"></span>
 
                     <div class="tb-remotes">
-                      <span class="tb-icon-btn" title="抓取 (Fetch ⌘⇧F)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"></path></svg></span>
-                      <span class="tb-icon-btn" title="拉取 (Pull ⌘⇧P)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg></span>
-                      <span class="tb-icon-btn" title="推送 (Push ⌘⇧U)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg></span>
+                      <span class="tb-icon-btn" title="Fetch (⌘⇧F)" data-i18n-title="tb.fetch"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"></path></svg></span>
+                      <span class="tb-icon-btn" title="Pull (⌘⇧P)" data-i18n-title="tb.pull"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg><span class="tb-badge">1</span></span>
+                      <span class="tb-icon-btn" title="Push (⌘⇧U)" data-i18n-title="tb.push"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg><span class="tb-badge">2</span></span>
                     </div>
 
                     <span class="tb-sep"></span>
 
-                    <span class="tb-icon-btn" title="刷新仓库 (⌘R)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></span>
-                    <span class="tb-icon-btn" title="打开本地仓库 (⌘O)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg></span>
+                    <span class="tb-icon-btn" title="Refresh (⌘R)" data-i18n-title="tb.refresh"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></span>
+                    <span class="tb-icon-btn" title="Open repository (⌘O)" data-i18n-title="tb.open"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg></span>
                   </div>
 
                   <!-- Card Body -->
@@ -237,12 +233,12 @@
 
                 <section class="cl">
                   <div class="cl-head">
-                    <span>Loaded 500 commits…</span>
+                    <span data-i18n="cl.count">500 commits</span>
                     <span class="cl-delta"><i class="add">+12</i><i class="del">−4</i></span>
                   </div>
                   <div class="cl-filter">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
-                    Filter commits
+                    <span data-i18n="cl.filter">Filter commits</span>
                     <span class="cl-kbd">⌘F</span>
                   </div>
                   <div class="cl-list">
@@ -266,94 +262,86 @@
               <circle cx="12" cy="432" r="3.5" fill="var(--app-lane0)" stroke="var(--app-card)" stroke-width="2"></circle>
             </svg>
             <div class="cl-row is-on">
-              <span class="cl-msg">Merge 'feat/audit-log' into beta</span>
-              <span class="cl-refs"><b>HEAD → beta</b></span>
+              <span class="cl-msg" data-i18n="cm.m1">Merge 'feat/audit-log' into main</span>
+              <span class="cl-refs is-head"><i class="rdot"></i>HEAD → main</span>
               <span class="cl-author">Lin Wei</span>
-              <span class="cl-when">6 天前</span>
+              <span class="cl-when" data-i18n="t.6a">6d ago</span>
               <span class="cl-hash">11c4fe5</span>
             </div>
             <div class="cl-row">
-              <span class="cl-msg">fix(review): 只标注当前 hunk</span>
-              
+              <span class="cl-msg" data-i18n="cm.m2">fix(review): only annotate the current hunk</span>
+              <span class="cl-refs"><i class="rdot"></i>feat/audit-log</span>
               <span class="cl-author">Lin Wei</span>
-              <span class="cl-when">6 天前</span>
+              <span class="cl-when" data-i18n="t.6a">6d ago</span>
               <span class="cl-hash">89f8c56</span>
             </div>
             <div class="cl-row">
-              <span class="cl-msg">Merge 'feat/audit-log' into beta</span>
-              
+              <span class="cl-msg" data-i18n="cm.m1">Merge 'feat/audit-log' into main</span>
+              <span class="cl-refs"><i class="rdot"></i>origin/main</span>
               <span class="cl-author">Lin Wei</span>
-              <span class="cl-when">6 天前</span>
+              <span class="cl-when" data-i18n="t.6a">6d ago</span>
               <span class="cl-hash">8af2425</span>
             </div>
             <div class="cl-row">
-              <span class="cl-msg">feat(audit): 自动关闭风险提示</span>
-              
+              <span class="cl-msg" data-i18n="cm.m4">feat(audit): auto-dismiss risk findings</span>
               <span class="cl-author">Lin Wei</span>
-              <span class="cl-when">6 天前</span>
+              <span class="cl-when" data-i18n="t.6a">6d ago</span>
               <span class="cl-hash">d71682c</span>
             </div>
             <div class="cl-row">
               <span class="cl-msg">chore: sync shared tokens</span>
-              
               <span class="cl-author">Kai Chen</span>
-              <span class="cl-when">7 天前</span>
+              <span class="cl-when" data-i18n="t.7a">7d ago</span>
               <span class="cl-hash">64d9b26</span>
             </div>
             <div class="cl-row">
               <span class="cl-msg">merge: sync beta into feat/audit-log</span>
-              
+              <span class="cl-refs"><i class="rdot"></i>feat/tabs</span>
               <span class="cl-author">Kai Chen</span>
-              <span class="cl-when">10 天前</span>
+              <span class="cl-when" data-i18n="t.10a">10d ago</span>
               <span class="cl-hash">38f1af4</span>
             </div>
             <div class="cl-row">
-              <span class="cl-msg">Merge 'panel-optimize' into beta</span>
-              
+              <span class="cl-msg" data-i18n="cm.m7">Merge 'panel-optimize' into main</span>
+              <span class="cl-refs"><i class="rdot"></i>panel-optimize</span>
               <span class="cl-author">Seul</span>
-              <span class="cl-when">11 天前</span>
+              <span class="cl-when" data-i18n="t.11a">11d ago</span>
               <span class="cl-hash">ed2d1f0</span>
             </div>
             <div class="cl-row">
-              <span class="cl-msg">客户端 Panel 组件优化</span>
-              
+              <span class="cl-msg" data-i18n="cm.m8">perf(panel): tune client panel components</span>
               <span class="cl-author">Seul</span>
-              <span class="cl-when">11 天前</span>
+              <span class="cl-when" data-i18n="t.11a">11d ago</span>
               <span class="cl-hash">5b6fe7b</span>
             </div>
             <div class="cl-row">
               <span class="cl-msg">chore: sync common</span>
-              
               <span class="cl-author">CI Robot</span>
-              <span class="cl-when">12 天前</span>
+              <span class="cl-when" data-i18n="t.12a">12d ago</span>
               <span class="cl-hash">392185c</span>
             </div>
             <div class="cl-row">
-              <span class="cl-msg">fix: 消息通知成员审核无法打开</span>
-              
+              <span class="cl-msg" data-i18n="cm.m10">fix: member review screen unreachable from notification</span>
               <span class="cl-author">Lin Wei</span>
-              <span class="cl-when">26 天前</span>
+              <span class="cl-when" data-i18n="t.26a">26d ago</span>
               <span class="cl-hash">d8dca12</span>
             </div>
             <div class="cl-row">
               <span class="cl-msg">feat(panel): lazy mount panes</span>
-              
               <span class="cl-author">Lin Wei</span>
-              <span class="cl-when">26 天前</span>
+              <span class="cl-when" data-i18n="t.26a">26d ago</span>
               <span class="cl-hash">b018c24</span>
             </div>
             <div class="cl-row">
-              <span class="cl-msg">test(review): 保持 hunk 顺序</span>
-              
+              <span class="cl-msg" data-i18n="cm.m12">test(review): preserve hunk order</span>
               <span class="cl-author">Kai Chen</span>
-              <span class="cl-when">27 天前</span>
+              <span class="cl-when" data-i18n="t.27a">27d ago</span>
               <span class="cl-hash">4f7a011</span>
             </div>
             <div class="cl-row">
-              <span class="cl-msg">perf(graph): 按行缓存车道几何</span>
-              
+              <span class="cl-msg" data-i18n="cm.m13">perf(graph): cache lane geometry per row</span>
               <span class="cl-author">Lin Wei</span>
-              <span class="cl-when">27 天前</span>
+              <span class="cl-when" data-i18n="t.27a">27d ago</span>
               <span class="cl-hash">9c1de02</span>
             </div>
                   </div>
@@ -361,52 +349,52 @@
 
                 <section class="cd">
                   <div class="cd-card">
-                    <div class="cd-top">
+                    <div class="cd-id">
                       <span class="avatar">LW</span>
-                      <div class="cd-who">
-                        <b>Lin Wei</b>
-                        <span>14 Oct 2026 17:04</span>
-                      </div>
+                      <b class="cd-name">Lin Wei</b>
+                      <span class="cd-date" data-i18n="cd.date">Oct 14, 2026 17:04</span>
                     </div>
                     <div class="cd-meta">
                       <span class="cd-mail">lin@example.dev</span>
-                      <span class="cd-hash">#11c4fe5</span>
-                      <span class="cd-link">View on GitHub ↗</span>
+                      <span class="cd-hash"># 11c4fe5</span>
+                      <span class="cd-link" data-i18n="cd.link">View on GitHub ↗</span>
                     </div>
-                    <div class="cd-subject">Merge 'feat/audit-log' into beta</div>
+                    <div class="cd-rule"></div>
+                    <div class="cd-subject" data-i18n="cm.m1">Merge 'feat/audit-log' into main</div>
                     <ul class="cd-body">
-                      <li>审查状态按提交隔离，切换分支不再串味。</li>
-                      <li>行内风险标注只保留当前 hunk，减少干扰。</li>
+                      <li data-i18n="cd.b1">Review state is scoped per commit; switching branches no longer bleeds.</li>
+                      <li data-i18n="cd.b2">Inline risk flags stay on the current hunk to cut the noise.</li>
                     </ul>
                   </div>
 
                   <div class="cd-files">
                     <div class="cd-files-head">
-                      <span>4 files</span>
+                      <span data-i18n="cd.files">4 files</span>
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
                     </div>
-                    <div class="cd-path-bar">
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
-                      src/views/layout/panel/components
+                    <div class="cd-filter">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
+                      <span data-i18n="cd.filter">Filter files</span>
                     </div>
-                    <div class="cf-row is-on"><span class="cf-path">PanelList.vue</span><span class="cf-num"><i class="add">+12</i><i class="del">−4</i></span><span class="cf-st">M</span></div>
-                    <div class="cf-row"><span class="cf-path">usePanelUpdate.ts</span><span class="cf-num"><i class="add">+3</i><i class="del">−1</i></span><span class="cf-st">M</span></div>
-                    <div class="cf-row"><span class="cf-path">panel.less</span><span class="cf-num"><i class="add">+6</i></span><span class="cf-st">M</span></div>
-                    <div class="cf-row"><span class="cf-path">PanelList.test.ts</span><span class="cf-num"><i class="add">+9</i></span><span class="cf-st">A</span></div>
-                    <div class="cd-total"><span>Total</span><span><i class="add">+30</i><i class="del">−5</i></span></div>
+                    <div class="cf-row is-on"><span class="cf-path">PanelList.vue</span><span class="cf-num"><i class="add">+12</i><i class="del">−4</i></span><span class="cf-st st-m">M</span></div>
+                    <div class="cf-row"><span class="cf-path">usePanelUpdate.ts</span><span class="cf-num"><i class="add">+3</i><i class="del">−1</i></span><span class="cf-st st-m">M</span></div>
+                    <div class="cf-row"><span class="cf-path">panel.less</span><span class="cf-num"><i class="add">+6</i></span><span class="cf-st st-m">M</span></div>
+                    <div class="cf-row"><span class="cf-path">PanelList.test.ts</span><span class="cf-num"><i class="add">+9</i></span><span class="cf-st st-a">A</span></div>
+                    <div class="cd-total"><span data-i18n="cd.total">Total</span><span><i class="add">+30</i><i class="del">−5</i></span></div>
                   </div>
                 </section>
 
                 <section class="df">
                   <div class="df-head">
-                    <span class="df-badge">M</span>
+                    <span class="df-dot st-m"></span>
+                    <span class="df-badge st-m">M</span>
                     <span class="df-file">src/views/layout/panel/components/PanelList.vue</span>
                     <span class="df-plus">+12</span>
                     <span class="df-minus">−4</span>
                     <span class="df-spacer"></span>
-                    <span class="df-reviewed"><i class="cb">✓</i>Reviewed</span>
+                    <span class="df-reviewed"><i class="cb">✓</i><span data-i18n="ui.review">review</span></span>
                   </div>
-                  <div class="df-collapsed"><span class="chev">⌄</span> 156 unmodified lines</div>
+                  <div class="df-collapsed"><span class="chev">⌄</span><span data-i18n="df.c1">156 unchanged lines</span></div>
                   <div class="df-code">
                     <div class="dl"><span class="ln">157</span><span class="ln">157</span><span class="lc"><span class="k">const</span> { subscriptionPanel } = <span class="fn">usePanelUpdate</span>()</span></div>
                     <div class="dl"><span class="ln">158</span><span class="ln">158</span><span class="lc"><span class="k">const</span> internalIsActive = <span class="fn">computed</span>(</span></div>
@@ -414,9 +402,9 @@
                     <div class="dl"><span class="ln">160</span><span class="ln">160</span><span class="lc">)</span></div>
                     <div class="dl"><span class="ln">161</span><span class="ln">161</span><span class="lc"></span></div>
                     <div class="dl dl-add"><span class="ln"></span><span class="ln">162</span><span class="lc"><span class="c">/**</span></span></div>
-                    <div class="dl dl-add"><span class="ln"></span><span class="ln">163</span><span class="lc"><span class="c"> * 普通号固定分组：列表里只取</span></span></div>
-                    <div class="dl dl-add"><span class="ln"></span><span class="ln">164</span><span class="lc"><span class="c"> * UNKNOWN/PERSONAL 筛选号的分组。</span></span></div>
-                    <div class="dl dl-add"><span class="ln"></span><span class="ln">165</span><span class="lc"><span class="c"> * 该分组只能通过官网登录 Cookie 接入。</span></span></div>
+                    <div class="dl dl-add"><span class="ln"></span><span class="ln">163</span><span class="lc" data-i18n-html="df.n1"><span class="c"> * Fixed-number group: only picks groups</span></span></div>
+                    <div class="dl dl-add"><span class="ln"></span><span class="ln">164</span><span class="lc" data-i18n-html="df.n2"><span class="c"> * filtered as UNKNOWN/PERSONAL.</span></span></div>
+                    <div class="dl dl-add"><span class="ln"></span><span class="ln">165</span><span class="lc" data-i18n-html="df.n3"><span class="c"> * This group only joins via the website login cookie.</span></span></div>
                     <div class="dl dl-add"><span class="ln"></span><span class="ln">166</span><span class="lc"><span class="c"> */</span></span></div>
                     <div class="dl dl-add"><span class="ln"></span><span class="ln">167</span><span class="lc"><span class="k">const</span> isNormalGroup = <span class="fn">computed</span>(</span></div>
                     <div class="dl dl-add"><span class="ln"></span><span class="ln">168</span><span class="lc">  () =&gt; props.types === <span class="s">'msg'</span> &amp;&amp;</span></div>
@@ -427,14 +415,14 @@
                     <div class="dl"><span class="ln">173</span><span class="ln">173</span><span class="lc">  <span class="fn">emits</span>(<span class="s">'toggleActivePanel'</span>, props.panelKey)</span></div>
                     <div class="dl"><span class="ln">174</span><span class="ln">174</span><span class="lc">}</span></div>
                   </div>
-                  <div class="df-collapsed"><span class="chev">⌄</span> 148 unmodified lines</div>
+                  <div class="df-collapsed"><span class="chev">⌄</span><span data-i18n="df.c2">148 unchanged lines</span></div>
                   <div class="df-code">
                     <div class="dl"><span class="ln">318</span><span class="ln">318</span><span class="lc"><span class="k">const</span> accountType = Reflect.<span class="fn">get</span>(target, <span class="s">'AccountType'</span>)</span></div>
                     <div class="dl"><span class="ln">319</span><span class="ln">319</span><span class="lc"><span class="k">const</span> normalizedAccountType =</span></div>
                     <div class="dl"><span class="ln">320</span><span class="ln">320</span><span class="lc">  accountType ?? <span class="fn">Number</span>(accountType)</span></div>
                     <div class="dl"><span class="ln">321</span><span class="ln">321</span><span class="lc"><span class="k">const</span> isXhsAccount =</span></div>
                     <div class="dl"><span class="ln">322</span><span class="ln">322</span><span class="lc">  <span class="fn">String</span>(PlatformType) === PLATFORM_TYPE.XHS</span></div>
-                    <div class="dl dl-del"><span class="ln">323</span><span class="ln"></span><span class="lc"><span class="k">const</span> isNormalGroup = <span class="k">false</span></span></div>
+                    <div class="dl dl-del"><span class="ln">323</span><span class="ln"></span><span class="lc"><span class="k">const</span> isNormalGroup = <span class="wl-d"><span class="k">false</span></span></span></div>
                     <div class="dl dl-add"><span class="ln"></span><span class="ln">323</span><span class="lc"><span class="k">const</span> isNormalGroup =</span></div>
                     <div class="dl dl-add"><span class="ln"></span><span class="ln">324</span><span class="lc">  props.types === <span class="s">'msg'</span> &amp;&amp;</span></div>
                     <div class="dl dl-add"><span class="ln"></span><span class="ln">325</span><span class="lc">  props.accountTypes?.<span class="fn">some</span>(</span></div>
@@ -452,19 +440,6 @@
                   <div class="df-fade"></div>
                 </section>
               </div>
-
-              <div class="card-status">
-                <span class="st-branch">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="6" cy="6" r="2.4"></circle><circle cx="6" cy="18" r="2.4"></circle><path d="M6 8.4v7.2M15 6a3 3 0 0 1 3 3v6a2.4 2.4 0 1 1-2.4-2.4"></path></svg>
-                  beta
-                </span>
-                <span class="st-dot"></span>
-                <span>0 conflicts</span>
-                <span class="st-spacer"></span>
-                <span>UTF-8 · LF</span>
-                <span class="st-dot"></span>
-                <span>GPU 60 fps</span>
-              </div>
             </div>
           </main>
         </div>
@@ -472,10 +447,10 @@
         </figure>
 
         <div class="spec-strip">
-          <div class="spec"><span class="spec-n">80<em>ms</em></span><span class="spec-l">冷启动</span></div>
-          <div class="spec"><span class="spec-n">35<em>MB</em></span><span class="spec-l">待机内存</span></div>
-          <div class="spec"><span class="spec-n">20<em>MB</em></span><span class="spec-l">安装包</span></div>
-          <div class="spec"><span class="spec-n">0<em>WebView</em></span><span class="spec-l">运行时依赖</span></div>
+          <div class="spec"><span class="spec-n">80<em>ms</em></span><span class="spec-l" data-i18n="spec.cold">Cold start</span></div>
+          <div class="spec"><span class="spec-n">35<em>MB</em></span><span class="spec-l" data-i18n="spec.idle">Idle memory</span></div>
+          <div class="spec"><span class="spec-n">20<em>MB</em></span><span class="spec-l" data-i18n="spec.size">Download size</span></div>
+          <div class="spec"><span class="spec-n">0<em>WebView</em></span><span class="spec-l" data-i18n="spec.runtime">Runtime dependency</span></div>
         </div>
       </div>
     </section>
@@ -486,15 +461,15 @@
         <header class="sec-head" data-reveal>
           <p class="sec-label"><span class="idx">01</span>REVIEW</p>
           <div class="sec-titles">
-            <h2>改动不止要看见，<br>更要读得懂。</h2>
-            <p>一次改动往往涉及代码与静态资源。单文件专注审查、词级内联高亮、按块/按行暂存；原生支持 PNG、JPEG、GIF、WebP、BMP 图片差异对比。每一处可疑风险都被标在它所在的那一行，而不是藏进深层弹窗。</p>
+            <h2 data-i18n="s1.h">Changes deserve to be read,<br>not just seen.</h2>
+            <p data-i18n="s1.p">One change often touches code and static assets alike. Review a single file in focus, with word-level inline highlights, staging by hunk or by line, and native PNG, JPEG, GIF, WebP and BMP image compare. Every suspicious risk is flagged on the line it lives on — not buried in a dialog.</p>
           </div>
         </header>
 
         <figure class="figure" data-reveal>
           <div class="fig-cap">
-            <span class="mono">FIG. 01 — 差异阅读器</span>
-            <span class="mono">逐 hunk 暂存 · 词级高亮 · 栅格图片对比 · 行内风险标注</span>
+            <span class="mono" data-i18n="s1.cap">FIG. 01 — Diff reader</span>
+            <span class="mono" data-i18n="s1.tags">stage per hunk · word highlights · raster image compare · inline risk flags</span>
           </div>
 
           <div class="panel dp">
@@ -511,12 +486,12 @@
               <span class="dp-tab">review_test.go</span>
               <span class="dp-tabs-pad"></span>
               <span class="seg"><i class="is-on">Split</i><i>Unified</i></span>
-              <span class="dp-reviewed"><i class="cb">✓</i>Reviewed</span>
+              <span class="dp-reviewed"><i class="cb">✓</i><span data-i18n="ui.review">review</span></span>
             </div>
 
             <div class="dp-sub">
               <span class="dp-path">internal/review/state.go</span>
-              <span class="dp-badge">M</span>
+              <span class="dp-badge st-m">M</span>
               <span class="dp-num"><i class="add">+42</i><i class="del">−8</i></span>
               <span class="dp-spacer"></span>
               <span class="dp-hunks">hunk 3 / 7</span>
@@ -539,18 +514,18 @@
               <div class="dl"><span class="ln">128</span><span class="ln">128</span><span class="lc"><span class="k">func</span> (s *Store) <span class="fn">Reset</span>() {</span></div>
 
               <div class="risk-pop">
-                <div class="risk-head"><span class="sev">CRITICAL</span><span>硬编码访问凭据</span></div>
-                <p>变量 <code>token</code> 含明文密钥，将随仓库一并提交。</p>
-                <div class="risk-fix"><b>建议：</b>改从环境变量或密钥服务读取。</div>
+                <div class="risk-head"><span class="sev">CRITICAL</span><span data-i18n="risk.h">Hardcoded credential</span></div>
+                <p data-i18n-html="risk.p">The variable <code>token</code> holds a plaintext secret and would be committed with the repository.</p>
+                <div class="risk-fix" data-i18n="risk.fix"><b>Fix:</b> read it from an environment variable or a secret manager.</div>
               </div>
             </div>
 
             <div class="dp-foot">
               <span class="prog"><i style="width:66%"></i></span>
-              <span class="dp-prog-t">已审查 4 / 6 文件 · 支持栅格图片对照</span>
+              <span class="dp-prog-t" data-i18n="dp.prog">4 / 6 files reviewed · raster compare ready</span>
               <span class="dp-spacer"></span>
-              <span class="dp-act"><kbd>R</kbd> 风险扫描</span>
-              <span class="dp-act is-primary"><kbd>⌘</kbd><kbd>↩</kbd> 提交</span>
+              <span class="dp-act" data-i18n-html="dp.risk"><kbd>R</kbd> risk scan</span>
+              <span class="dp-act is-primary" data-i18n-html="dp.commit"><kbd>⌘</kbd><kbd>↩</kbd> commit</span>
             </div>
           </div>
         </figure>
@@ -563,15 +538,15 @@
         <header class="sec-head" data-reveal>
           <p class="sec-label"><span class="idx">02</span>TOPOLOGY</p>
           <div class="sec-titles">
-            <h2>分叉与合并，<br>一眼到底。</h2>
-            <p>自研贝塞尔车道算法，三条内置调色盘，支持逐车道配色。「All branches」把本地、远端与标签画进同一张图，方向键走完整个历史。</p>
+            <h2 data-i18n="s2.h">Forks and merges,<br>at a glance.</h2>
+            <p data-i18n="s2.p">A hand-rolled Bézier lane algorithm, three built-in palettes and per-lane color overrides. “All branches” draws local, remote and tags into one graph, and the arrow keys walk the entire history.</p>
           </div>
         </header>
 
         <figure class="figure" data-reveal>
           <div class="fig-cap">
-            <span class="mono">FIG. 02 — 全分支拓扑</span>
-            <span class="mono">三车道 · 深浅两套调色</span>
+            <span class="mono" data-i18n="s2.cap">FIG. 02 — The full branch graph</span>
+            <span class="mono" data-i18n="s2.tags">three lanes · tuned for both appearances</span>
           </div>
 
           <div class="panel gp">
@@ -588,7 +563,7 @@
                 <path d="M28 17V323" stroke="var(--app-lane0)" stroke-width="1.5"></path>
                 <path d="M28 51C28 68 46 67 46 85V153C46 171 28 169 28 187" stroke="var(--app-lane1)" stroke-width="1.5"></path>
                 <path d="M28 221C28 238 64 237 64 255V289C64 306 28 304 28 323" stroke="var(--app-lane2)" stroke-width="1.5"></path>
-                <circle cx="28" cy="17" r="4.5" fill="var(--app-lane0)" stroke="var(--app-bg)" stroke-width="2"></circle>
+                <circle cx="28" cy="17" r="4.5" fill="var(--app-lane0)" stroke="var(--app-card)" stroke-width="2"></circle>
                 <circle cx="28" cy="51" r="3.5" fill="var(--app-lane0)"></circle>
                 <circle cx="46" cy="85" r="4" fill="var(--app-lane1)"></circle>
                 <circle cx="46" cy="119" r="3.5" fill="var(--app-lane1)"></circle>
@@ -604,47 +579,47 @@
                 <div class="gp-row">
                   <span class="gp-msg">chore(release): v0.9.0</span>
                   <span class="gp-refs"><b>HEAD → main</b><em>v0.9.0</em></span>
-                  <span class="gp-author">Lin Wei</span><span class="gp-when">1 小时前</span>
+                  <span class="gp-author">Lin Wei</span><span class="gp-when" data-i18n="t.1h">1h ago</span>
                 </div>
                 <div class="gp-row gp-row--dim">
                   <span class="gp-msg">chore: bump graph fixtures</span>
-                  <span class="gp-author">Lin Wei</span><span class="gp-when">2 小时前</span>
+                  <span class="gp-author">Lin Wei</span><span class="gp-when" data-i18n="t.2h">2h ago</span>
                 </div>
                 <div class="gp-row">
                   <span class="gp-msg">feat(audit): structured finding model</span>
                   <span class="gp-refs"><em>feat/audit-log</em></span>
-                  <span class="gp-author">Lin Wei</span><span class="gp-when">3 小时前</span>
+                  <span class="gp-author">Lin Wei</span><span class="gp-when" data-i18n="t.3h">3h ago</span>
                 </div>
                 <div class="gp-row gp-row--dim">
                   <span class="gp-msg">test(audit): severity ordering</span>
-                  <span class="gp-author">Lin Wei</span><span class="gp-when">4 小时前</span>
+                  <span class="gp-author">Lin Wei</span><span class="gp-when" data-i18n="t.4h">4h ago</span>
                 </div>
                 <div class="gp-row gp-row--dim">
                   <span class="gp-msg">feat(audit): inline risk anchors</span>
-                  <span class="gp-author">Lin Wei</span><span class="gp-when">5 小时前</span>
+                  <span class="gp-author">Lin Wei</span><span class="gp-when" data-i18n="t.5h">5h ago</span>
                 </div>
                 <div class="gp-row is-merge">
                   <span class="gp-msg">merge: feat/audit-log into main</span>
                   <span class="gp-refs"><b>main</b></span>
-                  <span class="gp-author">Lin Wei</span><span class="gp-when">6 小时前</span>
+                  <span class="gp-author">Lin Wei</span><span class="gp-when" data-i18n="t.6h">6h ago</span>
                 </div>
                 <div class="gp-row">
                   <span class="gp-msg">feat(graph): lane palettes for both themes</span>
                   <span class="gp-refs"><em>origin/main</em></span>
-                  <span class="gp-author">Lin Wei</span><span class="gp-when">7 小时前</span>
+                  <span class="gp-author">Lin Wei</span><span class="gp-when" data-i18n="t.7h">7h ago</span>
                 </div>
                 <div class="gp-row">
                   <span class="gp-msg">fix(tabs): re-attach remote tabs after relay drop</span>
                   <span class="gp-refs"><em>feat/tabs</em></span>
-                  <span class="gp-author">Lin Wei</span><span class="gp-when">8 小时前</span>
+                  <span class="gp-author">Lin Wei</span><span class="gp-when" data-i18n="t.8h">8h ago</span>
                 </div>
                 <div class="gp-row gp-row--dim">
                   <span class="gp-msg">feat(tabs): hairline under tab strip</span>
-                  <span class="gp-author">Lin Wei</span><span class="gp-when">9 小时前</span>
+                  <span class="gp-author">Lin Wei</span><span class="gp-when" data-i18n="t.9h">9h ago</span>
                 </div>
                 <div class="gp-row">
                   <span class="gp-msg">perf(graph): cache lane geometry per row</span>
-                  <span class="gp-author">Lin Wei</span><span class="gp-when">10 小时前</span>
+                  <span class="gp-author">Lin Wei</span><span class="gp-when" data-i18n="t.10h">10h ago</span>
                 </div>
               </div>
             </div>
@@ -659,48 +634,48 @@
         <header class="sec-head" data-reveal>
           <p class="sec-label"><span class="idx">03</span>INTELLIGENCE</p>
           <div class="sec-titles">
-            <h2>提交信息，<br>用你自己的模型。</h2>
-            <p>内置 Claude、DeepSeek、Kimi、Qwen 与 GLM 预设，也接受任意 OpenAI 兼容端点。提示词、密钥与仓库上下文只留在本机。</p>
+            <h2 data-i18n="s3.h">Commit messages,<br>from your own model.</h2>
+            <p data-i18n="s3.p">Presets for Claude, DeepSeek, Kimi, Qwen and GLM ship in the box, and any OpenAI-compatible endpoint works too. Prompts, keys and repository context never leave your machine.</p>
           </div>
         </header>
 
         <figure class="figure figure--inset" data-reveal>
           <div class="fig-cap">
-            <span class="mono">FIG. 03 — 提交信息生成</span>
+            <span class="mono" data-i18n="s3.cap">FIG. 03 — Commit message generation</span>
             <span class="mono">Conventional Commits</span>
           </div>
 
           <div class="panel ai">
             <div class="ai-head">
-              <span class="ai-title">生成提交信息</span>
+              <span class="ai-title" data-i18n="ai.title">Generate commit message</span>
               <span class="ai-chip is-on">DeepSeek</span>
               <span class="ai-chip">Claude</span>
               <span class="ai-chip">Kimi</span>
               <span class="ai-chip">Qwen</span>
               <span class="ai-chip">Ollama</span>
               <span class="ai-spacer"></span>
-              <span class="ai-local">本地直连 · 无云端登录</span>
+              <span class="ai-local" data-i18n="ai.local">local only · no cloud login</span>
             </div>
             <div class="ai-intent">
-              <span class="ai-intent-label">意图</span>
-              <span class="ai-intent-text">修复暂存区大小写重命名时的竞态</span>
+              <span class="ai-intent-label" data-i18n="ai.intent">Intent</span>
+              <span class="ai-intent-text" data-i18n="ai.intentText">Fix a race when staging case-only renames</span>
               <span class="ai-caret"></span>
               <span class="ai-intent-spacer"></span>
             </div>
             <div class="ai-out">
               <div class="ai-out-label">
-                <span>生成结果</span>
+                <span data-i18n="ai.result">Result</span>
                 <span class="ai-tokens">312 tokens · 0.9s</span>
               </div>
               <p class="ai-msg"><b>fix(stage): preserve rename case on macOS</b></p>
               <p class="ai-body">Compare paths case-sensitively before staging, and reset the cached status after a case-only rename. Adds a regression test for <code>A → a</code> renames on case-insensitive volumes.</p>
             </div>
             <div class="ai-foot">
-              <span class="ai-act is-primary"><kbd>⌘</kbd><kbd>↩</kbd> 提交</span>
-              <span class="ai-act"><kbd>Tab</kbd> 换个模型</span>
-              <span class="ai-act"><kbd>Esc</kbd> 放弃</span>
+              <span class="ai-act is-primary" data-i18n-html="dp.commit"><kbd>⌘</kbd><kbd>↩</kbd> commit</span>
+              <span class="ai-act" data-i18n-html="ai.next"><kbd>Tab</kbd> next model</span>
+              <span class="ai-act" data-i18n-html="ai.discard"><kbd>Esc</kbd> discard</span>
               <span class="ai-spacer"></span>
-              <span class="ai-note">diff 46 行 · 6 文件</span>
+              <span class="ai-note" data-i18n="ai.note">diff 46 lines · 6 files</span>
             </div>
           </div>
         </figure>
@@ -713,15 +688,15 @@
         <header class="sec-head" data-reveal>
           <p class="sec-label"><span class="idx">04</span>TERMINAL &amp; WORKSPACE</p>
           <div class="sec-titles">
-            <h2>极速内置终端，<br>代码触手可及。</h2>
-            <p>基于 Ghostty 的原生多会话终端，支持自定义等宽/Nerd 字体；向 Claude Code 等 AI CLI 粘贴图片（<kbd class="inline-kbd">⌘</kbd><kbd class="inline-kbd">V</kbd>）时自动转发剪贴板序列。左侧全量工作区文件树按状态优雅着色，Git 身份配置三层合一。</p>
+            <h2 data-i18n="s4.h">A fast built-in terminal,<br>code within reach.</h2>
+            <p data-i18n-html="s4.p">Native multi-session terminals built on Ghostty, with custom monospace and Nerd fonts; pasting an image (<kbd class="inline-kbd">⌘</kbd><kbd class="inline-kbd">V</kbd>) into AI CLIs like Claude Code forwards the clipboard sequence. The full workspace tree on the left tints by change state, and Git identity setup lives in one place.</p>
           </div>
         </header>
 
         <figure class="figure figure--inset" data-reveal>
           <div class="fig-cap">
-            <span class="mono">FIG. 04 — 原生终端与工作区</span>
-            <span class="mono">多会话芯片 · Nerd Font · AI 剪贴板直通</span>
+            <span class="mono" data-i18n="s4.cap">FIG. 04 — Native terminal &amp; workspace</span>
+            <span class="mono" data-i18n="s4.tags">session chips · Nerd Font · AI clipboard passthrough</span>
           </div>
 
           <div class="panel tp">
@@ -741,7 +716,7 @@
                 test-runner
                 <span class="tp-tab-close">×</span>
               </span>
-              <span class="tp-add-btn" title="新建终端 (⌘⇧T)">＋</span>
+              <span class="tp-add-btn" title="New terminal (⌘⇧T)" data-i18n-title="tp.new">＋</span>
               <span class="tp-spacer"></span>
               <span class="tp-meta">Ghostty Engine · JetBrainsMono Nerd Font 13px</span>
             </div>
@@ -749,18 +724,18 @@
             <div class="tp-body">
               <div class="tp-line"><span class="tp-prompt">carl@mbp</span> <span class="tp-dim">~/dev/Gloss</span> <span class="tp-prompt">(beta)</span> <span class="tp-cmd">$ claude</span></div>
               <div class="tp-line tp-dim">Claude Code CLI v1.0.8 (connected to Claude 3.7 Sonnet)</div>
-              <div class="tp-line">&gt; 优化图片预览逻辑，增加 2400 万像素防 OOM 上限</div>
-              <div class="tp-line tp-pill"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg> 已粘贴剪贴板图片：1280×860 PNG (⌘V 直通转发)</div>
-              <div class="tp-line"><span class="tp-dim">● 分析 imagereview.go 与 editor_pane.go...</span></div>
-              <div class="tp-line tp-success">✔ 写入 maxPreviewImagePixels = 24_000_000 像素级上限防护</div>
-              <div class="tp-line tp-success">✔ 补齐 5 种栅格格式（PNG/JPEG/GIF/WebP/BMP）双侧位图解码测试</div>
+              <div class="tp-line" data-i18n="tp.cmd">&gt; Optimize the image preview, add a 24 MP OOM guard</div>
+              <div class="tp-line tp-pill"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg> <span data-i18n="tp.pill">Pasted clipboard image: 1280×860 PNG (⌘V passthrough)</span></div>
+              <div class="tp-line tp-dim" data-i18n="tp.analyze">● Reading imagereview.go and editor_pane.go...</div>
+              <div class="tp-line tp-success" data-i18n="tp.ok1">✔ Added maxPreviewImagePixels = 24_000_000 pixel cap</div>
+              <div class="tp-line tp-success" data-i18n="tp.ok2">✔ Added decode tests for 5 raster formats (PNG/JPEG/GIF/WebP/BMP)</div>
             </div>
 
             <div class="tp-foot">
-              <span>会话：3 个激活</span>
-              <span>编码：UTF-8</span>
+              <span data-i18n="tp.sessions">Sessions: 3 active</span>
+              <span data-i18n="tp.enc">Encoding: UTF-8</span>
               <span class="tp-spacer"></span>
-              <span>⌘1~⌘4 随手切换 Git 审查与终端</span>
+              <span data-i18n="tp.hint">⌘1–⌘4 flip between Git review and terminal</span>
             </div>
           </div>
         </figure>
@@ -773,63 +748,63 @@
         <header class="sec-head" data-reveal>
           <p class="sec-label"><span class="idx">05</span>KEYBOARD</p>
           <div class="sec-titles">
-            <h2>手不离键。</h2>
-            <p><kbd class="inline-kbd">⌘</kbd><kbd class="inline-kbd">K</kbd> 呼出命令面板，空格暂存当前 hunk，<kbd class="inline-kbd">V</kbd> 标记已读，<kbd class="inline-kbd">R</kbd> 发起风险扫描。完整 macOS 原生菜单快捷键，按下即有回应。</p>
+            <h2 data-i18n="s5.h">Hands on the keys.</h2>
+            <p data-i18n-html="s5.p"><kbd class="inline-kbd">⌘</kbd><kbd class="inline-kbd">K</kbd> opens the command palette, <kbd class="inline-kbd">Space</kbd> stages the current hunk, <kbd class="inline-kbd">V</kbd> marks a file reviewed, <kbd class="inline-kbd">R</kbd> starts a risk scan. Complete native macOS menu shortcuts — every press answers.</p>
           </div>
         </header>
 
         <figure class="figure figure--inset" data-reveal>
           <div class="fig-cap">
-            <span class="mono">FIG. 05 — 命令面板</span>
-            <span class="mono">按 Esc 收起 · ⌘K 呼出</span>
+            <span class="mono" data-i18n="s5.cap">FIG. 05 — Command palette</span>
+            <span class="mono" data-i18n="s5.tags">Esc to close · ⌘K to open</span>
           </div>
 
           <div class="panel pal is-open" id="palette">
             <div class="pal-stage">
               <div class="pal-ghost">
                 <span class="pal-ghost-icon"><kbd>⌘</kbd><kbd>K</kbd></span>
-                <span class="pal-ghost-text">任何操作，两下按键。</span>
-                <span class="pal-ghost-sub">点击或按下 ⌘K</span>
+                <span class="pal-ghost-text" data-i18n="pal.ghost">Any action, two keystrokes.</span>
+                <span class="pal-ghost-sub" data-i18n="pal.ghostSub">CLICK OR PRESS ⌘K</span>
               </div>
 
               <div class="pal-card" id="palette-card" aria-hidden="false">
                 <div class="pal-input">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
-                  <span>提交</span>
+                  <span data-i18n="pal.query">commit</span>
                   <span class="pal-caret"></span>
                   <span class="pal-esc">esc</span>
                 </div>
                 <div class="pal-list">
                   <div class="pal-item is-on">
                     <span class="pal-ic">↵</span>
-                    <span class="pal-label">提交已暂存的改动</span>
+                    <span class="pal-label" data-i18n="pal.i1">Commit staged changes</span>
                     <span class="pal-hint">Commit staged changes</span>
                     <kbd>⌘</kbd><kbd>↩</kbd>
                   </div>
                   <div class="pal-item">
                     <span class="pal-ic">⌥</span>
-                    <span class="pal-label">用 AI 生成提交信息</span>
+                    <span class="pal-label" data-i18n="pal.i2">Generate a message with AI</span>
                     <span class="pal-hint">Generate message</span>
                     <kbd>⌘</kbd><kbd>G</kbd>
                   </div>
                   <div class="pal-item">
                     <span class="pal-ic">↗</span>
-                    <span class="pal-label">推送到 origin/main</span>
+                    <span class="pal-label" data-i18n="pal.i3">Push to origin/main</span>
                     <span class="pal-hint">Push</span>
                     <kbd>⌘</kbd><kbd>P</kbd>
                   </div>
                   <div class="pal-item">
                     <span class="pal-ic">⚑</span>
-                    <span class="pal-label">对暂存区运行风险扫描</span>
+                    <span class="pal-label" data-i18n="pal.i4">Run a risk scan on staged changes</span>
                     <span class="pal-hint">Run risk scan</span>
                     <kbd>R</kbd>
                   </div>
                 </div>
                 <div class="pal-foot">
-                  <span><kbd>↑</kbd><kbd>↓</kbd> 选择</span>
-                  <span><kbd>⏎</kbd> 执行</span>
+                  <span data-i18n-html="pal.sel"><kbd>↑</kbd><kbd>↓</kbd> select</span>
+                  <span data-i18n-html="pal.run"><kbd>⏎</kbd> run</span>
                   <span class="pal-spacer"></span>
-                  <span>4 条命令</span>
+                  <span data-i18n="pal.count">4 commands</span>
                 </div>
               </div>
             </div>
@@ -837,12 +812,12 @@
         </figure>
 
         <div class="keys" data-reveal>
-          <div class="key-item"><kbd>Space</kbd><span>暂存 / 取消暂存当前文件或 hunk</span></div>
-          <div class="key-item"><kbd>⌘</kbd><kbd>K</kbd><span>全局命令面板</span></div>
-          <div class="key-item"><kbd>⌘</kbd><kbd>↩</kbd><span>提交已暂存的改动</span></div>
-          <div class="key-item"><kbd>V</kbd><span>标记已读并折叠文件</span></div>
-          <div class="key-item"><kbd>[</kbd><kbd>]</kbd><span>在差异块之间跳转</span></div>
-          <div class="key-item"><kbd>R</kbd><span>运行风险扫描</span></div>
+          <div class="key-item"><kbd>Space</kbd><span data-i18n="key.k1">Stage / unstage the current file or hunk</span></div>
+          <div class="key-item"><kbd>⌘</kbd><kbd>K</kbd><span data-i18n="key.k2">Global command palette</span></div>
+          <div class="key-item"><kbd>⌘</kbd><kbd>↩</kbd><span data-i18n="key.k3">Commit staged changes</span></div>
+          <div class="key-item"><kbd>V</kbd><span data-i18n="key.k4">Mark reviewed and collapse the file</span></div>
+          <div class="key-item"><kbd>[</kbd><kbd>]</kbd><span data-i18n="key.k5">Jump between diff hunks</span></div>
+          <div class="key-item"><kbd>R</kbd><span data-i18n="key.k6">Run a risk scan</span></div>
         </div>
       </div>
     </section>
@@ -853,56 +828,56 @@
         <header class="sec-head" data-reveal>
           <p class="sec-label"><span class="idx">06</span>SPEC</p>
           <div class="sec-titles">
-            <h2>性能不是感觉，<br>是数字。</h2>
-            <p>同一台机器、同一个仓库的对照。没有 Chromium，没有 Node 运行时，也没有一个只在后台待命就吃掉半 GB 的进程。</p>
+            <h2 data-i18n="s6.h">Performance you can measure.</h2>
+            <p data-i18n="s6.p">Same machine, same repository. No Chromium, no Node runtime, and no background process idling on half a gigabyte.</p>
           </div>
         </header>
 
         <div class="figures" data-reveal>
           <div class="fig">
             <span class="fig-n">80<em>ms</em></span>
-            <span class="fig-l">冷启动</span>
-            <span class="fig-s">Electron 客户端 1,800 – 3,200 ms</span>
+            <span class="fig-l" data-i18n="spec.cold">Cold start</span>
+            <span class="fig-s" data-i18n="spec.coldS">Electron clients 1,800 – 3,200 ms</span>
           </div>
           <div class="fig">
             <span class="fig-n">35<em>MB</em></span>
-            <span class="fig-l">静默待机内存</span>
-            <span class="fig-s">Electron 客户端 280 – 550 MB</span>
+            <span class="fig-l" data-i18n="spec.idle">Idle memory</span>
+            <span class="fig-s" data-i18n="spec.idleS">Electron clients 280 – 550 MB</span>
           </div>
           <div class="fig">
             <span class="fig-n">20<em>MB</em></span>
-            <span class="fig-l">单文件安装包</span>
-            <span class="fig-s">Electron 客户端 130 – 240 MB</span>
+            <span class="fig-l" data-i18n="spec.size">Download size</span>
+            <span class="fig-s" data-i18n="spec.sizeS">Electron clients 130 – 240 MB</span>
           </div>
           <div class="fig">
             <span class="fig-n">0</span>
-            <span class="fig-l">WebView / JS 运行时</span>
-            <span class="fig-s">纯 Go，GPU 直接绘制</span>
+            <span class="fig-l" data-i18n="spec.runtimeL">WebView / JS runtime</span>
+            <span class="fig-s" data-i18n="spec.runtimeS">Pure Go, drawn straight on the GPU</span>
           </div>
         </div>
 
         <div class="bars" data-reveal>
           <div class="bar-row">
-            <span class="bar-label">冷启动</span>
+            <span class="bar-label" data-i18n="spec.cold">Cold start</span>
             <span class="bar-track"><i class="bar-gloss" style="width:9%"></i></span>
             <span class="bar-track"><i class="bar-other" style="width:88%"></i></span>
-            <span class="bar-legend"><b>Gloss</b> / 其他</span>
+            <span class="bar-legend" data-i18n-html="bar.legend"><b>Gloss</b> / others</span>
           </div>
           <div class="bar-row">
-            <span class="bar-label">待机内存</span>
+            <span class="bar-label" data-i18n="spec.idle">Idle memory</span>
             <span class="bar-track"><i class="bar-gloss" style="width:6%"></i></span>
             <span class="bar-track"><i class="bar-other" style="width:74%"></i></span>
-            <span class="bar-legend"><b>Gloss</b> / 其他</span>
+            <span class="bar-legend" data-i18n-html="bar.legend"><b>Gloss</b> / others</span>
           </div>
           <div class="bar-row">
-            <span class="bar-label">安装包</span>
+            <span class="bar-label" data-i18n="spec.size">Download size</span>
             <span class="bar-track"><i class="bar-gloss" style="width:8%"></i></span>
             <span class="bar-track"><i class="bar-other" style="width:62%"></i></span>
-            <span class="bar-legend"><b>Gloss</b> / 其他</span>
+            <span class="bar-legend" data-i18n-html="bar.legend"><b>Gloss</b> / others</span>
           </div>
         </div>
 
-        <p class="footnote" data-reveal>对照组为常见 Electron / WebView 架构 Git 客户端；数值取自 macOS 本地实测，随仓库规模浮动。</p>
+        <p class="footnote" data-reveal data-i18n="spec.foot">Compared against common Electron / WebView Git clients; measured locally on macOS, varies with repository size.</p>
       </div>
     </section>
 
@@ -912,23 +887,23 @@
         <header class="sec-head" data-reveal>
           <p class="sec-label"><span class="idx">07</span>DOWNLOAD</p>
           <div class="sec-titles">
-            <h2>一条命令，<br>或一个安装包。</h2>
-            <p>三个平台，同一个原生二进制。不捆绑浏览器内核，不需要额外运行时。</p>
+            <h2 data-i18n="s7.h">One command,<br>or one installer.</h2>
+            <p data-i18n="s7.p">Three platforms, one native binary. No bundled browser engine, no extra runtime.</p>
           </div>
         </header>
 
         <div class="dl-wrap" data-reveal>
           <div class="dl-lead">
             <span class="mono">LATEST RELEASE</span>
-            <p class="dl-ver">v0.3.18</p>
+            <p class="dl-ver">v0.3.20</p>
             <a class="btn btn-primary btn-lg" href="https://github.com/CarlOpenLab/Gloss/releases/latest" target="_blank" rel="noopener" id="main-dl-2">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"></path>
               </svg>
-              <span id="main-dl2-label">下载 macOS 版</span>
+              <span id="main-dl2-label">Download for macOS</span>
               <span class="btn-meta" id="main-dl2-meta">.dmg</span>
             </a>
-            <p class="fine">Universal · Apple Silicon / Intel · 约 20 MB</p>
+            <p class="fine" data-i18n="dl.fine">Universal · Apple Silicon / Intel · ~20 MB</p>
           </div>
 
           <div class="dl-list">
@@ -940,13 +915,13 @@
             </a>
             <a class="dl-row" href="https://github.com/CarlOpenLab/Gloss/releases/latest" target="_blank" rel="noopener">
               <span class="dl-os">Windows</span>
-              <span class="dl-desc">x64 · 安装版与便携版</span>
+              <span class="dl-desc" data-i18n="dl.win">x64 · installer &amp; portable</span>
               <span class="dl-tag">.exe / .zip</span>
               <span class="dl-arrow">↗</span>
             </a>
             <a class="dl-row" href="https://github.com/CarlOpenLab/Gloss/releases/latest" target="_blank" rel="noopener">
               <span class="dl-os">Linux</span>
-              <span class="dl-desc">x86_64 · 静态二进制</span>
+              <span class="dl-desc" data-i18n="dl.linux">x86_64 · static binary</span>
               <span class="dl-tag">.tar.gz</span>
               <span class="dl-arrow">↗</span>
             </a>
@@ -956,12 +931,12 @@
         <div class="cli" data-reveal>
           <span class="cli-label">CLI</span>
           <code id="cli-cmd">go install github.com/CarlOpenLab/Gloss@latest</code>
-          <button class="cli-copy" id="copy-btn" type="button" aria-label="复制安装命令">
+          <button class="cli-copy" id="copy-btn" type="button" aria-label="Copy install command">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-            <span id="copy-label">复制</span>
+            <span id="copy-label">Copy</span>
           </button>
         </div>
-        <p class="footnote" data-reveal>全部版本发布于 GitHub Releases。MIT License。</p>
+        <p class="footnote" data-reveal data-i18n="dl.foot">All releases are published on GitHub Releases. MIT License.</p>
       </div>
     </section>
   </main>
@@ -972,9 +947,9 @@
         <img class="brand-logo is-dark" src="assets/logo-dark.png" alt="" width="20" height="20">
         <img class="brand-logo is-light" src="assets/logo.png" alt="" width="20" height="20">
         <span class="foot-name">Gloss</span>
-        <span class="foot-tag">原生 Git 客户端 · 为审查而生</span>
+        <span class="foot-tag" data-i18n="foot.tag">Native Git client · built for review</span>
       </div>
-      <nav class="foot-links" aria-label="页脚">
+      <nav class="foot-links" aria-label="Footer">
         <a href="https://github.com/CarlOpenLab/Gloss" target="_blank" rel="noopener">Repository</a>
         <a href="https://github.com/CarlOpenLab/Gloss/releases" target="_blank" rel="noopener">Releases</a>
         <a href="https://github.com/CarlOpenLab/Gloss/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
@@ -984,6 +959,7 @@
     </div>
   </footer>
 
+  <script src="i18n.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
