@@ -29,6 +29,8 @@
   --app-sel: rgba(107, 147, 255, 0.16);
   --app-accent: #6b93ff;
   --app-accent-ink: #ffffff;
+  --app-key: #ececf0;
+  --app-key-ink: #101014;
   --app-add-bg: rgba(79, 209, 122, 0.11);
   --app-add-word: rgba(79, 209, 122, 0.26);
   --app-del-bg: rgba(255, 105, 97, 0.11);
@@ -72,6 +74,8 @@
   --app-sel: rgba(59, 108, 246, 0.10);
   --app-accent: #3b6cf6;
   --app-accent-ink: #ffffff;
+  --app-key: #17181d;
+  --app-key-ink: #ffffff;
   --app-add-bg: rgba(34, 134, 58, 0.09);
   --app-add-word: rgba(34, 134, 58, 0.18);
   --app-del-bg: rgba(217, 58, 53, 0.09);
@@ -985,19 +989,19 @@
 .panel .s { color: var(--app-s); }
 .panel .c { color: var(--app-c); font-style: italic; }
 
-/* 主操作键：实心钢青蓝（t.Accent） */
+/* 主操作键：Linear 黑白键（与页面 CTA 同一套），蓝留给语义小件 */
 .act-primary,
 .dp-act.is-primary,
 .ai-act.is-primary {
-  background: var(--app-accent);
+  background: var(--app-key);
   border: 1px solid transparent;
-  color: var(--app-accent-ink);
+  color: var(--app-key-ink);
 }
 .dp-act.is-primary kbd,
 .ai-act.is-primary kbd {
-  background: rgba(255, 255, 255, 0.18);
+  background: color-mix(in srgb, var(--app-key-ink) 16%, transparent);
   border-color: transparent;
-  color: var(--app-accent-ink);
+  color: var(--app-key-ink);
 }
 
 /* --- diff reader */

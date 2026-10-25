@@ -21,8 +21,8 @@
   --ink-2: #b1b6bc;
   --ink-3: #7d8289;
   --ink-4: #6c7178;
-  --key: #6b93ff;
-  --key-ink: #ffffff;
+  --key: #f2f3f4;
+  --key-ink: #08090a;
   --green: #4fd17a;
   --red: #ff6961;
   --amber: #f0a33a;
@@ -47,7 +47,7 @@
   --ink-2: #44484e;
   --ink-3: #6b6f75;
   --ink-4: #86898f;
-  --key: #3b6cf6;
+  --key: #17181d;
   --key-ink: #ffffff;
   --green: #22863a;
   --red: #d93a35;
@@ -348,15 +348,14 @@ body::after {
   color: var(--key-ink);
   border: 1px solid var(--key);
 }
-.btn-primary:hover { background: color-mix(in srgb, var(--key) 88%, #000 12%); }
-[data-theme="light"] .btn-primary:hover { background: color-mix(in srgb, var(--key) 92%, #fff 8%); }
+.btn-primary:hover { background: color-mix(in srgb, var(--key) 88%, var(--bg)); }
 
 .btn-meta {
   font-family: var(--mono);
   font-size: 10.5px;
   opacity: 0.55;
   padding-left: 9px;
-  border-left: 1px solid color-mix(in srgb, var(--key-ink) 30%, transparent);
+  border-left: 1px solid color-mix(in srgb, var(--key-ink) 22%, transparent);
   letter-spacing: 0;
 }
 
