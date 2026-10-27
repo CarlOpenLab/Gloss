@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/CarlOpenLab/Gloss/releases/latest"><img src="https://img.shields.io/badge/Release-v0.3.20-4F46E5?style=flat-square" alt="Release v0.3.20"></a>
+  <a href="https://github.com/CarlOpenLab/Gloss/releases/latest"><img src="https://img.shields.io/badge/Release-v0.3.21-4F46E5?style=flat-square" alt="Release v0.3.20"></a>
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.27+-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go 1.27+"></a>
   <img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-000000?style=flat-square&logo=apple&logoColor=white" alt="macOS | Windows | Linux">
   <a href="https://github.com/egoist/mygo"><img src="https://img.shields.io/badge/GUI-mygo%20(GPU%20Direct)-4F46E5?style=flat-square" alt="mygo"></a>
