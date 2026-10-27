@@ -139,7 +139,7 @@ func TestAIBranchGenerationFromUI(t *testing.T) {
 	tt := ui.NewTester(a.view, 1280, 860)
 	tt.Frame()
 
-	if err := tt.Click("✨ AI 建议分支名"); err != nil {
+	if err := tt.Click("AI 建议分支名"); err != nil {
 		t.Fatalf("点击 AI 建议分支名按钮失败: %v", err)
 	}
 	settle(t, a)

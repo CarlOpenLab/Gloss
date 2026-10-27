@@ -81,8 +81,8 @@ func (a *app) newBranchBody(c *ui.Context, pal palette) {
 			ui.Text(c, "名称").FontSize(11).TextColor(t.TextMuted)
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				// placeholder 把两种用法都摆出来：这个框既是分支名，也是「意图」的输入位
-				// —— ✨ 会把框里写的内容当成需求描述喂给模型（见 startAIBranch）。
-				in := ui.TextInput(c, &bs.name).Placeholder("feature/login 或 修复登录超时").Label("分支名称").Grow(1)
+				// —— AI 起名会把框里写的内容当成需求描述喂给模型（见 startAIBranch）。
+				in := ui.TextInput(c, &bs.name).Placeholder("feature/login 或 修复登录超时").Label("分支名称")
 				if bs.focusName {
 					in.Focus()
 					bs.focusName = false
@@ -93,16 +93,20 @@ func (a *app) newBranchBody(c *ui.Context, pal palette) {
 				}
 				a.aiBranchButton(c, pal)
 			})
-			// 「输入一句意图 → AI 起名」这条用法原来只有按钮的 tooltip 里提了一句，
-			// 框上又只写着 feature/login，等于藏起来了：写得出一整句话的人，
-			// 恰恰是最需要这功能的人。
-			ui.Text(c, "想不出名字就写一句要做什么（如「修复登录超时」），再点 ✨ 让 AI 起名；自己填也行。").
-				FontSize(11).TextColor(t.TextMuted)
+			// 用法提示只在空框时摆出来：开始写字的人已经知道要干嘛了。原来
+			// 是一行常驻说明，加上勾选框底下那段，小表单上摞着三段灰字 ——
+			// 这个对话框「说教」的感觉主要就是它们给的。藏进条件里之后，
+			// 剩下的和打标签（tagdialog.go）一个密度。
+			if strings.TrimSpace(bs.name) == "" && !bs.aiLoading {
+				ui.Text(c, "想不出名字就写一句要做什么，点「AI 起名」让 AI 想一个。").
+					FontSize(11).TextColor(t.TextMuted)
+			}
 		})
 
-		ui.Checkbox(c, &bs.switchTo, "建好就切过去").Label("建好就切过去")
-		ui.Text(c, "勾上就把 HEAD 挪到新分支（工作区的改动跟着过去）；不勾只建一条，停在这条分支上不动。").
-			FontSize(11).TextColor(t.TextMuted)
+		// 「工作区的改动跟着过去」这句不写脸上就会心里打鼓，收进 tooltip：
+		// 悬停时想要的人能拿到，平常不占地方。
+		ui.Checkbox(c, &bs.switchTo, "建好就切过去").Label("建好就切过去").
+			Tooltip("建好就把 HEAD 挪到新分支（工作区的改动跟着过去）；不勾只建一条，停在当前分支不动")
 
 		if msg := branchBlocker(bs); msg != "" {
 			ui.Text(c, msg).FontSize(11).TextColor(t.TextMuted)
@@ -123,21 +127,26 @@ func (a *app) newBranchBody(c *ui.Context, pal palette) {
 	})
 }
 
-// aiBranchButton 是「✨ AI 建议分支名」按钮。
+// aiBranchButton 是「AI 起名」按钮。
 //
 // 走 §4.1 的次级按钮：Surface 1 底 + hairline 边 + Ink Muted 文字。这个
 // 对话框里没有主操作键（「创建」走的是回车），所以它不该是蓝的 ——
 // 生成中才用强调色文字说明「正在跑」。
+//
+// 图标和文字分工：sparkle 矢量图标管视觉识别，文字只说「AI 起名」——
+// 原来文字里再带一个 ✨，和图标叠在一起是重复的。完整的「AI 建议分支名」
+// 放进无障碍 label 和 tooltip：读屏和测试要能离开上下文找到这个控件，
+// 屏幕上则越短越好（和 tagdialog 里「名称」/「标签名称」的分工一个道理）。
 func (a *app) aiBranchButton(c *ui.Context, pal palette) {
 	t := c.Theme()
 	bs := &a.newBranch
-	tip := "✨ AI 建议分支名"
+	tip := "把框里写的当需求描述，让 AI 起个分支名；自己填也行"
 	if bs.aiLoading {
 		tip = "正在生成建议… 点击取消"
 	}
 	btn := ui.ButtonBase(c).Height(28).Shrink(0).Radius(radiusMD).
 		Padding(0, 10).Gap(6).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).Label("✨ AI 建议分支名").Tooltip(tip)
+		Cursor(ui.CursorPointer).Label("AI 建议分支名").Tooltip(tip)
 
 	hovered := btn.Hovered()
 	var bg, border, fg ui.Color
@@ -157,7 +166,7 @@ func (a *app) aiBranchButton(c *ui.Context, pal palette) {
 			ui.Text(c, "推荐中…").FontSize(textButton).FontWeight(weightMedium).TextColor(fg)
 		} else {
 			sparkleIcon(c, sparkleSize, fg)
-			ui.Text(c, "✨ AI 建议分支名").FontSize(textButton).
+			ui.Text(c, "AI 起名").FontSize(textButton).
 				FontWeight(weightMedium).TextColor(fg)
 		}
 	})
