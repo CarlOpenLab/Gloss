@@ -247,12 +247,14 @@ func raisedSurface(e ui.Element, pal palette) ui.Element {
 }
 
 // selectedSurface is the restrained lift used by selected sidebar rows.
+//
+// 深色给选中行抬升（描边 + 阴影）；浅色什么都不加 —— rowSelected 的中性
+// 灰底本身就是完整的选中态，再叠白胶囊那套投影，画出来就是一颗输入框。
 func selectedSurface(e ui.Element, pal palette) ui.Element {
 	if pal.dark {
 		return raisedSurface(e, pal)
 	}
-	return e.Shadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.06)).
-		Shadow(0, 0.5, 2, 0, ui.RGBA(0, 0, 0, 0.05))
+	return e
 }
 
 // floatingSurface lifts menus and dialogs above the cards.

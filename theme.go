@@ -490,7 +490,11 @@ func paletteFor(t *ui.Theme, ls laneSet) palette {
 		textMuted:   ui.Hex("#6e6e78"),
 		textFaint:   ui.Hex("#a3a3ad"),
 		rowHover:    ui.RGBA(0, 0, 0, 0.04),
-		rowSelected: ui.Hex("#ffffff"),
+		// 选中行用中性灰底，不用白胶囊：白底加投影压在灰蓝侧栏上活像一颗
+		// 输入框（下面「筛选分支」就长那样），到了 settings 的白卡片上又
+		// 整个隐形。中性灰在两种底上都成立，比悬停正好重一档 —— 和 dark
+		// 侧「比 SurfaceHover 重一档」是同一条规矩。
+		rowSelected: ui.RGBA(0, 0, 0, 0.07),
 		card:        ui.Hex("#ffffff"),
 		cardBorder:  ui.RGBA(0, 0, 0, 0.07),
 		cardShadow:  ui.RGBA(0, 0, 0, 0.07),
