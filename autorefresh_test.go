@@ -32,10 +32,7 @@ func TestApplyModelArmWatcher(t *testing.T) {
 // 自动刷新关注的是「打开仓库后 watcher 挂没挂」，不需要 diff 内容）。
 func loadAppFrom(t *testing.T, dir string) *app {
 	t.Helper()
-	runGit(t, dir, "init", "-b", "main")
-	runGit(t, dir, "config", "user.email", "test@example.com")
-	runGit(t, dir, "config", "user.name", "Test")
-	runGit(t, dir, "config", "commit.gpgsign", "false")
+	initRepo(t, dir)
 	return loadApp(t, dir)
 }
 

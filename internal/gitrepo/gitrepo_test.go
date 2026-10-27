@@ -24,6 +24,10 @@ func tempRepo(t *testing.T) *Repo {
 	git(t, dir, "config", "user.email", "test@example.com")
 	git(t, dir, "config", "user.name", "Test")
 	git(t, dir, "config", "commit.gpgsign", "false")
+	// Windows 的全局 autocrlf 常是 true：checkout 会把 LF 转成 CRLF，逐字节
+	// 比对内容的测试（储藏、hunk）就全挂了。本地配置盖掉全局，checkout 出来
+	// 的就是当初写进去的字节，三个平台一个样。
+	git(t, dir, "config", "core.autocrlf", "false")
 
 	write(t, filepath.Join(dir, "a.txt"), "one\ntwo\nthree\n")
 	git(t, dir, "add", "a.txt")

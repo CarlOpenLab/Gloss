@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -71,6 +72,9 @@ func TestSaveAndReopen(t *testing.T) {
 
 // config.json 里有 API key，权限必须是 0600。
 func TestConfigFileIsPrivate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows 没有 Unix 权限位，Stat 永远报 666，这条只在 macOS/Linux 上有意义")
+	}
 	dir := t.TempDir()
 	s := Open(dir)
 	s.SetConfig(Config{Providers: []llm.Provider{{Name: "x", APIKey: "sk-secret"}}})

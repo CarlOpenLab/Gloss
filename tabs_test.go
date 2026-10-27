@@ -3,6 +3,7 @@ package main
 import (
 	"io"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -1050,21 +1051,30 @@ func TestTerminalPasteForwardsImageKey(t *testing.T) {
 	tt.Frame()
 	tt.Frame()
 
+	// 粘贴意图键跟着平台走：终端插件的绑定是 mac ⌘V、其他平台 Ctrl+Shift+V
+	//（见 plugins/terminal 的 keyDown）。⌘V 在 Windows 上是 Win+V，按下去走
+	// 的是原始键编码，永远碰不到 OnPaste —— 测试就在钉一条 Windows 上根本
+	// 不存在的路径。
+	pasteMods := ui.Super
+	if runtime.GOOS != "darwin" {
+		pasteMods = ui.Ctrl | ui.Shift
+	}
+
 	// Ctrl+V 老路：直达到程序，一个字节都不多包。
 	tt.Key(ui.Ctrl, ui.KeyV)
 	waitPaste(t, conn, "\x16")
 
-	// 图片（空文本）+ ⌘V：补发 Ctrl+V。
+	// 图片（空文本）+ 粘贴键：补发 Ctrl+V。
 	tt.SetClipboard("")
-	tt.Key(ui.Super, ui.KeyV)
+	tt.Key(pasteMods, ui.KeyV)
 	waitPaste(t, conn, "\x16")
 
-	// 文本 + ⌘V：照旧把文本送进程序，不补发按键。
+	// 文本 + 粘贴键：照旧把文本送进程序，不补发按键。
 	conn.mu.Lock()
 	conn.buf = nil
 	conn.mu.Unlock()
 	tt.SetClipboard("pasted text")
-	tt.Key(ui.Super, ui.KeyV)
+	tt.Key(pasteMods, ui.KeyV)
 	waitPaste(t, conn, "pasted text")
 	conn.mu.Lock()
 	got := string(conn.buf)

@@ -15,6 +15,29 @@ import (
 	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
 )
 
+// TestMain 把应用自己的 git 子进程和开发机的全局/系统 git 配置隔离开。
+// 测试里经 runGit 起的 git 自带这层（GIT_CONFIG_GLOBAL/SYSTEM=/dev/null），
+// 但 gitrepo 起的进程不带 —— Windows 安装器写在系统配置里的
+// core.autocrlf=true 会改掉 checkout 出来的字节，pull.rebase 会让「没配过
+// pull 策略」的前提失真；不隔离的话，测试过不过取决于开发机的 git 配置。
+func TestMain(m *testing.M) {
+	gitrepo.SetGitConfigIsolation()
+	os.Exit(m.Run())
+}
+
+// initRepo 把一个空目录变成配好身份的空仓库，是所有测试夹具共用的第一步。
+// autocrlf 显式关掉：仓库级配置盖掉用户全局的 true/false，checkout 出来的
+// 字节才是当初写进去的，逐字节比对内容的断言在 Windows 上才不会挂
+//（gitrepo 包的 tempRepo 同款；TestMain 的隔离钩子之外多的一层保险）。
+func initRepo(t *testing.T, dir string) {
+	t.Helper()
+	runGit(t, dir, "init", "-b", "main")
+	runGit(t, dir, "config", "user.email", "test@example.com")
+	runGit(t, dir, "config", "user.name", "Test")
+	runGit(t, dir, "config", "commit.gpgsign", "false")
+	runGit(t, dir, "config", "core.autocrlf", "false")
+}
+
 // testApp 建一个真实的临时 git 仓库并加载它，返回可以直接渲染的 app。
 // 用真仓库而不是构造假数据：这样测试同时覆盖了 gitrepo 层和界面层，
 // 而且不需要 API key、不需要网络。
@@ -25,10 +48,7 @@ func testApp(t *testing.T) *app {
 		dir = resolved
 	}
 
-	runGit(t, dir, "init", "-b", "main")
-	runGit(t, dir, "config", "user.email", "test@example.com")
-	runGit(t, dir, "config", "user.name", "Test")
-	runGit(t, dir, "config", "commit.gpgsign", "false")
+	initRepo(t, dir)
 
 	writeFile(t, filepath.Join(dir, "a.go"), "package main\n")
 	runGit(t, dir, "add", "a.go")
@@ -133,10 +153,7 @@ func richApp(t *testing.T) *app {
 		dir = resolved
 	}
 
-	runGit(t, dir, "init", "-b", "main")
-	runGit(t, dir, "config", "user.email", "test@example.com")
-	runGit(t, dir, "config", "user.name", "Test")
-	runGit(t, dir, "config", "commit.gpgsign", "false")
+	initRepo(t, dir)
 
 	// 60 行的文件，改动分别在第 3 行和第 52 行 —— 中间隔着一大段
 	// 未改动区间，正好看到折叠条

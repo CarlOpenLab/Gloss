@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"image/png"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -497,24 +498,26 @@ func TestThemeAndLocaleSettings(t *testing.T) {
 		t.Error("点击简体中文卡片后语言应切换为中文")
 	}
 
-	// 4. 测试应用图标切换
-	if !tt.HasText("应用图标") {
-		t.Error("通用偏好页面应包含「应用图标」分区")
-	}
-	if err := tt.Click("纯白极简"); err != nil {
-		t.Fatalf("点击「纯白极简」图标卡片: %v", err)
-	}
-	tt.Frame()
-	if a.appIcon != "white" {
-		t.Errorf("点击纯白卡片后 appIcon 应为 white，实际为 %s", a.appIcon)
-	}
+	// 4. 测试应用图标切换（这一分区只在 macOS 上摆，见 settings.go）
+	if runtime.GOOS == "darwin" {
+		if !tt.HasText("应用图标") {
+			t.Error("通用偏好页面应包含「应用图标」分区")
+		}
+		if err := tt.Click("纯白极简"); err != nil {
+			t.Fatalf("点击「纯白极简」图标卡片: %v", err)
+		}
+		tt.Frame()
+		if a.appIcon != "white" {
+			t.Errorf("点击纯白卡片后 appIcon 应为 white，实际为 %s", a.appIcon)
+		}
 
-	if err := tt.Click("纯黑极简"); err != nil {
-		t.Fatalf("点击「纯黑极简」图标卡片: %v", err)
-	}
-	tt.Frame()
-	if a.appIcon != "black" {
-		t.Errorf("点击纯黑卡片后 appIcon 应为 black，实际为 %s", a.appIcon)
+		if err := tt.Click("纯黑极简"); err != nil {
+			t.Fatalf("点击「纯黑极简」图标卡片: %v", err)
+		}
+		tt.Frame()
+		if a.appIcon != "black" {
+			t.Errorf("点击纯黑卡片后 appIcon 应为 black，实际为 %s", a.appIcon)
+		}
 	}
 
 	// 5. 测试切换至「关于 Gloss」选项卡

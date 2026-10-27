@@ -328,10 +328,7 @@ func TestHistoryNavScrollsIntoView(t *testing.T) {
 	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
 		dir = resolved
 	}
-	runGit(t, dir, "init", "-b", "main")
-	runGit(t, dir, "config", "user.email", "test@example.com")
-	runGit(t, dir, "config", "user.name", "Test")
-	runGit(t, dir, "config", "commit.gpgsign", "false")
+	initRepo(t, dir)
 
 	for i := 0; i < 20; i++ {
 		writeFile(t, filepath.Join(dir, "f.txt"), fmt.Sprintf("line %d\n", i))

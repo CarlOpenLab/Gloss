@@ -21,10 +21,7 @@ func menuApp(t *testing.T) *app {
 	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
 		dir = resolved
 	}
-	runGit(t, dir, "init", "-b", "main")
-	runGit(t, dir, "config", "user.email", "test@example.com")
-	runGit(t, dir, "config", "user.name", "Test")
-	runGit(t, dir, "config", "commit.gpgsign", "false")
+	initRepo(t, dir)
 
 	writeFile(t, filepath.Join(dir, "mod.go"), "package main\n")
 	writeFile(t, filepath.Join(dir, "gone.go"), "package gone\n")

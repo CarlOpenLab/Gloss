@@ -746,8 +746,10 @@ func TestStagingOpKeepsCommitButtonAndHintStable(t *testing.T) {
 	if !a.canCommit() {
 		t.Fatal("有暂存和消息时应允许提交")
 	}
-	if !tt.HasText("⌘⏎") {
-		t.Fatal("允许提交时应显示 ⌘⏎ 提示")
+	// 快捷键文案过 K()：屏幕上显示的是平台翻译后的（Windows 是 Ctrl+Enter），
+	// 断言写死 ⌘⏎ 的话只在 macOS 上成立。
+	if !tt.HasText(K("⌘⏎")) {
+		t.Fatal("允许提交时应显示提交快捷键提示")
 	}
 
 	// 模拟点击暂存另一个文件，触发 OpStage
@@ -757,8 +759,8 @@ func TestStagingOpKeepsCommitButtonAndHintStable(t *testing.T) {
 	if !a.canCommit() {
 		t.Error("暂存写操作进行中，canCommit 不应闪退禁用导致透明度闪烁")
 	}
-	if !tt.HasText("⌘⏎") {
-		t.Error("暂存写操作进行中，⌘⏎ 快捷键提示不应闪退消失")
+	if !tt.HasText(K("⌘⏎")) {
+		t.Error("暂存写操作进行中，提交快捷键提示不应闪退消失")
 	}
 }
 

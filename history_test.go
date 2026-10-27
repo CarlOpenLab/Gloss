@@ -22,10 +22,7 @@ func histApp(t *testing.T) *app {
 		dir = resolved
 	}
 
-	runGit(t, dir, "init", "-b", "main")
-	runGit(t, dir, "config", "user.email", "test@example.com")
-	runGit(t, dir, "config", "user.name", "Test")
-	runGit(t, dir, "config", "commit.gpgsign", "false")
+	initRepo(t, dir)
 
 	writeFile(t, filepath.Join(dir, "a.txt"), "one\n")
 	runGit(t, dir, "add", ".")
@@ -56,10 +53,7 @@ func graphApp(t *testing.T) *app {
 		dir = resolved
 	}
 
-	runGit(t, dir, "init", "-b", "main")
-	runGit(t, dir, "config", "user.email", "test@example.com")
-	runGit(t, dir, "config", "user.name", "Test")
-	runGit(t, dir, "config", "commit.gpgsign", "false")
+	initRepo(t, dir)
 
 	// 每次写一个新文件名，保证一定有东西可提交
 	commit := func(name, msg string) {
@@ -1116,10 +1110,7 @@ func scrollApp(t *testing.T) *app {
 		dir = resolved
 	}
 
-	runGit(t, dir, "init", "-b", "main")
-	runGit(t, dir, "config", "user.email", "test@example.com")
-	runGit(t, dir, "config", "user.name", "Test")
-	runGit(t, dir, "config", "commit.gpgsign", "false")
+	initRepo(t, dir)
 
 	writeFile(t, filepath.Join(dir, "seed.txt"), "seed\n")
 	runGit(t, dir, "add", ".")
@@ -1191,10 +1182,7 @@ func stashApp(t *testing.T) *app {
 		dir = resolved
 	}
 
-	runGit(t, dir, "init", "-b", "main")
-	runGit(t, dir, "config", "user.email", "test@example.com")
-	runGit(t, dir, "config", "user.name", "Test")
-	runGit(t, dir, "config", "commit.gpgsign", "false")
+	initRepo(t, dir)
 
 	writeFile(t, filepath.Join(dir, "a.txt"), "one\n")
 	runGit(t, dir, "add", ".")

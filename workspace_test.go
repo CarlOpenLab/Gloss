@@ -20,10 +20,7 @@ func workspaceApp(t *testing.T) *app {
 	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
 		dir = resolved
 	}
-	runGit(t, dir, "init", "-b", "main")
-	runGit(t, dir, "config", "user.email", "test@example.com")
-	runGit(t, dir, "config", "user.name", "Test")
-	runGit(t, dir, "config", "commit.gpgsign", "false")
+	initRepo(t, dir)
 
 	writeFile(t, filepath.Join(dir, "README.md"), "# 说明\n\n没动过的文件\n")
 	writeFile(t, filepath.Join(dir, "internal/clean/untouched.go"), "package clean\n\n// 没动过\n")

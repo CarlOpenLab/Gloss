@@ -22,10 +22,7 @@ func newRepoDir(t *testing.T) string {
 	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
 		dir = resolved
 	}
-	runGit(t, dir, "init", "-b", "main")
-	runGit(t, dir, "config", "user.email", "test@example.com")
-	runGit(t, dir, "config", "user.name", "Test")
-	runGit(t, dir, "config", "commit.gpgsign", "false")
+	initRepo(t, dir)
 	return dir
 }
 
@@ -146,7 +143,13 @@ func TestDoubleClickBranchChecksOut(t *testing.T) {
 // 真实鼠标下按下和抬起之间隔着几十毫秒，检出完全可能在这中间做完 —— 那一下
 // 抬起要是照单全收，用户刚双击检出一条分支，界面立刻又被切去历史。无头测试
 // 每个事件都会渲染一帧，正好能把这个交错排出来：按下、抬起、按下（双击成立，
-// 检出开跑）、等检出做完、再抬起。
+// 检出开跑）、抬起、等检出做完。
+//
+// 抬起必须紧跟着按下。框架认双击和 swallowTrailingClick 用的都是按下后
+// 500ms 的墙钟窗（ui/input.go 的 lastPress）：先把检出等完再抬起的话，慢机器
+// （Windows 起一次 git 进程就要几百毫秒）会把抬起推到窗外 —— 那在应用的设计
+// 里已经是「用户真的又点了一下」，照单全收才是对的。测试钉的是窗内的行为，
+// 就不能让机器速度决定抬起落在窗内还是窗外。
 func TestDoubleClickTrailingReleaseIgnored(t *testing.T) {
 	a := branchApp(t)
 	tt := ui.NewTester(a.view, 1280, 900)
@@ -162,9 +165,8 @@ func TestDoubleClickTrailingReleaseIgnored(t *testing.T) {
 	tt.Press(x, y)
 	tt.Release(x, y)
 	tt.Press(x, y)
-	settle(t, a) // 检出在这中间做完
 	tt.Release(x, y)
-	settle(t, a)
+	settle(t, a) // 检出在抬起之后做完
 	tt.Frame()
 
 	if got := headOf(t, a.repoPath); got != "refs/heads/topic" {

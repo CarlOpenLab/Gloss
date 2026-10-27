@@ -26,10 +26,7 @@ func dirRepo(t *testing.T, dirty bool) (*app, *ui.Tester) {
 	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
 		dir = resolved
 	}
-	runGit(t, dir, "init", "-b", "main")
-	runGit(t, dir, "config", "user.email", "test@example.com")
-	runGit(t, dir, "config", "user.name", "Test")
-	runGit(t, dir, "config", "commit.gpgsign", "false")
+	initRepo(t, dir)
 
 	writeFile(t, filepath.Join(dir, "internal/server/handler.go"), "package server\n\nfunc H() {}\n")
 	writeFile(t, filepath.Join(dir, "root.go"), "package main\n")

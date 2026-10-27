@@ -19,8 +19,18 @@ func setupMockGh(t *testing.T, scriptContent string) string {
 	if err := os.WriteFile(ghPath, []byte(content), 0755); err != nil {
 		t.Fatalf("failed to write mock gh: %v", err)
 	}
-	t.Setenv("PATH", binDir+":"+os.Getenv("PATH"))
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return binDir
+}
+
+// skipShMockOnWindows 挡住依赖 sh mock 的用例：mock 是个无扩展名脚本，
+// Windows 的 exec 只认 .exe/.bat，起不来 —— 那几条只在 macOS/Linux 上有意义。
+// 不依赖 mock 的参数校验用例别包进来，Windows 上照跑。
+func skipShMockOnWindows(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("mock gh 是个 sh 脚本，Windows 起不来，这条只在 macOS/Linux 上有意义")
+	}
 }
 
 func TestCheckGhInstalled(t *testing.T) {
@@ -43,6 +53,7 @@ func TestCheckGhInstalled(t *testing.T) {
 }
 
 func TestListPRs(t *testing.T) {
+	skipShMockOnWindows(t)
 	repoDir := t.TempDir()
 	setupMockGh(t, `
 cat << 'EOF'
@@ -113,6 +124,9 @@ func TestListPRs_Errors(t *testing.T) {
 	}
 	lookPath = origLook
 
+	// 3、4 要靠 mock 假装 gh，Windows 上跳过（见 skipShMockOnWindows）
+	skipShMockOnWindows(t)
+
 	// 3. Unauthenticated gh
 	setupMockGh(t, `
 echo "X Failed to log in to github.com: token is invalid. To re-authenticate, run: gh auth refresh" >&2
@@ -138,6 +152,8 @@ func TestGetPRDiff(t *testing.T) {
 	if _, err := GetPRDiff(context.Background(), repoDir, 0); err == nil {
 		t.Error("expected error for prNumber = 0")
 	}
+
+	skipShMockOnWindows(t)
 
 	setupMockGh(t, `
 cat << 'EOF'
@@ -183,6 +199,8 @@ func TestPostPRComment(t *testing.T) {
 	if err := PostPRComment(context.Background(), repoDir, -1, "LGTM!"); err == nil {
 		t.Error("expected error for invalid PR number")
 	}
+
+	skipShMockOnWindows(t)
 
 	setupMockGh(t, `
 # Verify arguments

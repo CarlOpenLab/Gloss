@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -13,6 +14,11 @@ import (
 
 func setupTestGh(t *testing.T) {
 	t.Helper()
+	// mock 是个无扩展名 sh 脚本：Windows 的 exec 只认 .exe/.bat，起不来，
+	// 依赖它的用例在那边只能跳过（和 internal/gitrepo 的 ghpr_test 同款）。
+	if runtime.GOOS == "windows" {
+		t.Skip("mock gh 是个 sh 脚本，Windows 起不来，这条只在 macOS/Linux 上有意义")
+	}
 	binDir := t.TempDir()
 	ghPath := filepath.Join(binDir, "gh")
 	content := `#!/bin/sh
@@ -63,7 +69,7 @@ exit 1
 	if err := os.WriteFile(ghPath, []byte(content), 0755); err != nil {
 		t.Fatalf("failed to write mock gh: %v", err)
 	}
-	t.Setenv("PATH", binDir+":"+os.Getenv("PATH"))
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
 func TestPRPaletteAndMenu(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -39,6 +40,9 @@ func longFile() string {
 // 保存一个可执行脚本时不该把权限位抹掉：那是没人要求的一次改动，而且
 // git status 也不会把它报出来 —— 用户要过很久才会发现脚本跑不起来了。
 func TestWriteContentsKeepsExistingMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows 没有 Unix 权限位，Stat 永远报 666，这条只在 macOS/Linux 上有意义")
+	}
 	r := tempRepo(t)
 	script := filepath.Join(r.Root, "run.sh")
 	write(t, script, "#!/bin/sh\necho old\n")

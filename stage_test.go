@@ -40,10 +40,7 @@ func dirtyRepoDir(t *testing.T) string {
 	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
 		dir = resolved
 	}
-	runGit(t, dir, "init", "-b", "main")
-	runGit(t, dir, "config", "user.email", "test@example.com")
-	runGit(t, dir, "config", "user.name", "Test")
-	runGit(t, dir, "config", "commit.gpgsign", "false")
+	initRepo(t, dir)
 	writeFile(t, filepath.Join(dir, "a.go"), "package main\n")
 	runGit(t, dir, "add", "a.go")
 	runGit(t, dir, "commit", "-m", "init")
