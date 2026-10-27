@@ -112,20 +112,27 @@ func (a *app) projectSidebar(c *ui.Context, pal palette) {
 	if bar.Left > 0 {
 		lead = bar.Left + shellCardGap
 	}
+	// 顶栏那排图标再往右让一截：贴着红绿灯排一行图标太挤，右边还压着
+	// 「项目」那一栏的标题。这一截是照着截图里想要的位置量的，嫌多嫌少
+	// 改这一个数就行。
+	lead += sidebarTopBarNudge
 
 	ui.Column(c).FillHeight().Children(func() {
+		// 侧栏顶栏：命令面板 / 设置 / 侧栏开关三颗，顺序固定，排在红绿灯
+		// 右边。前两颗是「任何时候都用得上」的入口，开关和它们并排 —— 侧栏
+		// 收起时整块滑走，这三颗一并搬到工具栏左端（见 toolbar），两颗始终
+		// 挨着开关。
 		ui.Row(c).Height(max(float32(shellTopBar), bar.Height)).Shrink(0).FillWidth().
 			AlignItems(ui.Center).Padding(0, 12, 0, lead).Gap(2).
 			DragWindow().Children(func() {
-			if isMacPlatform() {
-				ui.Spacer(c)
-			}
-			shellIconButton(c, pal, T("隐藏侧栏", "Hide Sidebar"),
-				Tf("隐藏项目侧栏 %s", "Hide project sidebar %s", K("⌘⌥B")),
+			shellIconButton(c, pal, T("命令面板", "Command Palette"),
+				Tf("搜索命令与项目 %s", "Search commands and projects %s", K("⌘K")),
+				iconSearch, false, a.openPalette)
+			shellIconButton(c, pal, T("模型设置…", "Model Settings…"),
+				Tf("偏好与设置 %s", "Preferences %s", K("⌘,")),
+				iconSettings, false, a.openSettings)
+			shellIconButton(c, pal, a.sidebarToggleLabel(), a.sidebarToggleTip(),
 				iconSidebar, false, func() { a.setSidebar(false) })
-			if !isMacPlatform() {
-				ui.Spacer(c)
-			}
 		})
 
 		a.projectGroups(c, pal, a.projectsPaneHeight(c))
@@ -208,7 +215,9 @@ func (a *app) projectSidebar(c *ui.Context, pal palette) {
 			a.refsView(c, pal)
 		})
 
-		a.projectSidebarFooter(c, pal)
+		// 底部留一口气：命令面板与设置那两个图标在工具栏左端（见 toolbar），
+		// 这一行原来占的 38px 变成 8px 的留白。
+		ui.Box(c).Height(8).Shrink(0)
 	})
 }
 
@@ -456,17 +465,4 @@ func (a *app) projectGroup(c *ui.Context, pal palette, idx int, tab *repoTab, ac
 			row.Cursor(ui.CursorGrabbing).Opacity(0.45)
 		}
 	}
-}
-
-func (a *app) projectSidebarFooter(c *ui.Context, pal palette) {
-	ui.Row(c).Height(38).Shrink(0).FillWidth().Padding(0, 12, 4, 12).
-		Gap(2).AlignItems(ui.Center).DragWindow().Children(func() {
-		shellIconButton(c, pal, T("命令面板", "Command Palette"),
-			Tf("搜索命令与项目 %s", "Search commands and projects %s", K("⌘K")),
-			iconSearch, false, a.openPalette)
-		shellIconButton(c, pal, T("模型设置…", "Model Settings…"),
-			Tf("偏好与设置 %s", "Preferences %s", K("⌘,")),
-			iconSettings, false, a.openSettings)
-		ui.Spacer(c)
-	})
 }

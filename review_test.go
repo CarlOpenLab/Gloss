@@ -176,22 +176,65 @@ func countHunks(diffText string) int {
 	return n
 }
 
-// hoverDiffBody 把鼠标在改动区正文里扫一遍，直到某处让 expect 那串字出现。
+// diffHoverX 是「在改动区正文里扫」用的那个 x：落在左边那一栏的代码上，
+// 具体是哪一栏不重要 —— 重要的是别落在行号槽或分隔条上。
+const diffHoverX = float32(900)
+
+// hoverDiffBody 把鼠标在改动区正文里扫一遍，直到某处让 expect 那串字出现，
+// 返回那一处按钮的位置。
 //
 // DiffView 的按段按钮只挂在「指针底下那一段」上（mygo 的 HunkActions：
 // 指针或光标所在的那一段才摆按钮），而每一段在屏幕上的位置取决于字号、行高
 // 和前面折起来多少行。测试里不去复算这套排版，扫一遍找它 —— 找到了就等于
 // 证明「这一段在界面上真点得到」。
-func hoverDiffBody(t *testing.T, tt *ui.Tester, expect string) bool {
+func hoverDiffBody(t *testing.T, tt *ui.Tester, expect string) (ui.Rect, bool) {
 	t.Helper()
 	for y := float32(150); y < 640; y += 3 {
-		tt.Move(900, y)
+		tt.Move(diffHoverX, y)
 		tt.Frame()
-		if tt.HasText(expect) {
-			return true
+		if r, ok := tt.Find(expect); ok {
+			return r, true
 		}
 	}
-	return false
+	return ui.Rect{}, false
+}
+
+// clickHunkAction 点某一段改动上那颗按钮（「暂存这段」/「取消暂存这段」）。
+//
+// 按钮只挂在指针底下那一段上，而它画在那一段的右端：从代码区一步跳到按钮
+// 中心，这一跳就换了「指针底下是哪一段」，按钮会先收起来 —— 测试里得像真人
+// 一样把指针分几步挪过去再按。r 是 hoverDiffBody 找到的那个位置。
+func clickHunkAction(t *testing.T, tt *ui.Tester, r ui.Rect) {
+	t.Helper()
+	x, y := r.X+r.W/2, r.Y+r.H/2
+	const steps = 4
+	for i := 1; i <= steps; i++ {
+		tt.Move(diffHoverX+(x-diffHoverX)*float32(i)/steps, y)
+		tt.Frame()
+	}
+	tt.Press(x, y)
+	tt.Frame()
+	tt.Release(x, y)
+	tt.Frame()
+}
+
+// focusDiffBody 在改动区正文里点一处，把焦点交给右边的编辑器。
+//
+// DiffView 自己画文字（不是 ui.Text 元素），按坐标点；横向试几个位置直到
+// 打字真的进了缓冲区 —— 布局一动，正好的那个 x 也跟着动，写死一个数只会让
+// 这条测试在某次改版之后莫名其妙地红。
+func focusDiffBody(t *testing.T, tt *ui.Tester, a *app) {
+	t.Helper()
+	for _, x := range []float32{620, 700, 780, 860, 940, 1020, 1100} {
+		tt.ClickAt(x, 200)
+		tt.Frame()
+		tt.Type("x")
+		tt.Frame()
+		if a.review.new.Modified() {
+			return
+		}
+	}
+	t.Fatal("点进改动区正文之后打字该进到这个文件的缓冲区里")
 }
 
 // 按段暂存：鼠标停在某一段上，那一颗「暂存这段」点下去只把这一段放进 index，
@@ -205,12 +248,11 @@ func TestReviewHunkButtonStagesOnlyThatHunk(t *testing.T) {
 	if f := listedFile(t, a, "internal/server/handler.go"); len(f.Hunks) != 2 {
 		t.Fatalf("夹具该有两段改动，实际 %d 段", len(f.Hunks))
 	}
-	if !hoverDiffBody(t, tt, "暂存这段") {
+	btn, ok := hoverDiffBody(t, tt, "暂存这段")
+	if !ok {
 		t.Fatal("改动上该出现「暂存这段」按钮")
 	}
-	if err := tt.Click("暂存这段"); err != nil {
-		t.Fatal(err)
-	}
+	clickHunkAction(t, tt, btn)
 	settle(t, a)
 	tt.Frame()
 
@@ -245,12 +287,11 @@ func TestReviewHunkButtonUnstagesOnlyThatHunk(t *testing.T) {
 	if f := listedFile(t, a, "internal/server/handler.go"); f.Section != gitrepo.SectionStaged || len(f.Hunks) != 2 {
 		t.Fatalf("夹具该把两段都暂存起来，实际 %v 共 %d 段", f.Section, len(f.Hunks))
 	}
-	if !hoverDiffBody(t, tt, "取消暂存这段") {
+	btn, ok := hoverDiffBody(t, tt, "取消暂存这段")
+	if !ok {
 		t.Fatal("已暂存段的改动上该出现「取消暂存这段」按钮")
 	}
-	if err := tt.Click("取消暂存这段"); err != nil {
-		t.Fatal(err)
-	}
+	clickHunkAction(t, tt, btn)
 	settle(t, a)
 	tt.Frame()
 
@@ -367,8 +408,7 @@ func TestReviewSaveShortcut(t *testing.T) {
 	a.selectFileKey(fileKey(listedFile(t, a, "README.md")))
 	tt := settleReview(t, a)
 
-	tt.ClickAt(900, 200) // 焦点进改动区
-	tt.Frame()
+	focusDiffBody(t, tt, a) // 焦点进改动区
 	a.review.new.Set("⌘S 存的\n")
 	tt.Frame()
 	tt.Key(ui.Cmd, ui.KeyS)

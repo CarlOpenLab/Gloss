@@ -13,6 +13,12 @@ const (
 	shellTopBar  = 2 * shellBarMid
 	shellHeaderH = 2 * (shellBarMid - shellCardGap)
 	shellCardGap = 8
+
+	// sidebarTopBarNudge 是侧栏顶栏那排图标（命令面板 / 设置 / 侧栏开关）
+	// 在红绿灯右沿之外再往右让的一截。贴着窗口按钮排一行图标太挤，也让那
+	// 一排和下面「项目」栏的标题糊成一片；这一截照着参考截图量的，嫌多嫌少
+	// 改这一个数就行。
+	sidebarTopBarNudge = float32(83)
 )
 
 // shellWindowRadiusFor 是窗口自己那一圈圆角的半径。它不归我们画 —— macOS /

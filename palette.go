@@ -163,6 +163,25 @@ func (a *app) setSidebar(on bool) {
 	a.saveViewSettings()
 }
 
+// sidebarToggleLabel / sidebarToggleTip 是工具栏上那颗侧栏开关的字。
+//
+// 开关常驻工具栏左端（见 toolbar），两种状态都得有话可说：开着的时候它是
+// 「隐藏」，收起的时候它是「显示」。文案跟着 a.sidebarOn 走，不跟动画进度
+// —— 动画中途字就定下来，说的也是按下去会发生什么。
+func (a *app) sidebarToggleLabel() string {
+	if a.sidebarOn {
+		return T("隐藏侧栏", "Hide Sidebar")
+	}
+	return T("显示侧栏", "Show Sidebar")
+}
+
+func (a *app) sidebarToggleTip() string {
+	if a.sidebarOn {
+		return Tf("隐藏项目侧栏 %s", "Hide project sidebar %s", K("⌘⌥B"))
+	}
+	return Tf("显示项目侧栏 %s", "Show project sidebar %s", K("⌘⌥B"))
+}
+
 func (a *app) openPalette() {
 	a.palette = paletteState{on: true}
 }

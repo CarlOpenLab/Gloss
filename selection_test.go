@@ -36,13 +36,7 @@ func TestDiffCodeTextIsNativelySelectable(t *testing.T) {
 	tt := settleReview(t, a)
 
 	// 点进正文（右侧那一栏的中段），焦点归 DiffView 里的编辑器。
-	tt.ClickAt(900, 200)
-	tt.Frame()
-	tt.Type("x")
-	tt.Frame()
-	if !a.review.new.Modified() {
-		t.Fatal("点进正文之后打字该进到这个文件的缓冲区里")
-	}
+	focusDiffBody(t, tt, a)
 
 	tt.Key(ui.Cmd, ui.KeyA)
 	tt.Frame()
