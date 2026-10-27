@@ -31,7 +31,8 @@ func (a *app) stashDialog(c *ui.Context, pal palette) {
 		return
 	}
 	open := true
-	specModal(c, pal, &open, func() { a.stashDialogBody(c, pal) })
+	// 表单对话框：点背景不关（见 specModalSticky）。
+	specModalSticky(c, pal, &open, func() { a.stashDialogBody(c, pal) })
 	if !open {
 		a.stashDlg = stashState{}
 	}

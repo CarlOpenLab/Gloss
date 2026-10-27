@@ -54,12 +54,15 @@ func (a *app) newBranchAtHead() {
 }
 
 // newBranchDialog 是对话框入口。
+//
+// 走 specModalSticky：点压暗的背景不关 —— 名字打了一半，误触一下下面的背景
+// 就把打的内容连同步取消一起丢了。Esc 和「取消」照旧关。
 func (a *app) newBranchDialog(c *ui.Context, pal palette) {
 	if !a.newBranch.on {
 		return
 	}
 	open := true
-	specModal(c, pal, &open, func() { a.newBranchBody(c, pal) })
+	specModalSticky(c, pal, &open, func() { a.newBranchBody(c, pal) })
 	if !open {
 		a.cancelAIBranch()
 		a.newBranch = branchState{}

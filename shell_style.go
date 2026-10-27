@@ -13,7 +13,26 @@ const (
 	shellTopBar  = 2 * shellBarMid
 	shellHeaderH = 2 * (shellBarMid - shellCardGap)
 	shellCardGap = 8
+
+	// Sidebar controls keep a fixed title-bar slot whether the sidebar is
+	// expanded or folded. The folded card leaves this whole cluster clear.
+	shellIconButtonW    = float32(28)
+	shellIconButtonH    = float32(26)
+	shellIconButtonGap  = float32(2)
+	sidebarControlInset = float32(20)
+	sidebarControlsW    = 3*shellIconButtonW + 2*shellIconButtonGap
 )
+
+func titleBarLead(bar ui.TitleBar) float32 {
+	if bar.Left > 0 {
+		return bar.Left + shellCardGap
+	}
+	return 12
+}
+
+func sidebarControlsLeft(bar ui.TitleBar) float32 {
+	return titleBarLead(bar) + sidebarControlInset
+}
 
 // shellWindowRadiusFor 是窗口自己那一圈圆角的半径。它不归我们画 —— macOS /
 // Windows 由系统画，Linux 交给桌面主题 —— 但工作卡贴着它内缩 shellCardGap，
@@ -288,7 +307,7 @@ func shellIconButton(c *ui.Context, pal palette, label, tip string, icon *ui.SVG
 }
 
 func shellIconElement(c *ui.Context, pal palette, label, tip string, icon *ui.SVG, disabled bool) ui.Element {
-	btn := ui.ButtonBase(c).Size(28, 26).Radius(radiusSM).Center().
+	btn := ui.ButtonBase(c).Size(shellIconButtonW, shellIconButtonH).Radius(radiusSM).Center().
 		Cursor(ui.CursorPointer).Label(label).Tooltip(tip).Disabled(disabled)
 	col := pal.textMuted
 	switch {

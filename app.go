@@ -870,7 +870,12 @@ func (a *app) view(c *ui.Context) {
 		})
 		// 侧栏的拖拽带排在主区之后：它压在卡片左沿上，而主区那一层会
 		// 盖住侧栏伸出来的那一半（见 sidebarResizer）。
-		a.sidebarResizer(c, pal)
+		a.sidebarResizer(c)
+		// The utility cluster stays in a fixed title-bar slot when the sidebar is
+		// folded, rather than becoming part of the card toolbar's flex layout.
+		if a.sidebarShown < 0.5 {
+			a.sidebarToolbar(c, pal, true, sidebarControlsW, c.TitleBar())
+		}
 	})
 	a.paletteDialog(c, pal)
 	a.settingsDialog(c, pal)
@@ -995,10 +1000,10 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 	}
 
 	ui.Toolbar(c, func() {
+		// Reserve the fixed title controls' footprint while the sidebar is folded.
+		// The controls themselves are drawn above this toolbar in view().
 		if a.sidebarShown < 0.5 {
-			shellIconButton(c, pal, T("显示侧栏", "Show Sidebar"),
-				Tf("显示项目侧栏 %s", "Show project sidebar %s", K("⌘⌥B")),
-				iconSidebar, false, func() { a.setSidebar(true) })
+			ui.Box(c).Width(sidebarControlsW + 10).Shrink(0)
 		}
 
 		// 「现在看哪一块」的四个选择都在这一处：改动 / 历史 / 终端 / 编辑器。

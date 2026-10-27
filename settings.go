@@ -342,6 +342,12 @@ func (a *app) settingsDialog(c *ui.Context, pal palette) {
 
 	open := true
 	ui.DialogBase(c, &open, func(back, panel ui.Element) {
+		// 表单对话框：点背景不关（Esc、标题栏的 × 和底栏的「取消 / 保存」
+		// 照旧）—— 供应商表单、API Key 打到一半，被页面上误触的一下丢掉太亏。
+		// 见 specModalSticky。
+		if back.Clicked() {
+			open = true
+		}
 		// 不再压暗整页：设置是浮在页面上的窗口，不是盖住页面的幕布 ——
 		// 改外观、字号、终端配色能当场在底下的终端里看到；按住它的导航栏
 		// 或卡片顶栏就能把它挪开。

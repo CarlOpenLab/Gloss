@@ -86,14 +86,20 @@ func buildAppMenu(a *app) *mygo.Menu {
 	m.split = a.menuToggle(T("左右对照", "Split View"), "", mygo.MenuItemRadio, a.split, func() { a.setSplit(true) })
 	m.sidebar = a.menuToggle(T("显示侧栏", "Show Sidebar"), "CmdOrCtrl+Shift+B", mygo.MenuItemCheckbox, true, a.toggleSidebar)
 	m.refresh = a.menuCmd(T("刷新", "Refresh"), "CmdOrCtrl+R", a.reload)
-	m.commit = a.menuCmd(T("提交", "Commit"), "CmdOrCtrl+Return", a.doCommit)
+	// 提交 / 暂存那几条和快捷键、命令栏共用 gitPanelLive：终端与编辑器
+	// 视图里屏幕上没有提交栏，菜单点下去也是看不见地改仓库。
+	m.commit = a.menuCmd(T("提交", "Commit"), "CmdOrCtrl+Return", func() {
+		if a.gitPanelLive() {
+			a.doCommit()
+		}
+	})
 	m.stageAll = a.menuCmd(T("暂存全部改动", "Stage All Changes"), "CmdOrCtrl+Shift+A", func() {
-		if a.tab == 0 && a.repoReady() && a.op == gitrepo.OpNone {
+		if a.gitPanelLive() && a.tab == 0 && a.repoReady() && a.op == gitrepo.OpNone {
 			a.stageAll()
 		}
 	})
 	m.unstageAll = a.menuCmd(T("取消暂存全部改动", "Unstage All Changes"), "", func() {
-		if a.tab == 0 && a.repoReady() && a.op == gitrepo.OpNone {
+		if a.gitPanelLive() && a.tab == 0 && a.repoReady() && a.op == gitrepo.OpNone {
 			a.unstageAll()
 		}
 	})
@@ -105,10 +111,29 @@ func buildAppMenu(a *app) *mygo.Menu {
 	// 抓取 / 拉取 / 推送的键是挑出来的：F 和 P 是 Fetch 和 Pull，U 是「上传」
 	// 那个 up（Push 的 P 被拉取占了）。三个都带 ⇧：⌘P 归「筛选文件」，
 	// 单键轮不到它们。
-	m.fetch = a.menuCmd(T("抓取", "Fetch"), "CmdOrCtrl+Shift+F", a.doFetch)
-	m.pull = a.menuCmd(T("拉取", "Pull"), "CmdOrCtrl+Shift+P", a.doPull)
-	m.push = a.menuCmd(T("推送", "Push"), "CmdOrCtrl+Shift+U", a.doPush)
-	m.forcePush = a.menuCmd(T("强制推送（--force-with-lease）…", "Force Push (--force-with-lease)…"), "", a.promptForcePush)
+	// 远程那几条同样只认 Git 面板（gitPanelLive）：它们的横幅、toast、进度条
+	// 都在 Git 面板里画，终端 / 编辑器视图里点下去没人汇报结果。强制推送
+	// 自己还带一道确认框，但确认之前的「发起」也归这个判据管。
+	m.fetch = a.menuCmd(T("抓取", "Fetch"), "CmdOrCtrl+Shift+F", func() {
+		if a.gitPanelLive() {
+			a.doFetch()
+		}
+	})
+	m.pull = a.menuCmd(T("拉取", "Pull"), "CmdOrCtrl+Shift+P", func() {
+		if a.gitPanelLive() {
+			a.doPull()
+		}
+	})
+	m.push = a.menuCmd(T("推送", "Push"), "CmdOrCtrl+Shift+U", func() {
+		if a.gitPanelLive() {
+			a.doPush()
+		}
+	})
+	m.forcePush = a.menuCmd(T("强制推送（--force-with-lease）…", "Force Push (--force-with-lease)…"), "", func() {
+		if a.gitPanelLive() {
+			a.promptForcePush()
+		}
+	})
 
 	m.themeSystem = a.menuToggle(T("跟随系统", "Follow System"), "", mygo.MenuItemRadio, a.themeMode == "system" || a.themeMode == "", func() { a.setThemeMode("system") })
 	m.themeLight = a.menuToggle(T("浅色模式", "Light Mode"), "", mygo.MenuItemRadio, a.themeMode == "light", func() { a.setThemeMode("light") })
@@ -166,7 +191,9 @@ func buildAppMenu(a *app) *mygo.Menu {
 			a.menuCmd(T("打开仓库…", "Open Repository…"), "CmdOrCtrl+O", a.chooseFolder),
 			a.recentReposMenuItem(),
 			mygo.Separator(),
-			a.menuCmd(T("关闭标签页", "Close Tab"), "CmdOrCtrl+W", func() { a.closeTab(a.activeTab) }),
+			// 和快捷键同一条路：终端视图里关当前会话，别处关项目标签页
+			// （见 closeActive）—— 两条入口各写一套就会各错一套。
+			a.menuCmd(T("关闭标签页", "Close Tab"), "CmdOrCtrl+W", a.closeActive),
 			a.menuCmd(T("上一个标签页", "Previous Tab"), "CmdOrCtrl+Shift+[", a.prevTab),
 			a.menuCmd(T("下一个标签页", "Next Tab"), "CmdOrCtrl+Shift+]", a.nextTab),
 			mygo.Separator(),
@@ -324,9 +351,9 @@ func (a *app) syncMenu() {
 	enableItem(m.tabHist, !noRepo)
 	enableItem(m.unified, !noRepo)
 	enableItem(m.split, !noRepo)
-	enableItem(m.commit, a.canCommit())
-	enableItem(m.stageAll, !noRepo && a.tab == 0 && a.op == gitrepo.OpNone && a.unstagedCount() > 0)
-	enableItem(m.unstageAll, !noRepo && a.tab == 0 && a.op == gitrepo.OpNone && a.stagedCount() > 0)
+	enableItem(m.commit, a.gitPanelLive() && a.canCommit())
+	enableItem(m.stageAll, a.gitPanelLive() && !noRepo && a.tab == 0 && a.op == gitrepo.OpNone && a.unstagedCount() > 0)
+	enableItem(m.unstageAll, a.gitPanelLive() && !noRepo && a.tab == 0 && a.op == gitrepo.OpNone && a.stagedCount() > 0)
 	enableItem(m.stash, !noRepo && a.op == gitrepo.OpNone)
 	enableItem(m.newBranch, !noRepo && a.op == gitrepo.OpNone)
 	enableItem(m.newTag, !noRepo && a.op == gitrepo.OpNone)
@@ -335,12 +362,13 @@ func (a *app) syncMenu() {
 	// 远程三条：没有远程就没得抓也没得推（`git fetch --all` 在这种情况下
 	// 静默成功，等错误等不到）；分离 HEAD 上拉取和推送没有落点，抓取照常。
 	// 判据和工具栏那三颗按钮用的是同一个（canReachRemote），两处不能各写
-	// 一套 —— 菜单亮着而按钮是灰的，用户不知道该信哪个。
+	// 一套 —— 菜单亮着而按钮是灰的，用户不知道该信哪个。非 Git 面板下一并
+	// 置灰：那几个操作的结果只在 Git 面板里汇报（见 gitPanelLive）。
 	canRemote := a.canReachRemote()
-	enableItem(m.fetch, canRemote)
-	enableItem(m.pull, canRemote && !a.detached)
-	enableItem(m.push, canRemote && !a.detached)
-	enableItem(m.forcePush, canRemote && !a.detached && a.hasUpstream(a.branch))
+	enableItem(m.fetch, a.gitPanelLive() && canRemote)
+	enableItem(m.pull, a.gitPanelLive() && canRemote && !a.detached)
+	enableItem(m.push, a.gitPanelLive() && canRemote && !a.detached)
+	enableItem(m.forcePush, a.gitPanelLive() && canRemote && !a.detached && a.hasUpstream(a.branch))
 }
 
 // checkItem 只在勾真的会变的时候才去动它。

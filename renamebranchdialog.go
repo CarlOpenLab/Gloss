@@ -41,7 +41,8 @@ func (a *app) renameBranchDialog(c *ui.Context, pal palette) {
 		return
 	}
 	open := true
-	specModal(c, pal, &open, func() { a.renameBranchBody(c, pal) })
+	// 表单对话框：点背景不关 —— 新名字打到一半不该被误触丢掉（见 specModalSticky）。
+	specModalSticky(c, pal, &open, func() { a.renameBranchBody(c, pal) })
 	if !open {
 		a.rename = renameState{}
 	}

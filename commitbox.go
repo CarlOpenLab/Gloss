@@ -349,6 +349,19 @@ func (a *app) canCommit() bool {
 	return a.stagedCount() > 0
 }
 
+// gitPanelLive 报告 Git 面板此刻是不是屏幕上那一块。
+//
+// 主区在终端 / 编辑器视图下画的是终端 / 编辑器（mainArea 一进去就 return），
+// opBanner / Toast / pendingBar 也都在 Git 面板里 —— 在这些视图里触发任何
+// 「改仓库」的动作都是「看不见地发生」：⌘⇧A 把整个工作区扫进 index、⌘⏎ 直接
+// 提交、⌘⇧P 拉下来一堆改动，而用户看到的是「什么都没发生」，切回 Git 面板
+// 才发现仓库变了。提交栏那一套和远程那几条都归这个判据管，快捷键、菜单、
+// 命令栏三个入口共用 —— 各写一份正是漏掉视图这条的原因（⌘⇧A 原来只查了
+// a.tab == 0，终端视图里照按不误）。
+func (a *app) gitPanelLive() bool {
+	return a.viewMode == viewModeGit
+}
+
 // commitBoxOn 决定这一帧要不要画提交栏。
 //
 // 历史 tab 没有它（历史是只读的）；仓库没打开没有它；工作区干净、消息也

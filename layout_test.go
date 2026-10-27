@@ -34,8 +34,8 @@ func TestSidebarClearsTitleBar(t *testing.T) {
 	}
 }
 
-// 红绿灯浮在窗口左上角。侧栏自己的顶栏控件要让开它们，项目行则从标题栏
-// 下沿开始，不能和窗口按钮抢同一块地方。
+// 红绿灯浮在窗口左上角。侧栏开关（现在在工具栏左端，见 toolbar）要让开它们，
+// 项目行则从标题栏下沿开始，不能和窗口按钮抢同一块地方。
 func TestSidebarChromeClearsTrafficLights(t *testing.T) {
 	a := richApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
@@ -45,10 +45,10 @@ func TestSidebarChromeClearsTrafficLights(t *testing.T) {
 
 	hide, ok := tt.Find("隐藏侧栏")
 	if !ok {
-		t.Fatalf("侧栏顶栏上找不到隐藏按钮：%q", tt.Texts())
+		t.Fatalf("工具栏上找不到隐藏侧栏按钮：%q", tt.Texts())
 	}
 	if minX := realTitleBar.Left + 8; hide.X < minX {
-		t.Errorf("侧栏顶栏按钮左边 x=%.0f，离窗口按钮（右沿 x=%.0f）太近了，至少该到 %.0f",
+		t.Errorf("侧栏开关左边 x=%.0f，离窗口按钮（右沿 x=%.0f）太近了，至少该到 %.0f",
 			hide.X, realTitleBar.Left, minX)
 	}
 
@@ -182,14 +182,20 @@ func TestToolbarHugsSidebarEdge(t *testing.T) {
 	tt.Frame()
 	tt.Frame()
 
+	// 侧栏收起时工具栏左端是 [命令面板][设置][显示侧栏] 三颗，第一颗因此
+	// 是命令面板。
+	first, ok := tt.Find(T("命令面板", "Command Palette"))
+	if !ok {
+		t.Fatalf("侧栏收起时找不到命令面板：%q", tt.Texts())
+	}
+	if minX := realTitleBar.Left + shellCardGap; first.X < minX {
+		t.Errorf("侧栏收起时第一个工具栏控件左边 x=%.0f，该给系统红绿灯留到 %.0f", first.X, minX)
+	}
+
 	show, ok := tt.Find(T("显示侧栏", "Show Sidebar"))
 	if !ok {
 		t.Fatalf("侧栏收起时找不到显示按钮：%q", tt.Texts())
 	}
-	if minX := realTitleBar.Left + shellCardGap; show.X < minX {
-		t.Errorf("侧栏收起时第一个工具栏控件左边 x=%.0f，该给系统红绿灯留到 %.0f", show.X, minX)
-	}
-
 	seg, ok := tt.Find("改动")
 	if !ok {
 		t.Fatalf("找不到工具栏的视图切换：%q", tt.Texts())
@@ -198,7 +204,8 @@ func TestToolbarHugsSidebarEdge(t *testing.T) {
 		t.Errorf("视图切换 x=%.0f 没有排在显示侧栏按钮 x=%.0f 右边", seg.X, show.X)
 	}
 
-	// 侧栏开着的时候，显示按钮让位，视图切换直接贴着侧栏右边缘。
+	// 侧栏开着的时候，那三颗回到侧栏顶栏，工具栏左端直接是视图切换 ——
+	// 它该贴着侧栏右边缘起排，不再额外缩进。
 	a.sidebarOn = true
 	tt.Frame()
 	tt.Frame()
@@ -206,9 +213,124 @@ func TestToolbarHugsSidebarEdge(t *testing.T) {
 	if !ok {
 		t.Fatalf("侧栏开着时找不到工具栏的视图切换：%q", tt.Texts())
 	}
-	if want := float32(sidebarWidth); seg2.X < want || seg2.X > want+40 {
+	if want := float32(sidebarWidth) + shellCardGap + 12; seg2.X < want || seg2.X > want+8 {
 		t.Errorf("侧栏开着时工具栏第一个控件左边 x=%.0f，该贴着侧栏右边缘的 %.0f",
 			seg2.X, want)
+	}
+}
+
+// 命令面板、设置、侧栏开关三颗，顺序固定，两颗始终紧挨着开关。
+//
+// 展开时它们在侧栏顶栏（红绿灯右边）；侧栏一收起整块滑走，三颗一并搬到
+// 工具栏左端 —— 不放那儿就一个都点不到，也没有把侧栏放回来的入口了。
+func TestUtilityClusterFollowsSidebar(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
+	tt.SetTitleBar(realTitleBar)
+	tt.Frame()
+	settle(t, a)
+	tt.Frame()
+
+	// 展开态：三颗在侧栏顶栏，顺序 [命令面板][设置][隐藏侧栏]，都在侧栏
+	// 那一栏里（x 不超过侧栏宽度），并给红绿灯让出位置。
+	search, ok := tt.Find(T("命令面板", "Command Palette"))
+	if !ok {
+		t.Fatalf("侧栏顶栏找不到命令面板：%q", tt.Texts())
+	}
+	settings, ok := tt.Find(T("模型设置…", "Model Settings…"))
+	if !ok {
+		t.Fatalf("侧栏顶栏找不到模型设置：%q", tt.Texts())
+	}
+	hide, ok := tt.Find(T("隐藏侧栏", "Hide Sidebar"))
+	if !ok {
+		t.Fatalf("侧栏顶栏找不到侧栏开关：%q", tt.Texts())
+	}
+	if !(search.X < settings.X && settings.X < hide.X) {
+		t.Errorf("三颗该按 [命令面板][设置][开关] 排，实际 x=%.0f / %.0f / %.0f",
+			search.X, settings.X, hide.X)
+	}
+	if want := float32(sidebarWidth) - 3*(shellIconButtonW+shellIconButtonGap) + shellIconButtonGap - 9; search.X != want {
+		t.Errorf("展开态图标组左边 x=%.0f，该贴齐侧栏右侧并留 9px 内距（want %.0f）", search.X, want)
+	}
+	if wantY := (max(float32(shellTopBar), realTitleBar.Height) - shellIconButtonH) / 2; search.Y != wantY || settings.Y != wantY || hide.Y != wantY {
+		t.Errorf("展开态三颗图标应固定在标题栏垂直中线 y=%.0f，实际 %.0f / %.0f / %.0f",
+			wantY, search.Y, settings.Y, hide.Y)
+	}
+	if hide.X+hide.W > sidebarWidth {
+		t.Errorf("开关右边 x=%.0f 探出侧栏（宽 %d）了", hide.X+hide.W, sidebarWidth)
+	}
+	if minX := realTitleBar.Left + 8; search.X < minX {
+		t.Errorf("第一颗左边 x=%.0f，该给系统红绿灯留到 %.0f", search.X, minX)
+	}
+	// 第三颗（侧栏开关）和「项目」行那颗 + 对齐：下面那个 + 是这一栏右端
+	// 唯一的参照，开关挂在它正上方，两行右边才收在一处。
+	plus, ok := tt.Find(T("添加项目", "Add Project"))
+	if !ok {
+		t.Fatalf("项目行找不到 + 按钮：%q", tt.Texts())
+	}
+	if d := (hide.X + hide.W/2) - (plus.X + plus.W/2); d > 1 || d < -1 {
+		t.Errorf("侧栏开关中心 x=%.1f 和 + 中心 x=%.1f 没对齐（差 %.1f）",
+			hide.X+hide.W/2, plus.X+plus.W/2, d)
+	}
+
+	// 收起态：三颗搬到工具栏左端，顺序不变。
+	a.setSidebar(false)
+	tt.Frame()
+	tt.Frame()
+	if tt.HasText(T("隐藏侧栏", "Hide Sidebar")) {
+		t.Error("收起后侧栏顶栏该整块滑走")
+	}
+	search2, ok := tt.Find(T("命令面板", "Command Palette"))
+	if !ok {
+		t.Fatalf("收起后工具栏找不到命令面板：%q", tt.Texts())
+	}
+	settings2, ok := tt.Find(T("模型设置…", "Model Settings…"))
+	if !ok {
+		t.Fatalf("收起后工具栏找不到模型设置：%q", tt.Texts())
+	}
+	show, ok := tt.Find(T("显示侧栏", "Show Sidebar"))
+	if !ok {
+		t.Fatalf("收起后工具栏找不到显示侧栏开关：%q", tt.Texts())
+	}
+	if !(search2.X < settings2.X && settings2.X < show.X) {
+		t.Errorf("收起后三颗该还是这个顺序，实际 x=%.0f / %.0f / %.0f",
+			search2.X, settings2.X, show.X)
+	}
+	if want := sidebarControlsLeft(realTitleBar); search2.X != want {
+		t.Errorf("收起态图标组左边 x=%.0f，该固定在标题栏位置 %.0f", search2.X, want)
+	}
+	if search2.Y != search.Y || settings2.Y != settings.Y || show.Y != hide.Y {
+		t.Errorf("收起侧栏时三颗图标的垂直位置不该跳：展开 %.0f / %.0f / %.0f，收起 %.0f / %.0f / %.0f",
+			search.Y, settings.Y, hide.Y, search2.Y, settings2.Y, show.Y)
+	}
+
+	// 收起态两颗都点得开，开关点得回来。
+	if err := tt.Click(T("模型设置…", "Model Settings…")); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !a.settingsOn {
+		t.Error("收起态点设置该打开设置窗口")
+	}
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	if err := tt.Click(T("命令面板", "Command Palette")); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !a.palette.on {
+		t.Error("收起态点命令面板该打开命令栏")
+	}
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	if err := tt.Click(T("显示侧栏", "Show Sidebar")); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	if !a.sidebarOn {
+		t.Error("点显示侧栏该把侧栏放回来")
 	}
 }
 
@@ -404,7 +526,7 @@ func TestTreeSelectionIsPill(t *testing.T) {
 	// 左右边界：两边都该收进来 treePadX，且左右对称
 	y := (top + bot) / 2
 	left, right := -1, -1
-	for x := 0; x < sidebarWidth; x++ {
+	for x := range sidebarWidth {
 		if lum(x, y) > bandLum {
 			if left < 0 {
 				left = x

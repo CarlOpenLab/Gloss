@@ -85,6 +85,50 @@ func TestRenameBranchDialog(t *testing.T) {
 	}
 }
 
+// 新建分支对话框：点压暗的背景不关。
+//
+// 名字打了一半，手一抖点在对话框外面的背景上，连同步取消问都不问就没了 ——
+// 这条盯着「误触不关」；Esc 和「取消」是显式动作，照旧关。
+func TestNewBranchDialogSurvivesBackdropClick(t *testing.T) {
+	a := branchApp(t)
+	tt := ui.NewTester(a.view, 1280, 900)
+	settle(t, a)
+	tt.Frame()
+
+	a.openNewBranchDialog("", "HEAD")
+	tt.Frame()
+	if !a.newBranch.on {
+		t.Fatal("新建分支对话框没打开")
+	}
+
+	tt.Type("feature/half-typed")
+	tt.Frame()
+	if a.newBranch.name != "feature/half-typed" {
+		t.Fatalf("名字没进框：%q", a.newBranch.name)
+	}
+
+	// 面板居中，左上角这一下落在压暗的背景上。
+	tt.ClickAt(4, 4)
+	tt.Frame()
+
+	if !a.newBranch.on {
+		t.Fatal("点背景不该关掉新建分支对话框")
+	}
+	if a.newBranch.name != "feature/half-typed" {
+		t.Errorf("点背景不该丢名字：%q", a.newBranch.name)
+	}
+	if !tt.HasText("新建分支") {
+		t.Errorf("对话框该还在屏幕上：%q", tt.Texts())
+	}
+
+	// Esc 是显式关闭，照旧关。
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	if a.newBranch.on {
+		t.Error("Esc 该关掉对话框")
+	}
+}
+
 // 重命名当前分支：HEAD 自动跟随更新，工具栏分支芯片刷新。
 func TestRenameCurrentBranchUpdatesChip(t *testing.T) {
 	a := branchApp(t)

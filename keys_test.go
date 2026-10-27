@@ -3,6 +3,7 @@ package main
 import (
 	"testing"
 
+	"github.com/egoist/mygo/plugins/terminal"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -298,7 +299,122 @@ func TestShortcutsWithoutRepo(t *testing.T) {
 
 	// 没有仓库、没有文件：这些键都不该把状态搅乱。
 	if len(a.files) != 0 || a.review.key != "" {
-		t.Errorf("没有仓库时不该有文件和改动区状态：files=%d review=%q",
+		t.Errorf("没有仓库、没有文件时按这些键不该有文件和改动区状态：files=%d review=%q",
 			len(a.files), a.review.key)
+	}
+}
+
+// 提交栏那一套（⌘⇧A / ⌘⏎ / ⌘I）只在 Git 面板里认。
+//
+// 终端和编辑器视图里屏幕上没有提交栏，opBanner / Toast 也只在 Git 面板画
+// （mainArea 一进终端视图就 return 了）—— 在那些视图里按下去是「看不见地
+// 改仓库」：⌘⇧A 把整个工作区扫进 index、⌘⏎ 直接提交，用户看到的是「什么都
+// 没发生」，切回 Git 面板才发现改动没了。命令栏那条「提交」走的是同一个
+// 判据（gitPanelLive），这里连它一起按。
+func TestCommitShortcutsIgnoredOutsideGitView(t *testing.T) {
+	dir := dirtyRepoDir(t)
+	a := loadApp(t, dir)
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+	settle(t, a)
+	tt.Frame()
+
+	a.stageAll()
+	settle(t, a)
+	tt.Frame()
+	a.commitMsg = "这个视图里不该提交"
+	tt.Frame()
+	staged, msg := a.stagedCount(), a.commitMsg
+	head := headOf(t, dir)
+	top := gitOut(t, dir, "log", "--oneline", "-1")
+
+	for _, view := range []struct {
+		name string
+		mode int
+	}{
+		{"终端", viewModeTerm},
+		{"编辑器", viewModeEditor},
+	} {
+		a.setViewMode(view.mode)
+		tt.Frame()
+		for _, k := range []struct {
+			mods ui.Modifiers
+			key  ui.Key
+		}{
+			{ui.Cmd | ui.Shift, ui.KeyA},
+			{ui.Cmd, ui.KeyEnter},
+			{ui.Cmd, ui.KeyI},
+		} {
+			tt.Key(k.mods, k.key)
+			tt.Frame()
+		}
+		// 命令栏里那条「提交」同路，也按一遍。
+		a.openPalette()
+		a.palette.query = "提交"
+		tt.Frame()
+		tt.Key(0, ui.KeyEnter)
+		tt.Frame()
+		settle(t, a)
+		tt.Frame()
+
+		if got := headOf(t, dir); got != head {
+			t.Errorf("%s 视图里按这些键不该动 HEAD：%q → %q", view.name, head, got)
+		}
+		if got := gitOut(t, dir, "log", "--oneline", "-1"); got != top {
+			t.Errorf("%s 视图里不该多出提交：%q", view.name, got)
+		}
+		if a.stagedCount() != staged {
+			t.Errorf("%s 视图里 ⌘⇧A 不该动暂存区：%d → %d", view.name, staged, a.stagedCount())
+		}
+		if a.commitMsg != msg {
+			t.Errorf("%s 视图里 ⌘I 不该动提交信息：%q → %q", view.name, msg, a.commitMsg)
+		}
+	}
+}
+
+// 终端视图里一个会话都没有时，⌘K 退回命令栏 —— 没东西可清，别让这个键在
+// 空终端页上变成死的。
+func TestCmdKInEmptyTerminalFallsBackToPalette(t *testing.T) {
+	// 真起一个终端（对端是录作用的假 conn）：有会话时 ⌘K 要走清屏那条路，
+	// 替身返回 nil 的话那条路验不到。
+	conn := newRecordingConn()
+	old := terminalNew
+	terminalNew = func(o terminal.Options) (*terminal.Terminal, error) {
+		o.Conn = conn
+		return terminal.New(o)
+	}
+	t.Cleanup(func() { terminalNew = old })
+
+	a := newApp()
+	a.openInNewTab(t.TempDir())
+	tt := ui.NewTester(a.view, 1000, 700)
+	tt.Frame()
+	settle(t, a)
+	tt.Frame()
+
+	a.setViewMode(viewModeTerm)
+	tt.Frame()
+	if !tt.HasText("没有终端会话") {
+		t.Fatalf("该落在空状态页：%q", tt.Texts())
+	}
+
+	tt.Key(ui.Cmd, ui.KeyK)
+	tt.Frame()
+	if !a.palette.on {
+		t.Error("空终端视图里 ⌘K 该打开命令栏")
+	}
+
+	// 有会话时照旧是清屏，不弹命令栏。
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	a.newTerminalSession(a.currentTab())
+	tt.Frame()
+	if s := a.activeSession(); s == nil || s.term == nil {
+		t.Fatalf("该起了一个真终端：%+v", s)
+	}
+	tt.Key(ui.Cmd, ui.KeyK)
+	tt.Frame()
+	if a.palette.on {
+		t.Error("有会话时 ⌘K 该是清屏，不是命令栏")
 	}
 }

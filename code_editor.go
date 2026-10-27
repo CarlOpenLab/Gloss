@@ -134,6 +134,38 @@ func (a *app) closeEmbeddedEditors() {
 	a.reviewDrafts = nil
 }
 
+// unsavedEdits 报告眼前这些编辑器缓冲区里有没有没保存的改动。
+//
+// 三个缓冲区各管一处：改动区的 DiffView（review）、「编辑代码」对话框
+// （codeEdit）、编辑器视图（editorPane）。改过的才叫没保存 —— 只是打开看过
+// 的缓冲区 Modified() 是 false，不会平白多问一句。
+func (a *app) unsavedEdits() bool {
+	if a.codeEdit.on && a.codeEdit.buffer != nil && a.codeEdit.buffer.Modified() {
+		return true
+	}
+	if a.editorPane.buffer != nil && a.editorPane.buffer.Modified() {
+		return true
+	}
+	return a.review.editable && a.review.new != nil && a.review.new.Modified()
+}
+
+// tabHasUnsavedEdits 看第 idx 页有没有没保存的编辑改动。
+//
+// 活动页的活状态在 app 上（切走时才由 saveActiveTab 存进 tab.review），别的
+// 页只有 tab.review 那份快照 —— 所以活动页问 app，非活动页问快照。codeEdit
+// 和 editorPane 不进快照（切页时就被 closeEmbeddedEditors 收掉了），非活动
+// 页不存在这两样。
+func (a *app) tabHasUnsavedEdits(idx int) bool {
+	if idx < 0 || idx >= len(a.tabs) {
+		return false
+	}
+	if idx == a.activeTab {
+		return a.unsavedEdits()
+	}
+	r := a.tabs[idx].review
+	return r.editable && r.new != nil && r.new.Modified()
+}
+
 // codeEditorDialog 画整文件编辑器。和冲突编辑器同一副骨架（标题条 / 正文 /
 // 底栏），只是正文永远是 editor.View，而不是分栏 diff。
 func (a *app) codeEditorDialog(c *ui.Context, pal palette) {
@@ -145,6 +177,11 @@ func (a *app) codeEditorDialog(c *ui.Context, pal palette) {
 	panelW := clamp(w-32, 640, 1180)
 	panelH := clamp(h-32, 420, 780)
 	ui.DialogBase(c, &open, func(back, panel ui.Element) {
+		// 表单对话框：点背景不关（Esc 和底栏的「关闭」照旧）—— 缓冲区里
+		// 没保存的改动不该被背景上误触的一下丢掉。见 specModalSticky。
+		if back.Clicked() {
+			open = true
+		}
 		back.Background(ui.RGBA(0, 0, 0, 0.28))
 		panel.Width(panelW).Height(panelH).Padding(0).Radius(radiusXL).
 			Background(pal.surface4).Border(1, pal.hairline).

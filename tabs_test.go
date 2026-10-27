@@ -292,6 +292,215 @@ func TestTerminalSessions(t *testing.T) {
 	}
 }
 
+// ⌘W 关的是眼前那一页：终端视图里关当前激活的会话，别处关项目标签页。
+//
+// 会话全挂在同一个项目标签页下（tab.terms），在终端视图里关标签页会把这一页
+// 所有 shell 一起放掉 —— 用户按 ⌘W 要的是「关掉眼前这个」。
+func TestCloseActiveClosesCurrentTerminalOnly(t *testing.T) {
+	spawns := stubTerminal(t)
+	a := newApp()
+	a.openInNewTab("/tmp/proj1")
+	tab := a.currentTab()
+	tt := ui.NewTester(a.view, 1000, 700)
+	a.setViewMode(viewModeTerm)
+	tt.Frame()
+
+	a.newTerminalSession(tab)
+	tt.Frame()
+	a.newTerminalSession(tab)
+	tt.Frame()
+	if len(tab.terms) != 2 {
+		t.Fatalf("该有两个会话，实际 %d", len(tab.terms))
+	}
+
+	// 切到第一枚芯片：⌘W 要关的是激活的这个，不是新开的那一个。
+	if err := tt.Click("终端 1"); err != nil {
+		t.Fatalf("找不到第一枚芯片：%v（%q）", err, tt.Texts())
+	}
+	tt.Frame()
+	if tab.termActive != 0 {
+		t.Fatalf("该切到第一个会话，实际 %d", tab.termActive)
+	}
+
+	before := *spawns
+	tt.Key(ui.Cmd, ui.KeyW)
+	tt.Frame()
+
+	if len(tab.terms) != 1 {
+		t.Fatalf("⌘W 该只关当前会话，实际剩 %d", len(tab.terms))
+	}
+	if tab.terms[0].ord != 2 {
+		t.Errorf("剩下的会话不该重编号：%d", tab.terms[0].ord)
+	}
+	if len(a.tabs) != 1 || a.tabs[0] != tab {
+		t.Error("⌘W 在终端视图里不该关项目标签页")
+	}
+	if *spawns != before {
+		t.Errorf("关会话不该再起 shell，多起了 %d 次", *spawns-before)
+	}
+
+	// 关光之后没有终端可关了，⌘W 落回去关项目标签页。
+	tt.Key(ui.Cmd, ui.KeyW)
+	tt.Frame()
+	if len(tab.terms) != 0 {
+		t.Fatalf("该把会话关光，实际 %d", len(tab.terms))
+	}
+	if !tt.HasText("没有终端会话") {
+		t.Errorf("关光之后该回空状态页：%q", tt.Texts())
+	}
+
+	tt.Key(ui.Cmd, ui.KeyW)
+	tt.Frame()
+	if len(a.tabs) != 1 || a.tabs[0].path != "" {
+		t.Errorf("空终端视图里 ⌘W 该关掉项目标签页，实际 %d 页", len(a.tabs))
+	}
+}
+
+// Git 面板里 ⌘W 关项目标签页，这一条没变。
+func TestCloseActiveClosesProjectTabInGitView(t *testing.T) {
+	a := newApp()
+	a.openInNewTab("/tmp/proj1")
+	a.openInNewTab("/tmp/proj2")
+	tt := ui.NewTester(a.view, 1000, 700)
+	tt.Frame()
+
+	tt.Key(ui.Cmd, ui.KeyW)
+	tt.Frame()
+
+	if len(a.tabs) != 1 {
+		t.Fatalf("Git 面板里 ⌘W 该关掉当前项目标签页，实际 %d 页", len(a.tabs))
+	}
+	if a.activeTab != 0 {
+		t.Errorf("剩下的该是第一个标签页，实际激活 %d", a.activeTab)
+	}
+}
+
+// dirtyTabApp 是一个真打开的标签页：仓库里有一个改过没暂存的 README.md。
+//
+// loadApp 那一系 fixture（richApp / branchApp）不往 a.tabs 里放页，关标签页
+// 的用例得用这一个 —— 没有页，closeTab 直接就越界返回了。
+func dirtyTabApp(t *testing.T) *app {
+	t.Helper()
+	dir := newRepoDir(t)
+	writeFile(t, filepath.Join(dir, "README.md"), "第一行\n")
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "init")
+	writeFile(t, filepath.Join(dir, "README.md"), "第一行\n第二行\n")
+
+	a := newApp()
+	a.openInNewTab(dir)
+	return a
+}
+
+// 带着没保存的编辑器改动关标签页：先问一句，取消就原样留着，确认了才关。
+//
+// 顶栏的 ×、侧栏的「关闭项目」、⌘W 三条路都汇到 closeTab，而「关掉」和
+// 「误触」长得一模一样 —— 缓冲区跟着标签页一起没，问一句是唯一的闸。
+func TestCloseTabAsksBeforeDroppingUnsavedEdits(t *testing.T) {
+	a := dirtyTabApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+	settle(t, a)
+	tt.Frame()
+
+	a.selectFileKey(fileKey(listedFile(t, a, "README.md")))
+	waitReview(t, a, tt)
+	a.review.new.Set("改了一半\n")
+	tt.Frame()
+	if !a.unsavedEdits() {
+		t.Fatal("该看出有没保存的改动")
+	}
+
+	a.closeActive()
+	tt.Frame()
+
+	if len(a.tabs) != 1 || a.tabs[0].path == "" {
+		t.Fatal("有没保存的改动时该先问一句，不该直接关掉")
+	}
+	if !a.confirm.on {
+		t.Fatal("该弹出确认框")
+	}
+	if !tt.HasText("还没保存") {
+		t.Errorf("确认框该说清会丢什么：%q", tt.Texts())
+	}
+
+	// 取消：标签页和缓冲区都原样留着。
+	if err := tt.Click("取消"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.confirm.on {
+		t.Error("取消之后确认框该收起来")
+	}
+	if got := a.review.new.String(); got != "改了一半\n" {
+		t.Errorf("取消不该动缓冲区：%q", got)
+	}
+
+	// 仍然关闭：唯一的标签页关掉后落回兜底空页，缓冲区跟着收起来。
+	a.closeActive()
+	tt.Frame()
+	if err := tt.Click("仍然关闭"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	settle(t, a)
+	tt.Frame()
+
+	if len(a.tabs) != 1 || a.tabs[0].path != "" {
+		t.Errorf("确认后该关掉，实际 %d 页", len(a.tabs))
+	}
+	if a.review.key != "" {
+		t.Error("关掉之后改动区该收起来")
+	}
+}
+
+// 非活动页那份快照里的未保存改动同样算数：切页时改动区缓冲区存进了
+// tab.review，关那一页也会丢。
+func TestCloseInactiveTabAsksAboutItsUnsavedEdits(t *testing.T) {
+	a := dirtyTabApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+	settle(t, a)
+	tt.Frame()
+
+	a.selectFileKey(fileKey(listedFile(t, a, "README.md")))
+	waitReview(t, a, tt)
+	a.review.new.Set("改了一半\n")
+	tt.Frame()
+
+	// 开第二个标签页：第一页的改动随之存进快照（saveActiveTab）。
+	a.openInNewTab(t.TempDir())
+	tt.Frame()
+	settle(t, a)
+	tt.Frame()
+	if len(a.tabs) != 2 {
+		t.Fatalf("该有两个标签页，实际 %d", len(a.tabs))
+	}
+	if !a.tabHasUnsavedEdits(0) {
+		t.Fatal("第一页的快照里该留着没保存的改动")
+	}
+
+	a.closeTab(0)
+	tt.Frame()
+
+	if len(a.tabs) != 2 {
+		t.Fatal("第一页有没保存的改动，该先问一句")
+	}
+	if !a.confirm.on {
+		t.Fatal("该弹出确认框")
+	}
+
+	if err := tt.Click("仍然关闭"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	settle(t, a)
+	tt.Frame()
+	if len(a.tabs) != 1 {
+		t.Errorf("确认后该关掉第一页，实际 %d 页", len(a.tabs))
+	}
+}
+
 // fontFamilyWithFallback 只补一个尾巴，且不重复补。
 func TestFontFamilyWithFallback(t *testing.T) {
 	cases := []struct{ in, want string }{
