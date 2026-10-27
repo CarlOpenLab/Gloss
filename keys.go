@@ -35,7 +35,8 @@ func (a *app) handleKeys(c *ui.Context) {
 		a.chooseFolder()
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyW) {
-		a.closeTab(a.activeTab)
+		// 终端视图里关当前会话，别处关项目标签页（见 closeActive）。
+		a.closeActive()
 	}
 	// 终端会话的 ⌘⇧T。⌘T 已经是「新建项目标签页」、⌘W 是「关闭标签页」、
 	// Ctrl+~ / ⌘J 是视图切换 —— 这几个都动不得（它们在别的应用里也是那个
@@ -53,8 +54,11 @@ func (a *app) handleKeys(c *ui.Context) {
 	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyBracketRight) || c.Shortcut(ui.Cmd|ui.Alt, ui.KeyRight) {
 		a.nextTab()
 	}
+	// 提交栏那一套（暂存全部 / 提交 / AI 起名）只在 Git 面板里认 —— 判据和
+	// 菜单、命令栏共用一份（gitPanelLive）：终端视图里屏幕上没有提交栏，
+	// 按下去是看不见地改仓库。
 	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyA) {
-		if a.tab == 0 && a.repoReady() && a.op == gitrepo.OpNone {
+		if a.gitPanelLive() && a.tab == 0 && a.repoReady() && a.op == gitrepo.OpNone {
 			if a.unstagedCount() > 0 {
 				a.stageAll()
 			} else if a.stagedCount() > 0 {
@@ -88,10 +92,18 @@ func (a *app) handleKeys(c *ui.Context) {
 			a.focusCommitFilter = true
 		}
 	}
+	// ⌘K：Git 面板里是命令栏，终端视图里是清屏。
+	//
+	// 终端视图里一个会话都没有（从没开过、或最后一个被 × / ⌘W 关掉）时没有
+	// 东西可清 —— 那一下退回命令栏，不让 ⌘K 在空终端页上变成死键。
 	if c.Shortcut(ui.Cmd, ui.KeyK) {
-		if a.viewMode == viewModeTerm {
+		s := a.activeSession()
+		switch {
+		case a.viewMode != viewModeTerm:
+			a.openPalette()
+		case s != nil && s.term != nil:
 			a.clearCurrentTerminal()
-		} else {
+		default:
 			a.openPalette()
 		}
 	}
@@ -146,9 +158,11 @@ func (a *app) handleKeys(c *ui.Context) {
 		a.openSettings()
 	}
 
-	// ⌘I 触发 AI 提交信息生成。
+	// ⌘I 触发 AI 提交信息生成。和 ⌘⇧A、⌘⏎ 一样只在 Git 面板里认
+	// （gitPanelLive）：终端视图里发一次请求、把消息填进一个看不见的
+	// 提交框，不如不认。
 	if c.Shortcut(ui.Cmd, ui.KeyI) {
-		if a.stagedCount() > 0 && !a.aiCommitLoading {
+		if a.gitPanelLive() && a.stagedCount() > 0 && !a.aiCommitLoading {
 			a.startAICommit()
 		}
 	}
@@ -158,7 +172,10 @@ func (a *app) handleKeys(c *ui.Context) {
 	// 用 ⌘ 而不是裸回车：输入框里回车是换行，提交信息本来就常常是多行的。
 	// 框架的编辑器对 KeyEnter 只在「没有修饰键」时才认（ui/editor.go 的
 	// wants），⌘⏎ 因此会漏给窗口这一层 —— 正合惯例。
-	if c.Shortcut(ui.Cmd, ui.KeyEnter) {
+	//
+	// 同样只在 Git 面板里认：终端视图里屏幕上没有提交栏，这一下会静默提交
+	// （opBanner / Toast 也不在那一视图画），用户看到的是「什么都没发生」。
+	if c.Shortcut(ui.Cmd, ui.KeyEnter) && a.gitPanelLive() {
 		a.doCommit()
 	}
 
@@ -167,14 +184,21 @@ func (a *app) handleKeys(c *ui.Context) {
 	//
 	// 键位和 menu.go 里「远程」菜单那三条一致：真实 macOS 应用里菜单先把键
 	// 吃掉，这条路走不到；测试和没有菜单的环境走的才是这里。
-	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyF) {
-		a.doFetch()
-	}
-	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyP) {
-		a.doPull()
-	}
-	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyU) {
-		a.doPush()
+	//
+	// 和提交那一套同一个理由只认 Git 面板（gitPanelLive）：远程操作跑起来
+	// 动辄几秒，而它的横幅、toast、进度条全在 Git 面板里画 —— 终端视图里
+	// 按下去是干等一个没人汇报的结果。⌘⇧D 不设闸：它开的是模态框，任何
+	// 视图下都看得见。
+	if a.gitPanelLive() {
+		if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyF) {
+			a.doFetch()
+		}
+		if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyP) {
+			a.doPull()
+		}
+		if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyU) {
+			a.doPush()
+		}
 	}
 	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyD) {
 		a.openCompareDialog("")

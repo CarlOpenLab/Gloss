@@ -548,3 +548,41 @@ func hasAnnouncement(all []string, want string) bool {
 	}
 	return false
 }
+
+// 远程三条快捷键只在 Git 面板里认：终端 / 编辑器视图里按下去不该动远程。
+//
+// 那几个操作跑起来动辄几秒，而横幅、toast、进度条全在 Git 面板里画
+// （gitPanelLive）—— 在终端视图里按下去是干等一个没人汇报的结果。推送有
+// 远程上的痕迹可查，正好当判据。
+func TestRemoteShortcutsIgnoredOutsideGitView(t *testing.T) {
+	a, bare := remoteApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+	a.setViewMode(viewModeTerm)
+	tt.Frame()
+
+	tt.Key(ui.Cmd|ui.Shift, ui.KeyU)
+	tt.Frame()
+	tt.Key(ui.Cmd|ui.Shift, ui.KeyF)
+	tt.Frame()
+	settle(t, a)
+	tt.Frame()
+
+	if got := gitOut(t, bare, "for-each-ref", "--format=%(refname)"); got != "" {
+		t.Errorf("终端视图里这些键不该推/抓任何东西，远程上出现了 %q", got)
+	}
+	if a.op != gitrepo.OpNone {
+		t.Errorf("不该有操作在飞，实际 %v", a.op)
+	}
+
+	// 正向对照：Git 面板里 ⌘⇧U 照旧推得上去。
+	b, bare2 := remoteApp(t)
+	tt2 := ui.NewTester(b.view, 1280, 860)
+	tt2.Frame()
+	tt2.Key(ui.Cmd|ui.Shift, ui.KeyU)
+	settle(t, b)
+	tt2.Frame()
+	if got := remoteHead(t, bare2, "main"); got == "" {
+		t.Error("Git 面板里 ⌘⇧U 该推送")
+	}
+}

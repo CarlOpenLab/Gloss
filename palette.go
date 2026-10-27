@@ -38,27 +38,56 @@ func (a *app) commands() []command {
 	cmds := []command{
 		{T("切换终端 / Git 面板", "Toggle Terminal / Git Panel"), KS("⌘J / Ctrl+`"), func(a *app) { a.toggleViewMode() }},
 		{T("新建项目标签页…", "New Project Tab…"), K("⌘T"), func(a *app) { a.chooseFolder() }},
-		{T("关闭标签页", "Close Tab"), K("⌘W"), func(a *app) { a.closeTab(a.activeTab) }},
+		// 和 ⌘W、菜单里那条同一条路（见 closeActive）：终端视图里关当前会话。
+		{T("关闭标签页", "Close Tab"), K("⌘W"), func(a *app) { a.closeActive() }},
 		{T("上一个项目标签页", "Previous Project Tab"), K("⌘⇧["), func(a *app) { a.prevTab() }},
 		{T("下一个项目标签页", "Next Project Tab"), K("⌘⇧]"), func(a *app) { a.nextTab() }},
 		{T("打开仓库…", "Open Repository…"), K("⌘O"), func(a *app) { a.chooseFolder() }},
 		{T("刷新", "Refresh"), K("⌘R"), func(a *app) { a.reload() }},
-		{T("提交", "Commit"), K("⌘⏎"), func(a *app) { a.doCommit() }},
+		// 提交 / 暂存这几条和快捷键、菜单共用 gitPanelLive：终端与编辑器
+		// 视图里屏幕上没有提交栏，命令栏点下去也是看不见地改仓库。
+		{T("提交", "Commit"), K("⌘⏎"), func(a *app) {
+			if a.gitPanelLive() {
+				a.doCommit()
+			}
+		}},
 		{T("保存改动区的编辑", "Save Diff Edits"), K("⌘S"), func(a *app) {
 			if a.review.editable && a.review.new != nil && a.review.new.Modified() {
 				a.saveReview()
 			}
 		}},
 		{T("丢弃改动区的编辑", "Discard Diff Edits"), "", func(a *app) { a.revertReview() }},
-		{T("暂存全部改动", "Stage All Changes"), K("⌘⇧A"), func(a *app) { a.stageAll() }},
-		{T("取消暂存全部改动", "Unstage All Changes"), "", func(a *app) { a.unstageAll() }},
+		{T("暂存全部改动", "Stage All Changes"), K("⌘⇧A"), func(a *app) {
+			if a.gitPanelLive() {
+				a.stageAll()
+			}
+		}},
+		{T("取消暂存全部改动", "Unstage All Changes"), "", func(a *app) {
+			if a.gitPanelLive() {
+				a.unstageAll()
+			}
+		}},
 		{T("预检暂存区代码风险…", "Scan Staged Changes for Risks…"), "", func(a *app) { a.startRiskScan() }},
 		{T("储藏工作区改动…", "Stash Changes…"), "", func(a *app) { a.openStashDialog() }},
 		{T("新建标签…", "New Tag…"), "", func(a *app) { a.newTagAtHead() }},
 		{T("新建分支…", "New Branch…"), K("⌘⇧N"), func(a *app) { a.newBranchAtHead() }},
-		{T("抓取", "Fetch"), K("⌘⇧F"), func(a *app) { a.doFetch() }},
-		{T("拉取", "Pull"), K("⌘⇧P"), func(a *app) { a.doPull() }},
-		{T("推送", "Push"), K("⌘⇧U"), func(a *app) { a.doPush() }},
+		// 远程那几条和快捷键、菜单共用 gitPanelLive：结果只在 Git 面板里
+		// 汇报，终端 / 编辑器视图里跑起来没人知道发生了什么。
+		{T("抓取", "Fetch"), K("⌘⇧F"), func(a *app) {
+			if a.gitPanelLive() {
+				a.doFetch()
+			}
+		}},
+		{T("拉取", "Pull"), K("⌘⇧P"), func(a *app) {
+			if a.gitPanelLive() {
+				a.doPull()
+			}
+		}},
+		{T("推送", "Push"), K("⌘⇧U"), func(a *app) {
+			if a.gitPanelLive() {
+				a.doPush()
+			}
+		}},
 		{T("查看改动", "Show Changes"), K("⌘1"), func(a *app) { a.setSection(sectionChanges) }},
 		{T("查看历史", "Show History"), K("⌘2"), func(a *app) { a.setSection(sectionHistory) }},
 		{T("打开终端", "Show Terminal"), K("⌘3"), func(a *app) { a.setSection(sectionTerminal) }},
@@ -85,7 +114,11 @@ func (a *app) commands() []command {
 		cmds = append(cmds, command{T("显示侧栏", "Show Sidebar"), K("⌘⇧B"), func(a *app) { a.setSidebar(true) }})
 	}
 	if a.canReachRemote() && !a.detached && a.hasUpstream(a.branch) {
-		cmds = append(cmds, command{T("强制推送（--force-with-lease）…", "Force Push (--force-with-lease)…"), "", func(a *app) { a.promptForcePush() }})
+		cmds = append(cmds, command{T("强制推送（--force-with-lease）…", "Force Push (--force-with-lease)…"), "", func(a *app) {
+			if a.gitPanelLive() {
+				a.promptForcePush()
+			}
+		}})
 	}
 	if a.repoReady() {
 		cmds = append(cmds, command{T("对比分支代码差异…", "Compare Branches…"), K("⌘⇧D"), func(a *app) { a.openCompareDialog("") }})

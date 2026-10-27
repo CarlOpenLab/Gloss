@@ -579,9 +579,33 @@ func secondaryAction(c *ui.Context, pal palette, label, tip string, disabled boo
 //
 // 内边距和间距跟 ui.Modal 保持一致（20 / 12），各对话框的身子是按这个尺寸摆的。
 func specModal(c *ui.Context, pal palette, open *bool, fn func()) {
+	specModalOpts(c, pal, open, false, fn)
+}
+
+// specModalSticky 是 specModal 的变体：点压暗的背景不关对话框（Esc 和
+// 「取消」照旧关）。
+//
+// 给表单类对话框用 —— 新建分支打了一半名字，手一抖点在下边的背景上，内容和
+// 「取消」问都不问就一起没了。目前走它的：新建分支、新建标签、储藏、重命名
+// 分支、建 PR、PR 评审、对比分支、模型设置、代码编辑器。剩下三种照旧点背景
+// 即关：确认框（点背景本来就是「取消」）、文件历史与风险预检（纯查看，没有
+// 会丢的东西）、重置（挑的是模式，不是打字）。
+//
+// back.Clicked() 在 DialogBase 判过之后还是 true（点击数记在元素自己身上，
+// 一帧之后才清零），所以在这儿能把 *open 拨回去；点在面板里的点击记在面板
+// 上，到不了背景，拨不错。自己搭 DialogBase 的对话框（设置、代码编辑器、
+// 对比分支）在里面照抄这两行。
+func specModalSticky(c *ui.Context, pal palette, open *bool, fn func()) {
+	specModalOpts(c, pal, open, true, fn)
+}
+
+func specModalOpts(c *ui.Context, pal palette, open *bool, keepOnBackdrop bool, fn func()) {
 	t := c.Theme()
 	w, h := c.Size()
 	ui.DialogBase(c, open, func(back, panel ui.Element) {
+		if keepOnBackdrop && back.Clicked() {
+			*open = true
+		}
 		back.Background(ui.RGBA(0, 0, 0, 0.25))
 		panel.Padding(t.Space(5)).Gap(t.Space(3)).Radius(radiusXL).
 			Background(pal.surface4).Border(1, pal.hairline).

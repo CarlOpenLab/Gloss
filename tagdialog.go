@@ -61,7 +61,8 @@ func (a *app) tagDialog(c *ui.Context, pal palette) {
 		return
 	}
 	open := true
-	specModal(c, pal, &open, func() { a.tagBody(c, pal) })
+	// 表单对话框：点背景不关 —— 打到一半的名字不该被误触丢掉（见 specModalSticky）。
+	specModalSticky(c, pal, &open, func() { a.tagBody(c, pal) })
 	if !open {
 		a.tag = tagState{}
 	}

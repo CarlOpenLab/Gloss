@@ -447,8 +447,33 @@ func (a *app) removeRecentRepo(path string) {
 }
 
 // closeTab 关闭指定标签页。
+//
+// 这一页里还有没保存的编辑改动时先问一句：那些缓冲区跟着标签页一起没，
+// 而「关掉」和「误触」长得一模一样（顶栏的 ×、侧栏的「关闭项目」、⌘W 三条
+// 路都到这儿）。确认之后由 onYes 里显式丢掉缓冲再关，所以不会绕回本条
+// 问第二次。
 func (a *app) closeTab(idx int) {
 	if idx < 0 || idx >= len(a.tabs) {
+		return
+	}
+	if a.tabHasUnsavedEdits(idx) {
+		a.askConfirm(confirmState{
+			title: T("关闭这个项目标签页？", "Close this project tab?"),
+			body: T("这一页里有还没保存的编辑器改动，关掉就丢了。保存（⌘S）或者先取消。",
+				"This tab has unsaved editor changes; closing it discards them. Save (⌘S) or cancel."),
+			yes: T("仍然关闭", "Close anyway"),
+			onYes: func() {
+				// 用户选了丢：把这一页的缓冲区清掉再关，否则 closeTab 又会
+				// 走到这条确认上，问第二次。活动页的活状态在 app 上，非活动页
+				// 只有 tab.review 那份快照（codeEdit / editorPane 不进快照，
+				// 切页时就被收掉了，非活动页没有这两样）。
+				a.closeEmbeddedEditors()
+				if idx < len(a.tabs) && idx != a.activeTab {
+					a.tabs[idx].review = reviewState{}
+				}
+				a.closeTab(idx)
+			},
+		})
 		return
 	}
 	target := a.tabs[idx]
@@ -475,6 +500,30 @@ func (a *app) closeTab(idx int) {
 	// 关掉/切换后活动仓库换了，自动刷新跟着换盯的对象。
 	a.syncAutoWatch()
 	a.persistOpenRepos()
+}
+
+// closeActive 是「关闭」那条命令（⌘W 和菜单里的「关闭标签页」）：关的是
+// 眼前那一页，不是这一页下挂的所有东西。
+//
+// 终端视图里眼前那一页是一枚会话芯片 —— 终端会话全挂在同一个 repoTab 下
+// （tab.terms），在终端视图里关标签页会把这一页所有 shell 一起放掉。所以
+// 终端视图认会话：有关着的会话就关当前激活的那个（和芯片上的 × 一个脾气，
+// 关光落空状态页）；一个会话都没有时才落回去关项目标签页 —— 那已经没什么
+// 终端可关了。
+func (a *app) closeActive() {
+	if a.viewMode == viewModeTerm {
+		tab := a.currentTab()
+		if tab != nil && len(tab.terms) > 0 {
+			idx := tab.termActive
+			if idx < 0 || idx >= len(tab.terms) {
+				idx = len(tab.terms) - 1
+			}
+			dropTerminalSession(tab, idx)
+			a.requestRedraw()
+			return
+		}
+	}
+	a.closeTab(a.activeTab)
 }
 
 // nextTab 循环切换到下一个项目标签页。

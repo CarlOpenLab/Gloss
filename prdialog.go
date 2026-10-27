@@ -263,7 +263,8 @@ func (a *app) prDialog(c *ui.Context, pal palette) {
 		return
 	}
 	open := true
-	specModal(c, pal, &open, func() { a.prDialogBody(c, pal) })
+	// 表单对话框：点背景不关 —— PR 标题和描述打到一半不该被误触丢掉（见 specModalSticky）。
+	specModalSticky(c, pal, &open, func() { a.prDialogBody(c, pal) })
 	if !open {
 		a.prDlg.on = false
 	}
@@ -471,7 +472,8 @@ func (a *app) prReviewModal(c *ui.Context, pal palette) {
 		return
 	}
 	open := true
-	specModal(c, pal, &open, func() { a.prReviewModalBody(c, pal) })
+	// 表单对话框：点背景不关 —— 评审意见写到一半不该被误触丢掉（见 specModalSticky）。
+	specModalSticky(c, pal, &open, func() { a.prReviewModalBody(c, pal) })
 	if !open {
 		a.prReview.reviewModal = false
 	}

@@ -374,6 +374,11 @@ func (a *app) compareDialog(c *ui.Context, pal palette) {
 
 	open := true
 	ui.DialogBase(c, &open, func(back, panel ui.Element) {
+		// 表单对话框：点背景不关（Esc 和「取消」照旧）—— 两个分支挑到一半，
+		// 被背景上误触的一下打回默认值。见 specModalSticky。
+		if back.Clicked() {
+			open = true
+		}
 		back.Background(ui.RGBA(0, 0, 0, 0.25))
 		panel.Width(460).Padding(20).Radius(radiusXL).
 			Background(pal.surface4).Border(1, pal.hairline).
