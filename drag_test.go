@@ -128,11 +128,14 @@ func TestFilePaneDragResize(t *testing.T) {
 	}
 }
 
-// 两条栏分隔线悬停 / 拖动时只提亮中性发丝线，不铺强调蓝。
+// 两条栏分隔线悬停 / 拖动时只提亮中性发丝线，不铺强调蓝；侧栏那条干脆
+// 不画线（见 sidebarResizer）。
 //
 // 蓝线是「可点击的主 CTA」那一档的强调（DESIGN §5）；调栏宽时它跟着指针
 // 满屏走，一次普通的拖动就变成在卡片边上划一道彩色高亮。这条测试盯像素：
-// 分隔线附近任何一个像素都不该偏蓝，同时线本身还得看得见（不能干脆不画）。
+// 分隔线附近任何一个像素都不该偏蓝；文件栏那条线本身还得看得见（不能干脆
+// 不画）—— 侧栏那条不画，卡片左沿已有自己的 1px 硬边，再描一条就是按下
+// / 松手时闪一下的白杠。
 func TestSplitterLineIsNeutral(t *testing.T) {
 	a := richApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
@@ -141,7 +144,7 @@ func TestSplitterLineIsNeutral(t *testing.T) {
 	settle(t, a)
 	tt.Frame()
 
-	check := func(name string, x float32) {
+	check := func(name string, x float32, mustShow bool) {
 		t.Helper()
 		tt.Move(x, 420)
 		tt.Frame()
@@ -155,17 +158,21 @@ func TestSplitterLineIsNeutral(t *testing.T) {
 			}
 			darkest = min(darkest, r8)
 		}
-		if darkest >= 250 {
+		if mustShow && darkest >= 250 {
 			t.Errorf("%s分隔线悬停时该可见（扫到的像素全是背景）", name)
 		}
 	}
 
-	check("侧栏", a.sidebarWidth(nil)+shellCardGap)
-	check("文件栏", a.sidebarWidth(nil)+shellCardGap+a.filePaneWidth(nil))
+	check("侧栏", a.sidebarWidth(nil)+shellCardGap, false)
+	check("文件栏", a.sidebarWidth(nil)+shellCardGap+a.filePaneWidth(nil), true)
 }
 
 // 拖动时整条分隔线收掉：栏宽自己跟着指针在变，那条位移就是反馈，
 // 再画一条跟着指针满屏跑的线只是噪音。
+//
+// 侧栏那条更进一步 —— 干脆不画：悬停、按下、拖动、松手（指针还压在抓手
+// 上）四种状态的边界像素必须和静止时逐个一样。深色下另有
+// TestSidebarEdgeNeverLightsUp 盯同一件事（用户报的那条白杠出在深色主题）。
 func TestSplitterLineHiddenWhileDragging(t *testing.T) {
 	a := richApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
@@ -187,9 +194,9 @@ func TestSplitterLineHiddenWhileDragging(t *testing.T) {
 		}
 		return false
 	}
-	// darkest 是这一带最暗的中性像素。侧栏那条边界上本来就有卡片自己的
-	// 1px 硬边（见 raisedSurface），分隔线是压在它上面再深一档的发丝线 ——
-	// 都在同一个像素上，只能比亮度，不能问「有没有线」。
+	// darkest 是这一带最暗的中性像素。文件栏那条是两个同色栏之间的发丝线，
+	// 只能问「有没有线」；侧栏那条边界上本来就有卡片自己的 1px 硬边（见
+	// raisedSurface），而拖拽带不再往上描线，所以侧栏问的是「亮度没变」。
 	darkest := func(x float32, y int) int {
 		img := tt.Image()
 		out := 255
@@ -203,22 +210,27 @@ func TestSplitterLineHiddenWhileDragging(t *testing.T) {
 		return out
 	}
 
-	// 侧栏：悬停有细线（比卡片边深一档），按住拖动时收回到卡片边的亮度。
+	// 侧栏：一个像素都不许多出来。
 	sep := a.sidebarWidth(nil) + shellCardGap
 	rest := darkest(sep, 420)
+	same := func(stage string, at float32) {
+		t.Helper()
+		if got := darkest(at, 420); got != rest {
+			t.Errorf("%s时侧栏边界多出了线：最暗 %d，静止时 %d", stage, got, rest)
+		}
+	}
 	tt.Move(sep, 420)
 	tt.Frame()
-	if hover := darkest(sep, 420); hover >= rest {
-		t.Fatalf("侧栏悬停时该有分隔线：最暗 %d 不比静止时的卡片边 %d 深", hover, rest)
-	}
+	same("悬停", sep)
 	tt.Press(sep, 420)
+	tt.Frame()
+	same("按下", sep)
 	tt.Move(sep+50, 420)
 	tt.Frame()
-	if drag := darkest(a.sidebarWidth(nil)+shellCardGap, 420); drag < rest {
-		t.Errorf("拖动侧栏时线该完全消失：最暗 %d 比静止时的卡片边 %d 还深", drag, rest)
-	}
+	same("拖动", a.sidebarWidth(nil)+shellCardGap)
 	tt.Release(sep+50, 420)
 	tt.Frame()
+	same("松手", a.sidebarWidth(nil)+shellCardGap)
 
 	// 文件栏：同一套。
 	paneSep := a.sidebarWidth(nil) + shellCardGap + a.filePaneWidth(nil)
@@ -235,6 +247,66 @@ func TestSplitterLineHiddenWhileDragging(t *testing.T) {
 	}
 	tt.Release(paneSep+40, 500)
 	tt.Frame()
+}
+
+// 深色主题下侧栏边界那条「白杠」—— 用户报的就是它。
+//
+// 深色工作卡的左沿本来只有自己那条 1px 硬边（litSurfaceEdge，实测
+// rgb(52,52,56)）。抓着侧栏拖拽带的时候，悬停 / 按下 / 松手会在边界上再描
+// 一档 hairlineStrong（≈rgb(74,74,78)）：一道白线压在卡片边线上，按下去的
+// 那一帧、松手后指针还压在带子上的那一段，一次普通拖动两头各闪一下。
+// 现在拖拽带根本不画线 —— 边界附近最亮的像素在静止 / 悬停 / 按下 / 拖动 /
+// 松手五种状态下必须一模一样。
+func TestSidebarEdgeNeverLightsUp(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+	tt.SetDark(true)
+	tt.Frame()
+	tt.SetTitleBar(realTitleBar)
+	tt.Frame()
+	settle(t, a)
+	tt.Frame()
+
+	// 边界附近最亮的像素：卡片左沿那一列（连圆角上的抗锯齿），±4px 覆盖
+	// 得了 8px 的留白和卡片内侧前几列 —— 这一带没有文字也没有控件，亮的
+	// 只能是边线本身或者多描的那条线。
+	edgeMax := func() int {
+		img := tt.Image()
+		edge := int(a.sidebarWidth(nil) + shellCardGap)
+		out := 0
+		for dx := -4; dx <= 4; dx++ {
+			r, _, _, _ := img.At(edge+dx, 420).RGBA()
+			if v := int(r >> 8); v > out {
+				out = v
+			}
+		}
+		return out
+	}
+	rest := edgeMax()
+	if rest >= 200 {
+		t.Fatalf("深色下侧栏边界不该有亮像素：最亮 %d", rest)
+	}
+	same := func(stage string) {
+		t.Helper()
+		if got := edgeMax(); got != rest {
+			t.Errorf("%s时侧栏边界多出了一条线：最亮 %d，静止时 %d", stage, got, rest)
+		}
+	}
+
+	sep := a.sidebarWidth(nil) + shellCardGap
+	tt.Move(sep, 420)
+	tt.Frame()
+	same("悬停")
+	tt.Press(sep, 420)
+	tt.Frame()
+	same("按下")
+	tt.Move(sep+50, 420)
+	tt.Frame()
+	same("拖动")
+	tt.Release(sep+50, 420)
+	tt.Frame()
+	same("松手")
 }
 
 // 项目与分支之间那条分割线可以拖：往下拖，项目区变高，分支区让出位置；

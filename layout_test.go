@@ -250,6 +250,13 @@ func TestUtilityClusterFollowsSidebar(t *testing.T) {
 		t.Errorf("三颗该按 [命令面板][设置][开关] 排，实际 x=%.0f / %.0f / %.0f",
 			search.X, settings.X, hide.X)
 	}
+	if want := float32(sidebarWidth) - 3*(shellIconButtonW+shellIconButtonGap) + shellIconButtonGap - 9; search.X != want {
+		t.Errorf("展开态图标组左边 x=%.0f，该贴齐侧栏右侧并留 9px 内距（want %.0f）", search.X, want)
+	}
+	if wantY := (max(float32(shellTopBar), realTitleBar.Height) - shellIconButtonH) / 2; search.Y != wantY || settings.Y != wantY || hide.Y != wantY {
+		t.Errorf("展开态三颗图标应固定在标题栏垂直中线 y=%.0f，实际 %.0f / %.0f / %.0f",
+			wantY, search.Y, settings.Y, hide.Y)
+	}
 	if hide.X+hide.W > sidebarWidth {
 		t.Errorf("开关右边 x=%.0f 探出侧栏（宽 %d）了", hide.X+hide.W, sidebarWidth)
 	}
@@ -289,6 +296,13 @@ func TestUtilityClusterFollowsSidebar(t *testing.T) {
 	if !(search2.X < settings2.X && settings2.X < show.X) {
 		t.Errorf("收起后三颗该还是这个顺序，实际 x=%.0f / %.0f / %.0f",
 			search2.X, settings2.X, show.X)
+	}
+	if want := sidebarControlsLeft(realTitleBar); search2.X != want {
+		t.Errorf("收起态图标组左边 x=%.0f，该固定在标题栏位置 %.0f", search2.X, want)
+	}
+	if search2.Y != search.Y || settings2.Y != settings.Y || show.Y != hide.Y {
+		t.Errorf("收起侧栏时三颗图标的垂直位置不该跳：展开 %.0f / %.0f / %.0f，收起 %.0f / %.0f / %.0f",
+			search.Y, settings.Y, hide.Y, search2.Y, settings2.Y, show.Y)
 	}
 
 	// 收起态两颗都点得开，开关点得回来。

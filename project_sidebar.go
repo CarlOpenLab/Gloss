@@ -107,33 +107,14 @@ func (a *app) sidebarShell(c *ui.Context, pal palette, progress float32) {
 // secondary navigation below the project list.
 func (a *app) projectSidebar(c *ui.Context, pal palette) {
 	bar := c.TitleBar()
-
-	lead := float32(12)
-	if bar.Left > 0 {
-		lead = bar.Left + shellCardGap
-	}
-	// 顶栏那排图标再往右让一截：贴着红绿灯排一行图标太挤，右边还压着
-	// 「项目」那一栏的标题。这一截是照着截图里想要的位置量的，嫌多嫌少
-	// 改这一个数就行。
-	lead += sidebarTopBarNudge
+	topH := max(float32(shellTopBar), bar.Height)
+	sideW := a.sidebarWidth(c)
 
 	ui.Column(c).FillHeight().Children(func() {
-		// 侧栏顶栏：命令面板 / 设置 / 侧栏开关三颗，顺序固定，排在红绿灯
-		// 右边。前两颗是「任何时候都用得上」的入口，开关和它们并排 —— 侧栏
-		// 收起时整块滑走，这三颗一并搬到工具栏左端（见 toolbar），两颗始终
-		// 挨着开关。
-		ui.Row(c).Height(max(float32(shellTopBar), bar.Height)).Shrink(0).FillWidth().
-			AlignItems(ui.Center).Padding(0, 12, 0, lead).Gap(2).
-			DragWindow().Children(func() {
-			shellIconButton(c, pal, T("命令面板", "Command Palette"),
-				Tf("搜索命令与项目 %s", "Search commands and projects %s", K("⌘K")),
-				iconSearch, false, a.openPalette)
-			shellIconButton(c, pal, T("模型设置…", "Model Settings…"),
-				Tf("偏好与设置 %s", "Preferences %s", K("⌘,")),
-				iconSettings, false, a.openSettings)
-			shellIconButton(c, pal, a.sidebarToggleLabel(), a.sidebarToggleTip(),
-				iconSidebar, false, func() { a.setSidebar(false) })
-		})
+		// The title row stays a drag surface; a fixed overlay keeps its SVG
+		// buttons from participating in flex sizing as the sidebar is resized.
+		ui.Box(c).Height(topH).Shrink(0).FillWidth().DragWindow()
+		a.sidebarToolbar(c, pal, false, sideW, bar)
 
 		a.projectGroups(c, pal, a.projectsPaneHeight(c))
 
@@ -221,17 +202,46 @@ func (a *app) projectSidebar(c *ui.Context, pal palette) {
 	})
 }
 
+// sidebarToolbar is the three fixed title controls shared by the expanded
+// sidebar and the folded card. Expanded controls hug the sidebar's right edge;
+// folded controls stay in the same title-bar slot after the traffic lights.
+func (a *app) sidebarToolbar(c *ui.Context, pal palette, hidden bool, width float32, bar ui.TitleBar) {
+	row := ui.Row(c).Key("sidebar-toolbar").Absolute().
+		Top((max(float32(shellTopBar), bar.Height) - shellIconButtonH) / 2).
+		Height(shellIconButtonH).Gap(shellIconButtonGap).AlignItems(ui.Center).
+		Shrink(0)
+	if hidden {
+		row.Left(sidebarControlsLeft(bar)).Width(sidebarControlsW).Justify(ui.Start)
+	} else {
+		row.Left(0).Width(width).Padding(0, 9).Justify(ui.End)
+	}
+	row.Children(func() {
+		shellIconButton(c, pal, T("命令面板", "Command Palette"),
+			Tf("搜索命令与项目 %s", "Search commands and projects %s", K("⌘K")),
+			iconSearch, false, a.openPalette)
+		shellIconButton(c, pal, T("模型设置…", "Model Settings…"),
+			Tf("偏好与设置 %s", "Preferences %s", K("⌘,")),
+			iconSettings, false, a.openSettings)
+		toggle := func() { a.setSidebar(hidden) }
+		shellIconButton(c, pal, a.sidebarToggleLabel(), a.sidebarToggleTip(),
+			iconSidebar, false, toggle)
+	})
+}
+
 // sidebarResizer 是侧栏与主区之间那条 9px 宽的拖拽带。
 //
 // 它压在白色卡片的左沿上（往侧栏里 4px、往主区里 5px），而不是浮在侧栏
 // 与卡片之间那段 8px 留白的中间：眼睛看见的边界是卡片的边线，指针就该在
-// 那条线上变成左右箭头，拖起来也像是直接拽着卡片走。悬停 / 按下时那条
-// 1px 的线同样画在卡片边上（只提亮一档中性发丝线）；真正拖动时整条收掉
-// —— 宽度自己跟着指针在变，不需要再描一条跟着跑的边。
+// 那条线上变成左右箭头，拖起来也像是直接拽着卡片走。
+//
+// 这条带子自己不画线。卡片左沿本来就有自己那条 1px 硬边（raisedSurface
+// 的 litSurfaceEdge），悬停 / 按下 / 松手时再描一档亮的，就是压在边界上的
+// 一道白杠：按下去的那一帧、松手后指针还压在带子上的那一段，一次普通的
+// 拖动两头各闪一下。能不能拖由光标说（CursorResizeEW），不由一条线说。
 //
 // 它挂在根行上、排在主区之后：主区那一层盖住侧栏的右边缘，抓手留在侧栏里
 // 的话，伸出去的那一半收不到指针。
-func (a *app) sidebarResizer(c *ui.Context, pal palette) {
+func (a *app) sidebarResizer(c *ui.Context) {
 	// 只在侧栏完全展开时给抓手：收起 / 展开的动画途中按住的不是一条稳定
 	// 的边线，拖起来会跳。
 	if a.sidebarShown < 0.98 {
@@ -258,23 +268,10 @@ func (a *app) sidebarResizer(c *ui.Context, pal palette) {
 		a.sidebarDragging = false
 		a.saveViewSettings()
 	}
-
-	handle.Draw(func(p *ui.Painter, r ui.Rect) {
-		// 拖动时整条线收掉：侧栏宽度自己跟着指针在变，这条线再跟一遍
-		// 只是把「卡片边线」描成一条跟着跑的游标。
-		if a.sidebarDragging {
-			return
-		}
-		if !handle.Hovered() && !handle.Pressed() {
-			return
-		}
-		// 和文件栏那条分隔线同一套：悬停 / 按下提亮一档中性发丝线，
-		// 不铺强调蓝。
-		p.Fill(ui.Rect{X: r.X + r.W/2 - 0.5, Y: r.Y, W: 1, H: r.H}, pal.hairlineStrong, 0)
-	})
 }
 
-// sidebarHandleW 是侧栏拖拽带的宽度：一条 1px 的边线，左右各留 4px 的容错。
+// sidebarHandleW 是侧栏拖拽带的命中宽度：卡片左沿压在正中间，左右各留
+// 4px 的容错 —— 一条边线是世界上最难点中的东西。
 const sidebarHandleW = float32(9)
 
 // projectGroups 列出所有打开的项目。项目之间没有展开关系：一条项目就是

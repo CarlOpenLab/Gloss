@@ -870,7 +870,12 @@ func (a *app) view(c *ui.Context) {
 		})
 		// 侧栏的拖拽带排在主区之后：它压在卡片左沿上，而主区那一层会
 		// 盖住侧栏伸出来的那一半（见 sidebarResizer）。
-		a.sidebarResizer(c, pal)
+		a.sidebarResizer(c)
+		// The utility cluster stays in a fixed title-bar slot when the sidebar is
+		// folded, rather than becoming part of the card toolbar's flex layout.
+		if a.sidebarShown < 0.5 {
+			a.sidebarToolbar(c, pal, true, sidebarControlsW, c.TitleBar())
+		}
 	})
 	a.paletteDialog(c, pal)
 	a.settingsDialog(c, pal)
@@ -995,18 +1000,10 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 	}
 
 	ui.Toolbar(c, func() {
-		// 侧栏收起时，命令面板 / 设置 / 侧栏开关这三颗搬到工具栏左端：侧栏
-		// 整体滑走了，不放这儿就一个都点不到（展开时它们在侧栏顶栏，见
-		// projectSidebar）。两颗始终紧挨着开关，收不收起都在同一处。
+		// Reserve the fixed title controls' footprint while the sidebar is folded.
+		// The controls themselves are drawn above this toolbar in view().
 		if a.sidebarShown < 0.5 {
-			shellIconButton(c, pal, T("命令面板", "Command Palette"),
-				Tf("搜索命令与项目 %s", "Search commands and projects %s", K("⌘K")),
-				iconSearch, false, a.openPalette)
-			shellIconButton(c, pal, T("模型设置…", "Model Settings…"),
-				Tf("偏好与设置 %s", "Preferences %s", K("⌘,")),
-				iconSettings, false, a.openSettings)
-			shellIconButton(c, pal, a.sidebarToggleLabel(), a.sidebarToggleTip(),
-				iconSidebar, false, func() { a.setSidebar(true) })
+			ui.Box(c).Width(sidebarControlsW + 10).Shrink(0)
 		}
 
 		// 「现在看哪一块」的四个选择都在这一处：改动 / 历史 / 终端 / 编辑器。
