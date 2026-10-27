@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -49,10 +50,13 @@ func Open(ctx context.Context, dir string) (*Repo, error) {
 		return nil, fmt.Errorf("%w: %w", ErrNotRepo, err)
 	}
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	root := strings.TrimSpace(lines[0])
+	// git 在 Windows 上也输出正斜杠，filepath.Clean 把它转成本机形态：
+	// 之后和 filepath.Dir/Join 的结果做字符串比对（worktree 的 GitDir 归属、
+	// 子目录拼路径）才对得上。macOS/Linux 上 Clean 是 no-op。
+	root := filepath.Clean(strings.TrimSpace(lines[0]))
 	gitDir := filepath.Join(root, ".git")
 	if len(lines) > 1 {
-		gitDir = strings.TrimSpace(lines[1])
+		gitDir = filepath.Clean(strings.TrimSpace(lines[1]))
 	}
 	return &Repo{Root: root, Name: filepath.Base(root), GitDir: gitDir}, nil
 }
@@ -178,6 +182,20 @@ func diffArgs(extra ...string) []string {
 //     的 PATH 里。从 Finder 启动的 GUI 进程只有 launchd 那几个系统目录，
 //     不加这一层，husky/lefthook 这类钩子会在「提交」（还有「继续合并」
 //     这种会真提交的操作）时报 `env: node: No such file or directory`。
+// SetGitConfigIsolation 把开发机的全局/系统 git 配置和 git 子进程隔离开
+// （GIT_CONFIG_GLOBAL/SYSTEM=/dev/null），只该由测试调用（根包的 TestMain）。
+//
+// 设的是**进程环境变量**而不是往子进程环境里追加：gitEnv() 透传 os.Environ()，
+// 进程级默认值自然流下去；单个测试想换一份自己的全局配置（gitconfig_test 用
+// t.Setenv 指到临时文件），t.Setenv 会按测试覆盖、结束还原 —— 要是钩子把
+// /dev/null 追加在环境数组末尾，exec 对重复键取最后一个，测试自己的设置就
+// 被打穿了。生产代码不调用它：用户命令行里生效的配置原样生效，是这个包存在
+// 的理由（见文件头）。
+func SetGitConfigIsolation() {
+	os.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+	os.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+}
+
 func gitEnv() []string {
 	// PATH 由 shellPATHEnv 处理，其余变量按老办法追加。
 	return append(shellPATHEnv(),

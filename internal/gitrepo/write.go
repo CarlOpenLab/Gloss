@@ -105,7 +105,10 @@ func (r *Repo) RemoveFiles(ctx context.Context, paths ...string) error {
 // worktreePath 把一个仓库内的相对路径拼成磁盘上的绝对路径，跑出仓库的
 // 一律拒绝。
 func (r *Repo) worktreePath(p string) (string, error) {
-	if p == "" || filepath.IsAbs(p) {
+	// Windows 的 IsAbs 不认 "/etc/hosts" 这种没盘符的路径，不挡的话它会被
+	// 字面拼进仓库里（Root\etc\hosts）—— 真撞上同名文件就删错了。以分隔符
+	// 开头一律按仓库外的路径挡掉，和 Unix 上「绝对路径，拒绝」一个语义。
+	if p == "" || filepath.IsAbs(p) || strings.HasPrefix(p, "/") || strings.HasPrefix(p, `\`) {
 		return "", fmt.Errorf("路径不在仓库里: %q", p)
 	}
 	full := filepath.Join(r.Root, filepath.FromSlash(p))
