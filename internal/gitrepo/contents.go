@@ -1,6 +1,7 @@
 package gitrepo
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -37,31 +38,90 @@ func (r *Repo) SizeAt(ctx context.Context, rev, path string) (int64, error) {
 	return strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
 }
 
-// BlobHash 返回某个版本里文件的 blob 哈希，不读内容。
-//
-// 二进制文件的指纹靠它（见 model.go 的 binaryFingerprint）：没有 hunk
-// 可读，只有对象哈希能说明「内容换没换」。
-func (r *Repo) BlobHash(ctx context.Context, rev, path string) (string, error) {
-	if rev == "" {
-		rev = "HEAD"
+// indexHashes 批量取一组路径在 index（stage 0）里的 blob 哈希，不读内容。
+// 二进制文件的指纹靠它们（见 model.go 的填充循环）：没有 hunk 可读，只有
+// 对象哈希能说明「内容换没换」。取不到的路径不出现在结果里，调用方按
+// 空串处理 —— 冲突条目挂在 stage 1/2/3，不算「已暂存内容」。
+func (r *Repo) indexHashes(ctx context.Context, paths []string) map[string]string {
+	out := make(map[string]string, len(paths))
+	for _, chunk := range chunkPaths(paths, 128) {
+		args := append([]string{"ls-files", "--stage", "-z", "--"}, chunk...)
+		raw, err := run(ctx, r.Root, args...)
+		if err != nil {
+			continue
+		}
+		for _, rec := range bytes.Split(raw, []byte{0}) {
+			meta, path, ok := bytes.Cut(rec, []byte{'\t'})
+			if !ok {
+				continue
+			}
+			fields := strings.Fields(string(meta)) // "<mode> <sha> <stage>"
+			if len(fields) != 3 || fields[2] != "0" {
+				continue
+			}
+			out[string(path)] = fields[1]
+		}
 	}
-	out, err := run(ctx, r.Root, "rev-parse", "--verify", rev+":"+path)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(out)), nil
+	return out
 }
 
-// WorktreeHash 返回工作区文件的 blob 哈希（git 的哈希算法）。
-//
+// headHashes 批量取一组路径在 HEAD 里的 blob 哈希。取不到（文件刚删、
+// 权限不对）的路径不出现在结果里，调用方按空串处理。
+func (r *Repo) headHashes(ctx context.Context, paths []string) map[string]string {
+	out := make(map[string]string, len(paths))
+	for _, chunk := range chunkPaths(paths, 128) {
+		args := append([]string{"ls-tree", "-z", "HEAD", "--"}, chunk...)
+		raw, err := run(ctx, r.Root, args...)
+		if err != nil {
+			continue
+		}
+		for _, rec := range bytes.Split(raw, []byte{0}) {
+			meta, path, ok := bytes.Cut(rec, []byte{'\t'})
+			if !ok {
+				continue
+			}
+			fields := strings.Fields(string(meta)) // "<mode> <type> <sha>"
+			if len(fields) != 3 || fields[1] != "blob" {
+				continue
+			}
+			out[string(path)] = fields[2]
+		}
+	}
+	return out
+}
+
+// worktreeHashes 批量算工作区文件的 blob 哈希（git 的哈希算法，不落库）。
 // 走 git hash-object 而不是在这里读文件：它按流算，几百 MB 的文件不会
 // 整份进内存；路径里有什么字符也不用担心，-- 之后一律当路径。
-func (r *Repo) WorktreeHash(ctx context.Context, path string) (string, error) {
-	out, err := run(ctx, r.Root, "hash-object", "--", path)
-	if err != nil {
-		return "", err
+func (r *Repo) worktreeHashes(ctx context.Context, paths []string) map[string]string {
+	out := make(map[string]string, len(paths))
+	for _, chunk := range chunkPaths(paths, 128) {
+		args := append([]string{"hash-object", "--"}, chunk...)
+		raw, err := run(ctx, r.Root, args...)
+		if err != nil {
+			continue
+		}
+		hashes := strings.Fields(string(raw))
+		if len(hashes) != len(chunk) {
+			continue // 输出和输入一一对应才配得上对
+		}
+		for i, h := range hashes {
+			out[chunk[i]] = h
+		}
 	}
-	return strings.TrimSpace(string(out)), nil
+	return out
+}
+
+// chunkPaths 把路径列表切成每批最多 n 个：git 子进程的命令行有长度上限
+// （Windows 整条 32k），一批塞进几百个长路径会直接放不下。
+func chunkPaths(paths []string, n int) [][]string {
+	var out [][]string
+	for len(paths) > 0 {
+		c := min(n, len(paths))
+		out = append(out, paths[:c])
+		paths = paths[c:]
+	}
+	return out
 }
 
 // ConflictContents returns the three useful texts for a conflicted path:

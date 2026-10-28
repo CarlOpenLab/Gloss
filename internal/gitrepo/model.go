@@ -88,8 +88,6 @@ type Model struct {
 	Remotes    []string
 	RemoteURLs map[string]string
 	Files      []File
-	TotalAdd   int
-	TotalDel   int
 
 	// Pending 是仓库正卡在哪一步写操作中间（合并/变基/拣选/回退/am 撞了
 	// 冲突停着）。零值 = 没卡住。
@@ -169,8 +167,6 @@ func (r *Repo) Load(ctx context.Context) (*Model, error) {
 	}
 	appendFile := func(f File) {
 		m.Files = append(m.Files, f)
-		m.TotalAdd += f.AddCount
-		m.TotalDel += f.DelCount
 	}
 
 	// 有冲突文件时多跑一条 ls-files -u，把每个路径的 stage 情况读回来
@@ -248,39 +244,47 @@ func (r *Repo) Load(ctx context.Context) (*Model, error) {
 	// 二进制文件的内容指纹得另外补：hunk 里没有内容，光靠 patch 文本
 	// 认不出「换了一张图」。不补这一步，图片改了界面还显示上一张，
 	// 「已 review」也不会失效。
+	//
+	// 哈希按「从哪取」分三批批量拿（index / HEAD / 工作区），每批一个
+	// git 进程 —— 逐文件起进程的话，一仓库几十张图每次刷新都要付几十个
+	// 进程的代价。取不到的保留原指纹：界面显示旧内容，总比整次加载失败好。
+	var idxPaths, headPaths, wtPaths []string
 	for i := range m.Files {
 		f := &m.Files[i]
 		if !f.Binary || f.Status == StatusUntracked {
 			continue
 		}
-		if h := r.binaryFingerprint(ctx, *f); h != "" {
+		switch {
+		case f.Section == SectionStaged && f.Status == StatusDeleted:
+			headPaths = append(headPaths, f.OldPath)
+		case f.Section == SectionStaged, f.Status == StatusDeleted:
+			idxPaths = append(idxPaths, f.Path())
+		default:
+			wtPaths = append(wtPaths, f.Path())
+		}
+	}
+	idxHash := r.indexHashes(ctx, idxPaths)
+	headHash := r.headHashes(ctx, headPaths)
+	wtHash := r.worktreeHashes(ctx, wtPaths)
+	for i := range m.Files {
+		f := &m.Files[i]
+		if !f.Binary || f.Status == StatusUntracked {
+			continue
+		}
+		var h string
+		switch {
+		case f.Section == SectionStaged && f.Status == StatusDeleted:
+			h = headHash[f.OldPath]
+		case f.Section == SectionStaged, f.Status == StatusDeleted:
+			h = idxHash[f.Path()]
+		default:
+			h = wtHash[f.Path()]
+		}
+		if h != "" {
 			f.Fingerprint = fingerprint(strconv.Itoa(int(f.Section))+"/"+string(f.Status)+"/"+pathKey(*f), h)
 		}
 	}
 	return m, nil
-}
-
-// binaryFingerprint 取二进制文件在该段里「新的一侧」的 blob 哈希。
-//
-// 只走 git 的对象哈希，不把内容读进内存：几百 MB 的视频文件也只是一次
-// 哈希计算。取不到（文件刚好被删、权限不对）就返回空，调用方保留原来的
-// 指纹 —— 界面显示旧内容，总比整次加载失败好。
-func (r *Repo) binaryFingerprint(ctx context.Context, f File) string {
-	path := f.Path()
-	switch {
-	case f.Section == SectionStaged && f.Status == StatusDeleted:
-		h, _ := r.BlobHash(ctx, "HEAD", f.OldPath)
-		return h
-	case f.Section == SectionStaged:
-		h, _ := r.BlobHash(ctx, ":0", path)
-		return h
-	case f.Status == StatusDeleted:
-		h, _ := r.BlobHash(ctx, ":0", path)
-		return h
-	default:
-		h, _ := r.WorktreeHash(ctx, path)
-		return h
-	}
 }
 
 // pathKey 是给指纹用的路径：已删除的文件没有 NewPath，退回旧的。
