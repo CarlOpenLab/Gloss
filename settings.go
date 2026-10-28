@@ -1884,11 +1884,3 @@ func providerLabel(p llm.Provider) string {
 	}
 	return T("未命名服务商", "Untitled Provider")
 }
-
-// secretHint 在列表里提示有没有填 key —— 不显示 key 本身。
-func secretHint(p llm.Provider) string {
-	if p.APIKey == "" {
-		return T("未配置密钥", "No API Key")
-	}
-	return T("已配置密钥", "API Key Set")
-}

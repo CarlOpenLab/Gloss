@@ -320,7 +320,7 @@ func parseLineNumber(v interface{}) int {
 }
 
 var (
-	headingRe = regexp.MustCompile(`(?i)^#{1,4}\s*(?:\[?(CRITICAL|HIGH|MEDIUM|LOW|严重|高危|中危|低危)\]?[\s:：-]*)?(.*)$`)
+	headingRe  = regexp.MustCompile(`(?i)^#{1,4}\s*(?:\[?(CRITICAL|HIGH|MEDIUM|LOW|严重|高危|中危|低危)\]?[\s:：-]*)?(.*)$`)
 	fileLineRe = regexp.MustCompile(`(?i)(?:文件|file|path)[：:]\s*([^\s:]+)(?::(\d+))?`)
 )
 

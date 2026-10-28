@@ -228,23 +228,6 @@ func TestShortWhen(t *testing.T) {
 	}
 }
 
-// git 给的 ref 是一串，可能带 "HEAD -> " 前缀，也可能有好几个。侧栏只放得下
-// 一个，取第一个 —— 它总是最关键的那个。
-func TestRefLabel(t *testing.T) {
-	cases := []struct{ in, want string }{
-		{"HEAD -> main", "HEAD → main"},
-		{"", ""},
-		{"   ", ""},
-		{"main, origin/main, tag: v1", "main"},
-		{"tag: v1, main", "tag: v1"},
-	}
-	for _, c := range cases {
-		if got := refLabel(c.in); got != c.want {
-			t.Errorf("refLabel(%q) = %q, want %q", c.in, got, c.want)
-		}
-	}
-}
-
 // 提交行应该能同时解析出 HEAD 本地分支、远程分支（如 origin/beta）和标签，
 // 并自动跳过 origin/HEAD 这种符号引用。
 func TestParseRefBadges(t *testing.T) {

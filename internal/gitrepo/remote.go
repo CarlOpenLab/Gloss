@@ -116,11 +116,6 @@ func hasRemote(remotes []string, name string) bool {
 	return false
 }
 
-// Upstream 返回 branch 的上游引用名，没有上游时返回空串。
-func (r *Repo) Upstream(ctx context.Context, branch string) string {
-	return r.upstream(ctx, branch)
-}
-
 // PushForce 强制推送当前分支（--force-with-lease）。
 //
 // 用 --force-with-lease 而不是裸 --force：只在远程分支还是本地上次抓取

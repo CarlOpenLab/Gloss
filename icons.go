@@ -47,10 +47,9 @@ var (
 	// 减号 / 部分勾选（minus）
 	iconMinus = lucide(`<path d="M5 12h14"/>`)
 
-	// 折叠箭头（chevron-right / chevron-down / chevron-up）
+	// 折叠箭头（chevron-right / chevron-down）
 	iconChevronRight = lucide(`<path d="m9 18 6-6-6-6"/>`)
 	iconChevronDown  = lucide(`<path d="m6 9 6 6 6-6"/>`)
-	iconChevronUp    = lucide(`<path d="m18 15-6-6-6 6"/>`)
 
 	// 视图切换（columns-2 / rows-3）
 	iconSplit   = lucide(`<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M12 3v18"/>`)

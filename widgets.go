@@ -97,9 +97,6 @@ const xBtnSize = 26
 // closeButton 是右上角的关闭按钮（对话框）。
 func closeButton(c *ui.Context, pal palette) bool { return xButton(c, pal, "关闭") }
 
-// removeButton 是列表行右边的删除按钮（模型设置里的供应商列表）。
-func removeButton(c *ui.Context, pal palette) bool { return xButton(c, pal, "删除") }
-
 // sparkleSize 是 ✨ 图标的默认边长。
 const sparkleSize = 11
 
@@ -116,13 +113,6 @@ func drawSparkle(p *ui.Painter, r ui.Rect, c ui.Color) {
 func sparkleIcon(c *ui.Context, size float32, color ui.Color) {
 	ui.Box(c).Size(size, size).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
 		drawSparkle(p, r, color)
-	})
-}
-
-// sparkleCluster 是星群（Lucide sparkles），用在卡片标题上。
-func sparkleCluster(c *ui.Context, size float32, color ui.Color) {
-	ui.Box(c).Size(size, size).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
-		p.Icon(iconSparkles, r, color)
 	})
 }
 
@@ -406,37 +396,9 @@ func toolIconButton(c *ui.Context, pal palette, label, tip string, off, loading 
 	return btn.Clicked() && !loading
 }
 
-// iconPt 把 0..1 的归一化坐标落进矩形里。
-//
-// 图标按比例画，不写死像素：同一段代码既能画 15px 的工具栏图标，也不会
-// 在别的尺寸上变形。
-func iconPt(r ui.Rect, x, y float32) (float32, float32) {
-	return r.X + r.W*x, r.Y + r.H*y
-}
-
 // drawRefreshIcon 画「刷新」（Lucide rotate-cw）。
 func drawRefreshIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
 	p.Icon(iconRefresh, r, col)
-}
-
-// drawChevronUpIcon / drawChevronDownIcon 是查找栏里「上一条 / 下一条」的箭头
-// （Lucide chevron-up / chevron-down）。
-func drawChevronUpIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
-	p.Icon(iconChevronUp, r, col)
-}
-
-func drawChevronDownIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
-	p.Icon(iconChevronDown, r, col)
-}
-
-// drawSlidersIcon 画「设置」（Lucide sliders-horizontal）。
-func drawSlidersIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
-	p.Icon(iconSliders, r, col)
-}
-
-// drawSettingsIcon 画「设置齿轮」（Lucide settings）。
-func drawSettingsIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
-	p.Icon(iconSettings, r, col)
 }
 
 // drawFolderIcon 画「打开仓库」（Lucide folder）。
@@ -612,31 +574,5 @@ func specModalOpts(c *ui.Context, pal palette, open *bool, keepOnBackdrop bool, 
 			MaxWidth(w-t.Space(10)).MaxHeight(h-t.Space(10)).
 			Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.24))
 		fn()
-	})
-}
-
-// dragAfter 看指针落在元素哪半边：右半边就插到它后面，左半边插到前面。
-func dragAfter(el ui.Element) bool {
-	if x, _, over := el.PointerPosition(); over {
-		return x > el.Bounds().W/2
-	}
-	return false
-}
-
-// drawDropMarker 在元素边上竖一道强调色，告诉用户「松手会插到这儿」。
-// 项目标签页和终端芯片共用这一处 —— 拖到哪、插哪儿，两边必须是同一个说法。
-//
-// 上下各探出元素一框 5px：框架拖拽时会在指针上画一份拖动元素的副本
-// （mygo 的 paintDrag，0.75 不透明度，画在整棵元素树之后），副本正好盖住
-// 元素本身这一框 —— 画在框里的提示线会被它压得一点也看不见。探出框外的
-// 这两截露在副本外面，线才看得见（见 TestProjectTabDragDrawsInsertMarker）。
-// 横向上居中在边缘上：落点是「这一页的前/后」，线就该压在那条缝上。
-func drawDropMarker(el ui.Element, after bool, accent ui.Color) {
-	el.DrawOver(func(p *ui.Painter, r ui.Rect) {
-		x := r.X - 1
-		if after {
-			x = r.X + r.W - 1
-		}
-		p.Fill(ui.Rect{X: x, Y: r.Y - 5, W: 2, H: r.H + 10}, accent, 1)
 	})
 }

@@ -28,7 +28,7 @@ func TestMain(m *testing.M) {
 // initRepo 把一个空目录变成配好身份的空仓库，是所有测试夹具共用的第一步。
 // autocrlf 显式关掉：仓库级配置盖掉用户全局的 true/false，checkout 出来的
 // 字节才是当初写进去的，逐字节比对内容的断言在 Windows 上才不会挂
-//（gitrepo 包的 tempRepo 同款；TestMain 的隔离钩子之外多的一层保险）。
+// （gitrepo 包的 tempRepo 同款；TestMain 的隔离钩子之外多的一层保险）。
 func initRepo(t *testing.T, dir string) {
 	t.Helper()
 	runGit(t, dir, "init", "-b", "main")

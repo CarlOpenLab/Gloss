@@ -812,20 +812,6 @@ func parseRefBadges(refs string, remotes []string) []refBadge {
 	return badges
 }
 
-// refLabel 把 git 的 ref 列表缩短一点。「HEAD -> main, origin/main, tag: v1」
-// 全画出来会把一行的宽度吃光，只留最关键的那个。
-//
-// 箭头换成「→」：git 管道输出里是 ASCII 的「->」，摆在界面上和四周的排版
-// 不是一个味道 —— 这是个字，不是图标，用真正的箭头字符没有字形风险。
-func refLabel(refs string) string {
-	for _, part := range strings.Split(refs, ",") {
-		if p := strings.TrimSpace(part); p != "" {
-			return strings.Replace(p, " -> ", " → ", 1)
-		}
-	}
-	return ""
-}
-
 // shortWhen 给出「3 小时前」这类相对时间。绝对时间在 review 时不好用：
 // 想找的是「今天早上那个提交」，不是「14:23」。
 func shortWhen(t, now time.Time) string {

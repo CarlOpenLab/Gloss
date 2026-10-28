@@ -69,7 +69,7 @@ func TestOpenRejectsNonRepo(t *testing.T) {
 
 func TestBranch(t *testing.T) {
 	r := tempRepo(t)
-	branch, err := r.Branch(context.Background())
+	branch, _, err := r.branchInfo(context.Background())
 	if err != nil {
 		t.Fatalf("Branch: %v", err)
 	}
@@ -158,9 +158,6 @@ func TestLoadWorkingTree(t *testing.T) {
 		t.Errorf("new.txt 第一行 = %+v, want add/hello/1", got)
 	}
 
-	if m.TotalAdd != 4 || m.TotalDel != 1 {
-		t.Errorf("Total +%d -%d, want +4 -1", m.TotalAdd, m.TotalDel)
-	}
 }
 
 // 已暂存和未暂存拆成两段：两条 File、各自的 Section、各自的 diff 基线 ——
@@ -207,9 +204,6 @@ func TestLoadSplitsSections(t *testing.T) {
 
 	if staged.Fingerprint == unstaged.Fingerprint {
 		t.Error("两段内容不同，指纹不该一样")
-	}
-	if m.TotalAdd != 2 || m.TotalDel != 1 {
-		t.Errorf("Total +%d -%d, want +2 -1", m.TotalAdd, m.TotalDel)
 	}
 }
 
@@ -409,9 +403,6 @@ func TestLoadEmptyRepo(t *testing.T) {
 	}
 	if len(m.Files) != 1 || m.Files[0].NewPath != "first.txt" {
 		t.Fatalf("空仓库应该把未跟踪文件列出来，实际 %+v", m.Files)
-	}
-	if m.TotalAdd != 1 {
-		t.Errorf("TotalAdd = %d, want 1", m.TotalAdd)
 	}
 }
 

@@ -61,13 +61,7 @@ func Open(ctx context.Context, dir string) (*Repo, error) {
 	return &Repo{Root: root, Name: filepath.Base(root), GitDir: gitDir}, nil
 }
 
-// Branch 返回当前分支名。处于 detached HEAD 时返回短哈希。
-func (r *Repo) Branch(ctx context.Context) (string, error) {
-	name, _, err := r.branchInfo(ctx)
-	return name, err
-}
-
-// branchInfo 在 Branch 的基础上多带一个「是不是 detached HEAD」。
+// branchInfo 返回当前分支名，多带一个「是不是 detached HEAD」。
 //
 // 界面靠它把分支芯片换成警示样式：分离头指针上的提交没人接得住，
 // 不说清楚的话用户会以为自己在分支上正常干活。
@@ -182,6 +176,7 @@ func diffArgs(extra ...string) []string {
 //     的 PATH 里。从 Finder 启动的 GUI 进程只有 launchd 那几个系统目录，
 //     不加这一层，husky/lefthook 这类钩子会在「提交」（还有「继续合并」
 //     这种会真提交的操作）时报 `env: node: No such file or directory`。
+//
 // SetGitConfigIsolation 把开发机的全局/系统 git 配置和 git 子进程隔离开
 // （GIT_CONFIG_GLOBAL/SYSTEM=/dev/null），只该由测试调用（根包的 TestMain）。
 //
