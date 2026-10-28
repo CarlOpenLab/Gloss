@@ -125,24 +125,27 @@ func (a *app) startWsSearch(q string) {
 // scanWsFiles 在 root 下的 paths 里找含 query（不分大小写）的行。
 // 纯函数：只碰参数和文件系统，后台扫描与测试共用这一份实现。
 //
-// 上限三道：命中条数、命中文件数、扫描文件数。到了就停，truncated 如实
-// 报告 —— 不求扫全，求快。路径按字母序来，扫不到的都在字母表后面。
+// 上限三道：命中条数、命中文件数、走过的文件数。到了就停，truncated 如实
+// 报告 —— 不求扫全，求快。路径按字母序来，扫不到的都在字母表后面。走过的
+// 数的是「看过的每一个文件」而不只是扫出内容的：二进制仓库不然会一个不漏
+// 地读过去，上限就名存实亡了。
 func scanWsFiles(root string, paths []string, query string) (hits []wsSearchHit, fileCount int, truncated bool) {
 	q := strings.ToLower(query)
 	if q == "" {
 		return nil, 0, false
 	}
-	scanned := 0
+	buf := make([]byte, wsSearchMaxFile) // 一份缓冲从头用到尾，不逐文件分配
+	walked := 0
 	for _, p := range paths {
-		if len(hits) >= wsSearchMaxHits || fileCount >= wsSearchMaxFiles || scanned >= wsSearchMaxScan {
+		if len(hits) >= wsSearchMaxHits || fileCount >= wsSearchMaxFiles || walked >= wsSearchMaxScan {
 			truncated = true
 			return hits, fileCount, truncated
 		}
-		data, err := readHead(filepath.Join(root, filepath.FromSlash(p)), wsSearchMaxFile)
+		walked++
+		data, err := readHead(filepath.Join(root, filepath.FromSlash(p)), buf)
 		if err != nil || looksBinary(data) {
 			continue
 		}
-		scanned++
 		before := len(hits)
 		for i, line := range strings.Split(string(data), "\n") {
 			if len(hits) >= wsSearchMaxHits {
@@ -217,15 +220,15 @@ func wsHitWindow(path string, lineNo int, line string, off, n int) wsSearchHit {
 	}
 }
 
-// readHead 读文件的前 limit 个字节。搜索不求读全：超大的文件只看头部，
-// 内存和时间都封了顶 —— 与指纹、图片预览是同一套取舍。
-func readHead(path string, limit int) ([]byte, error) {
+// readHead 读文件的前 len(buf) 个字节，buf 由调用方复用（一次扫描一份，
+// 不逐文件分配）。搜索不求读全：超大的文件只看头部，内存和时间都封了顶
+// —— 与指纹、图片预览是同一套取舍。
+func readHead(path string, buf []byte) ([]byte, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	buf := make([]byte, limit)
 	n, err := io.ReadFull(f, buf)
 	if err == io.EOF || err == io.ErrUnexpectedEOF {
 		return buf[:n], nil
@@ -298,7 +301,11 @@ func (a *app) workspaceSearchView(c *ui.Context, pal palette, t *ui.Theme) {
 		})
 		return
 	case len(s.results) == 0:
-		emptyNote(c, t, T("没有匹配的结果", "No matching results"))
+		if s.truncated {
+			emptyNote(c, t, T("没有匹配的结果（扫描有上限，没扫完全部文件）", "No matching results (scanning hit its cap; not every file was scanned)"))
+		} else {
+			emptyNote(c, t, T("没有匹配的结果", "No matching results"))
+		}
 		return
 	}
 
