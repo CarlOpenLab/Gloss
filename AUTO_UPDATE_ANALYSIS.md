@@ -1,5 +1,7 @@
 # Gloss 自动更新方案分析
 
+> **状态（2026-10-28）：本稿为 v0.1.0 时期的实施前分析，方案已全部落地。** 采纳了方案 A（`mygo.Use(updater.Plugin)`，见 main.go），`mygo.json` 已带 `updates.publicKey`，设置面板已接入检查开关，release.yml 覆盖构建/签名/更新 feed。唯一未采纳的建议是迁移 `mygo.config.ts`——现仍用 `mygo.json`。留作设计记录，不再反映现状。
+
 > 基于 mygo 框架的 signed auto-update 系统，通过 GitHub Releases 分发。
 
 ---

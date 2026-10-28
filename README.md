@@ -26,7 +26,7 @@
 <p align="center">
   <a href="https://carlopenlab.github.io/Gloss/">🌐 Official Website</a> •
   <a href="https://github.com/CarlOpenLab/Gloss/releases">📦 Download Releases</a> •
-  <a href="#key-features">✨ Key Features</a> •
+  <a href="#visual-showcase--features">✨ Key Features</a> •
   <a href="#keyboard-shortcuts">⌨️ Shortcuts</a> •
   English • <a href="README.zh_CN.md">简体中文</a>
 </p>
