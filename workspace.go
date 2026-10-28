@@ -2,6 +2,7 @@ package main
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/CarlOpenLab/Gloss/internal/diff"
 	"github.com/CarlOpenLab/Gloss/internal/filetree"
@@ -71,6 +72,12 @@ func (a *app) setWorktree(m *gitrepo.Model) {
 	a.wsAll = workspaceFiles(m)
 	a.applyWsFilter()
 	a.selectWorkspaceKey(key)
+	// 搜索页签开着且敲了词的话，跟着新的一份文件列表重跑一遍：文件可能
+	// 增删了，结果不该停在上一份快照上。startWsSearch 会记下新的 root，
+	// 换了仓库旧结果同样作废。
+	if a.wsTab == wsTabSearch && strings.TrimSpace(a.wsSearchQuery) != "" {
+		a.startWsSearch(strings.TrimSpace(a.wsSearchQuery))
+	}
 }
 
 // applyWsFilter 按当前的筛选词重算显示的工作区文件与文件树。
@@ -125,22 +132,43 @@ func (a *app) changedWorkspaceCount() int {
 }
 
 // workspaceFilePane 是编辑器视图左边那一栏。
+//
+// 栏头两颗页签图标（VS Code 侧栏同款）：文件树管「有哪些文件」，搜索管
+// 「内容里有什么」，各自换掉下面那一块。
 func (a *app) workspaceFilePane(c *ui.Context, pal palette, t *ui.Theme) {
 	ui.Column(c).Width(a.filePaneWidth(c)).Shrink(0).FillHeight().
 		Background(pal.surface1).Children(func() {
-		ui.Row(c).Shrink(0).Padding(7, 12).Gap(6).AlignItems(ui.Center).Children(func() {
-			label := T("文件", "Files")
-			if a.state == loadReady || a.state == loadFailed {
-				label = Tf("%d 个文件", "%d files", len(a.wsFiles))
+		ui.Row(c).Shrink(0).Padding(5, 8, 5, 12).Gap(4).AlignItems(ui.Center).Children(func() {
+			if a.wsPaneTabButton(c, pal, T("文件树", "Files"),
+				T("浏览工作区的文件", "Browse the workspace files"),
+				iconFolder, a.wsTab == wsTabTree) {
+				a.wsTab = wsTabTree
 			}
-			ui.Text(c, label).FontSize(textCaption).TextColor(pal.inkSubtle)
+			if a.wsPaneTabButton(c, pal, T("搜索", "Search"),
+				T("搜索工作区文件的内容", "Search file contents across the workspace"),
+				iconSearch, a.wsTab == wsTabSearch) {
+				a.wsTab = wsTabSearch
+				a.focusWsSearch = true
+			}
+			ui.Spacer(c)
+			if a.wsTab == wsTabTree {
+				label := T("文件", "Files")
+				if a.state == loadReady || a.state == loadFailed {
+					label = Tf("%d 个文件", "%d files", len(a.wsFiles))
+				}
+				ui.Text(c, label).FontSize(textCaption).TextColor(pal.inkSubtle)
+			}
 		})
-		ui.Box(c).Key("workspace-file-filter-wrap").Shrink(0).Padding(0, 12, 8, 12).Children(func() {
-			a.workspaceFilterInput(c, pal)
-		})
-		ui.Box(c).Key("workspace-file-tree-wrap").Grow(1).FillWidth().Children(func() {
-			a.workspaceTreeView(c, pal, t)
-		})
+		if a.wsTab == wsTabSearch {
+			a.workspaceSearchView(c, pal, t)
+		} else {
+			ui.Box(c).Key("workspace-file-filter-wrap").Shrink(0).Padding(0, 12, 8, 12).Children(func() {
+				a.workspaceFilterInput(c, pal)
+			})
+			ui.Box(c).Key("workspace-file-tree-wrap").Grow(1).FillWidth().Children(func() {
+				a.workspaceTreeView(c, pal, t)
+			})
+		}
 		a.workspaceFooter(c, pal)
 	})
 }

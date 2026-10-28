@@ -28,6 +28,9 @@ type editorPaneState struct {
 	// 没有文本缓冲区，这里摆的是解好的位图，保存/还原都不适用。
 	img     *ui.Bitmap
 	imgMeta string
+	// pendingLine 是「打开后把这一行滚到顶上」的一次性请求（编辑器栏搜索
+	// 结果的跳转用）：缓冲还在读盘时先记下目标行，dispatch 就位后兑现。
+	pendingLine int
 }
 
 // editorTarget 取编辑器该显示哪个文件：左栏当前选中的那个，没选就退到第一个。
@@ -105,17 +108,20 @@ func (a *app) loadEditorPane(f gitrepo.File) {
 			if err != nil {
 				s.err = err.Error()
 				s.code, s.buffer, s.base, s.img = nil, nil, nil, nil
+				s.pendingLine = 0 // 没有缓冲可滚，别让请求残留到下一个文件头上
 				return
 			}
 			if image {
 				if side.err != "" {
 					s.err = side.err
 					s.code, s.buffer, s.base, s.img = nil, nil, nil, nil
+					s.pendingLine = 0
 					return
 				}
 				s.img, s.imgMeta = side.bitmap, side.meta
 				s.code, s.buffer, s.base = nil, nil, nil
 				s.err = ""
+				s.pendingLine = 0
 				return
 			}
 			lang := editor.LanguageFor(path)
@@ -135,6 +141,10 @@ func (a *app) loadEditorPane(f gitrepo.File) {
 			s.code = st
 			s.img, s.imgMeta = nil, ""
 			s.err = ""
+			if s.pendingLine > 0 {
+				st.ScrollTo(s.pendingLine)
+				s.pendingLine = 0
+			}
 		})
 	})
 }

@@ -92,6 +92,12 @@ func (a *app) commands() []command {
 		{T("查看历史", "Show History"), K("⌘2"), func(a *app) { a.setSection(sectionHistory) }},
 		{T("打开终端", "Show Terminal"), K("⌘3"), func(a *app) { a.setSection(sectionTerminal) }},
 		{T("打开代码编辑器", "Show Code Editor"), K("⌘4"), func(a *app) { a.setSection(sectionEditor) }},
+		// 编辑器栏的两个页签之一：切过去并让输入框拿焦点，落下来就能敲词。
+		{T("搜索工作区内容", "Search Workspace Contents"), "", func(a *app) {
+			a.setSection(sectionEditor)
+			a.wsTab = wsTabSearch
+			a.focusWsSearch = true
+		}},
 		{T("筛选文件", "Filter Files"), K("⌘P"), func(a *app) { a.focusFilter = true }},
 		{T("筛选提交", "Filter Commits"), K("/"), func(a *app) { a.focusCommitFilter = true }},
 		{T("查看所有分支的历史", "History of All Branches"), "", func(a *app) { a.selectAllRefs() }},

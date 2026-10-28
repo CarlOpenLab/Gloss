@@ -240,6 +240,14 @@ type app struct {
 	// dirOpen）。和 filesClosed 是两份独立的记录：两份名单的默认值相反。
 	wsOpen map[string]bool
 
+	// —— 编辑器栏的「搜索」页签 ——
+	// 与文件树同栏切换：树上找名字，搜索找内容。结果属于一个仓库（记在
+	// wsSearch.root），换仓库作废；查询词是全局一份，切标签页保留。
+	wsTab         int
+	wsSearchQuery string
+	wsSearchList  ui.ListState
+	wsSearch      wsSearchState
+
 	// —— 已 review：文件路径 -> 当时的内容指纹 ——
 	// 指纹对不上就说明文件又变了，标记自动失效。
 	viewed map[string]string
@@ -353,6 +361,9 @@ type app struct {
 	// focusFilter 是 ⌘P（以及命令栏里的「筛选文件」）的一次性请求：
 	// 下帧把焦点放进筛选框。
 	focusFilter bool
+	// focusWsSearch 是「切到编辑器栏搜索页签」的一次性请求：下一帧把焦点
+	// 放进搜索框，落下来就能直接敲词。
+	focusWsSearch bool
 
 	// —— 写操作（暂存 / 提交 / 检出 / 抓取……）——
 	// 同一时刻只允许一个写操作在飞：git 的 index 只有一把锁，两个写操作

@@ -173,10 +173,15 @@ func TestWorkspaceTreeRowsArePlain(t *testing.T) {
 		y := int(box.Y + box.H/2)
 		core := [3]uint8{255, 255, 255}
 		coreSum := 3 * 255
-		for x := int(box.X); x < int(box.X+box.W); x++ {
-			p := pixelAt(tt, x, y)
-			if sum := int(p[0]) + int(p[1]) + int(p[2]); sum < coreSum {
-				core, coreSum = p, sum
+		// 纵向多扫一行：栏头高一点矮一点，字形就落在不同的次像素相位上，
+		// 单行取「最深像素」会撞上 LCD 抗锯齿的边缘混色，把绿色读成别的。
+		// ±1px 仍在这一行自己的字形里，不会碰到邻行。
+		for dy := -1; dy <= 1; dy++ {
+			for x := int(box.X); x < int(box.X+box.W); x++ {
+				p := pixelAt(tt, x, y+dy)
+				if sum := int(p[0]) + int(p[1]) + int(p[2]); sum < coreSum {
+					core, coreSum = p, sum
+				}
 			}
 		}
 		warm = int(core[0]) > int(core[2])+20
