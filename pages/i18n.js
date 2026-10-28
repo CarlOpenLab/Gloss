@@ -17,6 +17,8 @@ window.GLOSS_I18N = {
     "nav.term": "终端",
     "nav.keys": "键盘",
     "nav.dl": "下载",
+    "nav.home": "Gloss 主页",
+    "nav.langEn": "切换到英文",
 
     "hero.display": "先看清，<br>再合并。",
     "hero.lead": "Gloss 把一次代码审查压缩进一屏：提交详情、逐行差异、风险标注与审查进度，都在你按下 <kbd class=\"inline-kbd\">⌘</kbd><kbd class=\"inline-kbd\">↩</kbd> 之前就绪。",
@@ -54,8 +56,10 @@ window.GLOSS_I18N = {
     "cl.count": "500 个提交",
     "cl.filter": "筛选提交",
 
+    "cm.m1": "将 'feat/audit-log' 合并进 main",
     "cm.m2": "fix(review): 只标注当前 hunk",
     "cm.m4": "feat(audit): 自动关闭风险提示",
+    "cm.m7": "将 'panel-optimize' 合并进 main",
     "cm.m8": "perf(graph): 客户端 Panel 组件优化",
     "cm.m10": "fix: 消息通知成员审核无法打开",
     "cm.m12": "test(review): 保持 hunk 顺序",
@@ -148,9 +152,13 @@ window.GLOSS_I18N = {
     "pal.ghostSub": "点击或按下 ⌘K",
     "pal.query": "提交",
     "pal.i1": "提交已暂存的改动",
+    "pal.h1": "提交已暂存的改动",
     "pal.i2": "用 AI 生成提交信息",
+    "pal.h2": "生成提交信息",
     "pal.i3": "推送到 origin/main",
+    "pal.h3": "推送",
     "pal.i4": "对暂存区运行风险扫描",
+    "pal.h4": "运行风险扫描",
     "pal.sel": "<kbd>↑</kbd><kbd>↓</kbd> 选择",
     "pal.run": "<kbd>⏎</kbd> 执行",
     "pal.count": "4 条命令",
@@ -173,7 +181,10 @@ window.GLOSS_I18N = {
 
     "s7.h": "一条命令，<br>或一个安装包。",
     "s7.p": "三个平台，同一个原生二进制。不捆绑浏览器内核，不需要额外运行时。",
+    "ui.review": "已审查",
+
     "dl.fine": "Universal · Apple Silicon / Intel · 约 20 MB",
+    "dl.mac": "Universal · Apple Silicon / Intel",
     "dl.win": "x64 · 安装版与便携版",
     "dl.linux": "x86_64 · 静态二进制",
     "dl.foot": "全部版本发布于 GitHub Releases。MIT License。",
@@ -185,6 +196,7 @@ window.GLOSS_I18N = {
     "dl.linuxLabel": "下载 Linux 版",
     "copy.copy": "复制",
     "copy.copied": "已复制",
+    "copy.aria": "复制安装命令",
     "theme.toLight": "切换到浅色外观",
     "theme.toDark": "切换到深色外观"
   }

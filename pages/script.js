@@ -22,6 +22,8 @@
   var enTexts = i18nNodes.map(function (el) { return el.innerHTML; });
   var titleNodes = Array.prototype.slice.call(document.querySelectorAll("[data-i18n-title]"));
   var enTitles = titleNodes.map(function (el) { return el.getAttribute("title") || ""; });
+  var ariaNodes = Array.prototype.slice.call(document.querySelectorAll("[data-i18n-aria]"));
+  var enArias = ariaNodes.map(function (el) { return el.getAttribute("aria-label") || ""; });
 
   var EN_META = {
     title: document.title,
@@ -51,6 +53,10 @@
     titleNodes.forEach(function (el, i) {
       var key = el.getAttribute("data-i18n-title");
       el.setAttribute("title", lang === "zh" && Object.prototype.hasOwnProperty.call(ZH, key) ? ZH[key] : enTitles[i]);
+    });
+    ariaNodes.forEach(function (el, i) {
+      var key = el.getAttribute("data-i18n-aria");
+      el.setAttribute("aria-label", lang === "zh" && Object.prototype.hasOwnProperty.call(ZH, key) ? ZH[key] : enArias[i]);
     });
 
     root.lang = lang === "zh" ? "zh-CN" : "en";
@@ -209,7 +215,7 @@
   }
 
   function resetCopyLabel() {
-    if (!copyLabel) return;
+    if (!copyLabel || !copyBtn) return;
     if (copyTimer) { window.clearTimeout(copyTimer); copyTimer = null; }
     copyBtn.classList.remove("is-done");
     copyLabel.textContent = copyStrings().copy;
@@ -270,17 +276,19 @@
   function updateDlLabels() {
     if (!dlLabel || !dlPlatform) return;
     var zh = lang === "zh";
-    var map = {
-      mac:   { label: zh ? "下载 macOS 版" : "Download for macOS",   meta: ".dmg" },
-      win:   { label: zh ? "下载 Windows 版" : "Download for Windows", meta: ".exe" },
-      linux: { label: zh ? "下载 Linux 版" : "Download for Linux",    meta: ".tar.gz" }
+    var labels = {
+      mac:   { en: "Download for macOS",   key: "dl.macLabel" },
+      win:   { en: "Download for Windows", key: "dl.winLabel" },
+      linux: { en: "Download for Linux",   key: "dl.linuxLabel" }
     }[dlPlatform];
+    var label = zh && Object.prototype.hasOwnProperty.call(ZH, labels.key) ? ZH[labels.key] : labels.en;
+    var map = { mac: ".dmg", win: ".exe", linux: ".tar.gz" }[dlPlatform];
 
-    dlLabel.textContent = map.label;
-    dlMeta.textContent = map.meta;
+    dlLabel.textContent = label;
+    dlMeta.textContent = map;
     if (dl2Label && dl2Meta) {
-      dl2Label.textContent = map.label;
-      dl2Meta.textContent = map.meta;
+      dl2Label.textContent = label;
+      dl2Meta.textContent = map;
     }
   }
 

@@ -11,8 +11,13 @@
   <meta property="og:title" content="Gloss — Look before you merge.">
   <meta property="og:description" content="A native Git client in pure Go: risk annotations, branch topology and commit context, ready before you press ⌘↩.">
   <meta property="og:url" content="https://carlopenlab.github.io/Gloss/">
-  <meta property="og:image" content="https://carlopenlab.github.io/Gloss/shots/v1-dark.png">
+  <meta property="og:image" content="https://carlopenlab.github.io/Gloss/assets/shot-history-dark.png">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="860">
+  <meta property="og:image:alt" content="Gloss main interface — commit detail with risk annotations and file list">
   <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://carlopenlab.github.io/Gloss/assets/shot-history-dark.png">
+  <link rel="canonical" href="https://carlopenlab.github.io/Gloss/">
   <link rel="icon" type="image/png" href="assets/icon.png">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="app-mock.css">
@@ -33,11 +38,11 @@
 
   <header class="nav">
     <div class="shell nav-in">
-      <a class="brand" href="#top" aria-label="Gloss home">
+      <a class="brand" href="#top" aria-label="Gloss home" data-i18n-aria="nav.home">
         <img class="brand-logo is-dark" src="assets/logo-dark.png" alt="" width="22" height="22">
         <img class="brand-logo is-light" src="assets/logo.png" alt="" width="22" height="22">
         <span class="brand-name">Gloss</span>
-        <span class="brand-ver">0.3.22</span>
+        <span class="brand-ver">0.3.23</span>
       </a>
 
       <nav class="nav-links" aria-label="Primary">
@@ -51,7 +56,7 @@
 
       <div class="nav-end">
         <div class="lang-switch" role="group" aria-label="Language">
-          <button class="lang-btn is-on" id="lang-en" type="button" aria-label="Switch to English">EN</button>
+          <button class="lang-btn is-on" id="lang-en" type="button" aria-label="Switch to English" data-i18n-aria="nav.langEn">EN</button>
           <button class="lang-btn" id="lang-zh" type="button" aria-label="切换到中文">中</button>
         </div>
         <button class="icon-btn" id="theme-btn" type="button" aria-label="Toggle light/dark appearance">
@@ -103,7 +108,7 @@
         <figure class="stage" data-stage>
           <div class="stage-cap">
             <span class="mono" data-i18n="stage.cap">HISTORY — commit details · file list · line diffs</span>
-            <span class="mono stage-cap-right">v0.3.20 / macOS</span>
+            <span class="mono stage-cap-right">v0.3.23 / macOS</span>
           </div>
 
           <div class="frame">
@@ -116,7 +121,7 @@
                     <span class="tl tl-y"></span>
                     <span class="tl tl-g"></span>
                   </div>
-                  <button class="sb-toggle-btn" type="button" aria-label="Hide sidebar" title="Hide project sidebar (⌘⌥B)" data-i18n-title="sb.hide">
+                  <button class="sb-toggle-btn" type="button" aria-label="Hide sidebar" data-i18n-aria="sb.hide" title="Hide project sidebar (⌘⌥B)" data-i18n-title="sb.hide">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                       <rect x="3" y="3" width="18" height="18" rx="3"></rect>
                       <path d="M9 3v18"></path>
@@ -169,9 +174,9 @@
                   <div class="sb-row sb-row--ind2"><span class="sb-name">panel-optimize</span></div>
 
                   <div class="sb-group"><span class="sb-group-label" data-i18n="sb.tags">Tags</span><span class="sb-chev">⌄</span></div>
-                  <div class="sb-row"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.3.20</span><span class="sb-tag">latest</span></div>
-                  <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.3.19</span></div>
-                  <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.3.18</span></div>
+                  <div class="sb-row"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.3.23</span><span class="sb-tag">latest</span></div>
+                  <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.3.22</span></div>
+                  <div class="sb-row sb-dim"><span class="sb-ic sb-ic--tag"></span><span class="sb-name">v0.3.21</span></div>
 
                   <div class="sb-group"><span class="sb-group-label" data-i18n="sb.stashes">Stashes</span><span class="sb-chev">⌄</span></div>
                   <div class="sb-row"><span class="sb-ic sb-ic--stash"></span><span class="sb-name">wip: image review</span></div>
@@ -778,25 +783,25 @@
                   <div class="pal-item is-on">
                     <span class="pal-ic">↵</span>
                     <span class="pal-label" data-i18n="pal.i1">Commit staged changes</span>
-                    <span class="pal-hint">Commit staged changes</span>
+                    <span class="pal-hint" data-i18n="pal.h1">Commit staged changes</span>
                     <kbd>⌘</kbd><kbd>↩</kbd>
                   </div>
                   <div class="pal-item">
                     <span class="pal-ic">⌥</span>
                     <span class="pal-label" data-i18n="pal.i2">Generate a message with AI</span>
-                    <span class="pal-hint">Generate message</span>
+                    <span class="pal-hint" data-i18n="pal.h2">Generate message</span>
                     <kbd>⌘</kbd><kbd>G</kbd>
                   </div>
                   <div class="pal-item">
                     <span class="pal-ic">↗</span>
                     <span class="pal-label" data-i18n="pal.i3">Push to origin/main</span>
-                    <span class="pal-hint">Push</span>
+                    <span class="pal-hint" data-i18n="pal.h3">Push</span>
                     <kbd>⌘</kbd><kbd>P</kbd>
                   </div>
                   <div class="pal-item">
                     <span class="pal-ic">⚑</span>
                     <span class="pal-label" data-i18n="pal.i4">Run a risk scan on staged changes</span>
-                    <span class="pal-hint">Run risk scan</span>
+                    <span class="pal-hint" data-i18n="pal.h4">Run risk scan</span>
                     <kbd>R</kbd>
                   </div>
                 </div>
@@ -895,7 +900,7 @@
         <div class="dl-wrap" data-reveal>
           <div class="dl-lead">
             <span class="mono">LATEST RELEASE</span>
-            <p class="dl-ver">v0.3.20</p>
+            <p class="dl-ver">v0.3.23</p>
             <a class="btn btn-primary btn-lg" href="https://github.com/CarlOpenLab/Gloss/releases/latest" target="_blank" rel="noopener" id="main-dl-2">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"></path>
@@ -909,7 +914,7 @@
           <div class="dl-list">
             <a class="dl-row" href="https://github.com/CarlOpenLab/Gloss/releases/latest" target="_blank" rel="noopener">
               <span class="dl-os">macOS</span>
-              <span class="dl-desc">Universal · Apple Silicon &amp; Intel</span>
+              <span class="dl-desc" data-i18n="dl.mac">Universal · Apple Silicon &amp; Intel</span>
               <span class="dl-tag">.dmg</span>
               <span class="dl-arrow">↗</span>
             </a>
@@ -931,7 +936,7 @@
         <div class="cli" data-reveal>
           <span class="cli-label">CLI</span>
           <code id="cli-cmd">go install github.com/CarlOpenLab/Gloss@latest</code>
-          <button class="cli-copy" id="copy-btn" type="button" aria-label="Copy install command">
+          <button class="cli-copy" id="copy-btn" type="button" aria-label="Copy install command" data-i18n-aria="copy.aria">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
             <span id="copy-label">Copy</span>
           </button>

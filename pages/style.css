@@ -24,9 +24,6 @@
   --key: #f2f3f4;
   --key-ink: #08090a;
   --green: #4fd17a;
-  --red: #ff6961;
-  --amber: #f0a33a;
-  --blue: #6b93ff;
 
   --shell: 1240px;
   --gutter: 24px;
@@ -50,9 +47,6 @@
   --key: #17181d;
   --key-ink: #ffffff;
   --green: #22863a;
-  --red: #d93a35;
-  --amber: #c27b0f;
-  --blue: #3b6cf6;
 
   color-scheme: light;
 }
@@ -910,7 +904,6 @@ html.js.no-reveal [data-reveal] {
   .spec:nth-child(n + 3) { border-top: 1px solid var(--line); }
   .spec-n { font-size: 24px; }
   .figure { min-width: 0; }
-  .figs { grid-template-columns: 1fr; }
   .bar-row { grid-template-columns: 1fr; gap: 8px; }
   .bar-track:first-of-type { display: none; }
   .bar-legend { text-align: left; }

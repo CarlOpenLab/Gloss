@@ -18,7 +18,6 @@
   --app-bg: #1b1a21;
   --app-line: rgba(255, 255, 255, 0.07);
   --app-line-2: rgba(255, 255, 255, 0.12);
-  --app-line-3: rgba(255, 255, 255, 0.17);
   --app-edge: rgba(236, 236, 240, 0.12);
   --app-toplit: rgba(236, 236, 240, 0.18);
   --app-ink: #ececf0;
@@ -28,7 +27,6 @@
   --app-code: #e4e4ea;
   --app-sel: rgba(107, 147, 255, 0.16);
   --app-accent: #6b93ff;
-  --app-accent-ink: #ffffff;
   --app-key: #ececf0;
   --app-key-ink: #101014;
   --app-add-bg: rgba(79, 209, 122, 0.11);
@@ -63,7 +61,6 @@
   --app-bg: #f4f5f8;
   --app-line: rgba(16, 18, 24, 0.08);
   --app-line-2: rgba(16, 18, 24, 0.13);
-  --app-line-3: rgba(16, 18, 24, 0.18);
   --app-edge: rgba(16, 18, 24, 0.07);
   --app-toplit: rgba(255, 255, 255, 0);
   --app-ink: #1d1d1f;
@@ -73,7 +70,6 @@
   --app-code: #2a2c33;
   --app-sel: rgba(59, 108, 246, 0.10);
   --app-accent: #3b6cf6;
-  --app-accent-ink: #ffffff;
   --app-key: #17181d;
   --app-key-ink: #ffffff;
   --app-add-bg: rgba(34, 134, 58, 0.09);
@@ -572,39 +568,6 @@
   color: var(--app-ink);
 }
 
-.lane {
-  position: relative;
-  width: 12px;
-  height: 100%;
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.lane::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  transform: translateX(-50%);
-  background: var(--app-line-2);
-}
-.node {
-  position: relative;
-  z-index: 1;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  box-shadow: 0 0 0 2px var(--app-card);
-}
-.cl-row.is-on .node { box-shadow: 0 0 0 2px var(--app-card); }
-.n0 { background: var(--app-lane0); }
-.n1 { background: var(--app-lane1); }
-.n2 { background: var(--app-lane2); }
-.n3 { background: var(--app-lane3); }
-
 .cl-msg {
   flex: 1;
   min-width: 0;
@@ -804,9 +767,7 @@
   font-weight: 600;
 }
 .st-a { color: var(--app-add-ink); }
-.st-d { color: var(--app-del-ink); }
 .st-m { color: var(--app-amber); }
-.st-r { color: var(--app-blue); }
 
 .cd-total {
   margin-top: auto;
@@ -941,7 +902,6 @@
 }
 
 /* 词级内联高亮 */
-.wl-a { background: var(--app-add-word); border-radius: 2px; }
 .wl-d { background: var(--app-del-word); border-radius: 2px; }
 
 .df-fade {
