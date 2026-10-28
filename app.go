@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -580,6 +579,13 @@ func (a *app) persist() {
 	a.run(func() { _ = s.Save() })
 }
 
+// persistNow 同步落盘一次，只该在关窗前调用：persist 把 Save 丢进后台
+// goroutine，进程随时可能退出，最后一份提交草稿/设置会跟着丢。文件很小，
+// 主线程同步写也就毫秒级。
+func (a *app) persistNow() {
+	_ = a.store.Save()
+}
+
 // saveViewSettings 记下跟界面有关的几项设置（视图模式、侧栏、字号、面板宽度、外观与语言）。
 func (a *app) saveViewSettings() {
 	cfg := a.store.Config()
@@ -644,16 +650,6 @@ func (a *app) setAppIcon(mode string) {
 	}
 	a.appIcon = mode
 	a.syncAppIcon()
-
-	// 将对应图标写回 resources/icon.png，保证未来打包与构建时生效
-	src := iconPureBlackPNG
-	if mode == "white" {
-		src = iconPureWhitePNG
-	}
-	if len(src) > 0 {
-		_ = os.WriteFile("resources/icon.png", src, 0o644)
-	}
-
 	a.saveViewSettings()
 }
 
@@ -1926,8 +1922,9 @@ func (a *app) toggleAmend(on bool) {
 	a.amend = on
 	if on {
 		if a.repoReady() {
+			dir := a.repoPath
 			a.run(func() {
-				repo, err := gitrepo.Open(context.Background(), a.repoPath)
+				repo, err := gitrepo.Open(context.Background(), dir)
 				if err == nil {
 					msg, err := repo.LastCommitMessage(context.Background())
 					if err == nil {

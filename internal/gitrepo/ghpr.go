@@ -174,11 +174,18 @@ func parseGhError(origErr error, msg string) error {
 	}
 }
 
+// ghTimeout 是单次 gh 网络请求的整体上限。调用方（PR 列表/差异检视）没有
+// 取消按钮，gh 挂住时（网络断、代理死）对话框会永远停在「正在获取」——
+// 超时是唯一的出口。挂钟时间，不做流式，60s 足够 gh 走完握手和传输。
+const ghTimeout = 60 * time.Second
+
 // ListPRs 通过 gh CLI 查询指定仓库下的打开 PR 列表。
 func ListPRs(ctx context.Context, repoDir string) ([]PRItem, error) {
 	if strings.TrimSpace(repoDir) == "" {
 		return nil, errors.New("仓库路径不能为空")
 	}
+	ctx, cancel := context.WithTimeout(ctx, ghTimeout)
+	defer cancel()
 	out, err := runGh(ctx, repoDir, "pr", "list", "--json", "number,title,author,headRefName,baseRefName,updatedAt,url")
 	if err != nil {
 		return nil, err
@@ -210,6 +217,8 @@ func GetPRDiff(ctx context.Context, repoDir string, prNumber int) ([]diff.FileDi
 	if prNumber <= 0 {
 		return nil, fmt.Errorf("无效的 PR 编号: %d", prNumber)
 	}
+	ctx, cancel := context.WithTimeout(ctx, ghTimeout)
+	defer cancel()
 	out, err := runGh(ctx, repoDir, "pr", "diff", strconv.Itoa(prNumber))
 	if err != nil {
 		return nil, err
@@ -232,6 +241,8 @@ func PostPRComment(ctx context.Context, repoDir string, prNumber int, body strin
 	if strings.TrimSpace(body) == "" {
 		return errors.New("评论内容不能为空")
 	}
+	ctx, cancel := context.WithTimeout(ctx, ghTimeout)
+	defer cancel()
 	_, err := runGh(ctx, repoDir, "pr", "comment", strconv.Itoa(prNumber), "--body", body)
 	return err
 }

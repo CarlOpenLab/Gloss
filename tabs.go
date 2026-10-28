@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/egoist/mygo/plugins/terminal"
@@ -466,9 +467,11 @@ func (a *app) closeTab(idx int) {
 				// 用户选了丢：把这一页的缓冲区清掉再关，否则 closeTab 又会
 				// 走到这条确认上，问第二次。活动页的活状态在 app 上，非活动页
 				// 只有 tab.review 那份快照（codeEdit / editorPane 不进快照，
-				// 切页时就被收掉了，非活动页没有这两样）。
-				a.closeEmbeddedEditors()
-				if idx < len(a.tabs) && idx != a.activeTab {
+				// 切页时就被收掉了，非活动页没有这两样）——各清各的，关别的
+				// 页不能顺手动活动页的活缓冲区。
+				if idx == a.activeTab {
+					a.closeEmbeddedEditors()
+				} else {
 					a.tabs[idx].review = reviewState{}
 				}
 				a.closeTab(idx)
@@ -490,12 +493,18 @@ func (a *app) closeTab(idx int) {
 		a.files = nil
 		a.state = loadIdle
 	} else {
+		// 只有活动页本身被关掉、眼前换了仓库时才恢复快照。关的是别的页就
+		// 别碰 restoreActiveTab：它先收掉嵌入式编辑器（没保存的缓冲一并
+		// 清空）再把快照整个重铺一遍，会把活动页的活状态抹回旧快照。
+		wasActive := idx == a.activeTab
 		if a.activeTab >= len(a.tabs) {
 			a.activeTab = len(a.tabs) - 1
 		} else if idx < a.activeTab {
 			a.activeTab--
 		}
-		a.restoreActiveTab()
+		if wasActive {
+			a.restoreActiveTab()
+		}
 	}
 	// 关掉/切换后活动仓库换了，自动刷新跟着换盯的对象。
 	a.syncAutoWatch()
@@ -1082,9 +1091,10 @@ func (a *app) startTerminal(tab *repoTab, s *termSession, dark bool, pal palette
 			a.dispatch(func() {})
 		}
 	}
-	// term 由下面的 OnPaste 引用：粘贴发生时 shell 早就起好了，指针已经落到
-	// s.term 上；起失败时它是 nil，回调里直接让过去。
-	var term *terminal.Terminal
+	// OnPaste 在终端插件的回调线程上跑，和主线程之间没有 happens-before；
+	// 指针经 atomic 交接，回调里读到什么都是完整的一份。起失败时它是 nil，
+	// 回调里直接让过去。
+	var termPtr atomic.Pointer[terminal.Terminal]
 	term, err := terminalNew(terminal.Options{
 		Dir:     dir,
 		Font:    a.terminalFont(),
@@ -1104,8 +1114,8 @@ func (a *app) startTerminal(tab *repoTab, s *termSession, dark bool, pal palette
 			if text != "" {
 				return false
 			}
-			if term != nil {
-				term.Send([]byte("\x16")) // Ctrl+V
+			if t := termPtr.Load(); t != nil {
+				t.Send([]byte("\x16")) // Ctrl+V
 			}
 			return true
 		},
@@ -1115,6 +1125,7 @@ func (a *app) startTerminal(tab *repoTab, s *termSession, dark bool, pal palette
 		return
 	}
 	s.term = term
+	termPtr.Store(term)
 }
 
 // restartCurrentTerminal 重启当前会话的 shell，其余会话不动。

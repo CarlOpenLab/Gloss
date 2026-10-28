@@ -82,6 +82,9 @@ func main() {
 			a.stopAutoRefresh()
 			a.saveCommitDraft()
 			a.closeAllTerminals()
+			// 上面的 persist 走后台 goroutine，等不等得到它跑完随缘；
+			// 最后这一份同步写完再放手（见 persistNow）。
+			a.persistNow()
 		})
 
 		// 接着上次打开的标签页（或最后打开的仓库），省得每次启动都要重新选一遍

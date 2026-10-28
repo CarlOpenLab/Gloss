@@ -147,11 +147,16 @@ func Open(dir string) *Store {
 // Dir 是这个 store 的数据目录。
 func (s *Store) Dir() string { return s.dir }
 
-// Config 返回设置的副本。
+// Config 返回设置的副本。Providers 是切片，要单独浅拷一层底层数组：
+// 设置对话框拿着这份副本逐键编辑（输入框直接绑在元素地址上），不拷贝的
+// 话改动会穿透到 store 里的活配置——「取消」拦不住，还会跟后台落盘的
+// json.Marshal 构成数据竞争。
 func (s *Store) Config() Config {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.cfg
+	c := s.cfg
+	c.Providers = append([]llm.Provider(nil), s.cfg.Providers...)
+	return c
 }
 
 // SetConfig 替换设置。

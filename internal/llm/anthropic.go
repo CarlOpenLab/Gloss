@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 
@@ -39,7 +40,12 @@ func streamAnthropic(ctx context.Context, p *Provider, system, user string, onDe
 	message := anthropic.Message{}
 	for stream.Next() {
 		event := stream.Current()
-		_ = message.Accumulate(event)
+		// 累加失败说明事件序已经乱了（协议异常）：再走下去 StopReason 会
+		// 缺失，Refusal 检测就静默失效，不如直接报错。
+		if err := message.Accumulate(event); err != nil {
+			_ = stream.Close()
+			return full.String(), fmt.Errorf("解析流式事件失败: %w", err)
+		}
 		if ev, ok := event.AsAny().(anthropic.ContentBlockDeltaEvent); ok {
 			if d, ok := ev.Delta.AsAny().(anthropic.TextDelta); ok {
 				full.WriteString(d.Text)
