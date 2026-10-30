@@ -1,7 +1,7 @@
 {
   "name": "Gloss",
   "identifier": "dev.carl.gloss",
-  "version": "0.3.26",
+  "version": "0.3.27",
   "icon": "resources/icon.png",
   "copyright": "Copyright (c) 2026 CarlOpenLab",
   "out": "build",
