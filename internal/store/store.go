@@ -50,7 +50,7 @@ type Config struct {
 	// 四周的缝里露出来。
 	BackgroundOpacity float64 `json:"backgroundOpacity,omitempty"`
 	// BackgroundBlur 是亚克力磨砂的模糊档位："none" / "subtle" / "medium" /
-	// "deep"，留空跟随 "subtle"。
+	// "deep"，留空跟随 "deep"。
 	BackgroundBlur string `json:"backgroundBlur,omitempty"`
 	// Locale 是界面语言设定："" 或 "zh"（简体中文）、"en"（English）。
 	Locale string `json:"locale,omitempty"`

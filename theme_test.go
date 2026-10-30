@@ -8,9 +8,9 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// 亚克力外观的四条：档位名是配置里的定值、未知档位收敛回柔和、材质映射和
-// beacon 同一张表、不透明度有默认值与上下限。任何一条坏了，用户改设置之后
-// 窗口要么没有材质，要么变成一个不由他决定的透明度。
+// 亚克力外观的四条：档位名是配置里的定值、未知档位收敛回默认（强力）、材质
+// 映射和 beacon 同一张表、不透明度有默认值与上下限。任何一条坏了，用户改设置
+// 之后窗口要么没有材质，要么变成一个不由他决定的透明度。
 func TestBlurNormalizesToKnownChoices(t *testing.T) {
 	for _, id := range blurChoices {
 		if got := normalizeBlur(id); got != id {
@@ -18,12 +18,12 @@ func TestBlurNormalizesToKnownChoices(t *testing.T) {
 		}
 	}
 	for _, id := range []string{"", "bogus", "Deep", "acrylic"} {
-		if got := normalizeBlur(id); got != blurSubtle {
-			t.Errorf("normalizeBlur(%q) = %q，未知档位应回落到 %q", id, got, blurSubtle)
+		if got := normalizeBlur(id); got != blurDefault {
+			t.Errorf("normalizeBlur(%q) = %q，未知档位应回落到 %q", id, got, blurDefault)
 		}
 	}
-	if got := blurIndex("bogus"); got != 1 {
-		t.Errorf("blurIndex(bogus) = %d，应落到柔和那一格（1）", got)
+	if got, want := blurIndex("bogus"), blurIndex(blurDefault); got != want {
+		t.Errorf("blurIndex(bogus) = %d，应落到默认档位那一格（%d）", got, want)
 	}
 	for i, id := range blurChoices {
 		if got := blurIndex(id); got != i {
@@ -38,12 +38,15 @@ func TestVibrancyFollowsBlurChoice(t *testing.T) {
 		blurSubtle: mygo.VibrancySidebar,
 		blurMedium: mygo.VibrancyPopover,
 		blurDeep:   mygo.VibrancyAcrylic,
-		"bogus":    mygo.VibrancySidebar,
 	}
 	for blur, want := range cases {
 		if got := vibrancyFor(blur); got != want {
 			t.Errorf("vibrancyFor(%q) = %q，应为 %q", blur, got, want)
 		}
+	}
+	// 坏档位按默认档位处理，默认值改了这里跟着走。
+	if got, want := vibrancyFor("bogus"), vibrancyFor(blurDefault); got != want {
+		t.Errorf("vibrancyFor(bogus) = %q，应为默认档位的 %q", got, want)
 	}
 }
 
@@ -64,11 +67,11 @@ func TestOpacityDefaultAndClamp(t *testing.T) {
 	}
 }
 
-// 工作卡的底色跟着设置走：默认 80% 的 pal.card，拧到 100% 就和实色卡完全一样。
+// 工作卡的底色跟着设置走：默认 30% 的 pal.card，拧到 100% 就和实色卡完全一样。
 func TestCardFillFollowsBackgroundOpacity(t *testing.T) {
 	a := newApp()
 	pal := paletteFor(themeFor(false, ui.Preferences{}), laneSet{})
-	if got, want := a.cardFill(pal), pal.card.Alpha(0.80); got != want {
+	if got, want := a.cardFill(pal), pal.card.Alpha(float32(bgOpacityDefault)); got != want {
 		t.Errorf("默认 cardFill = %v，应为 %v", got, want)
 	}
 	a.bgOpacity = 1

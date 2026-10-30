@@ -466,7 +466,7 @@ func newApp() *app {
 		sidebarOn: true,
 		themeMode: "system",
 		locale:    "zh",
-		bgBlur:    blurSubtle,
+		bgBlur:    blurDefault,
 		bgOpacity: bgOpacityDefault,
 		viewed:    map[string]string{},
 		commitSel: -1,

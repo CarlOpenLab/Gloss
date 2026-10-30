@@ -48,7 +48,9 @@ func shellWindowRadiusFor(goos string) float32 {
 		// 及更早是 10。
 		return 28
 	case "windows":
-		// Windows 11 的 DWM 圆角。
+		// Windows 11 的 DWM 圆角。窗口是无边框的，main.go 会在建窗后把原生
+		// 标题栏（连同 DWM 画在材质上的三颗按钮）收掉，同时显式要回这一档
+		// 圆角（见 applyNativeChrome）。
 		return 8
 	default:
 		// Linux 各家 CSD 常见的那一档（GNOME 的 Adwaita）。
@@ -57,17 +59,20 @@ func shellWindowRadiusFor(goos string) float32 {
 }
 
 // shellCardRadiusFor 是工作卡的圆角：内圆 = 外圆 − 间距，但不低于卡片自己的
-// 那一档（radiusLG）。
+// 那一档（radiusLG），也不能比外圆更圆。
 //
 // 同心是这条留白唯一的读法。写死一个不跟外圈走的数（原来是 14），在 macOS 26
 // 那种 28 的窗口角里，8px 的灰带会在角上挤薄到 5px —— 眼睛看见的是两条曲率
 // 差一倍的弧，像两张不相干的卡片叠在一起，而不是一张卡片浮在窗口里。
 //
-// 下限是必须的：窗口角本来就小的平台（Windows 11 是 8），严格同心算出来是 0 ——
-// 一张没有圆角的卡片读起来不是「跟着窗口走」，是「圆角丢了」。宁可让那条灰带
-// 在角上宽 4px，也不能把卡片的圆角抹平。
+// 窗口角小到装不下 rounded.lg 时（Windows 11 的 8、间距也是 8），同心会算出 0：
+// 一张没有圆角的卡片读起来不是「跟着窗口走」，是「圆角丢了」。这时守住
+// radiusLG，但以内圆不超过外圆为界 —— Windows 上取 8，内圈和外圈是同一套弧，
+// 不再出现旧规矩里「内圆比外圆更圆、角上一块楔形灰带」的样子（2026-10-30
+// 实机反馈）；Linux 的外圆是 12，取 12 正好落在两条边界之间。
 func shellCardRadiusFor(goos string) float32 {
-	return max(radiusLG, shellWindowRadiusFor(goos)-shellCardGap)
+	win := shellWindowRadiusFor(goos)
+	return min(max(radiusLG, win-shellCardGap), win)
 }
 
 func shellCardRadius() float32 { return shellCardRadiusFor(runtime.GOOS) }

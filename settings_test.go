@@ -842,8 +842,8 @@ func TestAcrylicSettingsPersist(t *testing.T) {
 	if got := a.backgroundOpacity(); got != bgOpacityDefault {
 		t.Errorf("默认不透明度 = %v，应为 %v", got, bgOpacityDefault)
 	}
-	if got := a.backgroundBlur(); got != blurSubtle {
-		t.Errorf("默认模糊档位 = %q，应为 %q", got, blurSubtle)
+	if got := a.backgroundBlur(); got != blurDefault {
+		t.Errorf("默认模糊档位 = %q，应为 %q", got, blurDefault)
 	}
 
 	a.setBackgroundOpacity(0.55)
@@ -861,8 +861,8 @@ func TestAcrylicSettingsPersist(t *testing.T) {
 
 	// 坏值和越界值在入口就收敛，不往磁盘上写第二套语义。
 	a.setBackgroundBlur("bogus")
-	if got := a.backgroundBlur(); got != blurSubtle {
-		t.Errorf("坏档位应收敛为 %q，实际 %q", blurSubtle, got)
+	if got := a.backgroundBlur(); got != blurDefault {
+		t.Errorf("坏档位应收敛为 %q，实际 %q", blurDefault, got)
 	}
 	a.setBackgroundOpacity(0.01)
 	if got := a.backgroundOpacity(); got != bgOpacityMin {

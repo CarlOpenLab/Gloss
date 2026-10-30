@@ -439,7 +439,7 @@ func TestTreeSelectionIsPill(t *testing.T) {
 	a := graphApp(t)
 	settle(t, a)
 	// 这条量的是选中底带压在侧栏上的亮度差，阈值按实色底调的：关掉亚克力
-	// 的默认 80%，别让窗口底的 alpha 把这套像素读数搅进来。
+	// 的默认 30%，别让窗口底的 alpha 把这套像素读数搅进来。
 	a.bgOpacity = 1
 	for _, ref := range a.refs {
 		if ref.Name == "feat1" {

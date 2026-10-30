@@ -66,13 +66,17 @@ func main() {
 			opts.TrafficLightPosition = &mygo.Point{X: trafficLightX, Y: trafficLightY}
 		} else {
 			// Windows / Linux：系统按钮收走，由视图画在右上角（见
-			// shell_style.go 的 windowButtons）。Frameless 只收走标题栏和
-			// 按钮：阴影、圆角、左右下三条可缩放的边都还在（Windows 上顶边
-			// 不再可缩放，这是无边框窗口的代价），窗口仍由工具栏拖动。
+			// shell_style.go 的 windowButtons）。Frameless 只收走 NonClient
+			// 的尺寸计算：阴影、圆角、左右下三条可缩放的边都还在（Windows
+			// 上顶边不再可缩放，这是无边框窗口的代价），窗口仍由工具栏拖动。
 			opts.Frameless = true
 		}
 		win := mygo.NewWindow(opts)
 		a.win = win
+		// Windows：亚克力材质铺满客户区时，DWM 会把它自己的三颗窗口按钮
+		// 画在材质顶上，压住视图自绘的那三颗。建窗后立刻收掉（macOS /
+		// Linux 上是空操作）。
+		applyNativeChrome(win.NativeHandle())
 		a.syncAppIcon()
 		// 后台 goroutine 改状态必须走这里：它把闭包投到主线程执行，
 		// 并请求重绘。直接改字段不会触发重绘。

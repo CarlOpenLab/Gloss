@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo"
@@ -337,25 +338,28 @@ func hexOf(c ui.Color) string {
 const (
 	bgOpacityMin     = 0.30
 	bgOpacityMax     = 1.0
-	bgOpacityDefault = 0.80
+	bgOpacityDefault = 0.30
 
 	blurNone   = "none"
 	blurSubtle = "subtle"
 	blurMedium = "medium"
 	blurDeep   = "deep"
+
+	// blurDefault 是没设过档位时的默认值。newApp、normalizeBlur 和
+	// 设置里的分段控件都从这一处取，改默认只需要改这里。
+	blurDefault = blurDeep
 )
 
 // blurChoices 是设置里模糊档位的顺序。id 存进配置，名字只给人看。
 var blurChoices = []string{blurNone, blurSubtle, blurMedium, blurDeep}
 
-// normalizeBlur 把不认识的档位（旧配置、手改的文件）收敛回 "subtle"：模糊
-// 档位只影响观感，不值得为一条坏值让窗口没有材质。
+// normalizeBlur 把不认识的档位（旧配置、手改的文件）收敛回默认档位：
+// 模糊只影响观感，不值得为一条坏值让窗口没有材质。
 func normalizeBlur(id string) string {
-	switch id {
-	case blurNone, blurSubtle, blurMedium, blurDeep:
+	if slices.Contains(blurChoices, id) {
 		return id
 	}
-	return blurSubtle
+	return blurDefault
 }
 
 // normalizeOpacity 把 0（没设过）和越界值收进 0.30~1.0。
@@ -366,15 +370,10 @@ func normalizeOpacity(v float64) float64 {
 	return min(max(v, bgOpacityMin), bgOpacityMax)
 }
 
-// blurIndex 是档位在 blurChoices 里的下标，给分段控件用。
+// blurIndex 是档位在 blurChoices 里的下标，给分段控件用。normalizeBlur 已经
+// 保证档位在表里，所以这里不会出现 -1。
 func blurIndex(id string) int {
-	id = normalizeBlur(id)
-	for i, choice := range blurChoices {
-		if choice == id {
-			return i
-		}
-	}
-	return 1 // subtle
+	return slices.Index(blurChoices, normalizeBlur(id))
 }
 
 // vibrancyFor 把模糊档位映射到 mygo 的窗口材质（和 beacon 完全同一张表）：

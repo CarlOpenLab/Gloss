@@ -206,23 +206,32 @@ func exprText(fset *token.FileSet, e ast.Expr) string {
 // 这条关系最容易在换机器 / 升系统之后悄悄失效：macOS 26（Tahoe）把窗口角从
 // 10 拉到了 28，卡片要是还写死 14，角上的灰带就被挤到 5px —— 差三个像素，
 // 整张截图上看不出来，但那个角读起来像两张不相干的卡片叠在一起。
+//
+// 窗口角装不下 rounded.lg 时（Windows 11 的 8），守下限的计算不能越过外圆：
+// 内圆最多和外圆一样圆，否则角上会出现一块楔形灰带 —— 这是 2026-10-30 在
+// Windows 上看到的那种「内外两套弧」。
 func TestShellCardRadiusIsConcentric(t *testing.T) {
-	// 窗口角够大的平台（macOS 26 = 28），严格同心算出来仍然是张卡片。
-	for _, goos := range []string{"darwin"} {
-		win, card := shellWindowRadiusFor(goos), shellCardRadiusFor(goos)
-		if want := win - shellCardGap; card != want {
-			t.Errorf("%s: 工作卡圆角 %.0f ≠ 窗口圆角 %.0f − 间距 %d —— 两圈弧不平行",
-				goos, card, win, shellCardGap)
-		}
-	}
-
-	// 窗口角比卡片那一档还小的平台（Windows 11 = 8，间距也是 8），严格同心
-	// 会算出 0 —— 那是把圆角抹平了，不是对齐。这时守住下限：卡片至少还是
-	// radiusLG，宁可角上的灰带宽几像素。
 	for _, goos := range []string{"darwin", "windows", "linux"} {
-		if card := shellCardRadiusFor(goos); card < radiusLG {
-			t.Errorf("%s: 工作卡圆角 %.0f 掉到 rounded.lg(%v) 之下 —— 卡片不能没有圆角",
-				goos, card, radiusLG)
+		win, card := shellWindowRadiusFor(goos), shellCardRadiusFor(goos)
+
+		// 内圆不能比外圆更圆：多出来的曲率会在角上留下一块楔形灰带，外圈和
+		// 内圈读起来是两套弧。
+		if card > win {
+			t.Errorf("%s: 工作卡圆角 %.0f 比窗口圆角 %.0f 还大 —— 内圆比外圆更圆",
+				goos, card, win)
+		}
+
+		// 窗口角装得下时严格同心；装不下时守住 rounded.lg，但不能越过外圆。
+		want := win - shellCardGap
+		if want < radiusLG {
+			want = min(radiusLG, win)
+		}
+		if card != want {
+			t.Errorf("%s: 工作卡圆角 %.0f，应为 %.0f（窗口圆角 %.0f − 间距 %d）",
+				goos, card, want, win, shellCardGap)
+		}
+		if card <= 0 {
+			t.Errorf("%s: 工作卡圆角 %.0f —— 卡片不能没有圆角", goos, card)
 		}
 	}
 }

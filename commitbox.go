@@ -436,9 +436,14 @@ func (a *app) commitBox(c *ui.Context, pal palette) {
 
 			// 顶部：全宽输入框，充足视野。chip 只铺输入区，不铺整张 Composer
 			// —— 要的是「输入区比下面那条槽亮一档」，铺满整张卡就只剩一块平底。
-			in = ui.TextArea(c, &a.commitMsg).Grow(1).FillWidth().MinWidth(0).
+			//
+			// 用 TextAreaBase 而不是 TextArea：框架自带的那层壳（底色、边框、
+			// 四角圆角）这里一样都不要，否则输入区自己的底角会在两端各空出
+			// 一小块卡片底色，那条分隔线看起来像断了一截；上沿交给 Composer
+			// 的 Clip 收成同一个圆，下沿是直角、紧贴动作条（§4.4）。
+			in = ui.TextAreaBase(c, &a.commitMsg).Grow(1).FillWidth().MinWidth(0).
 				MinHeight(inMin).MaxHeight(inMax).
-				Border(0, ui.Transparent).Background(pal.chip).
+				Background(pal.chip).
 				Padding(8, 10).
 				Placeholder(T("提交说明（首行简要概括，空行后输入详细背景…）", "Commit summary (first line summary, blank line for details…)")).Label(T("提交信息", "Commit Message"))
 

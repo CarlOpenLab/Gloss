@@ -176,7 +176,7 @@ func TestSplitterLineIsNeutral(t *testing.T) {
 func TestSplitterLineHiddenWhileDragging(t *testing.T) {
 	a := richApp(t)
 	// 这条量的是「线在不在」的绝对像素值，按实色底调的：把亚克力不透明度
-	// 关回 100%，别让默认 80% 的半透明卡片把整块画布的读数都带偏。亚克力
+	// 关回 100%，别让默认 30% 的半透明卡片把整块画布的读数都带偏。亚克力
 	// 本身由 theme_test / settings_test 盯。
 	a.bgOpacity = 1
 	tt := ui.NewTester(a.view, 1280, 860)
