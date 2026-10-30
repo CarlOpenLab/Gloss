@@ -79,7 +79,7 @@ func stageBox(c *ui.Context, pal palette, s stageState, lock bool) ui.Element {
 		border = pal.hairlineStrong
 		if hovered {
 			border = pal.hairlineTertiary
-			fill = pal.surface2
+			fill = pal.rowHover
 		}
 	}
 	btn.Background(fill).Border(1, border)
@@ -223,7 +223,7 @@ func stageFileButton(c *ui.Context, pal palette, s stageState, lock bool) ui.Ele
 		fg = pal.inkMuted
 		if hovered {
 			border = pal.hairlineTertiary
-			bg = pal.surface2
+			bg = pal.rowHover
 		} else {
 			border = pal.hairlineStrong
 		}
@@ -418,36 +418,38 @@ func (a *app) commitBox(c *ui.Context, pal palette) {
 
 		var in ui.Element
 
-		// 一体化 Composer 卡片容器（§4.4）：输入框底走 Surface 2，
-		// 卡片圆角 lg(12)；聚焦时换 1px 的焦点色描边，不再是 1.2px 的
-		// 强调色半透明 —— 描边宽度 1.2 在非整数缩放下会糊成两像素，
-		// 而 §2.2 的线只有一种粗细。
+		// 一体化 Composer 卡片容器（§4.4）：输入区在卡片上叠一层半透明的
+		// chip（原来的 Surface 2 不透明，会把卡片的亚克力挡掉），卡片圆角
+		// lg(12)；聚焦时换 1px 的焦点色描边，不再是 1.2px 的强调色半透明
+		// —— 描边宽度 1.2 在非整数缩放下会糊成两像素，而 §2.2 的线只有一种粗细。
 		//
-		// Clip 是必须的：底下那条工具栏铺的是 Surface 1，不裁的话它会
-		// 从卡片圆角里方方正正地探出来，底线看着又是一条直角。
+		// Clip 是必须的：输入区的 chip 底和底下工具栏各自贴着外沿，不裁的话
+		// 它们会从卡片圆角里方方正正地探出来，底线看着又是一条直角。
 		cardBorder := pal.hairlineStrong
 		if a.commitFocused {
 			cardBorder = t.Focus
 		}
 		ui.Column(c).FillWidth().Radius(radiusLG).
-			Background(pal.surface2).
 			Border(1, cardBorder).
 			Shadow(0, 2, 8, 0, ui.RGBA(0, 0, 0, 0.04)).
 			Clip().Children(func() {
 
-			// 顶部：全宽输入框，充足视野
+			// 顶部：全宽输入框，充足视野。chip 只铺输入区，不铺整张 Composer
+			// —— 要的是「输入区比下面那条槽亮一档」，铺满整张卡就只剩一块平底。
 			in = ui.TextArea(c, &a.commitMsg).Grow(1).FillWidth().MinWidth(0).
 				MinHeight(inMin).MaxHeight(inMax).
-				Border(0, ui.Transparent).Background(ui.Transparent).
+				Border(0, ui.Transparent).Background(pal.chip).
 				Padding(8, 10).
-				Placeholder(T("提交说明（首行简要概述，空行后输入详细背景…）", "Commit summary (first line summary, blank line for details…)")).Label(T("提交信息", "Commit Message"))
+				Placeholder(T("提交说明（首行简要概括，空行后输入详细背景…）", "Commit summary (first line summary, blank line for details…)")).Label(T("提交信息", "Commit Message"))
 
-			// 底部：操作与状态一体化工具栏。它比卡片本身沉一档（Surface 1），
-			// 像是卡片里挖出来的一条槽 —— 上面是「写什么」，下面是「拿它怎么办」。
+			// 底部：操作与状态一体化工具栏。它不铺色，让卡片的亚克力直接透上来
+			// —— 比输入区的 chip 又退一档，像是输入区底下挖出来的一条槽：上面
+			// 是「写什么」，下面是「拿它怎么办」。透明度仍然只有 chip 这一个
+			// 入口（§5「禁止在组件里手写半透明底」），这里只是不再叠一层。
 			//
 			// 主区放得下就摆成一行：状态靠左、动作靠右。放不下（窄窗口）就
 			// 竖着折成两行，而不是把按钮顶出窗口。
-			barBg := pal.surface1
+			barBg := ui.Transparent
 			barBorder := pal.hairline
 			if stackedBar {
 				ui.Column(c).FillWidth().Shrink(0).
@@ -500,10 +502,11 @@ func (a *app) commitBox(c *ui.Context, pal palette) {
 
 // aiCommitButton 是 AI 生成提交信息按钮。
 //
-// 它是次要动作，走 §4.1 的 Secondary Button：Surface 1 底 + hairline 边 +
-// Ink Muted 文字，悬停升一档。原来静息态就蓝底蓝字 —— 一颗按钮还没被碰过
-// 就先亮起来，等于提前替用户做了选择，而它旁边的「提交」才是这张卡片上
-// 唯一该被看见的动作。生成中只用强调色文字说话。
+// 它是次要动作，走 §4.1 的 Secondary Button：chip 底 + hairline 边 +
+// Ink Muted 文字，悬停升一档。chip 是半透明的：它落在这张亚克力卡上，
+// 铺不透明的 Surface 会把卡片的磨砂抠掉一块。原来静息态就蓝底蓝字 ——
+// 一颗按钮还没被碰过就先亮起来，等于提前替用户做了选择，而它旁边的
+// 「提交」才是这张卡片上唯一该被看见的动作。生成中只用强调色文字说话。
 func (a *app) aiCommitButton(c *ui.Context, t *ui.Theme, pal palette) {
 	tip := Tf("✨ AI 生成提交信息 (%s)", "✨ AI Generate Commit Message (%s)", K("⌘I"))
 	if a.aiCommitLoading {
@@ -519,13 +522,13 @@ func (a *app) aiCommitButton(c *ui.Context, t *ui.Theme, pal palette) {
 	var bg, border, fg ui.Color
 	switch {
 	case a.aiCommitLoading:
-		bg, border, fg = pal.surface3, pal.hairlineStrong, t.Accent
+		bg, border, fg = pal.rowSelected, pal.hairlineStrong, t.Accent
 	case disabled:
 		bg, border, fg = ui.Transparent, pal.hairline, pal.inkTertiary
 	case hovered:
-		bg, border, fg = pal.surface3, pal.hairlineStrong, pal.ink
+		bg, border, fg = pal.rowSelected, pal.hairlineStrong, pal.ink
 	default:
-		bg, border, fg = pal.surface2, pal.hairlineStrong, pal.inkMuted
+		bg, border, fg = pal.chip, pal.hairlineStrong, pal.inkMuted
 	}
 	btn.Background(bg).Border(1, border)
 	fadeColors(btn)
@@ -539,7 +542,7 @@ func (a *app) aiCommitButton(c *ui.Context, t *ui.Theme, pal palette) {
 			sparkleIcon(c, 11, fg)
 			ui.Text(c, T("AI 生成", "AI Commit")).FontSize(textButton).
 				FontWeight(weightMedium).TextColor(fg)
-			ui.Box(c).Radius(radiusXS).Padding(1, 4).Background(pal.surface1).
+			ui.Box(c).Radius(radiusXS).Padding(1, 4).Background(pal.kbd).
 				Children(func() {
 					ui.Text(c, K("⌘I")).FontSize(textCaption).TextColor(pal.inkTertiary)
 				})
@@ -576,11 +579,11 @@ func (a *app) commitLangButton(c *ui.Context, t *ui.Theme, pal palette) {
 	var bg, border, fg ui.Color
 	switch {
 	case lang == "en":
-		bg, border, fg = pal.surface3, pal.hairlineStrong, pal.ink
+		bg, border, fg = pal.rowSelected, pal.hairlineStrong, pal.ink
 	case hovered:
-		bg, border, fg = pal.surface3, pal.hairlineStrong, pal.ink
+		bg, border, fg = pal.rowSelected, pal.hairlineStrong, pal.ink
 	default:
-		bg, border, fg = pal.surface2, pal.hairlineStrong, pal.inkMuted
+		bg, border, fg = pal.chip, pal.hairlineStrong, pal.inkMuted
 	}
 	btn.Background(bg).Border(1, border)
 	fadeColors(btn)
@@ -613,13 +616,13 @@ func (a *app) riskScanButton(c *ui.Context, t *ui.Theme, pal palette) {
 	var bg, border, fg ui.Color
 	switch {
 	case a.riskScan.loading:
-		bg, border, fg = pal.surface3, pal.hairlineStrong, t.Accent
+		bg, border, fg = pal.rowSelected, pal.hairlineStrong, t.Accent
 	case disabled:
 		bg, border, fg = ui.Transparent, pal.hairline, pal.inkTertiary
 	case hovered:
-		bg, border, fg = pal.surface3, pal.hairlineStrong, pal.ink
+		bg, border, fg = pal.rowSelected, pal.hairlineStrong, pal.ink
 	default:
-		bg, border, fg = pal.surface2, pal.hairlineStrong, pal.inkMuted
+		bg, border, fg = pal.chip, pal.hairlineStrong, pal.inkMuted
 	}
 	btn.Background(bg).Border(1, border)
 	fadeColors(btn)
@@ -792,7 +795,7 @@ func (a *app) commitButton(c *ui.Context, t *ui.Theme, pal palette) {
 			bg, border, fg = t.Accent, t.Accent, t.AccentText
 		}
 	} else {
-		bg, border, fg = pal.surface3, pal.hairline, pal.inkTertiary
+		bg, border, fg = pal.chip, pal.hairline, pal.inkTertiary
 	}
 	btn.Background(bg).Border(1, border)
 	fadeColors(btn)
@@ -881,7 +884,7 @@ func (a *app) commitStatus(c *ui.Context, t *ui.Theme, pal palette) {
 		if a.hasHead {
 			ui.Box(c).Size(1, 12).Background(pal.hairline)
 			amendVal := a.amend
-			ui.Checkbox(c, &amendVal, T("修改上次提交 (Amend)", "Amend Last Commit")).Label(T("修改上次提交 (Amend)", "Amend Last Commit"))
+			washCheckbox(c, pal, &amendVal, T("修改上次提交 (Amend)", "Amend Last Commit"))
 			if amendVal != a.amend {
 				a.toggleAmend(amendVal)
 			}
@@ -944,7 +947,7 @@ func quickStageAllChip(c *ui.Context, pal palette) bool {
 	if btn.Hovered() {
 		fg = pal.ink
 	}
-	btn.Background(pal.surface2).Border(1, pal.hairlineStrong)
+	btn.Background(pal.chip).Border(1, pal.hairlineStrong)
 	fadeColors(btn)
 
 	btn.Children(func() {

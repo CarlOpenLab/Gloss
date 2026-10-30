@@ -136,8 +136,9 @@ func (a *app) changedWorkspaceCount() int {
 // 栏头两颗页签图标（VS Code 侧栏同款）：文件树管「有哪些文件」，搜索管
 // 「内容里有什么」，各自换掉下面那一块。
 func (a *app) workspaceFilePane(c *ui.Context, pal palette, t *ui.Theme) {
-	ui.Column(c).Width(a.filePaneWidth(c)).Shrink(0).FillHeight().
-		Background(pal.surface1).Children(func() {
+	// 不铺底：和改动栏的文件列表一样，让卡片的亚克力透上来（见
+	// fileListPane 的注释）。
+	ui.Column(c).Width(a.filePaneWidth(c)).Shrink(0).FillHeight().Children(func() {
 		ui.Row(c).Shrink(0).Padding(5, 8, 5, 12).Gap(4).AlignItems(ui.Center).Children(func() {
 			if a.wsPaneTabButton(c, pal, T("文件树", "Files"),
 				T("浏览工作区的文件", "Browse the workspace files"),
@@ -278,7 +279,7 @@ func (a *app) navWorkspaceFile(dir int) {
 func (a *app) workspaceFooter(c *ui.Context, pal palette) {
 	n := a.changedWorkspaceCount()
 	ui.Row(c).Shrink(0).Padding(7, 12).Gap(6).AlignItems(ui.Center).
-		Background(pal.surface2).
+		Background(pal.chip).
 		BorderWidth(1, 0, 0, 0).BorderColor(pal.hairline).Children(func() {
 		if n == 0 {
 			ui.Text(c, T("工作区无改动", "Working tree clean")).FontSize(textCaption).

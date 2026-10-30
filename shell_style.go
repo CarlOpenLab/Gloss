@@ -195,38 +195,35 @@ func (a *app) windowButton(c *ui.Context, pal palette, key string, svg *ui.SVG,
 	}
 }
 
-// shellBackdrop paints the window wash the cards and sidebar sit on: a flat
-// neutral in light, a gradient in dark, so the shell has depth without another
-// panel.
+// shellBackdrop paints the window ground under the cards and the sidebar.
 //
-// 浅色不铺渐变：那套粉紫到奶油的染色（借自 term-fleet 早期的 rex）落在
-// 白卡片旁边会读成一层脏色，也违了 §2「界面不含色相」。现在浅色只有一层
-// 中性冷灰 —— 和 term-fleet 的 plain 一样：窗口是「灰的」，卡片才是「白的」。
-// 侧栏是 Vibrant 材质，这里填不透明色：半透明会让壁纸的颜色透上来，又变成
-// 一层说不清的染色，「纯白」就守不住了。
-func shellBackdrop(c *ui.Context, pal palette, row ui.Element) {
-	if !pal.dark {
-		c.Root().Background(pal.sideBg)
-		return
-	}
+// 亚克力模式：有系统材质时（macOS、Windows 11 22H2+）窗口底是主题色的一层
+// 薄纱盖在磨砂材质上 —— 材质给纹理，主题色决定这块窗口读起来是深还是浅。
+// 不能把底色整个交给材质：材质跟的是系统外观，不是应用里固定的深 / 浅色。
+// 深色应用碰上浅色系统时，侧栏和卡片四周会亮成一片，和深色的卡片、提交栏
+// 拼在一起像没上完色（2026-10-30 实机截图）。剩下的部分留给材质透出背后
+// 的内容，模糊仍然看得见。
+//
+// 没有材质时（Linux、旧 Windows）直接铺实色 sideBg：透明底不模糊，透出来
+// 的桌面只会让文字没法读。
+//
+// 这里不再画深色那条 Oklab 渐变和紫辉光：那是「纯色洗底」时代的底，
+// 现在深色的颜色由这支 sideBg 确定，叠一条渐变只会把材质糊掉。
+func shellBackdrop(c *ui.Context, pal palette) {
+	c.Root().Background(shellGround(pal, c.Vibrancy()))
+}
 
-	alpha := float32(1)
-	if c.Vibrancy() {
-		alpha = 0.95
+// shellTint 是窗口底那层主题色的不透明度：材质最亮（正午的白墙）也要把
+// 侧栏的次要文字压到 4.5:1 以上（见 TestShellGroundKeepsDarkThemeDark）。
+const shellTint = 0.65
+
+// shellGround 是窗口底这一帧该铺的颜色：有材质时是主题色薄纱，没有材质时
+// 是实色 sideBg。拆成纯函数，测试才不用起视图。
+func shellGround(pal palette, vibrancy bool) ui.Color {
+	if vibrancy {
+		return pal.sideBg.Alpha(shellTint)
 	}
-	c.Root().LinearGradient(ui.LinearGradient{
-		Angle: 180,
-		Oklab: true,
-		From:  ui.Hex("#17141f").Alpha(alpha),
-		To:    ui.Hex("#1b1916").Alpha(alpha),
-	})
-	glow := ui.RGBA(120, 70, 120, 0.22)
-	row.LinearGradient(ui.LinearGradient{
-		Angle: 225,
-		Oklab: true,
-		From:  glow,
-		To:    glow.Alpha(0),
-	})
+	return pal.sideBg
 }
 
 // raisedSurface lifts the main card and controls off the background.
@@ -263,7 +260,11 @@ func floatingSurface(e ui.Element, pal palette) ui.Element {
 		return darkSurfaceShadow(litSurfaceEdge(e, pal)).
 			Shadow(0, 16, 40, 0, pal.floatShadow)
 	}
-	return e.Shadow(0, 1, 3, 0, pal.cardShadow).
+	// 浅色浮层和浅色卡片同一条规矩（见 raisedSurface）：只靠一层软阴影，
+	// 边在这片浅灰上就是一团化开的灰 —— 压在亚克力底上尤其糊。补一条
+	// 0 模糊 / 1 扩散的硬边，只画在外沿，不动布局。
+	return e.Shadow(0, 0, 0, 1, pal.cardBorder).
+		Shadow(0, 1, 3, 0, pal.cardShadow).
 		Shadow(0, 16, 40, 0, pal.floatShadow)
 }
 

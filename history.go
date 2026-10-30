@@ -361,46 +361,88 @@ func (a *app) selectStash(ref gitrepo.Ref) {
 
 // historyArea 是历史 tab 的主区：上半提交列表，下半「文件列表 + diff」，
 // 中间一条可以拖的分隔条。
+//
+// 分隔条自己画，不用 ui.SplitVertical：框架那条线取主题的 t.Border，而
+// Gloss 把 t.Border 设成了透明（框架自绘的控件一律不描边）—— 能拖的缝在
+// 屏幕上一根线都没有，用户只能猜。线用发丝线（§2.2），悬停提亮一档，
+// 和文件栏那两条竖分隔条（paneSplitter）同一副面孔。
 func (a *app) historyArea(c *ui.Context, pal palette) {
-	a.clampHistSplit(c)
+	minPane, hi := a.clampHistSplit(c)
+	grip := float32(6)
 
-	ui.SplitVertical(c, &a.histSplit,
-		func() { a.commitListPane(c, pal) },
-		func() { a.detailPane(c, pal) },
-	).Grow(1)
+	ui.Column(c).Grow(1).FillWidth().MinHeight(0).AlignItems(ui.Stretch).Children(func() {
+		ui.Box(c).FillWidth().Shrink(0).Height(a.histSplit).MinHeight(0).Clip().Children(func() {
+			a.commitListPane(c, pal)
+		})
+
+		// 1px 的槽：线本身由下面的把手画，这里只占位、把两栏分开。
+		ui.Box(c).FillWidth().Height(paneSplitterW).Shrink(0)
+
+		ui.Box(c).Grow(1).Shrink(1).FillWidth().MinHeight(0).Clip().Children(func() {
+			a.detailPane(c, pal)
+		})
+
+		// 把手最后建：它盖在上下两栏的交界上，命中区比那 1px 各探出 3px
+		// —— 一条发丝线是世界上最难点中的东西。放最后才压得住两栏里的内容，
+		// 指针落在缝上时不会先被列表或 diff 接走。
+		handle := ui.Box(c).Absolute().Left(0).Right(0).
+			Top(a.histSplit - (grip-1)/2).Height(grip).
+			Cursor(ui.CursorResizeNS).Role(ui.RoleNone)
+		if handle.DoubleClicked() {
+			a.histSplit = 0 // 下一帧由 clampHistSplit 重新给默认值
+		}
+		if _, dy, held := handle.Dragged(); held && dy != 0 {
+			a.histSplit = clamp(a.histSplit+dy, minPane, hi)
+		}
+		handle.Draw(func(p *ui.Painter, r ui.Rect) {
+			// 悬停 / 按下只把发丝线提亮一档，不用强调蓝：它是两栏的边界，
+			// 不是可点击的主 CTA（§5 的强调预算），和 paneSplitter 一致。
+			line := pal.hairline
+			if handle.Hovered() || handle.Pressed() {
+				line = pal.hairlineStrong
+			}
+			p.Fill(ui.Rect{X: r.X, Y: r.Y + (grip-1)/2, W: r.W, H: 1}, line, 0)
+		})
+	})
 }
 
-// clampHistSplit 把提交列表的高度收进当前窗口。
+// clampHistSplit 把提交列表的高度收进当前窗口，并给出能拖的范围
+// （下限、上限）。上限给下半区至少留一个 minPane 和那条 1px 的线。
 //
-// 为什么不能只靠 ui.Split 自己夹：它在 set() 里用的是**上一帧实测的**
-// 可用高度，而且只在拖动/按方向键那一刻生效 —— 第一帧（还没量过）夹不了，
-// 窗口被拖矮也不会重新夹一次。结果就是上栏顶到窗口外面、下栏（diff）
-// 被压成 0，看上去像 diff 没了。
+// 这个夹逼不能只靠分隔条自己：拖动时它拿到的位移是相对的，窗口被拖矮
+// 时也没有人来把 histSplit 拉回来 —— 不在这里夹一次，上栏会顶到窗口
+// 外面、下栏（diff）被压成 0，看上去像 diff 没了。
 //
 // 下限用框架自己那个 minPane（t.Space(10)，主题默认 Spacing=4 时是 40），
-// 不另立一个更紧的数：比它大就会和框架的夹逼打架 —— 用户拖到底，框架先
-// 停在 40，下一帧又被这里拉回去，闪一下。
-func (a *app) clampHistSplit(c *ui.Context) {
+// 不另立一个更紧的数：和框架其它分隔条的下限保持同一处，用户拖到底时
+// 停在他熟悉的位置。
+func (a *app) clampHistSplit(c *ui.Context) (minPane, hi float32) {
+	minPane = c.Theme().Space(10)
 	_, h := c.Size()
 	avail := h - a.toolbarHeight(c)
 	if avail <= 0 {
-		return
+		if a.histSplit <= 0 {
+			a.histSplit = minPane
+		}
+		return minPane, minPane
 	}
-	minPane := c.Theme().Space(10)
-	hi := max(minPane, avail-1-minPane)
+	hi = max(minPane, avail-1-minPane)
 
 	if a.histSplit <= 0 { // 还没定过：给 diff 留大头
 		a.histSplit = clamp(avail*defaultCommitH, minPane, hi)
-		return
+	} else {
+		a.histSplit = clamp(a.histSplit, minPane, hi)
 	}
-	a.histSplit = clamp(a.histSplit, minPane, hi)
+	return minPane, hi
 }
 
 // commitListPane 是提交列表那一栏：栏头 + 列头 + 列表。
 func (a *app) commitListPane(c *ui.Context, pal palette) {
 	t := c.Theme()
 
-	ui.Column(c).Grow(1).FillHeight().Background(pal.surface1).Children(func() {
+	// 不铺底：和下面的文件列表同一个卡片、同一层亚克力（见 fileListPane
+	// 的注释）。
+	ui.Column(c).Grow(1).FillHeight().Children(func() {
 		// 栏头。提交条数原来挂在侧栏底部，侧栏让给分支树之后搬到这里
 		// —— 它说的就是这份列表，放在列表头上比放在屏幕另一头合适。
 		ui.Row(c).Shrink(0).Padding(8, 12).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -519,9 +561,9 @@ func (a *app) commitListPane(c *ui.Context, pal palette) {
 // loadMoreRow 是提交列表底部的加载行，支持点击或自动滚动加载更早的提交。
 func (a *app) loadMoreRow(c *ui.Context, t *ui.Theme, pal palette) {
 	row := ui.Row(c).Height(commitH).Shrink(0).AlignItems(ui.Center).Justify(ui.Center).
-		Cursor(ui.CursorPointer).Background(pal.fileBg)
+		Cursor(ui.CursorPointer)
 	if row.Hovered() {
-		row.Background(pal.surface2)
+		row.Background(pal.rowHover)
 	}
 	fadeColors(row)
 	row.Children(func() {
@@ -565,8 +607,7 @@ const (
 // 结构必须和 commitRow 一模一样（图栏 + 带内边距的 Row），否则列对不齐 ——
 // 两处的宽度都取自上面那组常量。
 func (a *app) commitHeaderRow(c *ui.Context, t *ui.Theme, pal palette) {
-	ui.Row(c).Height(24).Shrink(0).AlignItems(ui.Center).
-		Background(pal.fileBg).Children(func() {
+	ui.Row(c).Height(24).Shrink(0).AlignItems(ui.Center).Children(func() {
 		ui.Box(c).Width(graphWidth(a.maxLanes)).Shrink(0)
 		ui.Row(c).Grow(1).MinWidth(0).Padding(0, 8).Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, T("描述", "Description")).FontSize(11).Grow(1).MinWidth(0).TextColor(t.TextMuted)
@@ -592,15 +633,7 @@ func (a *app) commitRow(c *ui.Context, pal palette, i int) {
 	row := ui.Row(c).Height(commitH).Shrink(0).AlignItems(ui.Center).
 		Background(bg).Cursor(ui.CursorPointer)
 	if row.Hovered() && !sel {
-		row.Background(pal.surface2)
-	}
-	// 图的底色跟着这一行的实际底色走：节点外圈铺的是它，选中 / 悬停时
-	// 行底色变了，这一圈也得跟着变，不然圆点周围会多出一块白斑。
-	nodeBg := pal.surface1
-	if sel {
-		nodeBg = pal.selection
-	} else if row.Hovered() {
-		nodeBg = pal.surface2
+		row.Background(pal.rowHover)
 	}
 	fadeColors(row)
 	// 徽章上那一下双击也要拦住整行的单击：芯片是行里的子元素，指针事件一
@@ -613,7 +646,7 @@ func (a *app) commitRow(c *ui.Context, pal palette, i int) {
 		if i < len(a.graph) {
 			ui.Box(c).Width(graphWidth(a.maxLanes)).Height(commitH).Shrink(0).
 				Draw(func(p *ui.Painter, r ui.Rect) {
-					drawGraphRow(p, r, pal, a.graph[i], a.maxLanes, nodeBg)
+					drawGraphRow(p, r, pal, a.graph[i], a.maxLanes)
 				})
 		}
 
@@ -653,7 +686,7 @@ func (a *app) commitRow(c *ui.Context, pal palette, i int) {
 				ui.Text(c, fmt.Sprintf("+%d", overflow)).FontSize(rowChipText).
 					FontWeight(weightMedium).SingleLine().Shrink(0).
 					Padding(1, 5).Radius(radiusXS).
-					TextColor(pal.inkSubtle).Background(pal.surface2).
+					TextColor(pal.inkSubtle).Background(pal.chip).
 					Border(1, pal.hairline)
 			}
 			ui.Spacer(c)

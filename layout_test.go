@@ -438,6 +438,9 @@ func TestRefGroupToggles(t *testing.T) {
 func TestTreeSelectionIsPill(t *testing.T) {
 	a := graphApp(t)
 	settle(t, a)
+	// 这条量的是选中底带压在侧栏上的亮度差，阈值按实色底调的：关掉亚克力
+	// 的默认 80%，别让窗口底的 alpha 把这套像素读数搅进来。
+	a.bgOpacity = 1
 	for _, ref := range a.refs {
 		if ref.Name == "feat1" {
 			a.refSel = refLeaf + ref.Full
@@ -453,7 +456,8 @@ func TestTreeSelectionIsPill(t *testing.T) {
 	tt.Frame()
 	img := tt.Image()
 
-	// 侧栏是半透明的，像素是预乘的：取色前先除以 alpha 还原成直通色。
+	// 像素是预乘的：取色前先除以 alpha 还原成直通色（底带边缘的抗锯齿
+	// 像素带 alpha，不还原会量成偏暗）。
 	rgb := func(x, y int) (float32, float32, float32) {
 		r, g, b, al := img.At(x, y).RGBA()
 		if al == 0 {
@@ -472,10 +476,10 @@ func TestTreeSelectionIsPill(t *testing.T) {
 	//
 	// 判据从「偏蓝」换成亮度了：设计规范把选中底带从中性的灰阶里取色
 	// （见 palette.selection），不再用强调色淡染，所以 b-r 这条老判据
-	// 在底带上约等于 0，量不出任何东西。亮度这一头分得很开 —— 侧栏在深色
-	// 渐变上的底色约 0.105、悬停约 0.15、选中底带约 0.20，0.16 落在悬停
-	// 和选中之间，既认得出选中，又不会把悬停误当选中。
-	const bandLum = 0.16
+	// 在底带上约等于 0，量不出任何东西。亮度这一头分得很开 —— 窗口底
+	// #141418 的亮度约 0.080、悬停约 0.126、选中底带约 0.138，0.132 落在
+	// 悬停和选中之间，既认得出选中，又不会把悬停误当选中。
+	const bandLum = 0.132
 
 	// bandRow 判断 y 这一行是不是选中底带：数整行里「够亮」的像素占比。
 	//

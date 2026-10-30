@@ -39,7 +39,7 @@ const (
 	statusChipText = textCaption
 )
 
-// specChip 起一颗「规范芯片」：Surface 2 底 + 1px 发丝边 + Ink Muted 文字。
+// specChip 起一颗「规范芯片」：chip 洗色底 + 1px 发丝边 + Ink Muted 文字。
 //
 // 语义 —— 本地分支 / 远程 / 标签 / 严重度 / 状态 —— 全靠 dot 那颗 6px 圆点带
 // 出来，而不是把整块芯片涂成琥珀、亮蓝、翠绿。这不是洁癖：提交行一行能挂四枚
@@ -54,7 +54,9 @@ const (
 func specChip(c *ui.Context, pal palette, label string, dot ui.Color, height, fontSize float32) ui.Element {
 	chip := ui.Row(c).Height(height).Shrink(0).AlignItems(ui.Center).Gap(4).
 		Padding(0, 6).Radius(radiusXS).
-		Background(pal.surface2).Border(1, pal.hairline)
+		// 半透明底：芯片多落在工作卡里（文件状态、HEAD、历史徽章），
+		// surface2 不透明，会把卡片的亚克力挡掉一块。
+		Background(pal.chip).Border(1, pal.hairline)
 	chip.Children(func() {
 		if dot.A > 0 {
 			ui.Box(c).Size(chipDot, chipDot).Shrink(0).
@@ -157,8 +159,12 @@ func searchField(c *ui.Context, pal palette, value *string, placeholder string) 
 	var in ui.Element
 
 	// 搜索栏在 §3 里明确归到 md(8)，和文本输入框同一档 —— 它就是个输入框。
+	//
+	// 底色走半透明的 chip：surface1 和卡片同色却是不透明的，铺在亚克力卡
+	// 上等于抠出一块挡板；chip 只是在卡片上叠一层薄纱（深色略抬、浅色略沉），
+	// 框的形状仍由 hairlineStrong 那条边定。
 	box := ui.Row(c).Height(searchH).Shrink(0).AlignItems(ui.Center).
-		Gap(6).Padding(0, 8).Radius(radiusMD).Background(pal.surface1).
+		Gap(6).Padding(0, 8).Radius(radiusMD).Background(pal.chip).
 		Border(1, pal.hairline).
 		Label(placeholder).Children(func() {
 		searchIcon(c, 12, pal.inkSubtle)
@@ -168,7 +174,7 @@ func searchField(c *ui.Context, pal palette, value *string, placeholder string) 
 			clearBtn := ui.ButtonBase(c).Size(16, 16).Radius(radiusPill).Center().
 				Cursor(ui.CursorPointer).Label("清空").Tooltip("清空筛选")
 			if clearBtn.Hovered() {
-				clearBtn.Background(pal.surface3)
+				clearBtn.Background(pal.rowSelected)
 			}
 			fadeColors(clearBtn)
 			clearBtn.Children(func() {
@@ -226,7 +232,7 @@ func toolbarSegmentedText(c *ui.Context, pal palette, selected *int, off bool, l
 	parts := ui.SegmentedBase(c, selected, len(labels))
 	g := parts.Track
 	g.Height(28).AlignItems(ui.Center).Padding(2).Gap(2).Radius(radiusMD).
-		Background(pal.surface1).Border(1, pal.hairline).Disabled(off)
+		Background(pal.chip).Border(1, pal.hairline).Disabled(off)
 
 	g.Children(func() {
 		for i, label := range labels {
@@ -239,11 +245,11 @@ func toolbarSegmentedText(c *ui.Context, pal palette, selected *int, off bool, l
 			case off:
 				fg = pal.inkTertiary
 			case sel:
-				bg = pal.surface3
+				bg = pal.rowSelected
 				fg = pal.ink
 				s.Border(1, pal.hairlineStrong)
 			case s.Hovered():
-				bg = pal.surface2
+				bg = pal.rowHover
 				fg = pal.ink
 			}
 			s.Background(bg)
@@ -271,8 +277,11 @@ type segmentedIconItem struct {
 //
 // 轨道自己不画底、不描边：工具栏上已经有一条卡片边线，再给这一组套一圈
 // 圆角边框，屏上就多出一个「框里的框」，和旁边的幽灵图标键也不在同一档。
-// 只留每一格自己的悬停 / 选中底 —— 选中态是 Surface 3 的小胶囊，未选中的
-// 图标直接坐在工具栏上。单元 sm(6)、图标用 Lucide 标准矢量。
+// 只留每一格自己的悬停 / 选中底 —— 选中态是 rowSelected 洗色的小胶囊，未选中
+// 的图标直接坐在工具栏上。单元 sm(6)、图标用 Lucide 标准矢量。
+//
+// 两档都是洗色、不是 Surface：这一条长在亚克力工作卡上，不透明的胶囊会在
+// 磨砂上抠出一块实心（DESIGN.md §2.1「洗色阶梯」）。
 func toolbarSegmentedIcons(c *ui.Context, pal palette, selected *int, off bool, items ...segmentedIconItem) ui.Element {
 	parts := ui.SegmentedBase(c, selected, len(items))
 	g := parts.Track
@@ -292,11 +301,11 @@ func toolbarSegmentedIcons(c *ui.Context, pal palette, selected *int, off bool, 
 			case off || it.off:
 				fg = pal.inkTertiary
 			case sel:
-				bg = pal.surface3
+				bg = pal.rowSelected
 				fg = pal.ink
 				s.Border(1, pal.hairlineStrong)
 			case s.Hovered():
-				bg = pal.surface2
+				bg = pal.rowHover
 				fg = pal.ink
 			}
 			s.Background(bg)
@@ -316,8 +325,10 @@ func toolbarSegmentedIcons(c *ui.Context, pal palette, selected *int, off bool, 
 
 // toolButton 是工具栏上的一颗动作按钮：矢量图标 + 文字标签。
 //
-// 照 §4.1 的 Ghost / Tool Button 走：透明底、悬停 Surface 2、圆角 sm(6)、
-// 图标由 Ink Subtle 提到 Ink。它和主按钮不是一档东西 —— 圆角也小一号。
+// 照 §4.1 的 Ghost / Tool Button 走：透明底、悬停 rowHover、按下 rowSelected、
+// 圆角 sm(6)、图标由 Ink Subtle 提到 Ink。它和主按钮不是一档东西 —— 圆角也
+// 小一号。底色只走洗色阶梯：它多半长在亚克力工作卡上，也会落进弹窗，洗色
+// 在两种底上都是「提一档」，不透明的 Surface 只在弹窗里成立。
 //
 // 支持 loading 态：正在加载时内部 15x15 图标平滑切换为 Spinner 原地旋转，
 // 保持按钮总尺寸与布局毫厘不差，彻底杜绝在按钮外侧横向弹出额外 icon 造成的剧烈布局偏移。
@@ -339,10 +350,10 @@ func toolButton(c *ui.Context, pal palette, label, tip string, off, loading bool
 		fg = pal.inkTertiary
 		btn.Cursor(ui.CursorDefault)
 	case btn.Pressed():
-		bg = pal.surface3
+		bg = pal.rowSelected
 		fg = pal.ink
 	case btn.Hovered():
-		bg = pal.surface2
+		bg = pal.rowHover
 		fg = pal.ink
 	}
 	btn.Background(bg)
@@ -362,8 +373,8 @@ func toolButton(c *ui.Context, pal palette, label, tip string, off, loading bool
 }
 
 // toolIconButton 是工具栏上的纯图标动作按钮（如刷新、设置、打开仓库）。
-// 同样是 §4.1 的幽灵键规格：28x28 方形、sm(6) 圆角、悬停 Surface 2，
-// 操作提示交给 Tooltip。
+// 同样是 §4.1 的幽灵键规格：28x28 方形、sm(6) 圆角、悬停 rowHover、按下
+// rowSelected，操作提示交给 Tooltip。
 func toolIconButton(c *ui.Context, pal palette, label, tip string, off, loading bool, icon func(p *ui.Painter, r ui.Rect, col ui.Color)) bool {
 	disabled := off || loading
 	btn := ui.ButtonBase(c).Size(28, 28).Shrink(0).Radius(radiusSM).Center().
@@ -376,10 +387,10 @@ func toolIconButton(c *ui.Context, pal palette, label, tip string, off, loading 
 		fg = pal.inkTertiary
 		btn.Cursor(ui.CursorDefault)
 	case btn.Pressed():
-		bg = pal.surface3
+		bg = pal.rowSelected
 		fg = pal.ink
 	case btn.Hovered():
-		bg = pal.surface2
+		bg = pal.rowHover
 		fg = pal.ink
 	}
 	btn.Background(bg)
@@ -439,7 +450,7 @@ func xButton(c *ui.Context, pal palette, hint string) bool {
 
 	bg, color := ui.Transparent, pal.inkSubtle
 	if btn.Hovered() {
-		bg, color = pal.surface2, pal.ink
+		bg, color = pal.rowHover, pal.ink
 	}
 	btn.Background(bg)
 	fadeColors(btn)
@@ -458,6 +469,46 @@ func xButton(c *ui.Context, pal palette, hint string) bool {
 		})
 	})
 	return btn.Clicked()
+}
+
+// washCheckbox 是落在亚克力工作卡上的勾选框（提交栏的 Amend、diff 栏头的
+// 「已 review」）。
+//
+// 不用 ui.Checkbox：框架那颗方框未勾选时铺 t.Background（深色 #232328、浅色
+// 纯白）—— 和卡片同色，却是不透明的。卡片一透，这颗 16px 的方块就成了磨砂
+// 上抠出来的一块实心。这里只换方框的皮：未勾选是 chip 洗色 + hairlineStrong
+// 边，悬停升 rowSelected；勾上是实心强调色，那是它应得的（§5）。点击、Space、
+// 无障碍角色都还是 CheckboxBase 的，尺寸和间距照框架那颗取，换上去不挪位置。
+func washCheckbox(c *ui.Context, pal palette, checked *bool, label string) ui.Element {
+	t := c.Theme()
+	row := ui.CheckboxBase(c, checked).Gap(t.Space(2)).AlignItems(ui.Center).
+		FocusRing(false).Label(label)
+	on, hovered := *checked, row.Hovered()
+	row.Children(func() {
+		box := ui.Box(c).Size(t.Space(4), t.Space(4)).Radius(radiusXS).Shrink(0)
+		switch {
+		case on:
+			box.Background(t.Accent).Border(1, t.Accent)
+		case hovered:
+			box.Background(pal.rowSelected).Border(1, pal.hairlineTertiary)
+		default:
+			box.Background(pal.chip).Border(1, pal.hairlineStrong)
+		}
+		fadeColors(box)
+		box.DrawOver(func(p *ui.Painter, r ui.Rect) {
+			if on {
+				// 勾画在内缩 3px 的方块里，和 stageBox 那颗同一副比例。
+				drawCheckMark(p, ui.Rect{X: r.X + 3, Y: r.Y + 3, W: r.W - 6, H: r.H - 6}, t.AccentText)
+			}
+			if row.FocusVisible() {
+				p.FocusRing(r, [4]float32{radiusXS, radiusXS, radiusXS, radiusXS})
+			}
+		})
+		if label != "" {
+			ui.Text(c, label)
+		}
+	})
+	return row
 }
 
 // actionBtnHeight 是对话框底部那两颗动作按钮的高度。
@@ -485,7 +536,7 @@ func primaryAction(c *ui.Context, pal palette, label, tip string, disabled bool)
 	var bg, border, fg ui.Color
 	switch {
 	case disabled:
-		bg, border, fg = pal.surface3, pal.hairline, pal.inkTertiary
+		bg, border, fg = pal.chip, pal.hairline, pal.inkTertiary
 	case btn.Pressed():
 		bg, border, fg = t.AccentPressed, t.AccentPressed, t.AccentText
 	case btn.Hovered():
@@ -502,8 +553,10 @@ func primaryAction(c *ui.Context, pal palette, label, tip string, disabled bool)
 	return btn
 }
 
-// secondaryAction 是对话框上的次要键（§4.1 Secondary Button）：Surface 1 底 +
-// 1px 发丝边 + Ink Muted 文字。「取消」「关闭」「重试」都走这里。
+// secondaryAction 是对话框上的次要键（§4.1 Secondary Button）：chip 洗色底 +
+// 1px 发丝边 + Ink Muted 文字，悬停 / 按下升到 rowSelected、边升 hairlineStrong。
+// 「取消」「关闭」「重试」都走这里 —— 它既落在弹窗里，也落在亚克力工作卡上
+// （冲突条的「全部采用」、空状态页），所以底色只能是洗色。
 //
 // 它和 primaryAction 的差别不只在颜色：两者同高同宽，谁主谁次由**有没有实心底**
 // 说清楚 —— 只靠色相区分的话，红绿色盲的用户看不出哪颗是「就这么办」。
@@ -516,12 +569,10 @@ func secondaryAction(c *ui.Context, pal palette, label, tip string, disabled boo
 	switch {
 	case disabled:
 		bg, border, fg = ui.Transparent, pal.hairline, pal.inkTertiary
-	case btn.Pressed():
-		bg, border, fg = pal.surface3, pal.hairlineStrong, pal.ink
-	case btn.Hovered():
-		bg, border, fg = pal.surface2, pal.hairlineStrong, pal.ink
+	case btn.Pressed(), btn.Hovered():
+		bg, border, fg = pal.rowSelected, pal.hairlineStrong, pal.ink
 	default:
-		bg, border, fg = pal.surface1, pal.hairline, pal.inkMuted
+		bg, border, fg = pal.chip, pal.hairline, pal.inkMuted
 	}
 	btn.Background(bg).Border(1, border)
 	fadeColors(btn)

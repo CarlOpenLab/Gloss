@@ -3,6 +3,7 @@ package main
 import (
 	_ "embed"
 	"encoding/json"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -546,22 +547,49 @@ func (a *app) generalSettingsPane(c *ui.Context, pal palette) {
 		ui.Column(c).Gap(22).FillWidth().MaxWidth(620).Children(func() {
 
 			// —— 外观 ——
-			settingsGroup(c, pal, T("外观主题", "Appearance Theme"), "", func() {
-				settingsRow(c, pal, T("主题", "Theme"),
-					T("跟随系统，或固定为浅色 / 深色。", "Follow the system, or pin light or dark."),
-					func() {
-						modes := []string{"system", "light", "dark"}
-						idx := 0
-						for i, m := range modes {
-							if a.themeMode == m {
-								idx = i
+			settingsGroup(c, pal, T("外观主题", "Appearance Theme"),
+				T("窗口用的是系统磨砂材质（macOS / Windows 11；其他平台退回纯色底），按当前主题染色。不透明度和模糊都即时生效。",
+					"The window uses the system's frosted material (macOS / Windows 11; a flat wash elsewhere), tinted by the theme. Opacity and blur apply immediately."),
+				func() {
+					settingsRow(c, pal, T("主题", "Theme"),
+						T("跟随系统，或固定为浅色 / 深色。", "Follow the system, or pin light or dark."),
+						func() {
+							modes := []string{"system", "light", "dark"}
+							idx := 0
+							for i, m := range modes {
+								if a.themeMode == m {
+									idx = i
+								}
 							}
-						}
-						seg := settingsSegmented(c, pal, &idx,
-							T("跟随系统", "System"), T("浅色模式", "Light"), T("深色模式", "Dark"))
-						seg.OnChange(func() { a.setThemeMode(modes[idx]) })
-					})
-			})
+							seg := settingsSegmented(c, pal, &idx,
+								T("跟随系统", "System"), T("浅色模式", "Light"), T("深色模式", "Dark"))
+							seg.OnChange(func() { a.setThemeMode(modes[idx]) })
+						})
+
+					// 亚克力（对齐 beacon 的外观设置）：不透明度决定工作卡透出
+					// 多少窗口材质，模糊档位换系统那一层磨砂的强度。
+					settingsRow(c, pal, T("背景透明度", "Background Opacity"),
+						T("30% 最透，100% 是实色卡片。", "30% is the clearest; 100% is a solid card."),
+						func() {
+							slider := ui.Slider(c.Key("bg-opacity"), &a.bgOpacity,
+								bgOpacityMin, bgOpacityMax).Step(0.05).Width(150)
+							if slider.Changed() {
+								a.setBackgroundOpacity(a.bgOpacity)
+							}
+							ui.Text(c, Tf("%d%%", "%d%%", int(math.Round(a.backgroundOpacity()*100)))).
+								FontSize(12.5).FontFeatures("tnum").TextColor(pal.textMuted).
+								Width(38).TextAlign(ui.End)
+						})
+
+					settingsRow(c, pal, T("亚克力模糊", "Acrylic Blur"), "",
+						func() {
+							idx := blurIndex(a.backgroundBlur())
+							seg := settingsSegmented(c, pal, &idx,
+								T("无模糊", "None"), T("柔和", "Subtle"),
+								T("标准", "Medium"), T("强力", "Deep"))
+							seg.OnChange(func() { a.setBackgroundBlur(blurChoices[idx]) })
+						})
+				})
 
 			// —— 应用图标（只在 macOS 上摆） ——
 			if isMacPlatform() {

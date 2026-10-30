@@ -44,14 +44,16 @@ func (a *app) commitDetailPane(c *ui.Context, pal palette, cm gitrepo.Commit) {
 	t := c.Theme()
 
 	// 整栏一个选区：拖动选中时可以连着邮箱、哈希一起选，⌘C 出去是三行。
+	// 不铺底：详情是卡片上的一栏，不是盖在卡片上的另一块板（见
+	// fileListPane 的注释）。
 	ui.Column(c).Width(a.detailPaneWidth(c)).Shrink(0).FillHeight().
-		Background(pal.surface1).Selectable().Children(func() {
+		Selectable().Children(func() {
 		// 头像 + 名字 + 时间，居中。作者名是这一屏里最该被认出来的东西，
 		// 摆中间比塞在行首和一行元信息混在一起好认。
 		ui.Box(c).Shrink(0).Padding(12, 12, 10, 12).Children(func() {
 			ui.Column(c).FillWidth().Gap(3).AlignItems(ui.Center).Children(func() {
 				ui.Box(c).Size(commitAvatar, commitAvatar).Shrink(0).Radius(commitAvatar/2).
-					Background(pal.surface2).Border(1, pal.hairline).Center().
+					Background(pal.chip).Border(1, pal.hairline).Center().
 					Children(func() {
 						drawIcon(c, iconUser, commitAvatar/2, pal.inkSubtle)
 					})

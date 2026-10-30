@@ -480,6 +480,18 @@ func TestThemeAndLocaleSettings(t *testing.T) {
 		t.Errorf("点击深色卡片后 themeMode 应为 dark，实际为 %s", a.themeMode)
 	}
 
+	// 亚克力背景：两条设置都在外观主题分组里，模糊档位点了就落进配置。
+	if !tt.HasText("背景透明度") || !tt.HasText("亚克力模糊") {
+		t.Error("外观主题分组应包含「背景透明度」与「亚克力模糊」")
+	}
+	if err := tt.Click("强力"); err != nil {
+		t.Fatalf("点击「强力」模糊档位: %v", err)
+	}
+	tt.Frame()
+	if a.backgroundBlur() != blurDeep {
+		t.Errorf("点击「强力」后背景模糊应为 %q，实际为 %q", blurDeep, a.backgroundBlur())
+	}
+
 	// 点击 English 卡片
 	if err := tt.Click("English"); err != nil {
 		t.Fatalf("点击「English」卡片: %v", err)
@@ -819,4 +831,42 @@ func TestAutoFetchSettingPersists(t *testing.T) {
 	if a.autoFetch || a.autoFetchOn.Load() != 0 {
 		t.Errorf("再点一次该关回去：autoFetch=%v on=%d", a.autoFetch, a.autoFetchOn.Load())
 	}
+}
+
+// 亚克力设置要落进配置文件：下次启动时窗口材质和不透明度都得回来。
+func TestAcrylicSettingsPersist(t *testing.T) {
+	dir := t.TempDir()
+	a := newApp()
+	a.attachStore(store.Open(dir))
+
+	if got := a.backgroundOpacity(); got != bgOpacityDefault {
+		t.Errorf("默认不透明度 = %v，应为 %v", got, bgOpacityDefault)
+	}
+	if got := a.backgroundBlur(); got != blurSubtle {
+		t.Errorf("默认模糊档位 = %q，应为 %q", got, blurSubtle)
+	}
+
+	a.setBackgroundOpacity(0.55)
+	a.setBackgroundBlur(blurDeep)
+	settle(t, a) // 等 saveViewSettings 丢出去的后台落盘跑完，再同步写一次
+	a.persistNow()
+
+	cfg := store.Open(dir).Config()
+	if cfg.BackgroundOpacity != 0.55 {
+		t.Errorf("落盘的不透明度 = %v，应为 0.55", cfg.BackgroundOpacity)
+	}
+	if cfg.BackgroundBlur != blurDeep {
+		t.Errorf("落盘的模糊档位 = %q，应为 %q", cfg.BackgroundBlur, blurDeep)
+	}
+
+	// 坏值和越界值在入口就收敛，不往磁盘上写第二套语义。
+	a.setBackgroundBlur("bogus")
+	if got := a.backgroundBlur(); got != blurSubtle {
+		t.Errorf("坏档位应收敛为 %q，实际 %q", blurSubtle, got)
+	}
+	a.setBackgroundOpacity(0.01)
+	if got := a.backgroundOpacity(); got != bgOpacityMin {
+		t.Errorf("越界不透明度应收敛为 %v，实际 %v", bgOpacityMin, got)
+	}
+	settle(t, a) // 后台落盘还握着 temp 文件的话，TempDir 清理会失败
 }

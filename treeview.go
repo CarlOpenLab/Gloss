@@ -74,7 +74,7 @@ func treeRow(c *ui.Context, t *ui.Theme, pal palette, o treeRowOpts, content fun
 		case o.Selected:
 			band.Background(pal.selection)
 		case hovered:
-			band.Background(pal.surface2)
+			band.Background(pal.rowHover)
 		}
 		fadeColors(band)
 

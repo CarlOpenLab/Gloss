@@ -81,7 +81,7 @@ func (a *app) wsPaneTabButton(c *ui.Context, pal palette, label, tip string, ico
 		btn.Background(pal.selection)
 		col = pal.ink
 	case btn.Hovered():
-		btn.Background(pal.surface2)
+		btn.Background(pal.rowHover)
 	}
 	fadeColors(btn)
 	btn.Children(func() {

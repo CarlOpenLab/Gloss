@@ -1096,11 +1096,16 @@ func (a *app) startTerminal(tab *repoTab, s *termSession, dark bool, pal palette
 	// 回调里直接让过去。
 	var termPtr atomic.Pointer[terminal.Terminal]
 	term, err := terminalNew(terminal.Options{
-		Dir:     dir,
-		Font:    a.terminalFont(),
-		Theme:   terminalTheme(dark, pal),
-		OnTitle: func(string) { redraw() },
-		OnExit:  func(int) { redraw() },
+		Dir:   dir,
+		Font:  a.terminalFont(),
+		Theme: terminalTheme(dark, pal),
+		// 终端画布不在自己身上铺底色：工作卡已经是压在窗口材质上的那一层
+		// 半透明，终端再铺一层不透明色就把亚克力挡没了（beacon 的终端也是
+		// 同一个做法）。主题里的 Background 留着 —— 块状光标下的文字要靠
+		// 它取反色，程序自己设了背景色的格子照旧画自己的。
+		Transparent: true,
+		OnTitle:     func(string) { redraw() },
+		OnExit:      func(int) { redraw() },
 		OnPaste: func(text string) bool {
 			// 剪贴板上没有文本（一张图片）时，把 Ctrl+V 补发给前台程序。
 			//
@@ -1322,16 +1327,17 @@ const termBarHeight = 34
 // terminalTabBar 是终端视图顶上那条会话芯片带：一枚芯片一个 shell，点一下
 // 切过去，右边那枚 + 再开一个。
 //
-// 底色取 pal.appBg（和它上面的工具栏同一块面），下面 1px 发丝线交代「正文
-// 从这里开始」：正文那一块是内容面 codeBg，两者深浅只差一档，没有这条线
-// 芯片带和终端就是糊在一起的一片。
+// 不铺底：它和上面的工具栏、下面的终端画布是同一张亚克力工作卡（终端
+// 本身也不铺底，见 startTerminal 的 Transparent）。原来铺的 appBg 是一条不
+// 透明的槽，卡片一透，它就成了磨砂上唯一一条实心。下沿 1px 发丝线交代
+// 「正文从这里开始」—— 两边是同一张卡，没有这条线芯片带和终端就是糊在
+// 一起的一片。
 func (a *app) terminalTabBar(c *ui.Context, pal palette, tab *repoTab) {
 	// 被拖的那枚芯片留出的空位：这一帧在预览顺序里的 x 和宽。画在带子
 	// 自己的 Draw 里（先于芯片），被拖的芯片本身是透明的，只剩这个槽。
 	var slotX, slotW float32
 	bar := ui.Row(c).Height(termBarHeight).FillWidth().Shrink(0).
 		Padding(0, chipBarPad).Gap(chipBarGap).AlignItems(ui.Center).
-		Background(pal.appBg).
 		// 只画下沿那一条：Border(0, …) 是零宽，画不出线，得用 BorderWidth
 		// （连框架自己注释里推荐的都是这一种）。
 		BorderWidth(0, 0, 1, 0).BorderColor(pal.hairline)
@@ -1344,7 +1350,7 @@ func (a *app) terminalTabBar(c *ui.Context, pal palette, tab *repoTab) {
 			Y: r.Y + (termBarHeight-chipHeight)/2,
 			W: slotW,
 			H: chipHeight,
-		}, pal.surface1, radiusSM)
+		}, pal.chip, radiusSM)
 	})
 	bar.Children(func() {
 		// 拖动期间画的是预览顺序：被拖的芯片已经挪到它将要落下的位置，
@@ -1439,7 +1445,7 @@ func (a *app) terminalTabBar(c *ui.Context, pal palette, tab *repoTab) {
 // 芯片上写 shell 自己报的标题（OSC 0/2），它不报就用「终端 N」兜底 —— 一屏
 // 里两个 shell 都叫「终端」，认不出哪一个是刚在跑构建的那个。
 //
-// 激活态只换颜色（底 surface2、边 hairlineStrong、字 ink），几何一律不动：
+// 激活态只换颜色（底 rowSelected、边 hairlineStrong、字 ink），几何一律不动：
 // 边框两态都是 1px，内边距、字号、字重也都一样。切一次会话整条芯片带跟着
 // 重排的话，第二下就点不准了。
 func (a *app) renderTerminalChip(c *ui.Context, pal palette, tab *repoTab, idx int, s *termSession, x float32, dragged, known bool) (closeClicked, dragging, dropped bool) {
@@ -1478,13 +1484,16 @@ func (a *app) renderTerminalChip(c *ui.Context, pal palette, tab *repoTab, idx i
 	case dragged:
 		// 原位的芯片不可见，只留空位；框架画在指针上的那份副本才是「拿
 		// 起来」的那一枚，所以底色和阴影给的是它。
+		//
+		// 只有这一态取实色：那份副本浮在一切之上（框架按 75% 不透明度画它），
+		// 是浮层，不是卡片上的一枚控件 —— 洗色在那儿只剩一层看不见的雾。
 		bg, fg, bd = pal.surface3, pal.ink, pal.hairlineStrong
 	case active:
-		bg, fg, bd = pal.surface2, pal.ink, pal.hairlineStrong
+		bg, fg, bd = pal.rowSelected, pal.ink, pal.hairlineStrong
 	case chip.Hovered() && a.chipDrag == nil:
 		// 悬停只提一档底（§5）：非激活芯片本来就是透明底，指上去得有点动静。
 		// 拖动期间别的芯片从指针下经过，不许闪。
-		bg = pal.surface1
+		bg = pal.rowHover
 	}
 	chip.Background(bg).Border(1, bd)
 	if dragged {
@@ -1514,7 +1523,7 @@ func (a *app) renderTerminalChip(c *ui.Context, pal palette, tab *repoTab, idx i
 		closeBtn := ui.ButtonBase(c).Size(16, 16).Radius(radiusXS).
 			Cursor(ui.CursorPointer).Label(T("关闭终端标签页", "Close Terminal Tab"))
 		if closeBtn.Hovered() && a.chipDrag == nil {
-			closeBtn.Background(pal.surface3)
+			closeBtn.Background(pal.rowSelected)
 		}
 		fadeColors(closeBtn)
 		closeBtn.Children(func() {
@@ -1594,7 +1603,9 @@ func (a *app) terminalArea(c *ui.Context, pal palette) {
 				})
 			})
 		case cur.term != nil:
-			ui.Box(c).Grow(1).MinHeight(0).Background(pal.codeBg).Padding(4, 6).Children(func() {
+			// 不铺底：卡片的亚克力透明度就是终端画布的底色（见 startTerminal
+			// 的 Transparent）。
+			ui.Box(c).Grow(1).MinHeight(0).Padding(4, 6).Children(func() {
 				terminal.View(c, cur.term).Fill().AutoFocus()
 			})
 		}
@@ -1610,7 +1621,7 @@ func (a *app) terminalArea(c *ui.Context, pal palette) {
 // 芯片带上的 + 和 ⌘⇧T 指向同一个动作（newTerminalSession）。
 func (a *app) terminalEmptyState(c *ui.Context, pal palette, tab *repoTab) {
 	t := c.Theme()
-	ui.Box(c).Grow(1).FillWidth().Background(pal.codeBg).Children(func() {
+	ui.Box(c).Grow(1).FillWidth().Children(func() {
 		ui.Column(c).Fill().Center().Gap(10).Padding(24).Children(func() {
 			drawIcon(c, iconTerminal, 28, pal.inkSubtle)
 			headline(c, pal, T("没有终端会话", "No Terminal Sessions"))

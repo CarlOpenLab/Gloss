@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -62,18 +63,11 @@ type palette struct {
 	inkSubtle   ui.Color // 行号、辅助元信息、未激活图标
 	inkTertiary ui.Color // 快捷键提示、占位符、禁用态
 
-	// appBg 是卡片里挖出来的那条槽（终端芯片带）的底色：浅色下比卡片白
-	// 暗一档，深色下比卡片沉一档，靠一道发丝线和正文分开。
-	appBg  ui.Color
 	codeBg ui.Color // 普通代码行背景
 	code   ui.Color // 代码文字
 	addBar ui.Color // 新增行左侧色条
 	delBar ui.Color // 删除行左侧色条
 	gapBg  ui.Color // 未改动区间条的背景
-	fileBg ui.Color // 文件头的背景
-	// hunkHover 是 hunk 行上那颗幽灵按钮悬停时的底色。它落在 hunk 带上，
-	// 所以不能直接用 codeBg：深色下那是比带子更暗的一档，鼠标一指上去
-	// 按钮反而沉下去。浅色下要的是提亮（白），深色下要的是抬高一档的蓝灰。
 	// sideBg 是「窗口」那一层的中性底：主窗口铺在侧栏和卡片下面（§1），
 	// 设置窗口的外壳也用它，浅色取值与 term-fleet 的 plain 同一支冷灰。
 	// 拆分 diff 里对面没有对应行的留白也读它 —— 那里要的是同一档「不是内容」。
@@ -328,6 +322,101 @@ func hexOf(c ui.Color) string {
 	return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B)
 }
 
+// —— 亚克力磨砂背景 ——
+//
+// 这一组和 beacon 的外观设置同名同义（beacon 的 BackgroundBlur /
+// BackgroundOpacity）：窗口底是系统材质（macOS 的 NSVisualEffectView、
+// Windows 11 的 Mica / Acrylic）盖一层主题色的薄纱，工作卡是压在窗口底上
+// 的那一层半透明。
+//
+// DESIGN.md §9 曾经禁止「侧栏乘一个 α」的写法，理由是把最终颜色交给桌面
+// 壁纸。这里的写法有下限：窗口底永远是 sideBg 乘 shellTint —— 材质只透出
+// 一部分，颜色还是主题说了算；卡片的不透明度是用户自己在设置里定的。
+// 没有材质可用的平台（Linux、较旧的 Windows）直接铺实色 sideBg，不会透出
+// 桌面 —— 没有模糊的透明底只会让文字没法读。
+const (
+	bgOpacityMin     = 0.30
+	bgOpacityMax     = 1.0
+	bgOpacityDefault = 0.80
+
+	blurNone   = "none"
+	blurSubtle = "subtle"
+	blurMedium = "medium"
+	blurDeep   = "deep"
+)
+
+// blurChoices 是设置里模糊档位的顺序。id 存进配置，名字只给人看。
+var blurChoices = []string{blurNone, blurSubtle, blurMedium, blurDeep}
+
+// normalizeBlur 把不认识的档位（旧配置、手改的文件）收敛回 "subtle"：模糊
+// 档位只影响观感，不值得为一条坏值让窗口没有材质。
+func normalizeBlur(id string) string {
+	switch id {
+	case blurNone, blurSubtle, blurMedium, blurDeep:
+		return id
+	}
+	return blurSubtle
+}
+
+// normalizeOpacity 把 0（没设过）和越界值收进 0.30~1.0。
+func normalizeOpacity(v float64) float64 {
+	if v <= 0 {
+		return bgOpacityDefault
+	}
+	return min(max(v, bgOpacityMin), bgOpacityMax)
+}
+
+// blurIndex 是档位在 blurChoices 里的下标，给分段控件用。
+func blurIndex(id string) int {
+	id = normalizeBlur(id)
+	for i, choice := range blurChoices {
+		if choice == id {
+			return i
+		}
+	}
+	return 1 // subtle
+}
+
+// vibrancyFor 把模糊档位映射到 mygo 的窗口材质（和 beacon 完全同一张表）：
+// 无 → 不挂材质；柔和 → 侧栏材质；标准 → 浮层材质；强力 → Acrylic/HUD。
+func vibrancyFor(blur string) mygo.Vibrancy {
+	switch normalizeBlur(blur) {
+	case blurNone:
+		return mygo.VibrancyNone
+	case blurMedium:
+		return mygo.VibrancyPopover
+	case blurDeep:
+		return mygo.VibrancyAcrylic
+	}
+	return mygo.VibrancySidebar
+}
+
+// applyNativeAppearance 把外观偏好告诉框架，让系统材质、菜单和标题栏跟着
+// 同一份浅色 / 深色走。只靠视图里的 c.SetTheme 不够：NSVisualEffectView 的
+// 明暗是原生那一侧决定的，固定在深色时窗口材质不能还是系统的浅色。
+func applyNativeAppearance(mode string) {
+	switch mode {
+	case "light":
+		mygo.Theme.SetSource(mygo.ThemeLight)
+	case "dark":
+		mygo.Theme.SetSource(mygo.ThemeDark)
+	default:
+		mygo.Theme.SetSource(mygo.ThemeSystem)
+	}
+}
+
+// cardFill 是工作卡的底色：pal.card 按背景不透明度透出窗口材质。
+// 100% 时就是原来的实色卡；往下拧，代码区背后的材质才透上来。
+func (a *app) cardFill(pal palette) ui.Color {
+	return pal.card.Alpha(float32(a.backgroundOpacity()))
+}
+
+// windowGround 是窗口画出第一帧之前露出的颜色：取和窗口底同一支 sideBg，
+// 避免启动时先闪一下系统默认色。带材质时这一层很快就被盖住。
+func windowGround(dark bool) string {
+	return hexOf(paletteFor(themeFor(dark, ui.Preferences{}), laneSet{}).sideBg)
+}
+
 // glossTheme gives the framework-drawn controls the same soft, blue-accented
 // material as the shell. Surfaces stand apart by fill and a restrained edge;
 // semantic colors remain available for diffs, warnings and destructive actions.
@@ -460,7 +549,6 @@ func paletteFor(t *ui.Theme, ls laneSet) palette {
 			// 选中底带：Surface 2 与 3 之间的一档灰，比悬停的 SurfaceHover
 			// 重一档，才压得住「选中的是这一行」。
 			selection: ui.RGBA(107, 147, 255, 0.14),
-			appBg:     ui.Hex("#17141f"), // 窗口柔和底色的最低一档
 			codeBg:    ui.Hex("#232328"),
 			code:      ui.Hex("#ececf0"),
 			addBar:    ui.Hex("#4fd17a"),
@@ -520,7 +608,6 @@ func paletteFor(t *ui.Theme, ls laneSet) palette {
 		inkSubtle:        ui.Hex("#8d8d97"),
 		inkTertiary:      ui.Hex("#a3a3ad"),
 		selection:        ui.RGBA(59, 108, 246, 0.12),
-		appBg:            ui.Hex("#f7f7f9"),
 		codeBg:           ui.Hex("#ffffff"),
 		code:             ui.Hex("#1d1d1f"),
 		addBar:           ui.Hex("#22863a"),

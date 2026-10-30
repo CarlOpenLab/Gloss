@@ -213,10 +213,10 @@ func (a *app) compareBar(c *ui.Context, pal palette) {
 	// 基准 / 交换 / 对比 三件选择器。
 	selectors := func() {
 		baseBtn := ui.ButtonBase(c).Height(26).Shrink(1).Padding(0, 8).Radius(radiusMD).
-			Background(pal.surface2).Border(1, pal.hairlineStrong).AlignItems(ui.Center).Gap(4).
+			Background(pal.chip).Border(1, pal.hairlineStrong).AlignItems(ui.Center).Gap(4).
 			Cursor(ui.CursorPointer).Tooltip("更换基准分支 (Base)").Label("基准分支")
 		if baseBtn.Hovered() {
-			baseBtn.Background(pal.surface3)
+			baseBtn.Background(pal.rowSelected)
 		}
 		fadeColors(baseBtn)
 		baseBtn.Children(func() {
@@ -237,7 +237,7 @@ func (a *app) compareBar(c *ui.Context, pal palette) {
 		swapBtn := ui.ButtonBase(c).Size(26, 26).Shrink(0).Radius(radiusMD).Center().
 			Cursor(ui.CursorPointer).Tooltip("交换基准与对比分支方向").Label("交换分支")
 		if swapBtn.Hovered() {
-			swapBtn.Background(pal.surface2)
+			swapBtn.Background(pal.rowHover)
 		}
 		fadeColors(swapBtn)
 		swapBtn.Children(func() {
@@ -250,10 +250,10 @@ func (a *app) compareBar(c *ui.Context, pal palette) {
 		}
 
 		targetBtn := ui.ButtonBase(c).Height(26).Shrink(1).Padding(0, 8).Radius(radiusMD).
-			Background(pal.surface2).Border(1, pal.hairlineStrong).AlignItems(ui.Center).Gap(4).
+			Background(pal.chip).Border(1, pal.hairlineStrong).AlignItems(ui.Center).Gap(4).
 			Cursor(ui.CursorPointer).Tooltip("更换对比分支 (Compare)").Label("对比分支")
 		if targetBtn.Hovered() {
-			targetBtn.Background(pal.surface3)
+			targetBtn.Background(pal.rowSelected)
 		}
 		fadeColors(targetBtn)
 		targetBtn.Children(func() {
@@ -296,7 +296,7 @@ func (a *app) compareBar(c *ui.Context, pal palette) {
 			cBtn := ui.ButtonBase(c).Height(24).Padding(0, 6).Radius(radiusSM).AlignItems(ui.Center).Gap(4).
 				Cursor(ui.CursorPointer).Tooltip("查看差异提交列表").Label("差异提交")
 			if cBtn.Hovered() {
-				cBtn.Background(pal.surface2)
+				cBtn.Background(pal.rowHover)
 			}
 			cBtn.Children(func() {
 				ui.Text(c, commitText).FontSize(textCaption).TextColor(pal.inkSubtle)
@@ -323,7 +323,7 @@ func (a *app) compareBar(c *ui.Context, pal palette) {
 			Background(ui.Transparent).Border(1, pal.hairline).
 			Label("退出对比").Tooltip("退出分支对比 (Esc)")
 		if exitBtn.Hovered() {
-			exitBtn.Background(pal.surface2)
+			exitBtn.Background(pal.rowHover)
 		}
 		fadeColors(exitBtn)
 		exitBtn.Children(func() {
@@ -335,11 +335,13 @@ func (a *app) compareBar(c *ui.Context, pal palette) {
 		}
 	}
 
+	// 两种排法都不铺底：surface1 就是卡片色、却是不透明的，铺在亚克力工作卡
+	// 上等于抠出一条实心。带子的边界交给那圈发丝线。
 	if narrow {
 		// 折成两行：上一行「在比哪两条分支 + 退出」，下一行模式与统计。
 		ui.Column(c).Shrink(0).FillWidth().
 			Padding(4, 16).Gap(4).
-			Background(pal.surface1).Border(1, pal.hairline).Children(func() {
+			Border(1, pal.hairline).Children(func() {
 			ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
 				title()
 				selectors()
@@ -355,7 +357,7 @@ func (a *app) compareBar(c *ui.Context, pal palette) {
 
 	ui.Row(c).Height(38).Shrink(0).FillWidth().
 		Padding(0, 16).Gap(8).AlignItems(ui.Center).
-		Background(pal.surface1).Border(1, pal.hairline).Children(func() {
+		Border(1, pal.hairline).Children(func() {
 		title()
 		selectors()
 		meta()

@@ -29,6 +29,9 @@ func main() {
 		}
 		s := store.Open(dir)
 		a.attachStore(s)
+		// 系统材质（窗口磨砂、菜单、标题栏）跟着保存的外观走：只设视图主题
+		// 的话，固定在深色时窗口材质还会跟着系统变（见 applyNativeAppearance）。
+		applyNativeAppearance(a.themeMode)
 
 		// 菜单栏。自己搭一份的理由写在 menu.go 顶上：框架默认那份会把
 		// ⌘R / ⌘+ / ⌘− / ⌘0 当成网页的「重新载入 / 缩放」占掉，而这几个
@@ -46,8 +49,14 @@ func main() {
 			// toolbar）。窗口按钮按平台在下面决定：macOS 用系统的红绿灯，
 			// Windows / Linux 由视图画在右上角。
 			TitleBarStyle: mygo.TitleBarHidden,
-			Vibrancy:      mygo.VibrancySidebar,
-			Content:       ui.View(a.view),
+			// 亚克力背景：窗口要让出一层透明底，系统合成器才能把窗口背后
+			// 的桌面 / 其他窗口磨砂进来（见 theme.go 的 vibrancyFor 和
+			// shell_style.go 的 shellBackdrop）。BackgroundColor 只在第一帧
+			// 之前露一下，取和窗口底同一支色，避免闪一下别的颜色。
+			Transparent:     true,
+			BackgroundColor: windowGround(a.isDarkMode()),
+			Vibrancy:        vibrancyFor(a.backgroundBlur()),
+			Content:         ui.View(a.view),
 		}
 		if isMacPlatform() {
 			// macOS：保留系统红绿灯，只把它们挪到 30px 中线上；标题栏藏掉，

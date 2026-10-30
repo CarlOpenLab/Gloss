@@ -45,6 +45,13 @@ type Config struct {
 	DetailPaneWidth float32 `json:"detailPaneWidth,omitempty"`
 	// ThemeMode 是外观模式偏好："" 或 "system"（跟随系统）、"light"（浅色模式）、"dark"（暗黑模式）。
 	ThemeMode string `json:"themeMode,omitempty"`
+	// BackgroundOpacity 是亚克力磨砂背景的不透明度（0.30~1.0），0 表示默认值。
+	// 它同时是工作卡的透光程度：100% 时卡片完全不透明，材质只在侧栏和卡片
+	// 四周的缝里露出来。
+	BackgroundOpacity float64 `json:"backgroundOpacity,omitempty"`
+	// BackgroundBlur 是亚克力磨砂的模糊档位："none" / "subtle" / "medium" /
+	// "deep"，留空跟随 "subtle"。
+	BackgroundBlur string `json:"backgroundBlur,omitempty"`
 	// Locale 是界面语言设定："" 或 "zh"（简体中文）、"en"（English）。
 	Locale string `json:"locale,omitempty"`
 	// AppIcon 是应用图标风格："black"（纯黑曜石）或 "white"（纯白极简）。

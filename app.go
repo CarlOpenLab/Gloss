@@ -293,10 +293,8 @@ type app struct {
 	// stashName 是同一个储藏给 git 的名字（stash@{n}）。改动区要拿它比
 	// 「储藏里的样子 vs 它的父提交」，而 Full 那种 refs/… 形态 git show 不认。
 	stashName string
-	// histSplit 是提交列表那一栏的高度，SplitVertical 拖的就是它。
-	// splitH 是上一帧量到的可用高度，用来在窗口变矮时把 split 收敛回来。
+	// histSplit 是提交列表那一栏的高度，历史主区那条水平分隔条拖的就是它。
 	histSplit float32
-	splitH    float32
 	// hist 是提交列表本身的状态，histDiff 是选中那个提交的 diff 的状态。
 	// 必须分开：列表和 diff 是两路异步加载，共用一个的话点一个提交会让
 	// 整个列表闪成「正在读提交…」。
@@ -327,6 +325,11 @@ type app struct {
 	themeMode     string // "system", "light", "dark"
 	locale        string // "zh", "en"
 	appIcon       string // "black", "white"
+	// 亚克力磨砂背景（对齐 beacon 的 BackgroundBlur / BackgroundOpacity）：
+	// bgBlur 选系统材质档位，bgOpacity 决定工作卡和窗口底透出多少背后的内容。
+	// 0 / "" 分别表示还没设过，取默认值（见 backgroundOpacity / backgroundBlur）。
+	bgBlur    string
+	bgOpacity float64
 	// autoFetch 是「后台自动抓取」开关（设置 → 通用偏好 → Git）。开着的话
 	// autorefresh 那个轮询每隔 autoFetchInterval 对所有远程抓一次，侧栏的
 	// 远程分支和超前/落后计数自己跟上。只抓不拉，见 store.Config.AutoFetch。
@@ -463,6 +466,8 @@ func newApp() *app {
 		sidebarOn: true,
 		themeMode: "system",
 		locale:    "zh",
+		bgBlur:    blurSubtle,
+		bgOpacity: bgOpacityDefault,
 		viewed:    map[string]string{},
 		commitSel: -1,
 		fileSel:   -1,
@@ -530,6 +535,8 @@ func (a *app) attachStore(s *store.Store) {
 	if a.themeMode == "" {
 		a.themeMode = "system"
 	}
+	a.bgBlur = normalizeBlur(cfg.BackgroundBlur)
+	a.bgOpacity = normalizeOpacity(cfg.BackgroundOpacity)
 	a.locale = cfg.Locale
 	if a.locale == "" {
 		a.locale = "zh"
@@ -615,6 +622,8 @@ func (a *app) saveViewSettings() {
 		cfg.DetailPaneWidth = a.detailPaneWidthVal
 	}
 	cfg.ThemeMode = a.themeMode
+	cfg.BackgroundBlur = a.backgroundBlur()
+	cfg.BackgroundOpacity = a.backgroundOpacity()
 	cfg.Locale = a.locale
 	cfg.AppIcon = a.appIcon
 	cfg.GraphPreset = a.graphPreset
@@ -664,6 +673,43 @@ func (a *app) setAppIcon(mode string) {
 	a.saveViewSettings()
 }
 
+// backgroundOpacity 是亚克力背景的不透明度：工作卡按它透出窗口材质。
+func (a *app) backgroundOpacity() float64 {
+	return normalizeOpacity(a.bgOpacity)
+}
+
+// backgroundBlur 是窗口材质的模糊档位。
+func (a *app) backgroundBlur() string { return normalizeBlur(a.bgBlur) }
+
+// setBackgroundOpacity 保存不透明度并重画。卡片颜色是每帧现算的，重画就够；
+// 材质本身不受影响，所以这里不碰窗口。
+func (a *app) setBackgroundOpacity(v float64) {
+	v = normalizeOpacity(v)
+	if a.bgOpacity == v {
+		return
+	}
+	a.bgOpacity = v
+	a.saveViewSettings()
+	if a.win != nil {
+		a.win.Invalidate()
+	}
+}
+
+// setBackgroundBlur 保存模糊档位，并立刻换掉窗口的材质 —— 材质是原生那一侧
+// 的属性，不重设的话要等到下次启动才生效。
+func (a *app) setBackgroundBlur(b string) {
+	b = normalizeBlur(b)
+	if a.bgBlur == b {
+		return
+	}
+	a.bgBlur = b
+	a.saveViewSettings()
+	if a.win != nil {
+		a.win.SetVibrancy(vibrancyFor(b))
+		a.win.Invalidate()
+	}
+}
+
 // setThemeMode 切换外观色彩模式（"system" / "light" / "dark"）。
 func (a *app) setThemeMode(mode string) {
 	if mode != "light" && mode != "dark" {
@@ -673,6 +719,11 @@ func (a *app) setThemeMode(mode string) {
 		return
 	}
 	a.themeMode = mode
+	// 系统材质只在真有窗口时跟着换。测试里没有窗口，也不该去碰框架的
+	// 主线程（那会等一个永远不跑的主循环）。
+	if a.win != nil {
+		applyNativeAppearance(mode)
+	}
 	a.saveViewSettings()
 	a.syncMenu()
 }
@@ -805,6 +856,18 @@ func (a *app) isDark(c *ui.Context) bool {
 	}
 }
 
+// isDarkMode 是不带 Context 的那一版：建窗口时还没有视图，第一帧之前
+// 也得知道该用哪一档窗口底。
+func (a *app) isDarkMode() bool {
+	switch a.themeMode {
+	case "light":
+		return false
+	case "dark":
+		return true
+	}
+	return mygo.Theme.IsDark()
+}
+
 func (a *app) view(c *ui.Context) {
 	// 换成 Gloss 自己的主题。必须在建任何控件之前：SetTheme 只作用于
 	// 调用之后创建的控件，放在后面的话这一帧前半截还是框架默认配色。
@@ -851,15 +914,16 @@ func (a *app) view(c *ui.Context) {
 	// 指纹变了就重读两侧（这一帧先看到旧的，读盘回来自己刷新）。
 	a.syncReview()
 
-	// The window keeps one soft wash under the sidebar and the raised work
-	// card. The card itself stays opaque so code and diffs keep a stable
-	// contrast against whatever is behind the window.
+	// The window is acrylic: the system material shows wherever the view draws
+	// no background, and the work card is the one translucent layer over it.
+	// Code and diffs keep their contrast from the card's opacity (the setting
+	// in Appearance), not from stacking another surface on top.
 	//
 	// 侧栏的收起/展开是同一条宽度动画：进度挂在根行上（元素身份跨帧不变），
 	// 侧栏外壳按它裁切。a.sidebarShown 留给工具栏 —— 动画走到一半时，界面
 	// 该按「已经收起到哪了」摆，而不是按最终状态突然跳一下。
 	row := ui.Row(c).Fill().AlignItems(ui.Stretch)
-	shellBackdrop(c, pal, row)
+	shellBackdrop(c, pal)
 	progress := row.AnimateTo("sidebar", b2f(a.sidebarOn), sidebarMotion)
 	a.sidebarShown = clamp(progress, 0, 1)
 	row.Children(func() {
@@ -868,7 +932,7 @@ func (a *app) view(c *ui.Context) {
 			Padding(shellCardGap).DragWindow()
 		main.Children(func() {
 			card := ui.Column(c).Grow(1).FillWidth().MinHeight(0).
-				Radius(shellCardRadius()).Background(pal.card).Clip()
+				Radius(shellCardRadius()).Background(a.cardFill(pal)).Clip()
 			raisedSurface(card, pal)
 			card.Children(func() {
 				a.toolbar(c, pal)
@@ -1069,7 +1133,7 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 		// 暂存/取消暂存为瞬时操作，提交在底部提交栏展示，均不在此喧宾夺主。
 		if a.toolbarOpVisible() {
 			ui.Box(c).Radius(radiusPill).Padding(3, 9).
-				Background(pal.surface2).
+				Background(pal.chip).
 				Border(1, pal.hairline).
 				Children(func() {
 					ui.Row(c).Gap(6).AlignItems(ui.Center).Shrink(0).Children(func() {
@@ -1150,7 +1214,7 @@ func (a *app) repoHeader(c *ui.Context, t *ui.Theme, pal palette) {
 			Cursor(ui.CursorPointer).Label(name).
 			Tooltip(Tf("点击切换最近项目（或 %s 打开本地仓库）", "Switch recent project (or %s to open repository)", K("⌘O")))
 		if repoBtn.Hovered() || a.repoDropdownOpen {
-			repoBtn.Background(pal.surface2)
+			repoBtn.Background(pal.rowHover)
 		}
 		fadeColors(repoBtn)
 		repoBtn.Children(func() {
@@ -1318,9 +1382,11 @@ func (a *app) repoDropdownPanel(c *ui.Context, panel ui.Element, pal palette) {
 // branchChip 是工具栏上那枚「现在在哪条分支上」的小牌子。
 // 采用 Lucide 矢量分支图标与微交互设计，点击可弹出本地分支快捷切换列表。
 //
-// 样子照 §4.2 来：Surface 1 底 + 1px hairline + Ink Muted 文字，悬停升 Surface 2、
-// 边升到 hairline-strong。原来的版本给底和边都染了色（`pal.ref` 配 alpha），
-// 看着像一枚「提示标签」而不是工具栏上的一个控件。
+// 样子照 §4.2 来：chip 底 + 1px hairline + Ink Muted 文字，悬停升一档、边升到
+// hairline-strong。底色用半透明的 `pal.chip` 而不是 Surface 1：它长在亚克力
+// 卡片上，实心底会变成一枚白 / 黑的实心药丸，和旁边同一块卡片的按钮对不上。
+// 原来的版本更早还给底和边都染了色（`pal.ref` 配 alpha），看着像一枚「提示
+// 标签」而不是工具栏上的一个控件。
 //
 // 变基中 / 分离 HEAD 这两种异常**只把文字和图标染成 Warning**，底色和边框
 // 照旧中性 —— 规范在这一条上写得很直白：异常状态仅用微弱的警示色文字点缀。
@@ -1346,12 +1412,13 @@ func (a *app) branchChip(c *ui.Context, t *ui.Theme, pal palette) {
 	chip := ui.ButtonBase(c).Height(28).Shrink(0).Radius(radiusSM).Padding(0, 9).
 		Cursor(ui.CursorPointer).Tooltip(tip).Label(name)
 
-	bg, border := pal.surface1, pal.hairline
+	bg, border := pal.chip, pal.hairline
 	if chip.Hovered() || a.branchDropdownOpen {
 		// 悬停用两个**不透明**的色值，不再对已经半透明的色再乘一次 alpha ——
 		// 老的写法 `bg.Alpha(0.22)` 是相乘语义，作用在 0.12 的底色上只剩 0.026，
-		// 鼠标指上去底色几乎消失。
-		bg, border = pal.surface2, pal.hairlineStrong
+		// 鼠标指上去底色几乎消失。rowSelected 是现成的一档，压在 chip 上
+		// 正好重一层。
+		bg, border = pal.rowSelected, pal.hairlineStrong
 	}
 	chip.Background(bg).Border(1, border)
 	fadeColors(chip)

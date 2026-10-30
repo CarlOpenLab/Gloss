@@ -4,8 +4,132 @@ import (
 	"math"
 	"testing"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
+
+// 亚克力外观的四条：档位名是配置里的定值、未知档位收敛回柔和、材质映射和
+// beacon 同一张表、不透明度有默认值与上下限。任何一条坏了，用户改设置之后
+// 窗口要么没有材质，要么变成一个不由他决定的透明度。
+func TestBlurNormalizesToKnownChoices(t *testing.T) {
+	for _, id := range blurChoices {
+		if got := normalizeBlur(id); got != id {
+			t.Errorf("normalizeBlur(%q) = %q，有效档位不该被改写", id, got)
+		}
+	}
+	for _, id := range []string{"", "bogus", "Deep", "acrylic"} {
+		if got := normalizeBlur(id); got != blurSubtle {
+			t.Errorf("normalizeBlur(%q) = %q，未知档位应回落到 %q", id, got, blurSubtle)
+		}
+	}
+	if got := blurIndex("bogus"); got != 1 {
+		t.Errorf("blurIndex(bogus) = %d，应落到柔和那一格（1）", got)
+	}
+	for i, id := range blurChoices {
+		if got := blurIndex(id); got != i {
+			t.Errorf("blurIndex(%q) = %d，应为 %d", id, got, i)
+		}
+	}
+}
+
+func TestVibrancyFollowsBlurChoice(t *testing.T) {
+	cases := map[string]mygo.Vibrancy{
+		blurNone:   mygo.VibrancyNone,
+		blurSubtle: mygo.VibrancySidebar,
+		blurMedium: mygo.VibrancyPopover,
+		blurDeep:   mygo.VibrancyAcrylic,
+		"bogus":    mygo.VibrancySidebar,
+	}
+	for blur, want := range cases {
+		if got := vibrancyFor(blur); got != want {
+			t.Errorf("vibrancyFor(%q) = %q，应为 %q", blur, got, want)
+		}
+	}
+}
+
+func TestOpacityDefaultAndClamp(t *testing.T) {
+	cases := []struct {
+		in, want float64
+	}{
+		{0, bgOpacityDefault},  // 没设过 / 旧配置
+		{-1, bgOpacityDefault}, // 坏值当没设过
+		{0.1, bgOpacityMin},    // 低于下限
+		{1.5, bgOpacityMax},    // 高于上限
+		{0.65, 0.65},           // 区间内原样
+	}
+	for _, tc := range cases {
+		if got := normalizeOpacity(tc.in); got != tc.want {
+			t.Errorf("normalizeOpacity(%v) = %v，应为 %v", tc.in, got, tc.want)
+		}
+	}
+}
+
+// 工作卡的底色跟着设置走：默认 80% 的 pal.card，拧到 100% 就和实色卡完全一样。
+func TestCardFillFollowsBackgroundOpacity(t *testing.T) {
+	a := newApp()
+	pal := paletteFor(themeFor(false, ui.Preferences{}), laneSet{})
+	if got, want := a.cardFill(pal), pal.card.Alpha(0.80); got != want {
+		t.Errorf("默认 cardFill = %v，应为 %v", got, want)
+	}
+	a.bgOpacity = 1
+	if got := a.cardFill(pal); got != pal.card {
+		t.Errorf("100%% 时 cardFill = %v，应与 pal.card 相同（%v）", got, pal.card)
+	}
+}
+
+// 根这一层：有材质时是主题色的薄纱，没有材质时是实色 sideBg。材质跟的是
+// 系统外观，不是应用里固定的深浅 —— 窗口底必须由主题色兜底，不能整个交给
+// 材质（浅色系统 + 深色应用时，侧栏和卡片四周会亮成一片）。
+func TestShellGroundTintsMaterialToTheme(t *testing.T) {
+	pal := paletteFor(themeFor(false, ui.Preferences{}), laneSet{})
+	if got, want := shellGround(pal, true), pal.sideBg.Alpha(shellTint); got != want {
+		t.Errorf("有材质时根 = %v，应为 sideBg 的 %.0f%% 薄纱 %v", got, shellTint*100, want)
+	}
+	if got := shellGround(pal, false); got != pal.sideBg {
+		t.Errorf("无材质时根应为实色 sideBg（%v），实际 %v", pal.sideBg, got)
+	}
+}
+
+// 深色主题压在最亮的材质上也还得是暗的：薄纱太薄的话，侧栏和卡片四周会
+// 亮成一片（2026-10-30 的截图里，材质约 #898c8d，窗口底就直接是它自己，
+// 深色文字全糊了）。按那支亮度合成后，窗口底要和次要文字拉开 4.5:1。
+func TestShellGroundKeepsDarkThemeDark(t *testing.T) {
+	dark := paletteFor(themeFor(true, ui.Preferences{}), laneSet{})
+	const material = 0x898c8d // 浅色系统上主窗口材质实测的灰度
+	blend := func(fg ui.Color, bg uint32) ui.Color {
+		a := float64(fg.A) / 255
+		ch := func(v uint8, shift uint) uint8 {
+			return uint8(math.Round(float64(v)*a + float64((bg>>shift)&0xff)*(1-a)))
+		}
+		return ui.RGB(ch(fg.R, 16), ch(fg.G, 8), ch(fg.B, 0))
+	}
+	ground := blend(shellGround(dark, true), material)
+	if luma(ground) > 0.35 {
+		t.Errorf("深色窗口底压在材质上亮度 %.2f，偏亮", luma(ground))
+	}
+	if got := contrastRatio(ground, dark.inkMuted); got < 4.5 {
+		t.Errorf("次要文字在窗口底上对比度 %.1f:1，低于 4.5:1", got)
+	}
+}
+
+// contrastRatio 是 WCAG 的对比度（1~21），文字可读性的判据。
+func contrastRatio(a, b ui.Color) float64 {
+	l := func(c ui.Color) float64 {
+		ch := func(v uint8) float64 {
+			s := float64(v) / 255
+			if s <= 0.03928 {
+				return s / 12.92
+			}
+			return math.Pow((s+0.055)/1.055, 2.4)
+		}
+		return 0.2126*ch(c.R) + 0.7152*ch(c.G) + 0.0722*ch(c.B)
+	}
+	la, lb := l(a), l(b)
+	if la < lb {
+		la, lb = lb, la
+	}
+	return (la + 0.05) / (lb + 0.05)
+}
 
 // themeFor 每帧都要交出一份同样的主题，所以它的几处改动必须是**赋值**而不是
 // 累加（`t.FontSize = b.FontSize * s`，不是 `t.FontSize *= s`）。
@@ -110,7 +234,6 @@ func TestLightShellGroundIsNeutral(t *testing.T) {
 		c    ui.Color
 	}{
 		{"sideBg", pal.sideBg},
-		{"appBg", pal.appBg},
 	} {
 		spread := int(max(tc.c.R, tc.c.G, tc.c.B)) - int(min(tc.c.R, tc.c.G, tc.c.B))
 		if spread > 12 {

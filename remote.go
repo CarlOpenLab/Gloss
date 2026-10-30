@@ -181,12 +181,13 @@ func drawPushIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
 // 当 badge == 0 时，为精确 28x28 方形无干扰微按钮，图标居中呈现；
 // 当 badge > 0 时，右侧并列一枚计数徽标。
 //
-// 徽标本身是**中性**的：Surface 1 底 + hairline 边 + 计数 pill。原来整颗按钮
+// 徽标本身是**中性**的：chip 洗色底 + hairline 边 + 计数 pill。原来整颗按钮
 // 在静息态就染着强调色（底、边、图标、数字四处），超前/落后几个提交于是变成
 // 工具栏上最响的东西 —— 而 §5 只留给核心动作一到两处强调色，旁边那颗实心的
 // 「提交」才是。数字本身（等宽 + tnum）已经把「有几个提交要走」说清楚了。
 //
-// 悬停与按下照工具按钮的规矩升 Surface 阶梯，不再叠外发光（§5 禁止）。
+// 悬停与按下照工具按钮的规矩升洗色阶梯（它长在亚克力工作卡的工具栏上，
+// 不透明的 Surface 会抠出一块实心），不再叠外发光（§5 禁止）。
 func iconToolButton(c *ui.Context, pal palette, label, tip string, off bool, icon iconDraw, badge int, inFlight bool) bool {
 	var clicked bool
 	outer := ui.Box(c).Shrink(0).Tooltip(tip)
@@ -212,12 +213,10 @@ func iconToolButton(c *ui.Context, pal palette, label, tip string, off bool, ico
 				// 禁用时连边框都不给：一枚灰按钮还描着边，看着仍像能点的。
 				bg, border, fg = ui.Transparent, ui.Transparent, pal.inkTertiary
 				btn.Cursor(ui.CursorDefault)
-			case btn.Pressed():
-				bg, border, fg = pal.surface3, pal.hairlineStrong, pal.ink
-			case btn.Hovered():
-				bg, border, fg = pal.surface2, pal.hairlineStrong, pal.ink
+			case btn.Pressed(), btn.Hovered():
+				bg, border, fg = pal.rowSelected, pal.hairlineStrong, pal.ink
 			default:
-				bg, border, fg = pal.surface1, pal.hairline, pal.inkMuted
+				bg, border, fg = pal.chip, pal.hairline, pal.inkMuted
 			}
 		} else {
 			switch {
@@ -225,10 +224,10 @@ func iconToolButton(c *ui.Context, pal palette, label, tip string, off bool, ico
 				fg = pal.inkTertiary
 				btn.Cursor(ui.CursorDefault)
 			case btn.Pressed():
-				bg = pal.surface3
+				bg = pal.rowSelected
 				fg = pal.ink
 			case btn.Hovered():
-				bg = pal.surface2
+				bg = pal.rowHover
 				fg = pal.ink
 			}
 		}

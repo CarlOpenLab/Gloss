@@ -361,9 +361,11 @@ func (a *app) prDialogBody(c *ui.Context, pal palette) {
 func (a *app) prReviewBar(c *ui.Context, pal palette) {
 	pr := a.prReview.pr
 
+	// 不铺底：这条长在亚克力工作卡上，surface1 就是卡片色、却是不透明的，
+	// 铺上去等于在磨砂上抠出一条实心（和对比栏 compareBar 同一条规矩）。
 	ui.Row(c).Height(38).Shrink(0).FillWidth().
 		Padding(0, 16).Gap(8).AlignItems(ui.Center).
-		Background(pal.surface1).Border(1, pal.hairline).Children(func() {
+		Border(1, pal.hairline).Children(func() {
 
 		ui.Box(c).Size(16, 16).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
 			p.Icon(iconGitPullRequest, r, pal.inkMuted)
@@ -381,7 +383,7 @@ func (a *app) prReviewBar(c *ui.Context, pal palette) {
 
 		// 分支对（head → base）是一枚等宽信息芯片，不染强调色 ——
 		// 它是「这条 PR 从哪儿到哪儿」，读的是那两个名字。
-		ui.Box(c).Padding(2, 6).Radius(radiusXS).Background(pal.surface2).
+		ui.Box(c).Padding(2, 6).Radius(radiusXS).Background(pal.chip).
 			Border(1, pal.hairline).Children(func() {
 			ui.Textf(c, "%s → %s", pr.HeadBranch, pr.BaseBranch).
 				Font("monospace").FontSize(textCaption).TextColor(pal.inkMuted)
@@ -409,15 +411,15 @@ func (a *app) prReviewBar(c *ui.Context, pal palette) {
 			ui.Textf(c, "%d 个改动文件", len(a.allFiles)).FontSize(textCaption).TextColor(pal.inkSubtle)
 		}
 
-		// ✨ 生成并发布 AI Review 评论：静息态是次级按钮（Surface 1 + hairline），
+		// ✨ 生成并发布 AI Review 评论：静息态是次级按钮（chip 洗色 + hairline），
 		// 悬停才升一档。工具栏上已经有「提交」那种实心主按钮的场合，这里
 		// 再来一块蓝底就会打架 —— 而且它并不比「退出检视」更重要。
 		reviewBtn := ui.ButtonBase(c).Height(26).Padding(0, 10).Radius(radiusMD).Gap(4).
 			AlignItems(ui.Center).Cursor(ui.CursorPointer).
-			Background(pal.surface2).Border(1, pal.hairlineStrong).
+			Background(pal.chip).Border(1, pal.hairlineStrong).
 			Label("✨ 生成并发布 AI Review 评论").Tooltip("AI 智能分析 PR 改动并提交 Review 评论")
 		if reviewBtn.Hovered() {
-			reviewBtn.Background(pal.surface3)
+			reviewBtn.Background(pal.rowSelected)
 		}
 		fadeColors(reviewBtn)
 		reviewBtn.Children(func() {
@@ -434,7 +436,7 @@ func (a *app) prReviewBar(c *ui.Context, pal palette) {
 			Background(ui.Transparent).Border(1, pal.hairline).AlignItems(ui.Center).
 			Cursor(ui.CursorPointer).Tooltip("查看其他 PR 列表").Label("切换 PR")
 		if switchBtn.Hovered() {
-			switchBtn.Background(pal.surface2)
+			switchBtn.Background(pal.rowHover)
 		}
 		fadeColors(switchBtn)
 		switchBtn.Children(func() {
@@ -453,7 +455,7 @@ func (a *app) prReviewBar(c *ui.Context, pal palette) {
 			Background(ui.Transparent).Border(1, pal.hairline).
 			Label("退出 PR 检视").Tooltip("退出 PR 检视并恢复工作区 (Esc)")
 		if exitBtn.Hovered() {
-			exitBtn.Background(pal.surface2)
+			exitBtn.Background(pal.rowHover)
 		}
 		fadeColors(exitBtn)
 		exitBtn.Children(func() {

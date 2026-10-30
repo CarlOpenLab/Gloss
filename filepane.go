@@ -269,8 +269,10 @@ func (a *app) hasDiff() bool {
 
 // fileListPane 是文件列表那一栏：栏头 + 筛选框 + 文件树 + footer。
 func (a *app) fileListPane(c *ui.Context, pal palette, t *ui.Theme) {
-	ui.Column(c).Width(a.filePaneWidth(c)).Shrink(0).FillHeight().
-		Background(pal.surface1).Children(func() {
+	// 不铺底：亚克力卡片是这一层唯一的底，边上的 splitter 发丝线负责和
+	// diff 分家。铺 surface1 的话，深色下是比卡片更黑的实心板、浅色下是
+	// 比卡片更白的实心板 —— 一眼就看得出它没跟着卡片透。
+	ui.Column(c).Width(a.filePaneWidth(c)).Shrink(0).FillHeight().Children(func() {
 		// 栏头只留「几个文件」一件必读的信息，以及左边的三态勾选框。
 		//
 		// 这一栏的宽度是定死的 300（split 下 220）。原来还并排塞着
@@ -339,7 +341,7 @@ func (a *app) masterStageBox(c *ui.Context, t *ui.Theme, pal palette) {
 		border = pal.hairlineStrong
 		if hovered {
 			border = pal.hairlineTertiary
-			fill = pal.surface2
+			fill = pal.rowHover
 		}
 	}
 	btn.Background(fill).Border(1, border)
@@ -679,13 +681,15 @@ func statusRank(s gitrepo.Status) int {
 //
 // 顶上描一条细线、底色抬一档：它是常驻的状态栏，不是列表的最后一行。
 // 不画出来，这几个字就直接浮在底色上，像是谁忘了删的一行；画出来，
-// 文件栏一整栏也就有了下沿。
+// 文件栏一整栏也就有了下沿。底色走半透明的 chip：surface2 不透明，铺在
+// 亚克力卡上等于把最后这几行磨砂抠掉一块；chip 只在卡片上叠一层薄雾，
+// 「抬一档」的关系还在，材质也照样透上来。
 //
 // 数字和文件行里的 +/− 用同一套颜色和等宽字体：同一份数据在哪儿都长
 // 一个样，扫一眼就知道是对得上的。
 func (a *app) filePaneFooter(c *ui.Context, pal palette, t *ui.Theme) {
 	ui.Row(c).Shrink(0).Padding(7, 12).Gap(6).AlignItems(ui.Center).
-		Background(pal.surface2).
+		Background(pal.chip).
 		BorderWidth(1, 0, 0, 0).BorderColor(pal.hairline).Children(func() {
 		ui.Text(c, T("总计", "Total")).FontSize(textCaption).TextColor(pal.inkSubtle)
 		ui.Textf(c, "+%d", a.totalAdd()).FontSize(11).Bold().

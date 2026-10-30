@@ -579,6 +579,9 @@ func (a *app) reviewPane(c *ui.Context, pal palette) {
 
 	s.diff.Layout = a.reviewLayout()
 	th := editor.DefaultTheme(c.Theme())
+	// 编辑器的画布保持不透明：它的增删淡染是从背景色现算的，A 不是 255 时
+	// 淡染会跟着变透（编辑器把背景的 alpha 也算进混色里），文字区就没有
+	// 稳定的对比度了。亚克力留给卡片这一层 —— 工具栏、空白区和侧栏。
 	th.Background = pal.codeBg
 	th.Text = pal.code
 	s.diff.Theme = th
@@ -619,7 +622,7 @@ func (a *app) reviewHeader(c *ui.Context, pal palette) {
 	busy := a.op != gitrepo.OpNone
 
 	ui.Row(c).Height(34).Shrink(0).FillWidth().Padding(0, 12).Gap(8).
-		AlignItems(ui.Center).Background(pal.surface2).
+		AlignItems(ui.Center).Background(pal.chip).
 		BorderWidth(0, 0, 1, 0).BorderColor(pal.hairline).Children(func() {
 		if f == nil {
 			ui.Text(c, T("未选择文件", "No file selected")).FontSize(textBodySM).
@@ -666,7 +669,7 @@ func (a *app) reviewHeader(c *ui.Context, pal palette) {
 		// 已 review 的勾：一份改动几十个文件时，靠它把看过的划掉。
 		viewed := a.isViewed(*f)
 		v := viewed
-		if ui.Checkbox(c, &v, T("已 review", "Reviewed")).Changed() {
+		if washCheckbox(c, pal, &v, T("已 review", "Reviewed")).Changed() {
 			a.toggleViewed(*f)
 		}
 	})
@@ -682,7 +685,7 @@ func (a *app) reviewConflictBar(c *ui.Context, pal palette, f gitrepo.File) {
 	busy := a.op != gitrepo.OpNone
 
 	ui.Column(c).Shrink(0).FillWidth().Padding(8, 12).Gap(6).
-		Background(pal.surface2).
+		Background(pal.chip).
 		BorderWidth(0, 0, 1, 0).BorderColor(pal.hairline).Children(func() {
 		ui.Text(c, act.note).FontSize(textCaption).TextColor(t.TextMuted)
 		ui.Row(c).Wrap().Gap(6).AlignItems(ui.Center).Children(func() {
@@ -730,7 +733,7 @@ func (a *app) reviewBaselineButton(c *ui.Context, pal palette, label string, b c
 	if sel {
 		btn.Background(pal.selection).Border(1, pal.hairlineStrong)
 	} else if btn.Hovered() {
-		btn.Background(pal.surface3).Border(1, pal.hairlineStrong)
+		btn.Background(pal.rowHover).Border(1, pal.hairlineStrong)
 	} else {
 		btn.Background(ui.Transparent).Border(1, pal.hairline)
 	}
@@ -831,10 +834,10 @@ func (a *app) reviewRegionActions(c *ui.Context, pal palette, an editor.DiffAnno
 // （按钮上只写得出侧的名字，说明里把「这是哪一边」补齐）。
 func smallConflictAction(c *ui.Context, pal palette, label, tip string) ui.Element {
 	btn := ui.ButtonBase(c).Height(20).Shrink(0).Padding(0, 7).Radius(radiusXS).
-		Cursor(ui.CursorPointer).Label(label).Background(pal.surface3).
+		Cursor(ui.CursorPointer).Label(label).Background(pal.chip).
 		Border(1, pal.hairline).Tooltip(tip)
 	if btn.Hovered() {
-		btn.Background(pal.surface4).Border(1, pal.hairlineStrong)
+		btn.Background(pal.rowSelected).Border(1, pal.hairlineStrong)
 	}
 	btn.Children(func() { ui.Text(c, label).FontSize(textCaption).TextColor(pal.inkMuted) })
 	return btn
