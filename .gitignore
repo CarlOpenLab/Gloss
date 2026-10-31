@@ -13,3 +13,6 @@ mygo-update.key
 config.json
 state.json
 cache.json
+
+# 本地开发用的二进制
+/gloss_dev.exe*

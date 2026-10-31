@@ -28,19 +28,26 @@ type editorPaneState struct {
 	// 没有文本缓冲区，这里摆的是解好的位图，保存/还原都不适用。
 	img     *ui.Bitmap
 	imgMeta string
-	// pendingLine 是「打开后把这一行滚到顶上」的一次性请求（编辑器栏搜索
-	// 结果的跳转用）：缓冲还在读盘时先记下目标行，dispatch 就位后兑现。
-	pendingLine int
+	// pendingHit 是「打开后兑现」的一次性跳转请求（编辑器栏搜索结果的跳转
+	// 用）：缓冲还在读盘时先记下点中的那条命中，dispatch 就位后选中它 ——
+	// Line 为 0 表示没有待兑现的。
+	pendingHit wsSearchHit
 }
 
 // editorTarget 取编辑器该显示哪个文件：左栏当前选中的那个，没选就退到第一个。
 //
 // 编辑器视图的左栏是整个工作区（wsFiles），别的视图里那份是改动（files）——
-// 跟着视图走，两边各自记着自己的选中下标。
+// 跟着视图走，两边各自记着自己的选中下标。树筛选把选中的文件筛出列表时
+// （下标落空），搜索跳转钉住的文件（wsPinPath）顶上。
 func (a *app) editorTarget() *gitrepo.File {
 	list, sel := a.files, a.fileSel
 	if a.viewMode == viewModeEditor {
 		list, sel = a.wsFiles, a.wsSel
+		if a.wsPinPath != "" && (sel < 0 || sel >= len(list)) {
+			if f := wsFileByPath(a.wsAll, a.wsPinPath); f != nil {
+				return f
+			}
+		}
 	}
 	if len(list) == 0 {
 		return nil
@@ -108,20 +115,20 @@ func (a *app) loadEditorPane(f gitrepo.File) {
 			if err != nil {
 				s.err = err.Error()
 				s.code, s.buffer, s.base, s.img = nil, nil, nil, nil
-				s.pendingLine = 0 // 没有缓冲可滚，别让请求残留到下一个文件头上
+				s.pendingHit = wsSearchHit{} // 没有缓冲可兑现，别让请求残留到下一个文件头上
 				return
 			}
 			if image {
 				if side.err != "" {
 					s.err = side.err
 					s.code, s.buffer, s.base, s.img = nil, nil, nil, nil
-					s.pendingLine = 0
+					s.pendingHit = wsSearchHit{}
 					return
 				}
 				s.img, s.imgMeta = side.bitmap, side.meta
 				s.code, s.buffer, s.base = nil, nil, nil
 				s.err = ""
-				s.pendingLine = 0
+				s.pendingHit = wsSearchHit{}
 				return
 			}
 			lang := editor.LanguageFor(path)
@@ -141,9 +148,9 @@ func (a *app) loadEditorPane(f gitrepo.File) {
 			s.code = st
 			s.img, s.imgMeta = nil, ""
 			s.err = ""
-			if s.pendingLine > 0 {
-				st.ScrollTo(s.pendingLine)
-				s.pendingLine = 0
+			if s.pendingHit.Line > 0 {
+				revealWsHit(st, s.pendingHit)
+				s.pendingHit = wsSearchHit{}
 			}
 		})
 	})
@@ -244,9 +251,7 @@ func (a *app) editorPaneView(c *ui.Context, pal palette) {
 		return
 	}
 
-	th := editor.DefaultTheme(c.Theme())
-	th.Background = pal.codeBg
-	th.Text = pal.code
+	th := a.codeEditorTheme(c, pal)
 	s.code.Theme = th
 	s.code.Font = ui.Font{Family: "monospace", Size: a.codeSizeValue()}
 	editor.View(c, s.code).Fill().AutoFocus()

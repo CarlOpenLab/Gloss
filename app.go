@@ -236,6 +236,10 @@ type app struct {
 	wsFilter     string
 	wsTreeFilter string
 	wsSel        int
+	// wsPinPath 是搜索结果跳转「钉」住的文件：树筛选把它筛出了 wsFiles，
+	// 选中落了空，编辑器仍对准它 —— 筛选只管树那颗，不管搜索结果能不能点
+	// （VS Code 同款）。点树里任何一行都会经 selectWorkspaceKey 清掉。
+	wsPinPath string
 	// wsOpen 记的是工作区树里用户展开过的目录（编辑器栏默认全收起，见
 	// dirOpen）。和 filesClosed 是两份独立的记录：两份名单的默认值相反。
 	wsOpen map[string]bool
@@ -247,6 +251,11 @@ type app struct {
 	wsSearchQuery string
 	wsSearchList  ui.ListState
 	wsSearch      wsSearchState
+	// 路径过滤（VS Code 搜索的 include/exclude 同款）：展开的面板和两框里
+	// 敲的 glob，会话级的，不进配置。
+	wsSearchPathOpen bool
+	wsSearchInclude  string
+	wsSearchExclude  string
 
 	// —— 已 review：文件路径 -> 当时的内容指纹 ——
 	// 指纹对不上就说明文件又变了，标记自动失效。

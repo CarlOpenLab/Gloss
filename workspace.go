@@ -98,8 +98,12 @@ func (a *app) selectedWorkspaceKey() string {
 }
 
 // selectWorkspaceKey 按路径选中文件；路径不在当前列表里就变成没选中。
+//
+// 不管选中成没成，都清掉搜索跳转的钉住（wsPinPath）：树里任何一次正经的
+// 选中都意味着「现在要看树里指的那个文件」，钉住的旧目标作废。
 func (a *app) selectWorkspaceKey(key string) {
 	a.wsSel = -1
+	a.wsPinPath = ""
 	if key == "" {
 		return
 	}
@@ -109,6 +113,16 @@ func (a *app) selectWorkspaceKey(key string) {
 			return
 		}
 	}
+}
+
+// wsFileByPath 在文件表里按路径找文件，没有就 nil。
+func wsFileByPath(files []gitrepo.File, path string) *gitrepo.File {
+	for i := range files {
+		if pathOf(files[i]) == path {
+			return &files[i]
+		}
+	}
+	return nil
 }
 
 // workspaceFile 是编辑器该显示的那个文件。没选中时返回 false，编辑器显示

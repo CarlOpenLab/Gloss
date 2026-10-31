@@ -120,6 +120,23 @@ func codeEditorBaseline(ctx context.Context, repo *gitrepo.Repo, path string, se
 
 func (a *app) closeCodeEditor() { a.codeEdit = codeEditorState{} }
 
+// codeEditorTheme 是各处代码编辑器共用的配色：出厂就是 Vitesse（深浅外观
+// 各一份，按窗口当前外观自动取用，见 code_theme.go）。下面那几行 Accent
+// 调的选区和活动行是打底 —— 方案没覆盖到的项（括号匹配、查找匹配、诊断
+// 这些）仍从这里取默认。
+func (a *app) codeEditorTheme(c *ui.Context, pal palette) *editor.Theme {
+	th := editor.DefaultTheme(c.Theme())
+	th.Background = pal.codeBg
+	th.Text = pal.code
+	th.Selection = pal.accent.Alpha(0.35)
+	th.InactiveSelection = th.Selection
+	th.ActiveLine = pal.accent.Alpha(0.12)
+	if p := codeThemePresetByID(defaultCodeTheme); p != nil {
+		p.apply(th, c.Theme().Dark)
+	}
+	return th
+}
+
 // closeEmbeddedEditors 收掉内置编辑器（整文件代码对话框 / 编辑器视图 /
 // 改动区的 DiffView）。
 //
@@ -258,10 +275,7 @@ func (a *app) codeEditorBody(c *ui.Context, pal palette) {
 		}
 
 		ui.Box(c).Grow(1).MinHeight(0).FillWidth().Children(func() {
-			th := editor.DefaultTheme(t)
-			th.Background = pal.codeBg
-			th.Text = pal.code
-			s.code.Theme = th
+			s.code.Theme = a.codeEditorTheme(c, pal)
 			s.code.Font = ui.Font{Family: "monospace", Size: a.codeSizeValue()}
 			editor.View(c, s.code).Fill().AutoFocus()
 		})

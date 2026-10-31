@@ -578,12 +578,10 @@ func (a *app) reviewPane(c *ui.Context, pal palette) {
 	}
 
 	s.diff.Layout = a.reviewLayout()
-	th := editor.DefaultTheme(c.Theme())
 	// 编辑器的画布保持不透明：它的增删淡染是从背景色现算的，A 不是 255 时
 	// 淡染会跟着变透（编辑器把背景的 alpha 也算进混色里），文字区就没有
 	// 稳定的对比度了。亚克力留给卡片这一层 —— 工具栏、空白区和侧栏。
-	th.Background = pal.codeBg
-	th.Text = pal.code
+	th := a.codeEditorTheme(c, pal)
 	s.diff.Theme = th
 	s.diff.Font = ui.Font{Family: "monospace", Size: a.codeSizeValue()}
 	s.diff.TabSize = tabWidth

@@ -284,6 +284,7 @@ var opaqueSurfaceOwners = map[string]string{
 	// 混在卡片文件里的浮层与画布
 	"app.go:repoDropdownPanel":        "仓库下拉浮层",
 	"app.go:branchDropdownPanel":      "分支下拉浮层",
+	"code_editor.go:codeEditorTheme":  "代码画布共用的配色：编辑器视图 / Diff 预览 / 编辑弹窗三处的底色都从这里出，增删淡染从背景色现算，必须不透明",
 	"compare.go:compareDialog":        "对比分支弹窗（对比栏 compareBar 在卡片上，不在此列）",
 	"prdialog.go:prDialogBody":        "PR 列表弹窗（PR 检视栏 prReviewBar 在卡片上，不在此列）",
 	"prdialog.go:prReviewModalBody":   "AI Review 弹窗",
@@ -293,8 +294,6 @@ var opaqueSurfaceOwners = map[string]string{
 	"tabs.go:recentRemoveButton":      "最近项目浮层里的移除键",
 	"tabs.go:renderTerminalChip":      "拖动中的芯片副本浮在指针上（框架按 75% 不透明度画），按浮层取实色；其余状态走洗色",
 	"tabs.go:terminalTheme":           "终端主题的 Background 只给块状光标取反色，画布本身透明（Transparent）",
-	"review.go:reviewPane":            "diff 画布：增删淡染从背景色现算，背景必须不透明",
-	"editor_pane.go:editorPaneView":   "编辑器画布：同 reviewPane",
 	"imagereview.go:drawCheckerboard": "图片预览的棋盘格就是内容画布，看透明像素用的",
 }
 
