@@ -662,12 +662,13 @@ func TestDumpScreenshot(t *testing.T) {
 // 芯片带那部分还是能看的。
 func waitShellText(t *testing.T, s *termSession) string {
 	t.Helper()
-	if s == nil || s.term == nil {
+	if s == nil || s.active == nil || s.active.pane == nil || s.active.pane.term == nil {
 		return ""
 	}
+	term := s.active.pane.term
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
-		if txt := strings.TrimSpace(s.term.Text()); txt != "" {
+		if txt := strings.TrimSpace(term.Text()); txt != "" {
 			return txt
 		}
 		time.Sleep(50 * time.Millisecond)
@@ -760,4 +761,67 @@ func writePNG(t *testing.T, path string, img image.Image) {
 	if err := png.Encode(f, img); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// waitPaneText 等一格终端的 shell 吐出提示符。
+func waitPaneText(t *testing.T, p *termPane) string {
+	t.Helper()
+	if p == nil || p.term == nil {
+		return ""
+	}
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		if txt := strings.TrimSpace(p.term.Text()); txt != "" {
+			return txt
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return ""
+}
+
+// TestDumpTerminalSplit 拍终端视图里的四宫格分屏：左右各上下两格，
+// 中间一条竖分隔线、两侧各一条横分隔线。明暗各一张。
+func TestDumpTerminalSplit(t *testing.T) {
+	if os.Getenv("SHOT") == "" {
+		t.Skip("设置 SHOT=1 才跑")
+	}
+	a := richApp(t)
+	t.Cleanup(a.closeAllTerminals)
+	a.tabs = []*repoTab{{path: a.repoPath, name: a.repoName, state: loadIdle}}
+	a.activeTab = 0
+	a.setViewMode(viewModeTerm)
+
+	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+	tt.Frame()
+	tt.SetTitleBar(realTitleBar)
+	tt.Frame()
+
+	a.newTerminalSession(a.currentTab())
+	tt.Frame()
+	_, s := a.activeTermChip()
+
+	// 先左右分，再把左右两边各自上下分，得到四宫格。
+	a.splitTerminal(paneRight)
+	tt.Frame()
+	a.splitTerminal(paneDown)
+	tt.Frame()
+	a.focusTerminalPane(paneLeft)
+	a.splitTerminal(paneDown)
+	tt.Frame()
+
+	leaves := paneLeaves(s.root)
+	if len(leaves) != 4 {
+		t.Fatalf("该有四格，实际 %d", len(leaves))
+	}
+	for _, n := range leaves {
+		waitPaneText(t, n.pane)
+	}
+	tt.Frame()
+	writePNG(t, "/tmp/de-shot-term-split-light.png", tt.Image())
+
+	tt.SetDark(true)
+	tt.Frame()
+	tt.Frame()
+	writePNG(t, "/tmp/de-shot-term-split-dark.png", tt.Image())
 }

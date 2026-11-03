@@ -2,6 +2,7 @@ package main
 
 import (
 	"io"
+	"math"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -207,7 +208,7 @@ func TestTerminalSessions(t *testing.T) {
 	if err := tt.Click("终端 1"); err != nil {
 		t.Fatalf("找不到第一枚芯片：%v（%q）", err, tt.Texts())
 	}
-	if tab.termActive != 0 || a.activeSession() != tab.terms[0] {
+	if tab.termActive != 0 || a.activeSession() != tab.terms[0].active.pane {
 		t.Fatalf("点芯片该切过去：激活 %d", tab.termActive)
 	}
 
@@ -271,10 +272,7 @@ func TestTerminalSessions(t *testing.T) {
 	a.restartCurrentTerminal()
 	tt.Frame()
 	if a.activeSession() != cur {
-		t.Errorf("重启后该还是同一个会话")
-	}
-	if cur.ord != tab.terms[0].ord {
-		t.Errorf("重启不该换编号：%d", cur.ord)
+		t.Errorf("重启后该还是同一格")
 	}
 	if *spawns != before+1 {
 		t.Errorf("重启该重新起一次 shell，实际 %d 次", *spawns-before)
@@ -1210,5 +1208,241 @@ func TestEscapePutsATerminalChipBack(t *testing.T) {
 	second, _ := tt.Find("终端 2")
 	if back.X > second.X {
 		t.Fatalf("Escape 之后芯片一还在 x=%.1f，没有回到芯片二左边（%.1f）", back.X, second.X)
+	}
+}
+
+// ⌘D / ⌘⇧D 在终端视图里把一个芯片拆成两格：芯片不增加，格子在芯片里分。
+func TestTerminalSplitShortcuts(t *testing.T) {
+	stubTerminal(t)
+	a := newApp()
+	a.openInNewTab("/tmp/proj1")
+	tab := a.currentTab()
+	tt := ui.NewTester(a.view, 1000, 700)
+	a.setViewMode(viewModeTerm)
+	tt.Frame()
+	a.newTerminalSession(tab)
+	tt.Frame()
+
+	// ⌘D：向右分屏，新格在右半边。
+	tt.Key(ui.Cmd, ui.KeyD)
+	tt.Frame()
+	if len(tab.terms) != 1 {
+		t.Fatalf("分屏不该新开芯片，实际 %d 枚", len(tab.terms))
+	}
+	s := tab.terms[0]
+	if s.root == nil || s.root.pane != nil || s.root.stack {
+		t.Fatalf("⌘D 该把芯片拆成左右两格，实际 %+v", s.root)
+	}
+	if len(paneLeaves(s.root)) != 2 {
+		t.Fatalf("该有两格，实际 %d", len(paneLeaves(s.root)))
+	}
+	if s.active != s.root.second {
+		t.Fatalf("新格该接住焦点")
+	}
+
+	// ⌘⇧D：在当前格下面再拆一格。
+	tt.Key(ui.Cmd|ui.Shift, ui.KeyD)
+	tt.Frame()
+	if len(tab.terms) != 1 || len(paneLeaves(s.root)) != 3 {
+		t.Fatalf("⌘⇧D 该在芯片里再加一格，实际芯片 %d 枚、格子 %d 个", len(tab.terms), len(paneLeaves(s.root)))
+	}
+	if !s.root.second.stack {
+		t.Fatalf("当前格下面该是一道竖分叉")
+	}
+	if s.active != s.root.second.second {
+		t.Fatalf("新格该接住焦点")
+	}
+}
+
+// 分屏键只在终端视图里认；回到 Git 面板，⌘D 不该悄悄改终端。
+func TestTerminalSplitShortcutOnlyInTerminalView(t *testing.T) {
+	stubTerminal(t)
+	a := newApp()
+	a.openInNewTab("/tmp/proj1")
+	tab := a.currentTab()
+	tt := ui.NewTester(a.view, 1000, 700)
+	a.setViewMode(viewModeTerm)
+	tt.Frame()
+	a.newTerminalSession(tab)
+	tt.Frame()
+
+	a.setViewMode(viewModeGit)
+	tt.Frame()
+	tt.Key(ui.Cmd, ui.KeyD)
+	tt.Frame()
+
+	if len(paneLeaves(tab.terms[0].root)) != 1 {
+		t.Fatalf("Git 面板里 ⌘D 不该分屏")
+	}
+}
+
+// ⌘⌥ 方向键在终端视图里挪焦点，离开终端视图仍然切项目标签页。
+func TestTerminalFocusShortcuts(t *testing.T) {
+	stubTerminal(t)
+	a := newApp()
+	a.openInNewTab("/tmp/proj1")
+	tab := a.currentTab()
+	tt := ui.NewTester(a.view, 1000, 700)
+	a.setViewMode(viewModeTerm)
+	tt.Frame()
+	a.newTerminalSession(tab)
+	tt.Frame()
+
+	tt.Key(ui.Cmd, ui.KeyD)
+	tt.Frame()
+	s := tab.terms[0]
+	if s.active != s.root.second {
+		t.Fatalf("分屏后焦点该在新格")
+	}
+	tt.Key(ui.Cmd|ui.Alt, ui.KeyLeft)
+	tt.Frame()
+	if s.active != s.root.first {
+		t.Fatalf("⌘⌥← 该把焦点挪到左格")
+	}
+	tt.Key(ui.Cmd|ui.Alt, ui.KeyRight)
+	tt.Frame()
+	if s.active != s.root.second {
+		t.Fatalf("⌘⌥→ 该把焦点挪回右格")
+	}
+
+	// 同一组键在 Git 面板里还是切项目标签页。
+	a.openInNewTab("/tmp/proj2")
+	a.setViewMode(viewModeGit)
+	tt.Frame()
+	if a.activeTab != 1 {
+		t.Fatalf("第二个项目该是当前页")
+	}
+	tt.Key(ui.Cmd|ui.Alt, ui.KeyLeft)
+	tt.Frame()
+	if a.activeTab != 0 {
+		t.Fatalf("Git 面板里 ⌘⌥← 该切回上一个项目，实际 %d", a.activeTab)
+	}
+}
+
+// ⌘⌃ 方向键调当前分隔线，⌘⌃= 均分。
+func TestTerminalResizeShortcuts(t *testing.T) {
+	stubTerminal(t)
+	a := newApp()
+	a.openInNewTab("/tmp/proj1")
+	tab := a.currentTab()
+	tt := ui.NewTester(a.view, 1000, 700)
+	a.setViewMode(viewModeTerm)
+	tt.Frame()
+	a.newTerminalSession(tab)
+	tt.Frame()
+	tt.Key(ui.Cmd, ui.KeyD)
+	tt.Frame()
+	s := tab.terms[0]
+	if s.root.ratio != 0.5 {
+		t.Fatalf("刚分屏该是一半，实际 %v", s.root.ratio)
+	}
+
+	tt.Key(ui.Cmd|ui.Ctrl, ui.KeyRight)
+	tt.Frame()
+	if math.Abs(float64(s.root.ratio-(0.5+paneResizeStep))) > 0.0001 {
+		t.Fatalf("⌘⌃→ 该把分隔线右移 %v，实际 %v", paneResizeStep, s.root.ratio)
+	}
+	tt.Key(ui.Cmd|ui.Ctrl, ui.KeyEqual)
+	tt.Frame()
+	if s.root.ratio != 0.5 {
+		t.Fatalf("⌘⌃= 该均分，实际 %v", s.root.ratio)
+	}
+}
+
+// ⌘⇧↩ 最大化当前格，再按还原。
+func TestTerminalZoomShortcut(t *testing.T) {
+	stubTerminal(t)
+	a := newApp()
+	a.openInNewTab("/tmp/proj1")
+	tab := a.currentTab()
+	tt := ui.NewTester(a.view, 1000, 700)
+	a.setViewMode(viewModeTerm)
+	tt.Frame()
+	a.newTerminalSession(tab)
+	tt.Frame()
+	tt.Key(ui.Cmd, ui.KeyD)
+	tt.Frame()
+
+	s := tab.terms[0]
+	tt.Key(ui.Cmd|ui.Shift, ui.KeyEnter)
+	tt.Frame()
+	if !s.zoom {
+		t.Fatalf("⌘⇧↩ 该最大化当前格")
+	}
+	tt.Key(ui.Cmd|ui.Shift, ui.KeyEnter)
+	tt.Frame()
+	if s.zoom {
+		t.Fatalf("再按一次该还原")
+	}
+}
+
+// ⌘W 先关当前格，剩最后一格才关芯片。
+func TestCloseActiveClosesPaneBeforeChip(t *testing.T) {
+	stubTerminal(t)
+	a := newApp()
+	a.openInNewTab("/tmp/proj1")
+	tab := a.currentTab()
+	tt := ui.NewTester(a.view, 1000, 700)
+	a.setViewMode(viewModeTerm)
+	tt.Frame()
+	a.newTerminalSession(tab)
+	tt.Frame()
+	tt.Key(ui.Cmd, ui.KeyD)
+	tt.Frame()
+
+	s := tab.terms[0]
+	if len(paneLeaves(s.root)) != 2 {
+		t.Fatalf("该有两格")
+	}
+	tt.Key(ui.Cmd, ui.KeyW)
+	tt.Frame()
+	if len(tab.terms) != 1 {
+		t.Fatalf("关一格不该关芯片，实际 %d 枚", len(tab.terms))
+	}
+	if len(paneLeaves(s.root)) != 1 || s.active != s.root {
+		t.Fatalf("该只剩一格并接住焦点")
+	}
+
+	tt.Key(ui.Cmd, ui.KeyW)
+	tt.Frame()
+	if len(tab.terms) != 0 {
+		t.Fatalf("最后一格关掉后该关芯片，实际 %d 枚", len(tab.terms))
+	}
+}
+
+// 拖分隔线改变两格的比例；双击分隔线均分。
+func TestTerminalDividerDragAndDoubleClick(t *testing.T) {
+	stubTerminal(t)
+	a := newApp()
+	a.openInNewTab("/tmp/proj1")
+	tab := a.currentTab()
+	tt := ui.NewTester(a.view, 1000, 700)
+	a.setViewMode(viewModeTerm)
+	tt.Frame()
+	a.newTerminalSession(tab)
+	tt.Frame()
+	tt.Key(ui.Cmd, ui.KeyD)
+	tt.Frame()
+
+	s := tab.terms[0]
+	r, ok := tt.Find("调整终端分屏大小")
+	if !ok {
+		t.Fatalf("找不到分隔线：%q", tt.Texts())
+	}
+	x, y := r.X+r.W/2, r.Y+r.H/2
+	tt.Press(x, y)
+	tt.Frame()
+	tt.Move(x+80, y)
+	tt.Frame()
+	tt.Release(x+80, y)
+	tt.Frame()
+	if s.root.ratio <= 0.5 {
+		t.Fatalf("往右拖分隔线该让左格变大，实际 %v", s.root.ratio)
+	}
+
+	// 双击复位成一半。
+	doubleClick(t, tt, "调整终端分屏大小")
+	if s.root.ratio != 0.5 {
+		t.Fatalf("双击分隔线该均分，实际 %v", s.root.ratio)
 	}
 }

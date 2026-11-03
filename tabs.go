@@ -330,6 +330,9 @@ func (a *app) switchTab(idx int) {
 		}
 		// 终端不在这里起：起 shell 要一份当前配色，而配色只有视图那层有。
 		// 进了终端视图，shell 也只因「新建终端」而起（见 terminalArea）。
+		if a.viewMode == viewModeTerm {
+			a.focusActiveTerminal()
+		}
 	}
 	a.persistOpenRepos()
 }
@@ -521,6 +524,9 @@ func (a *app) closeTab(idx int) {
 // 终端可关了。
 func (a *app) closeActive() {
 	if a.viewMode == viewModeTerm {
+		if a.closeActiveTerminalPane() {
+			return
+		}
 		tab := a.currentTab()
 		if tab != nil && len(tab.terms) > 0 {
 			idx := tab.termActive
@@ -528,6 +534,7 @@ func (a *app) closeActive() {
 				idx = len(tab.terms) - 1
 			}
 			dropTerminalSession(tab, idx)
+			a.focusActiveTerminal()
 			a.requestRedraw()
 			return
 		}
@@ -571,6 +578,11 @@ func (a *app) setViewMode(mode int) {
 	tab := a.currentTab()
 	if tab != nil {
 		tab.viewMode = mode
+	}
+	if mode == viewModeTerm {
+		// 切回终端视图时把焦点交还给当前格；否则键盘还停在上一个视图
+		// 的控件上，终端看着是活的却打不进字。
+		a.focusActiveTerminal()
 	}
 	if mode == viewModeEditor {
 		// 进编辑器视图时先把左边选中的那个文件读进来；之后换文件由
@@ -749,33 +761,40 @@ func moveTerminalSession(tab *repoTab, from, to int) {
 	}
 }
 
-// termSession 是一个终端会话 —— 芯片带上的一枚芯片对应一个 shell 进程。
+// termSession 是终端视图里的一枚芯片 —— 一个终端标签页。
 //
-// 进程之外还记着两样芯片要用的东西：
+// 芯片里可以再分屏：root 是这个标签页的分屏树，active 是接住键盘焦点的那
+// 一格。进程和「起过没有」挂在叶子（termPane）上，而不是芯片上：分屏之后
+// 每一格是各自独立的 shell。
 //
 //	ord 是兜底标题的编号。shell 没报标题（OSC 0/2）时芯片写「终端 N」，
 //	    这个号按创建顺序发，不按数组下标现算：关掉中间一个之后，剩下的
 //	    会话不该集体改名，新开的也不该顶掉别人的号。
-//	started 记着「已经试着起过了」。term 为 nil 且没试过才是「还没起」：
-//	    失败过当然不自己重试（重试由界面上那一下决定）。
+//	focusPending 是「下一帧把焦点交给 active」。点芯片、分屏、关格之后
+//	    都要交一次，之后由 terminal.View 自己的点击接管。
 type termSession struct {
-	term    *terminal.Terminal
-	err     string
-	ord     int
-	started bool
+	root         *paneNode
+	active       *paneNode
+	zoom         bool
+	focusPending bool
+	ord          int
 }
 
 // terminalNew 建一个终端。抽成变量是为了测试能换上替身：会话列表的增删
 // 切换是纯逻辑，为它每次真起一个 shell，既慢，又要在退出时照顾一堆子进程。
 var terminalNew = terminal.New
 
-// activeSession 返回当前标签页里激活的会话（还没有就返回 nil）。
-func (a *app) activeSession() *termSession {
+// activeSession 返回当前标签页里激活的那一格（还没有就返回 nil）。
+func (a *app) activeSession() *termPane {
 	tab := a.currentTab()
 	if tab == nil || tab.termActive < 0 || tab.termActive >= len(tab.terms) {
 		return nil
 	}
-	return tab.terms[tab.termActive]
+	s := tab.terms[tab.termActive]
+	if s == nil || s.active == nil {
+		return nil
+	}
+	return s.active.pane
 }
 
 // newTerminalSession 在标签页里再挂一个终端会话，并切到它。
@@ -788,8 +807,104 @@ func (a *app) newTerminalSession(tab *repoTab) {
 		return
 	}
 	tab.termSeq++
-	tab.terms = append(tab.terms, &termSession{ord: tab.termSeq})
+	s := &termSession{ord: tab.termSeq}
+	s.root = &paneNode{pane: &termPane{}}
+	s.active = s.root
+	s.focusPending = true
+	tab.terms = append(tab.terms, s)
 	tab.termActive = len(tab.terms) - 1
+}
+
+// activeTermChip 返回当前项目页和当前终端芯片。没有项目、没有芯片时芯片
+// 为 nil。
+func (a *app) activeTermChip() (*repoTab, *termSession) {
+	tab := a.currentTab()
+	if tab == nil || tab.termActive < 0 || tab.termActive >= len(tab.terms) {
+		return tab, nil
+	}
+	return tab, tab.terms[tab.termActive]
+}
+
+// focusActiveTerminal 让下一帧把键盘焦点交给当前格。
+func (a *app) focusActiveTerminal() {
+	if _, s := a.activeTermChip(); s != nil && s.active != nil {
+		s.focusPending = true
+	}
+}
+
+// splitTerminal 在当前格上按 dir 方向再分一格。新格立刻接住焦点，并把
+// 芯片从最大化状态放回来 —— 分屏之后只看一格，等于白分。
+func (a *app) splitTerminal(dir paneDir) {
+	_, s := a.activeTermChip()
+	if s == nil || s.active == nil {
+		return
+	}
+	s.root, s.active = splitPaneAt(s.root, s.active, dir, &termPane{})
+	s.zoom = false
+	s.focusPending = true
+	a.requestRedraw()
+}
+
+// focusTerminalPane 把焦点挪到 dir 方向上的相邻格；没有就停在原地。
+func (a *app) focusTerminalPane(dir paneDir) {
+	_, s := a.activeTermChip()
+	if s == nil || s.active == nil {
+		return
+	}
+	if next := focusPaneInDir(s.root, s.active, dir); next != nil && next != s.active {
+		s.active = next
+		s.focusPending = true
+		a.requestRedraw()
+	}
+}
+
+// resizeTerminalPane 把当前格所在方向上的分隔线挪 delta。
+func (a *app) resizeTerminalPane(dir paneDir, delta float32) {
+	_, s := a.activeTermChip()
+	if s == nil || s.active == nil {
+		return
+	}
+	resizePaneAt(s.root, s.active, dir, delta)
+	a.requestRedraw()
+}
+
+// equalizeTerminal 把当前芯片里所有分隔线调回均分。
+func (a *app) equalizeTerminal() {
+	_, s := a.activeTermChip()
+	if s == nil {
+		return
+	}
+	equalizePanes(s.root)
+	a.requestRedraw()
+}
+
+// toggleTerminalZoom 把当前格最大化 / 还原。
+func (a *app) toggleTerminalZoom() {
+	_, s := a.activeTermChip()
+	if s == nil || s.active == nil {
+		return
+	}
+	s.zoom = !s.zoom
+	a.requestRedraw()
+}
+
+// closeActiveTerminalPane 关掉当前芯片里的一格，返回是否关掉了。
+//
+// 只剩一格时返回 false：那时该关的是整枚芯片，由调用方决定（芯片上的 ×
+// 和 ⌘W 都是这个意思）。
+func (a *app) closeActiveTerminalPane() bool {
+	_, s := a.activeTermChip()
+	if s == nil || s.active == nil {
+		return false
+	}
+	if len(paneLeaves(s.root)) <= 1 {
+		return false
+	}
+	s.root, s.active = closePaneAt(s.root, s.active)
+	s.zoom = false
+	s.focusPending = true
+	a.requestRedraw()
+	return true
 }
 
 // newTerminalTab 是「新建终端标签页」那条命令（⌘⇧T 与菜单里的那一项）。
@@ -814,10 +929,7 @@ func dropTerminalSession(tab *repoTab, idx int) {
 	if tab == nil || idx < 0 || idx >= len(tab.terms) {
 		return
 	}
-	if s := tab.terms[idx]; s != nil && s.term != nil {
-		_ = s.term.Close()
-		s.term = nil
-	}
+	closeTermSession(tab.terms[idx])
 	tab.terms = append(tab.terms[:idx], tab.terms[idx+1:]...)
 	// 激活的挪到相邻的一个。关掉当前会话时保持原下标即可 —— 那正是它的
 	// 后一个（关的是最后一个时落到前一个），视线不用跳回第一枚芯片。
@@ -832,6 +944,19 @@ func dropTerminalSession(tab *repoTab, idx int) {
 	}
 }
 
+// closeTermSession 放掉一枚芯片里所有格子的 shell，不做界面补偿。
+func closeTermSession(s *termSession) {
+	if s == nil {
+		return
+	}
+	for _, n := range paneLeaves(s.root) {
+		if n.pane != nil && n.pane.term != nil {
+			_ = n.pane.term.Close()
+			n.pane.term = nil
+		}
+	}
+}
+
 // releaseTermSessions 放掉一个标签页里所有会话的 shell 进程。
 //
 // 关窗、退出、关闭项目标签页这三条路走这里：它们要的只是「别把子进程留在
@@ -841,10 +966,7 @@ func releaseTermSessions(tab *repoTab) {
 		return
 	}
 	for _, s := range tab.terms {
-		if s != nil && s.term != nil {
-			_ = s.term.Close()
-			s.term = nil
-		}
+		closeTermSession(s)
 	}
 	tab.terms = nil
 	tab.termActive = 0
@@ -892,9 +1014,11 @@ func (a *app) syncTerminalThemes(dark bool, pal palette) {
 		if tab == nil {
 			continue
 		}
-		for _, s := range tab.terms {
-			if s != nil && s.term != nil {
-				s.term.SetTheme(th, th)
+		for _, chip := range tab.terms {
+			for _, n := range paneLeaves(chip.root) {
+				if n.pane != nil && n.pane.term != nil {
+					n.pane.term.SetTheme(th, th)
+				}
 			}
 		}
 	}
@@ -1062,24 +1186,26 @@ func (a *app) syncTerminalFont() {
 		if tab == nil {
 			continue
 		}
-		for _, s := range tab.terms {
-			// 起失败的会话 term 是 nil（测试里的替身也是），跳过。
-			if s != nil && s.term != nil {
-				s.term.SetFont(f)
+		for _, chip := range tab.terms {
+			for _, n := range paneLeaves(chip.root) {
+				// 起失败的格子 term 是 nil（测试里的替身也是），跳过。
+				if n.pane != nil && n.pane.term != nil {
+					n.pane.term.SetFont(f)
+				}
 			}
 		}
 	}
 }
 
-// startTerminal 给一个会话起 shell。
+// startTerminal 给一格终端起 shell。
 //
 // Dir 用项目路径：终端标签页是「在这个仓库里再开一个 shell」，新会话落在
 // 同一个仓库，而不是回到 home 让用户自己 cd 一趟。
-func (a *app) startTerminal(tab *repoTab, s *termSession, dark bool, pal palette) {
-	if tab == nil || s == nil || s.started {
+func (a *app) startTerminal(tab *repoTab, p *termPane, dark bool, pal palette) {
+	if tab == nil || p == nil || p.started {
 		return
 	}
-	s.started = true
+	p.started = true
 	dir := tab.path
 	if dir == "" {
 		dir, _ = os.UserHomeDir()
@@ -1126,34 +1252,35 @@ func (a *app) startTerminal(tab *repoTab, s *termSession, dark bool, pal palette
 		},
 	})
 	if err != nil {
-		s.err = err.Error()
+		p.err = err.Error()
 		return
 	}
-	s.term = term
+	p.term = term
 	termPtr.Store(term)
 }
 
-// restartCurrentTerminal 重启当前会话的 shell，其余会话不动。
+// restartCurrentTerminal 重启当前格的 shell，其余格子不动。
 func (a *app) restartCurrentTerminal() {
-	s := a.activeSession()
-	if s == nil {
+	p := a.activeSession()
+	if p == nil {
 		return
 	}
-	if s.term != nil {
-		_ = s.term.Close()
-		s.term = nil
+	if p.term != nil {
+		_ = p.term.Close()
+		p.term = nil
 	}
 	// 把「起过」那笔账和错误一起抹掉，下一帧的 terminalArea 会重新起一个
-	// （配色在它手上）。重来的仍是同一个会话、同一枚芯片，编号也不换 ——
+	// （配色在它手上）。重来的仍是同一个格子、同一枚芯片，编号也不换 ——
 	// 看到的是这个 shell 换了，而不是「少了一个、多了一个」。
-	s.err = ""
-	s.started = false
+	p.err = ""
+	p.started = false
+	a.focusActiveTerminal()
 }
 
-// clearCurrentTerminal 清屏（只清当前会话）。
+// clearCurrentTerminal 清屏（只清当前格）。
 func (a *app) clearCurrentTerminal() {
-	if s := a.activeSession(); s != nil && s.term != nil {
-		s.term.Send([]byte("\x0c"))
+	if p := a.activeSession(); p != nil && p.term != nil {
+		p.term.Send([]byte("\x0c"))
 	}
 }
 
@@ -1450,8 +1577,8 @@ func (a *app) terminalTabBar(c *ui.Context, pal palette, tab *repoTab) {
 // 重排的话，第二下就点不准了。
 func (a *app) renderTerminalChip(c *ui.Context, pal palette, tab *repoTab, idx int, s *termSession, x float32, dragged, known bool) (closeClicked, dragging, dropped bool) {
 	title := ""
-	if s != nil && s.term != nil {
-		title = strings.TrimSpace(s.term.Title())
+	if s != nil && s.active != nil && s.active.pane != nil && s.active.pane.term != nil {
+		title = strings.TrimSpace(s.active.pane.term.Title())
 	}
 	if title == "" {
 		ord := 1
@@ -1463,8 +1590,8 @@ func (a *app) renderTerminalChip(c *ui.Context, pal palette, tab *repoTab, idx i
 	// 提示给 shell 的当前目录（OSC 7）：连着几个 shell 时，「哪一个是那个
 	// 还没退出来的」靠名字看不出来，靠目录能。
 	tip := title
-	if s != nil && s.term != nil {
-		if dir := s.term.Dir(); dir != "" {
+	if s != nil && s.active != nil && s.active.pane != nil && s.active.pane.term != nil {
+		if dir := s.active.pane.term.Dir(); dir != "" {
 			tip = dir
 		}
 	}
@@ -1540,6 +1667,9 @@ func (a *app) renderTerminalChip(c *ui.Context, pal palette, tab *repoTab, idx i
 		// 点击按会话认回真实下标：预览里的 idx 只在拖动时有意义。
 		if i := termIndex(tab, s); i >= 0 {
 			tab.termActive = i
+			if s != nil {
+				s.focusPending = true
+			}
 		}
 	}
 	if w := chip.Bounds().W; w > 0 {
@@ -1581,34 +1711,146 @@ func (a *app) terminalArea(c *ui.Context, pal palette) {
 			tab.termActive = 0
 		}
 		cur := tab.terms[tab.termActive]
+		// 正常路径上新芯片已经带了一格；这里兜住旧状态或异常数据，别让
+		// 一棵空树把整个终端页画没。
+		if cur.root == nil || cur.root.pane == nil && cur.root.first == nil {
+			cur.root = &paneNode{pane: &termPane{}}
+			cur.active = cur.root
+			cur.focusPending = true
+		}
+		if cur.active == nil || cur.active.pane == nil {
+			cur.active = firstLeaf(cur.root)
+			cur.focusPending = true
+		}
+
 		// 明暗从这一帧的主题读（view 开头刚按 isDark 设过），和推给终端的
 		// 那一份是同一个判断。
 		dark := a.isDark(c)
-		if !cur.started {
-			a.startTerminal(tab, cur, dark, pal)
+		if cur.zoom && cur.active != nil {
+			a.terminalPaneTree(c, pal, tab, cur, cur.active, 1, dark)
+			return
 		}
+		a.terminalPaneTree(c, pal, tab, cur, cur.root, 1, dark)
+	})
+}
 
-		switch {
-		case cur.err != "":
-			ui.Column(c).Grow(1).MinHeight(0).AlignItems(ui.Center).Justify(ui.Center).Children(func() {
-				ui.Column(c).Gap(12).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, T("终端启动失败", "Failed to start terminal")).FontWeight(weightSemibold).TextColor(pal.ink)
-					ui.Text(c, cur.err).FontSize(textCaption).TextColor(pal.inkSubtle)
-					if secondaryAction(c, pal, T("重试", "Retry"), "", false).Clicked() {
-						// 重来一次：把「起过」那笔账抹掉，下一帧再走一遍
-						// startTerminal。
-						cur.err = ""
-						cur.started = false
-					}
-				})
+// terminalPaneTree 按分屏树画一格或一道分叉。grow 是它在父容器里占的权重。
+func (a *app) terminalPaneTree(c *ui.Context, pal palette, tab *repoTab, s *termSession, n *paneNode, grow float32, dark bool) {
+	if n == nil {
+		return
+	}
+	if n.pane != nil {
+		a.terminalPane(c, pal, tab, s, n, grow, dark)
+		return
+	}
+
+	var box ui.Element
+	if n.stack {
+		box = ui.Column(c)
+	} else {
+		box = ui.Row(c)
+	}
+	box = box.Grow(grow).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch)
+	area := box.Bounds()
+	box.Children(func() {
+		a.terminalPaneTree(c, pal, tab, s, n.first, n.ratio, dark)
+		a.terminalDivider(c, pal, s, n, area)
+		a.terminalPaneTree(c, pal, tab, s, n.second, 1-n.ratio, dark)
+	})
+}
+
+// terminalPane 画一格终端：起 shell、画内容、接住焦点。
+func (a *app) terminalPane(c *ui.Context, pal palette, tab *repoTab, s *termSession, n *paneNode, grow float32, dark bool) {
+	p := n.pane
+	if p == nil {
+		return
+	}
+	box := ui.Box(c).Grow(grow).MinWidth(0).MinHeight(0).Padding(4, 6)
+	if p.err != "" {
+		box.AlignItems(ui.Center).Justify(ui.Center).Children(func() {
+			ui.Column(c).Gap(12).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, T("终端启动失败", "Failed to start terminal")).FontWeight(weightSemibold).TextColor(pal.ink)
+				ui.Text(c, p.err).FontSize(textCaption).TextColor(pal.inkSubtle)
+				if secondaryAction(c, pal, T("重试", "Retry"), "", false).Clicked() {
+					p.err = ""
+					p.started = false
+					a.focusActiveTerminal()
+				}
 			})
-		case cur.term != nil:
-			// 不铺底：卡片的亚克力透明度就是终端画布的底色（见 startTerminal
-			// 的 Transparent）。
-			ui.Box(c).Grow(1).MinHeight(0).Padding(4, 6).Children(func() {
-				terminal.View(c, cur.term).Fill().AutoFocus()
-			})
+		})
+		return
+	}
+	if !p.started {
+		a.startTerminal(tab, p, dark, pal)
+	}
+	if p.term == nil {
+		return
+	}
+	// 不铺底：卡片的亚克力透明度就是终端画布的底色（见 startTerminal
+	// 的 Transparent）。
+	box.Children(func() {
+		v := terminal.View(c, p.term).Fill()
+		// 鼠标点到哪一格，焦点就跟到哪一格；键盘之后再从这一格出发。
+		if v.Focused() {
+			s.active = n
 		}
+		if s.focusPending && s.active == n {
+			v.Focus()
+			s.focusPending = false
+		}
+	})
+}
+
+// terminalDivider 是两格之间那条能拖的分隔线。
+//
+// 命中区比 1px 宽（两边各探出 3px）；双击均分整枚芯片，和 ⌘⌃= 同一个意思。
+func (a *app) terminalDivider(c *ui.Context, pal palette, s *termSession, n *paneNode, area ui.Rect) {
+	const grip = float32(6)
+	var box ui.Element
+	var length float32
+	if n.stack {
+		box = ui.Box(c).Height(paneSplitterW).Shrink(0).FillWidth()
+		length = area.H
+	} else {
+		box = ui.Box(c).Width(paneSplitterW).Shrink(0).FillHeight()
+		length = area.W
+	}
+	box.Children(func() {
+		var handle ui.Element
+		if n.stack {
+			handle = ui.Box(c).Absolute().Left(0).Right(0).Top(-(grip - 1) / 2).Height(grip).
+				Cursor(ui.CursorResizeNS).Role(ui.RoleNone).
+				Label(T("调整终端分屏大小", "Resize terminal split"))
+		} else {
+			handle = ui.Box(c).Absolute().Top(0).Bottom(0).Left(-(grip - 1) / 2).Width(grip).
+				Cursor(ui.CursorResizeEW).Role(ui.RoleNone).
+				Label(T("调整终端分屏大小", "Resize terminal split"))
+		}
+		if handle.DoubleClicked() {
+			equalizePanes(s.root)
+			a.requestRedraw()
+		}
+		if dx, dy, held := handle.Dragged(); held && length > 0 {
+			delta := dx
+			if n.stack {
+				delta = dy
+			}
+			if delta != 0 {
+				n.ratio = clamp(n.ratio+delta/length, paneRatioMin, paneRatioMax)
+				a.requestRedraw()
+			}
+		}
+		handle.Draw(func(p *ui.Painter, r ui.Rect) {
+			line := pal.hairline
+			if handle.Hovered() || handle.Pressed() {
+				line = pal.hairlineStrong
+			}
+			if n.stack {
+				p.Fill(ui.Rect{X: r.X, Y: r.Y + (grip-1)/2, W: r.W, H: 1}, line, 0)
+				return
+			}
+			p.Fill(ui.Rect{X: r.X + (grip-1)/2, Y: r.Y, W: 1, H: r.H}, line, 0)
+		})
 	})
 }
 

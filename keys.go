@@ -48,11 +48,56 @@ func (a *app) handleKeys(c *ui.Context) {
 	if c.Shortcut(ui.Ctrl, ui.KeyBackquote) || c.Shortcut(ui.Cmd, ui.KeyJ) {
 		a.toggleViewMode()
 	}
-	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyBracketLeft) || c.Shortcut(ui.Cmd|ui.Alt, ui.KeyLeft) {
+	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyBracketLeft) {
 		a.prevTab()
 	}
-	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyBracketRight) || c.Shortcut(ui.Cmd|ui.Alt, ui.KeyRight) {
+	if c.Shortcut(ui.Cmd|ui.Alt, ui.KeyLeft) {
+		if a.viewMode == viewModeTerm {
+			a.focusTerminalPane(paneLeft)
+		} else {
+			a.prevTab()
+		}
+	}
+	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyBracketRight) {
 		a.nextTab()
+	}
+	if c.Shortcut(ui.Cmd|ui.Alt, ui.KeyRight) {
+		if a.viewMode == viewModeTerm {
+			a.focusTerminalPane(paneRight)
+		} else {
+			a.nextTab()
+		}
+	}
+	// 终端视图里的 Ghostty 分屏键位。其它视图不认这些键：⌘⌥ 方向键在
+	// 别处是切项目标签页，⌘⇧D 是分支对比。
+	if a.viewMode == viewModeTerm {
+		if c.Shortcut(ui.Cmd, ui.KeyD) {
+			a.splitTerminal(paneRight)
+		}
+		if c.Shortcut(ui.Cmd|ui.Alt, ui.KeyUp) {
+			a.focusTerminalPane(paneUp)
+		}
+		if c.Shortcut(ui.Cmd|ui.Alt, ui.KeyDown) {
+			a.focusTerminalPane(paneDown)
+		}
+		if c.Shortcut(ui.Cmd|ui.Ctrl, ui.KeyLeft) {
+			a.resizeTerminalPane(paneLeft, paneResizeStep)
+		}
+		if c.Shortcut(ui.Cmd|ui.Ctrl, ui.KeyRight) {
+			a.resizeTerminalPane(paneRight, paneResizeStep)
+		}
+		if c.Shortcut(ui.Cmd|ui.Ctrl, ui.KeyUp) {
+			a.resizeTerminalPane(paneUp, paneResizeStep)
+		}
+		if c.Shortcut(ui.Cmd|ui.Ctrl, ui.KeyDown) {
+			a.resizeTerminalPane(paneDown, paneResizeStep)
+		}
+		if c.Shortcut(ui.Cmd|ui.Ctrl, ui.KeyEqual) {
+			a.equalizeTerminal()
+		}
+		if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyEnter) {
+			a.toggleTerminalZoom()
+		}
 	}
 	// 提交栏那一套（暂存全部 / 提交 / AI 起名）只在 Git 面板里认 —— 判据和
 	// 菜单、命令栏共用一份（gitPanelLive）：终端视图里屏幕上没有提交栏，
@@ -201,7 +246,11 @@ func (a *app) handleKeys(c *ui.Context) {
 		}
 	}
 	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyD) {
-		a.openCompareDialog("")
+		if a.viewMode == viewModeTerm {
+			a.splitTerminal(paneDown)
+		} else {
+			a.openCompareDialog("")
+		}
 	}
 
 	// J / K 与方向键导航。
