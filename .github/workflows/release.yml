@@ -75,11 +75,44 @@ jobs:
         if: matrix.platform == 'windows/amd64'
         run: sudo apt-get update && sudo apt-get install -y nsis
 
+      # TCC 授权（屏幕录制、文件与文件夹、辅助功能）绑定在 App 的代码签名上。
+      # ad-hoc 签名每次发版 cdhash 都会变，用户更新后旧授权匹配不上，只能重新
+      # 授权；用同一张 Apple Development 证书签名后，designated requirement
+      # 跨版本不变，授权就能一直沿用。
+      - name: Import the macOS signing certificate
+        if: matrix.platform == 'darwin/universal'
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$MACOS_CERTIFICATE" || { echo "缺少 MACOS_CERTIFICATE secret"; exit 1; }
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password="$(openssl rand -base64 24)"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" \
+            -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/certificate.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain
+          identity="$(security find-identity -v -p codesigning "$keychain" |
+            sed -n 's/.*"\(Apple Development: .*\)"/\1/p' | head -1)"
+          test -n "$identity" || { echo "证书中没有 Apple Development 身份"; exit 1; }
+          echo "MACOS_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
+
       - name: Build and upload
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
-        run: go tool mygo build -platform "${{ matrix.platform }}" -upload
+        run: |
+          sign=()
+          if [ "${{ matrix.platform }}" = "darwin/universal" ]; then
+            sign=(-sign "$MACOS_SIGNING_IDENTITY")
+          fi
+          go tool mygo build -platform "${{ matrix.platform }}" "${sign[@]}" -upload
 
       # Defender 的 ML 误报（Trojan:Script/Wacatac.C!ml 那类）咬的是**安装包**：
       # 未签名 + 每次发版全新哈希 + NSIS 单文件，正是它最先咬的画像。被拦住的
@@ -108,4 +141,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
-        run: go tool mygo build -platform darwin/arm64,darwin/amd64 -skip-dmg -upload
+        run: go tool mygo build -platform darwin/arm64,darwin/amd64 -skip-dmg -sign "$MACOS_SIGNING_IDENTITY" -upload

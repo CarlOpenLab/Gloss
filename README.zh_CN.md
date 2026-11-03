@@ -141,15 +141,20 @@ cd Gloss
 # 2. 安装指定版本的 Go 工具链
 mise install
 
-# 3. 启动开发模式（支持代码热重载）
-go tool mygo dev
+# 3. 启动开发模式（支持代码热重载；用固定的 Apple Development 证书签名，
+#    macOS 的授权不会因重新编译而失效）
+sh scripts/dev.sh
 
 # 4. 生产打包（生成目标平台的二进制与安装包）
-go tool mygo build
+sh scripts/build.sh
 
 # 5. 执行无头自动化测试
 go test ./...
 ```
+
+脚本会用钥匙串里找到的第一张 `Apple Development` 证书签名（可用
+`MACOS_SIGNING_IDENTITY` 指定其他身份）。签名稳定后，macOS 的屏幕录制、
+文件与文件夹、辅助功能授权不会因为重新编译而失效，不必每次重新授权。
 
 ---
 
