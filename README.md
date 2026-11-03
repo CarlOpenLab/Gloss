@@ -145,15 +145,21 @@ cd Gloss
 # 2. Install the required toolchain
 mise install
 
-# 3. Run development mode with live hot-reload
-go tool mygo dev
+# 3. Run development mode with live hot-reload (signed with your Apple
+#    Development identity so macOS keeps permission grants across rebuilds)
+sh scripts/dev.sh
 
 # 4. Build production release binaries (.app / .dmg)
-go tool mygo build
+sh scripts/build.sh
 
 # 5. Run headless test suite
 go test ./...
 ```
+
+The scripts sign with the first `Apple Development` identity found in your
+keychain (override with `MACOS_SIGNING_IDENTITY`). A stable signature keeps
+macOS permission grants — Screen Recording, Files & Folders, Accessibility —
+across rebuilds instead of asking again every time.
 
 ---
 
