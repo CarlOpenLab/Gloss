@@ -309,6 +309,15 @@ func (a *app) projectGroups(c *ui.Context, pal palette, h float32) {
 		})
 
 		if len(a.tabs) == 0 {
+			// 真的没有项目时给一句空状态；测试 fixture（以及极少数只加载了
+			// 仓库、还没建标签页的路径）里 repoPath 还在，仍按一个项目显示。
+			if a.repoPath == "" {
+				ui.Box(c).Padding(6, 8).Children(func() {
+					ui.Text(c, T("还没有打开项目", "No projects opened yet")).
+						FontSize(textBodySM).TextColor(pal.inkSubtle)
+				})
+				return
+			}
 			fallback := &repoTab{path: a.repoPath, name: a.repoName, dirtyCount: len(a.workFiles)}
 			a.projectGroup(c, pal, 0, fallback, true, &rowEls)
 			return
@@ -399,6 +408,8 @@ func (a *app) projectGroup(c *ui.Context, pal palette, idx int, tab *repoTab, ac
 	if name == "" {
 		name = "Gloss"
 	}
+	// 兜底行（只有仓库、没有标签页）不提供关闭：没有 tab 可关。
+	canClose := idx >= 0 && idx < len(a.tabs)
 
 	row := ui.Row(c).Height(projectsRowH).FillWidth().
 		Padding(0, 8).Gap(8).AlignItems(ui.Center).Radius(radiusMD).
@@ -421,6 +432,9 @@ func (a *app) projectGroup(c *ui.Context, pal palette, idx int, tab *repoTab, ac
 			a.chooseFolder()
 		}
 		m.Separator()
+		if !canClose {
+			return
+		}
 		if m.Item(T("关闭项目", "Close Project")).Chosen() {
 			a.closeTab(idx)
 		}
@@ -435,7 +449,7 @@ func (a *app) projectGroup(c *ui.Context, pal palette, idx int, tab *repoTab, ac
 			Tooltip(tab.path)
 
 		ui.Spacer(c)
-		if row.Hovered() && len(a.tabs) > 1 {
+		if row.Hovered() && canClose {
 			close := ui.ButtonBase(c).Size(20, 20).Radius(radiusXS).Center().
 				Cursor(ui.CursorPointer).Label(T("关闭项目", "Close Project")).
 				Tooltip(Tf("关闭项目 %s", "Close project %s", name))

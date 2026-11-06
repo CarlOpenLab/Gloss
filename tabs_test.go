@@ -87,11 +87,11 @@ func TestTabClosing(t *testing.T) {
 		t.Errorf("关闭当前 tab 后预期激活第 1 个，实际 %d", a.activeTab)
 	}
 
-	// 关闭剩下的全部 tab
+	// 关闭剩下的全部 tab：项目列表真正清空，落回空状态
 	a.closeTab(0)
 	a.closeTab(0)
-	if len(a.tabs) != 1 {
-		t.Fatalf("关闭所有 tab 后应保留一个空兜底 tab，实际 %d", len(a.tabs))
+	if len(a.tabs) != 0 {
+		t.Fatalf("关闭所有 tab 后项目列表应为空，实际 %d", len(a.tabs))
 	}
 	if a.repoPath != "" {
 		t.Errorf("清空所有 tab 后 repoPath 应为空，实际 %q", a.repoPath)
@@ -350,7 +350,7 @@ func TestCloseActiveClosesCurrentTerminalOnly(t *testing.T) {
 
 	tt.Key(ui.Cmd, ui.KeyW)
 	tt.Frame()
-	if len(a.tabs) != 1 || a.tabs[0].path != "" {
+	if len(a.tabs) != 0 {
 		t.Errorf("空终端视图里 ⌘W 该关掉项目标签页，实际 %d 页", len(a.tabs))
 	}
 }
@@ -435,7 +435,7 @@ func TestCloseTabAsksBeforeDroppingUnsavedEdits(t *testing.T) {
 		t.Errorf("取消不该动缓冲区：%q", got)
 	}
 
-	// 仍然关闭：唯一的标签页关掉后落回兜底空页，缓冲区跟着收起来。
+	// 仍然关闭：唯一的标签页关掉后项目列表清空，缓冲区跟着收起来。
 	a.closeActive()
 	tt.Frame()
 	if err := tt.Click("仍然关闭"); err != nil {
@@ -445,7 +445,7 @@ func TestCloseTabAsksBeforeDroppingUnsavedEdits(t *testing.T) {
 	settle(t, a)
 	tt.Frame()
 
-	if len(a.tabs) != 1 || a.tabs[0].path != "" {
+	if len(a.tabs) != 0 {
 		t.Errorf("确认后该关掉，实际 %d 页", len(a.tabs))
 	}
 	if a.review.key != "" {

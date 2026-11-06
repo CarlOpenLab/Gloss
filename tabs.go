@@ -487,14 +487,7 @@ func (a *app) closeTab(idx int) {
 
 	a.tabs = append(a.tabs[:idx], a.tabs[idx+1:]...)
 	if len(a.tabs) == 0 {
-		a.tabs = []*repoTab{{name: "Gloss"}}
-		a.activeTab = 0
-		a.repoPath = ""
-		a.repoName = "Gloss"
-		a.branch = ""
-		a.workFiles = nil
-		a.files = nil
-		a.state = loadIdle
+		a.clearRepoState()
 	} else {
 		// 只有活动页本身被关掉、眼前换了仓库时才恢复快照。关的是别的页就
 		// 别碰 restoreActiveTab：它先收掉嵌入式编辑器（没保存的缓冲一并
@@ -512,6 +505,99 @@ func (a *app) closeTab(idx int) {
 	// 关掉/切换后活动仓库换了，自动刷新跟着换盯的对象。
 	a.syncAutoWatch()
 	a.persistOpenRepos()
+}
+
+// clearRepoState 关掉最后一个项目后，把仓库相关状态清干净，让主区和侧栏
+// 真的落回「还没有打开仓库 / 项目」的空状态。
+//
+// 只清 repoPath / state 是不够的：侧栏分支读的是 refsState，对比栏看的是
+// compare.on，PR 检视看的是 prReview.on —— 这些字段留着，空状态旁边就会
+// 挂着已经关掉的仓库的分支、对比栏或 PR 检视条。
+func (a *app) clearRepoState() {
+	// 提交框里的草稿按仓库记着，关掉之前先落盘，重新打开还能捡回来。
+	if a.store != nil {
+		a.saveCommitDraft()
+		a.store.SetLastRepo("")
+	}
+	a.cancelAICommit()
+	a.cancelAIBranch()
+	a.cancelAIReview()
+	a.closeEmbeddedEditors()
+
+	a.activeTab = 0
+	a.repoPath = ""
+	a.repoName = "Gloss"
+	a.branch = ""
+	a.detached = false
+	a.remotes = nil
+	a.remoteURLs = nil
+	a.hasHead = false
+	a.ahead = 0
+	a.behind = 0
+	a.upstream = ""
+	a.pending = gitrepo.Pending{}
+	a.state = loadIdle
+	a.errMsg = ""
+	a.errNotRepo = false
+	a.loadingPath = ""
+	a.repoSeq++ // 丢弃关闭前还在路上的读取
+
+	a.allFiles = nil
+	a.files = nil
+	a.workFiles = nil
+	a.histFiles = nil
+	a.histListID = ""
+	a.listID = ""
+	a.review = reviewState{}
+	a.tree = nil
+	a.filesList = ui.ListState{}
+	a.fileFilter = ""
+	a.fileTreeFilter = ""
+	a.filesClosed = nil
+	a.fileSel = 0
+
+	a.wsAll = nil
+	a.wsFiles = nil
+	a.wsTree = nil
+	a.wsList = ui.ListState{}
+	a.wsFilter = ""
+	a.wsTreeFilter = ""
+	a.wsSel = 0
+	a.wsOpen = nil
+
+	a.tab = 0
+	a.allCommits = nil
+	a.commits = nil
+	a.graph = nil
+	a.maxLanes = 0
+	a.commitList = ui.ListState{}
+	a.commitSel = -1
+	a.histAll = false
+	a.histRev = ""
+	a.commitFilter = ""
+	a.commitFilterBuilt = ""
+	a.hist = loadIdle
+	a.histDiff = loadIdle
+	a.histErr = ""
+	a.histDiffErr = ""
+
+	a.refs = nil
+	a.refByFull = nil
+	a.refTree = nil
+	a.refsList = ui.ListState{}
+	a.refsState = loadIdle
+	a.refErr = ""
+	a.refFilter = ""
+	a.refsFilter = ""
+	a.refSel = ""
+	a.refsClosed = nil
+
+	a.compare = compareState{}
+	a.prReview = prReviewState{}
+	a.viewMode = viewModeGit
+
+	a.commitMsg = ""
+	a.draftFor = ""
 }
 
 // closeActive 是「关闭」那条命令（⌘W 和菜单里的「关闭标签页」）：关的是
