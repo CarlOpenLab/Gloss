@@ -110,6 +110,91 @@ func TestBranchCompareFlow(t *testing.T) {
 	}
 }
 
+// 点击对比栏的分段控件应真正切换 diff 语义，而不只是画面上换了选中态。
+// 回归：toolbarSegmentedText 没有像图标分段那样在返回前应用挂起的输入，
+// 调用方读到的局部 mode 还是上一帧的值，点「两端对比」毫无反应。
+func TestBranchCompareModeToggleByClick(t *testing.T) {
+	a, _ := compareApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+	settle(t, a)
+	tt.Frame()
+
+	// 初始为三点对比（PR 模式）：只含 feature 分叉后的新文件。
+	a.startCompare("main", "feature", true)
+	settle(t, a)
+	tt.Frame()
+
+	if !a.compare.tripleDot {
+		t.Fatal("初始应为三点对比")
+	}
+	if len(a.files) != 1 || a.files[0].Path() != "feature.txt" {
+		t.Fatalf("三点对比结果异常：%+v", a.files)
+	}
+
+	// 点击「两端对比 (..)」切到两点语义。
+	if err := tt.Click("两端对比 (..)"); err != nil {
+		t.Fatalf("点击两端对比失败：%v", err)
+	}
+	settle(t, a)
+	tt.Frame()
+
+	if a.compare.tripleDot {
+		t.Fatal("点击后应该切换为两点对比")
+	}
+	if len(a.files) != 2 {
+		t.Fatalf("两点对比应该有 2 个文件, 实际为：%+v", a.files)
+	}
+
+	// 再点回「PR 模式 (...)」，应恢复三点语义。
+	if err := tt.Click("PR 模式 (...)"); err != nil {
+		t.Fatalf("点击 PR 模式失败：%v", err)
+	}
+	settle(t, a)
+	tt.Frame()
+
+	if !a.compare.tripleDot {
+		t.Fatal("点回 PR 模式后应该恢复三点对比")
+	}
+	if len(a.files) != 1 || a.files[0].Path() != "feature.txt" {
+		t.Fatalf("恢复三点对比结果异常：%+v", a.files)
+	}
+}
+
+// 对比对话框里的模式分段也应可切换，并按所选语义开始对比。
+func TestCompareDialogModeToggleByClick(t *testing.T) {
+	a, _ := compareApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+	settle(t, a)
+	tt.Frame()
+
+	a.openCompareDialog("feature")
+	tt.Frame()
+
+	// 对话框默认 PR 模式；点「直接对比」切到两点语义。
+	if err := tt.Click("直接对比 (两点 ..)"); err != nil {
+		t.Fatalf("点击直接对比失败：%v", err)
+	}
+	tt.Frame()
+	if a.compare.tripleDot {
+		t.Fatal("对话框里点击直接对比后应切到两点语义")
+	}
+
+	if err := tt.Click("开始对比"); err != nil {
+		t.Fatalf("点击开始对比失败：%v", err)
+	}
+	settle(t, a)
+	tt.Frame()
+
+	if a.compare.tripleDot {
+		t.Fatal("开始对比后应保持两点语义")
+	}
+	if len(a.files) != 2 {
+		t.Fatalf("两点对比应该有 2 个文件, 实际为：%+v", a.files)
+	}
+}
+
 // 侧栏右键菜单中包含「与当前分支 (main) 对比代码差异」。
 func TestBranchCompareContextMenu(t *testing.T) {
 	a, _ := compareApp(t)

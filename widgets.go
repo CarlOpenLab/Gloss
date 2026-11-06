@@ -260,6 +260,9 @@ func toolbarSegmentedText(c *ui.Context, pal palette, selected *int, off bool, l
 			})
 		}
 	})
+	// MyGo 0.4 controls apply pending input through Changed; without this call
+	// the local mode value is still the previous frame when the caller reads it.
+	g.Changed()
 	return g
 }
 
