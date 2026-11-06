@@ -208,7 +208,7 @@ func (a *app) localBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
 	m.Separator()
 	if !isHead && a.branch != "" {
 		if m.Item("与当前分支 (" + a.branch + ") 对比代码差异").Disabled(busy).Chosen() {
-			a.startCompare(a.branch, ref.Name, true)
+			a.startCompare(a.branch, ref.Name)
 		}
 	}
 	if m.Item("与其他分支对比代码差异…").Disabled(busy).Chosen() {
@@ -260,7 +260,7 @@ func (a *app) remoteBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
 	m.Separator()
 	if a.branch != "" {
 		if m.Item(T("与当前分支 ("+a.branch+") 对比代码差异", "Compare with current branch ("+a.branch+")")).Disabled(busy).Chosen() {
-			a.startCompare(a.branch, ref.Name, true)
+			a.startCompare(a.branch, ref.Name)
 		}
 	}
 	if m.Item(T("与其他分支对比代码差异…", "Compare with other branch…")).Disabled(busy).Chosen() {
@@ -291,7 +291,7 @@ func (a *app) tagMenu(m *ui.Menu, ref gitrepo.Ref) {
 	m.Separator()
 	if a.branch != "" {
 		if m.Item(T("与当前分支 ("+a.branch+") 对比代码差异", "Compare with current branch ("+a.branch+")")).Disabled(busy).Chosen() {
-			a.startCompare(a.branch, ref.Name, true)
+			a.startCompare(a.branch, ref.Name)
 		}
 	}
 	if m.Item(T("与其他分支/标签对比代码差异…", "Compare with other branch/tag…")).Disabled(busy).Chosen() {

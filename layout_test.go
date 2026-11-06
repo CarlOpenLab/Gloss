@@ -868,7 +868,7 @@ func TestCommitBarKeepsActionsWhenNarrow(t *testing.T) {
 // 标题也被 Shrink(0) 的邻居挤成竖排。
 func TestCompareBarKeepsExitWhenNarrow(t *testing.T) {
 	a := richApp(t)
-	a.startCompare("main", "feature", true)
+	a.startCompare("main", "feature")
 	a.compare.state = loadReady
 
 	tt := ui.NewTester(a.view, 720, 620)

@@ -383,27 +383,17 @@ func TestBranchDiffAndCommits(t *testing.T) {
 	git(t, r.Root, "add", ".")
 	git(t, r.Root, "commit", "-m", "commit on feature 2")
 
-	// 1. 三点对比（PR 模式）：main...feature
-	// 只看 feature 从 main 分叉之后新改了什么（feature.txt），不含 main 上的 main_only.txt
-	files, err := r.BranchDiff(context.Background(), "main", "feature", true)
-	if err != nil {
-		t.Fatalf("BranchDiff(main...feature): %v", err)
-	}
-	if len(files) != 1 || files[0].Path() != "feature.txt" {
-		t.Fatalf("三点对比应该只有 feature.txt：%+v", files)
-	}
-
-	// 2. 两点对比（直接对比）：main..feature
+	// 1. 两端内容对比：main..feature
 	// 包含 feature.txt（新增）和 main_only.txt（删除）
-	filesDirect, err := r.BranchDiff(context.Background(), "main", "feature", false)
+	files, err := r.BranchDiff(context.Background(), "main", "feature")
 	if err != nil {
 		t.Fatalf("BranchDiff(main..feature): %v", err)
 	}
-	if len(filesDirect) != 2 {
-		t.Fatalf("两点对比应该有两个文件：%+v", filesDirect)
+	if len(files) != 2 {
+		t.Fatalf("两端对比应该有两个文件：%+v", files)
 	}
 
-	// 3. 提交列表：main..feature
+	// 2. 提交列表：main..feature
 	// 包含 feature 上的两个提交
 	commits, err := r.BranchCommits(context.Background(), "main", "feature", 10)
 	if err != nil {

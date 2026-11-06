@@ -205,15 +205,13 @@ func (r *Repo) StashDiff(ctx context.Context, name string) ([]File, error) {
 	return FilesFromDiff(diff.Parse(string(out))), nil
 }
 
-// BranchDiff 读两个分支之间的改动（产物为 []File）。
-// tripleDot 为 true 时用 base...target（自共同祖先分叉以来的改动，即 PR 模式）；
-// 为 false 时用 base..target（两个分支最新指针的直接差异）。
-func (r *Repo) BranchDiff(ctx context.Context, base, target string, tripleDot bool) ([]File, error) {
-	op := "..."
-	if !tripleDot {
-		op = ".."
-	}
-	rev := base + op + target
+// BranchDiff 读两个分支之间的内容差异（base..target，产物为 []File）。
+//
+// 直接比较两个分支最新提交的快照。squash / rebase / cherry-pick 之后核对
+// 内容是否一致时，这比三点（提交历史语义）更接近「哪些文件真的不一样」：
+// squash 提交不在对方历史里时，三点会把已经合入的整批改动再算一遍。
+func (r *Repo) BranchDiff(ctx context.Context, base, target string) ([]File, error) {
+	rev := base + ".." + target
 	args := []string{
 		"-c", "core.quotePath=false",
 		"diff", "--no-color", "--no-ext-diff", "--no-textconv",

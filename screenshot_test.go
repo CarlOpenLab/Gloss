@@ -130,7 +130,7 @@ func TestDumpScreenshot(t *testing.T) {
 	shot("/tmp/de-shot-split.png")
 
 	// 分支对比视图（Fork 风格）：两分支比对栏、差异文件、diff
-	a.startCompare("main", "feature", true)
+	a.startCompare("main", "feature")
 	a.compare.state = loadReady
 	a.compare.commits = []gitrepo.Commit{
 		{Short: "a1b2c3d", Subject: "feat: add user authentication"},

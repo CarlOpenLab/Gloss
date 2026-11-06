@@ -11,13 +11,12 @@ import (
 
 // compareState 记录分支间代码差异对比的状态（Fork 风格）。
 type compareState struct {
-	on        bool             // 是否处于分支对比模式
-	base      string           // 基准分支名（如 main）
-	target    string           // 对比分支名（如 feature）
-	tripleDot bool             // true = base...target（PR 模式），false = base..target（直接对比）
-	commits   []gitrepo.Commit // 两个分支之间的提交列表
-	state     loadState        // 加载状态
-	err       string           // 错误信息
+	on      bool             // 是否处于分支对比模式
+	base    string           // 基准分支名（如 main）
+	target  string           // 对比分支名（如 feature）
+	commits []gitrepo.Commit // 两个分支之间的提交列表
+	state   loadState        // 加载状态
+	err     string           // 错误信息
 
 	// 弹窗状态
 	dialog     bool   // 是否打开对比分支选择弹窗
@@ -47,8 +46,8 @@ func (a *app) comparableBranches() []string {
 	return names
 }
 
-// startCompare 开启两个分支的代码差异对比。
-func (a *app) startCompare(base, target string, tripleDot bool) {
+// startCompare 开启两个分支的内容差异对比（git diff base..target）。
+func (a *app) startCompare(base, target string) {
 	if a.repoPath == "" || base == "" || target == "" {
 		return
 	}
@@ -60,7 +59,6 @@ func (a *app) startCompare(base, target string, tripleDot bool) {
 	a.compare.on = true
 	a.compare.base = base
 	a.compare.target = target
-	a.compare.tripleDot = tripleDot
 	a.compare.state = loadLoading
 	a.compare.err = ""
 	a.compare.commits = nil
@@ -79,7 +77,6 @@ func (a *app) loadCompareDiff() {
 	a.compareSeq++
 	seq := a.compareSeq
 	base, target := a.compare.base, a.compare.target
-	tripleDot := a.compare.tripleDot
 	dir := a.repoPath
 
 	a.run(func() {
@@ -88,7 +85,7 @@ func (a *app) loadCompareDiff() {
 		var files []gitrepo.File
 		var commits []gitrepo.Commit
 		if err == nil {
-			files, err = repo.BranchDiff(ctx, base, target, tripleDot)
+			files, err = repo.BranchDiff(ctx, base, target)
 			if err == nil {
 				commits, _ = repo.BranchCommits(ctx, base, target, 100)
 			}
@@ -104,7 +101,7 @@ func (a *app) loadCompareDiff() {
 			}
 			a.compare.state = loadReady
 			a.compare.commits = commits
-			id := fmt.Sprintf("cmp:%s:%s:%t", base, target, tripleDot)
+			id := fmt.Sprintf("cmp:%s:%s", base, target)
 			a.showFiles(files, id)
 		})
 	})
@@ -116,15 +113,6 @@ func (a *app) swapCompare() {
 		return
 	}
 	a.compare.base, a.compare.target = a.compare.target, a.compare.base
-	a.loadCompareDiff()
-}
-
-// setCompareTripleDot 切换三点对比（PR 模式）与两点对比（直接对比）。
-func (a *app) setCompareTripleDot(tripleDot bool) {
-	if a.compare.tripleDot == tripleDot {
-		return
-	}
-	a.compare.tripleDot = tripleDot
 	a.loadCompareDiff()
 }
 
@@ -179,17 +167,16 @@ func (a *app) openCompareDialog(defaultTarget string) {
 			a.compare.pickTarget = branches[0]
 		}
 	}
-	a.compare.tripleDot = true
 }
 
 // compareBar 画顶部的分支对比控制栏（Fork 风格）。
 // compareBarWideW 是分支对比栏能横向摆下的最小主区宽度。
 //
-// 这条带子的固有用量在 860 上下：两枚分支按钮、交换按钮、模式分段、提交
-// 统计、退出按钮，中间还有几道 8px 间隔。低于它就跟提交栏一样折成两行 ——
+// 这条带子的固有用量在 700 上下：两枚分支按钮、交换按钮、提交统计、
+// 退出按钮，中间还有几道 8px 间隔。低于它就跟提交栏一样折成两行 ——
 // 720 的最小窗口减去侧栏只剩 ~430，横着摆会把「退出对比」整个顶到窗口外，
 // 标题也会被 Shrink(0) 的邻居挤成竖排。
-const compareBarWideW = 820
+const compareBarWideW = 700
 
 func (a *app) compareBar(c *ui.Context, pal palette) {
 	t := c.Theme()
@@ -201,12 +188,13 @@ func (a *app) compareBar(c *ui.Context, pal palette) {
 
 	// 图标与标题。窄窗口里省掉「分支对比」四个字，把宽度让给分支按钮。
 	title := func() {
-		ui.Box(c).Size(16, 16).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
+		ui.Box(c).Size(16, 16).Shrink(0).Tooltip("直接比较两个分支最新提交的内容 (git diff base..target)").Draw(func(p *ui.Painter, r ui.Rect) {
 			p.Icon(iconGitCompare, r, pal.inkMuted)
 		})
 		if !narrow {
 			ui.Text(c, "分支对比").FontSize(textCaption).
-				FontWeight(weightSemibold).TextColor(pal.inkSubtle)
+				FontWeight(weightSemibold).TextColor(pal.inkSubtle).
+				Tooltip("直接比较两个分支最新提交的内容 (git diff base..target)")
 		}
 	}
 
@@ -229,7 +217,7 @@ func (a *app) compareBar(c *ui.Context, pal palette) {
 			for _, b := range branches {
 				name := b
 				if m.Item(name).Checked(name == a.compare.base).Chosen() {
-					a.startCompare(name, a.compare.target, a.compare.tripleDot)
+					a.startCompare(name, a.compare.target)
 				}
 			}
 		})
@@ -266,23 +254,14 @@ func (a *app) compareBar(c *ui.Context, pal palette) {
 			for _, b := range branches {
 				name := b
 				if m.Item(name).Checked(name == a.compare.target).Chosen() {
-					a.startCompare(a.compare.base, name, a.compare.tripleDot)
+					a.startCompare(a.compare.base, name)
 				}
 			}
 		})
 	}
 
-	// 模式切换 + 分隔线 + 状态统计。
+	// 分隔线 + 状态统计。
 	meta := func() {
-		modeIdx := 0
-		if !a.compare.tripleDot {
-			modeIdx = 1
-		}
-		toolbarSegmentedText(c, pal, &modeIdx, false, "PR 模式 (...)", "两端对比 (..)")
-		if (modeIdx == 0) != a.compare.tripleDot {
-			a.setCompareTripleDot(modeIdx == 0)
-		}
-
 		toolbarDivider(c, pal)
 
 		switch a.compare.state {
@@ -338,7 +317,7 @@ func (a *app) compareBar(c *ui.Context, pal palette) {
 	// 两种排法都不铺底：surface1 就是卡片色、却是不透明的，铺在亚克力工作卡
 	// 上等于抠出一条实心。带子的边界交给那圈发丝线。
 	if narrow {
-		// 折成两行：上一行「在比哪两条分支 + 退出」，下一行模式与统计。
+		// 折成两行：上一行「在比哪两条分支 + 退出」，下一行统计。
 		ui.Column(c).Shrink(0).FillWidth().
 			Padding(4, 16).Gap(4).
 			Border(1, pal.hairline).Children(func() {
@@ -371,7 +350,6 @@ func (a *app) compareDialog(c *ui.Context, pal palette) {
 	if !a.compare.dialog {
 		return
 	}
-	t := c.Theme()
 	branches := a.comparableBranches()
 
 	open := true
@@ -456,20 +434,6 @@ func (a *app) compareDialog(c *ui.Context, pal palette) {
 				}
 			})
 
-			ui.Box(c).Height(16)
-
-			// 对比模式选项
-			mode := 0
-			if !a.compare.tripleDot {
-				mode = 1
-			}
-			ui.Text(c, "对比模式:").FontSize(12).TextColor(t.TextMuted)
-			ui.Box(c).Height(4)
-			toolbarSegmentedText(c, pal, &mode, false, "PR 模式 (三点 ...)", "直接对比 (两点 ..)")
-			if (mode == 0) != a.compare.tripleDot {
-				a.compare.tripleDot = (mode == 0)
-			}
-
 			ui.Box(c).Height(20)
 
 			// 底部按钮
@@ -483,7 +447,7 @@ func (a *app) compareDialog(c *ui.Context, pal palette) {
 				}
 				if startBtn.Clicked() {
 					a.compare.dialog = false
-					a.startCompare(a.compare.pickBase, a.compare.pickTarget, a.compare.tripleDot)
+					a.startCompare(a.compare.pickBase, a.compare.pickTarget)
 				}
 			})
 		})
