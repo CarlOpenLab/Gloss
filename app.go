@@ -398,8 +398,11 @@ type app struct {
 	// reset / newBranch / rename 是表单对话框，和 tag 一个形状：状态挂在 app 上。
 	reset     resetState
 	newBranch branchState
-	rename    renameState
-	stashDlg  stashState
+	// aiBranchSeq 给每次 AI 起名请求编号：取消、重发之后，旧请求的响应
+	// 可能才姗姗来迟，不能让它去动新请求的状态。
+	aiBranchSeq int
+	rename      renameState
+	stashDlg    stashState
 	// codeEdit 是「编辑代码」那个一次性对话框的编辑器状态；editorPane 是
 	// 「编辑器」视图里那个常驻整文件编辑器（editor_pane.go）。两者都不进
 	// 标签页快照，换仓库时一起收掉。

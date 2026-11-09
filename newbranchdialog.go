@@ -32,6 +32,9 @@ type branchState struct {
 	// AI 分支名生成状态
 	aiLoading bool
 	aiCancel  context.CancelFunc
+	// aiSuggested 是上一次 AI 给出的名字。名字框和「意图」共用一个输入位，
+	// 再点一次时必须能认出框里这段字是 AI 自己的答案，而不是用户写的需求。
+	aiSuggested string
 }
 
 // openNewBranchDialog 打开对话框。rev 为空表示从 HEAD 起步。
@@ -175,7 +178,10 @@ func (a *app) aiBranchButton(c *ui.Context, pal palette) {
 		if bs.aiLoading {
 			a.cancelAIBranch()
 		} else {
-			a.startAIBranch()
+			// 推迟到下一帧再发：点按钮会让名字框失焦，中文输入法的组合态
+			// 正是在这一下才提交的。这一帧里 bs.name 还是提交前的值，
+			// 直接发会把用户刚打的字漏掉。
+			a.dispatch(a.startAIBranch)
 		}
 	}
 }
@@ -183,6 +189,9 @@ func (a *app) aiBranchButton(c *ui.Context, pal palette) {
 // startAIBranch 发起 AI 分支名推荐请求。
 func (a *app) startAIBranch() {
 	bs := &a.newBranch
+	if !bs.on {
+		return
+	}
 	if bs.aiLoading {
 		a.cancelAIBranch()
 		return
@@ -196,8 +205,11 @@ func (a *app) startAIBranch() {
 	ctx, cancel := context.WithCancel(context.Background())
 	bs.aiCancel = cancel
 	bs.aiLoading = true
+	a.aiBranchSeq++
+	seq := a.aiBranchSeq
+	sentName := bs.name
 
-	hint := strings.TrimSpace(bs.name)
+	hint := aiBranchHint(bs)
 	var diffs []diff.FileDiff
 	files := a.allFiles
 	if len(files) == 0 && len(a.workFiles) > 0 {
@@ -214,7 +226,10 @@ func (a *app) startAIBranch() {
 	a.run(func() {
 		text, err := llm.StreamExplanation(ctx, prov, system, user, nil)
 		a.dispatch(func() {
-			if !a.newBranch.on || a.newBranch.aiCancel == nil {
+			// 这个响应可能已经被取消、被新请求顶掉，或者对话框早就关了。
+			// 对不上号就什么都不碰 —— 尤其别清 aiCancel，那可能已经是
+			// 新一次请求的了。
+			if a.aiBranchSeq != seq {
 				return
 			}
 			a.newBranch.aiLoading = false
@@ -229,15 +244,38 @@ func (a *app) startAIBranch() {
 				return
 			}
 			cleaned := explain.CleanBranchName(text)
-			if cleaned != "" {
-				a.newBranch.name = cleaned
+			if cleaned == "" {
+				return
 			}
+			// 等结果的时候用户又改了名字框：这份结果已经对不上他写的东西，
+			// 不覆盖。
+			if a.newBranch.name != sentName {
+				return
+			}
+			a.newBranch.name = cleaned
+			a.newBranch.aiSuggested = cleaned
 		})
 	})
 }
 
+// aiBranchHint 返回这次「AI 起名」该当成需求描述的文本。
+//
+// 名字框同时是意图输入位：AI 给出名字后，框里留下的是它的答案，不是用户
+// 写的需求。原样再喂回 BuildBranchPrompt 的话，模型看见一个现成的合法分支名
+// 会直接抄回来（后面再补新意图也压不住），再点多少次都是同一个名字。所以
+// 框里还是上一次的答案时，就当这次是「重新起一个」，只按 diff 起名。
+func aiBranchHint(bs *branchState) string {
+	hint := strings.TrimSpace(bs.name)
+	if hint == bs.aiSuggested {
+		return ""
+	}
+	return hint
+}
+
 // cancelAIBranch 取消进行中的 AI 分支名生成。
 func (a *app) cancelAIBranch() {
+	// 让还在路上的响应从此对不上号，不能回头清掉下一次请求的状态。
+	a.aiBranchSeq++
 	if a.newBranch.aiCancel != nil {
 		a.newBranch.aiCancel()
 		a.newBranch.aiCancel = nil
