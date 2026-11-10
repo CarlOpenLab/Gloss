@@ -18,7 +18,7 @@ import (
 // 本身（seq + dead 认领），所以切走项目再回来不会永远转圈。
 type editorTabState struct {
 	path    string
-	section gitrepo.Section // 打开时的段落，用于「已暂存/未暂存」chip 的兜底
+	section gitrepo.Section // 打开时的段落，用于选 git 基线（index 还是 HEAD）
 	loading bool
 	err     string
 	buffer  *editor.Buffer
@@ -357,22 +357,6 @@ func (a *app) saveEditorPane() {
 		})
 }
 
-// revertEditorTab 丢掉一个 tab 的未保存改动，重新读一份。
-//
-// 走 loadEditorTab 而不是在内存里回滚缓冲区：磁盘上的内容可能已经被外部（别的
-// 编辑器、git 命令）改过，重读顺带把「行号槽标记」也重新对齐。
-func (a *app) revertEditorTab(t *editorTabState) {
-	if t == nil || t.dead {
-		return
-	}
-	f := wsFileByPath(a.wsAll, t.path)
-	if f == nil {
-		f = &gitrepo.File{Section: t.section}
-		f.NewPath = t.path
-	}
-	a.loadEditorTab(t, *f)
-}
-
 // editorArea 是「编辑器」视图下的整块主区：左边仍是那栏文件列表，右边换成一个
 // 可编辑的整文件编辑器 —— 「看哪几个文件变了」和「改文件」在同一屏里。
 func (a *app) editorArea(c *ui.Context, pal palette) {
@@ -403,8 +387,8 @@ func (a *app) editorArea(c *ui.Context, pal palette) {
 }
 
 // editorPaneWidthEstimate 是编辑器栏这一帧大概有多宽：窗口减去侧栏、
-// 文件栏、卡片两侧留白和那条 1px 分隔线。tab 栏靠它决定右侧的完整路径 /
-// 状态 chip 还摆不摆得下（见 editorTabBar）。
+// 文件栏、卡片两侧留白和那条 1px 分隔线。tab 栏靠它决定右侧的完整路径
+// 还摆不摆得下（见 editorTabBar）。
 func (a *app) editorPaneWidthEstimate(c *ui.Context) float32 {
 	winW, _ := c.Size()
 	if winW <= 0 {
@@ -459,8 +443,9 @@ func (a *app) editorPaneView(c *ui.Context, pal palette) {
 // editorTabBar 是编辑器上方那条文件 tab 栏。
 //
 // 左边是横向滚动的 tab：文件名只写 basename，完整相对路径在 tooltip 里；
-// 右边再报一次当前文件的相对路径和「已暂存/未暂存/图片」，这样两个同名文件
-// 分别在不同目录时也能一眼认出当前是哪一个。
+// 右边再报一次当前文件的相对路径，这样两个同名文件分别在不同目录时也能
+// 一眼认出当前是哪一个。tab 自己只报「有没有未保存的改动」（名字前的蓝点），
+// 不再摆已暂存/未暂存 chip —— 那是文件列表那边的事。
 func (a *app) editorTabBar(c *ui.Context, pal palette) {
 	ui.Row(c).Shrink(0).FillWidth().Height(34).Padding(0, 12).Gap(8).
 		AlignItems(ui.Center).
@@ -498,22 +483,14 @@ func (a *app) editorTabBar(c *ui.Context, pal palette) {
 		if s == nil {
 			return
 		}
-		// 编辑器栏本身不够宽时先保文件 tab：右侧的完整路径和状态 chip 只
-		// 是补充信息，tab 才是切文件唯一的入口。窗口 1280 时它们照常显示；
-		// 窄到放不下时让位，否则滚动区会被挤成零宽，连关闭 × 都点不到。
+		// 编辑器栏本身不够宽时先保文件 tab：右侧的完整路径只是补充信息，
+		// tab 才是切文件唯一的入口。窗口 1280 时它照常显示；窄到放不下时
+		// 让位，否则滚动区会被挤成零宽，连关闭 × 都点不到。
 		if a.editorPaneWidthEstimate(c) < 600 {
 			return
 		}
 		ui.Text(c, s.path).Font("monospace").FontSize(11).SingleLine().
 			MaxWidth(260).TextColor(pal.inkSubtle)
-		switch {
-		case s.img != nil:
-			specChip(c, pal, T("图片", "Image"), ui.Transparent, 20, textCaption)
-		case s.code != nil && s.section == gitrepo.SectionStaged:
-			specChip(c, pal, T("已暂存", "Staged"), ui.Transparent, 20, textCaption)
-		case s.code != nil:
-			specChip(c, pal, T("未暂存", "Unstaged"), ui.Transparent, 20, textCaption)
-		}
 	})
 }
 
@@ -541,14 +518,15 @@ func (a *app) editorTabChip(c *ui.Context, pal palette, idx int, tab *editorTabS
 
 	var closeClicked bool
 	chip.Children(func() {
+		if tab.buffer != nil && tab.buffer.Modified() {
+			// 未保存圆点在文件名前面、用强调蓝：它是「这个 tab 里还有东西
+			// 没落盘」，和状态色（警告/危险）不是一回事。带 Label 让读屏
+			// 和测试都知道它是什么。
+			ui.Box(c).Size(6, 6).Shrink(0).Radius(radiusPill).
+				Background(t.Accent).Label(T("未保存的改动", "Unsaved changes"))
+		}
 		ui.Text(c, name).FontSize(textCaption).SingleLine().
 			Grow(1).MinWidth(0).TextColor(fg)
-		if tab.buffer != nil && tab.buffer.Modified() {
-			// 未保存圆点和改动栏那一颗同一档；带 Label 让读屏和测试都
-			// 知道它是什么。
-			ui.Box(c).Size(6, 6).Shrink(0).Radius(radiusPill).
-				Background(t.Warning).Label(T("未保存的改动", "Unsaved changes"))
-		}
 		closeBtn := ui.ButtonBase(c).Size(16, 16).Shrink(0).Radius(radiusXS).
 			Cursor(ui.CursorPointer).
 			Label(Tf("关闭文件标签页 %s", "Close File Tab %s", name))
@@ -571,23 +549,6 @@ func (a *app) editorTabChip(c *ui.Context, pal palette, idx int, tab *editorTabS
 	return chip, closeClicked
 }
 
-// editorToolbar 是「编辑器」视图下工具栏右侧的两个动作。
-func (a *app) editorToolbar(c *ui.Context, pal palette) {
-	s := a.activeEditorTab()
-	busy := a.op != gitrepo.OpNone || (s != nil && s.loading)
-	dirty := s != nil && s.buffer != nil && s.buffer.Modified()
-	ready := s != nil && s.code != nil && s.err == ""
-
-	save := primaryAction(c, pal, T("保存", "Save"),
-		T("写回工作区，不自动暂存", "Write to the working tree, without staging"),
-		!ready || !dirty || busy)
-	if save.Clicked() {
-		a.saveEditorPane()
-	}
-	revert := secondaryAction(c, pal, T("还原", "Revert"),
-		T("丢弃未保存的改动，重新读盘", "Discard unsaved changes and reload from disk"),
-		!ready || !dirty || busy)
-	if revert.Clicked() {
-		a.revertEditorTab(s)
-	}
-}
+// 「编辑器」视图原先在顶栏右侧摆「保存 / 还原」两颗按钮，现在不摆了：
+// 保存只剩 ⌘S（见 keys.go），还原交给「关掉这个 tab」那条会先问一句的路。
+// 顶栏因此只留视图切换与仓库级动作。

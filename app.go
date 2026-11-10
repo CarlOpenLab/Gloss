@@ -1067,8 +1067,10 @@ func (a *app) toolbarHeight(c *ui.Context) float32 {
 	return shellHeaderH
 }
 
-// toolbar 是二级工具栏：提供 [改动 | 历史 | 终端 | 编辑器] 四选一的切换及
-// 当前那一块对应的操作。
+// toolbar 是二级工具栏：左边从 [改动 | 历史 | 终端 | 编辑器] 四选一开始，
+// 跟着是仓库级动作（刷新 + 抓取/拉取/推送），再右边是当前这一屏的显示方式
+// （统一 / 左右对照）。所有常驻控件都收在左侧；右侧只留给会临时出现的
+// 操作进度提示和窗口控件。
 func (a *app) toolbar(c *ui.Context, pal palette) {
 	t := c.Theme()
 	bar := c.TitleBar()
@@ -1143,8 +1145,41 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 			a.repoHeader(c, pal)
 		}
 
-		// 耗时写操作（抓取/拉取/推送/变基/合并/检出等）在标题和 Spacer 之间展示，
-		// 宽度由 Spacer 弹性吸收，避免右侧核心工具栏发生任何水平抖动与重排。
+		// 仓库级动作归一组，紧跟在四格视图切换右边：刷新 + 远程（抓取 /
+		// 拉取 / 推送）。它们回答的是「仓库和远端现在怎么样」，和右边那些
+		// 「眼前这一屏怎么看」的控件不是一码事。
+		refreshing := a.state == loadLoading
+		refreshTip := Tf("刷新仓库状态 %s", "Refresh Repository %s", K("⌘R"))
+		if refreshing {
+			refreshTip = T("正在刷新仓库状态…", "Refreshing repository…")
+		}
+		if toolIconButton(c, pal, T("刷新", "Refresh"), refreshTip, noRepo, refreshing, drawRefreshIcon) {
+			a.reload()
+		}
+		if len(a.remotes) > 0 {
+			a.remoteBar(c, pal)
+		}
+
+		if a.viewMode != viewModeEditor {
+			toolbarDivider(c, pal)
+
+			// unified / split 切换（Lucide rows-3 / columns-2 矢量图标）。
+			split := a.split
+			mode := 0
+			if split {
+				mode = 1
+			}
+			toolbarSegmentedIcons(c, pal, &mode, noRepo,
+				segmentedIconItem{label: "Unified", tip: Tf("统一视图（单栏） %s", "Unified View %s", K("⌘U")), icon: iconUnified},
+				segmentedIconItem{label: "Split", tip: T("左右对照（分栏）", "Split View"), icon: iconSplit},
+			)
+			if (mode == 1) != split {
+				a.setSplit(mode == 1)
+			}
+		}
+
+		// 耗时写操作（抓取/拉取/推送/变基/合并/检出等）在左侧动作组之后展示，
+		// 宽度由 Spacer 弹性吸收，避免左边的核心按钮发生任何水平抖动与重排。
 		// 暂存/取消暂存为瞬时操作，提交在底部提交栏展示，均不在此喧宾夺主。
 		if a.toolbarOpVisible() {
 			ui.Box(c).Radius(radiusPill).Padding(3, 9).
@@ -1160,42 +1195,6 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 		}
 
 		ui.Spacer(c)
-
-		if a.viewMode == viewModeEditor {
-			a.editorToolbar(c, pal)
-			return
-		}
-
-		// unified / split 切换（Lucide rows-3 / columns-2 矢量图标）。
-		split := a.split
-		mode := 0
-		if split {
-			mode = 1
-		}
-		toolbarSegmentedIcons(c, pal, &mode, noRepo,
-			segmentedIconItem{label: "Unified", tip: Tf("统一视图（单栏） %s", "Unified View %s", K("⌘U")), icon: iconUnified},
-			segmentedIconItem{label: "Split", tip: T("左右对照（分栏）", "Split View"), icon: iconSplit},
-		)
-		if (mode == 1) != split {
-			a.setSplit(mode == 1)
-		}
-
-		if len(a.remotes) > 0 {
-			toolbarDivider(c, pal)
-			a.remoteBar(c, pal)
-		}
-
-		toolbarDivider(c, pal)
-
-		// 刷新（纯图标按钮，对齐 Fork 与 macOS 原生设计规范）
-		refreshing := a.state == loadLoading
-		refreshTip := Tf("刷新仓库状态 %s", "Refresh Repository %s", K("⌘R"))
-		if refreshing {
-			refreshTip = T("正在刷新仓库状态…", "Refreshing repository…")
-		}
-		if toolIconButton(c, pal, T("刷新", "Refresh"), refreshTip, noRepo, refreshing, drawRefreshIcon) {
-			a.reload()
-		}
 		// 设置固定在项目侧栏底部；这条工具栏只服务当前视图。
 	}).Height(a.toolbarHeight(c)).Shrink(0).
 		Padding(0, padRight, 0, padLeft).

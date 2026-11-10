@@ -1619,7 +1619,12 @@ func (a *app) terminalTabBar(c *ui.Context, pal palette, tab *repoTab) {
 		var activeChipOK bool
 		// 芯片本身横向滚动（会话一多就超出栏宽），+ 和清屏/重启留在滚动区
 		// 外面 —— 它们是固定入口，不能被芯片挤到窗口外去。
-		ui.ScrollHorizontal(c).Grow(1).MinWidth(0).Height(chipHeight).
+		//
+		// 滚动区不设 Grow：它的宽度就是芯片总宽，+ 因此紧跟在最后一枚芯片
+		// 右边。Grow 会和后面的 Spacer 平分剩余空白，把 + 推到带子中间；
+		// 芯片多到放不下时，滚动区（scrolls 的 min 宽是 0）自己收缩，+ 仍旧
+		// 悬在带子里，不会越出窗口。
+		ui.ScrollHorizontal(c).MinWidth(0).Height(chipHeight).
 			TrackScroll(&a.termChipScroll).Gap(chipBarGap).
 			Draw(func(p *ui.Painter, r ui.Rect) {
 				if slotW <= 0 {

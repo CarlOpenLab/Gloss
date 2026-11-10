@@ -107,30 +107,6 @@ func TestEditorViewSaveWritesWorktreeOnly(t *testing.T) {
 	}
 }
 
-// 还原把未保存的改动丢掉、重读磁盘（不是内存回滚）。
-func TestEditorViewRevertReloadsFromDisk(t *testing.T) {
-	a := richApp(t)
-	selectEditorFile(t, a, "README.md")
-	a.setViewMode(viewModeEditor)
-	settle(t, a)
-
-	s := a.activeEditorTab()
-	s.buffer.Set("乱改的一行\n")
-	if !s.buffer.Modified() {
-		t.Fatal("改了缓冲区该显示未保存")
-	}
-
-	a.revertEditorTab(s)
-	settle(t, a)
-
-	if got := s.buffer.String(); strings.Contains(got, "乱改的一行") {
-		t.Errorf("还原后还有未保存内容：%q", got)
-	}
-	if s.buffer.Modified() {
-		t.Error("还原后不该还是未保存状态")
-	}
-}
-
 // 换仓库要把编辑器缓冲区丢掉 —— 否则下一次保存会把上一个仓库的内容写进新仓库
 // （保存用的是 a.repoPath 底下的相对路径）。
 func TestSwitchRepoClosesEditorPane(t *testing.T) {
@@ -153,17 +129,18 @@ func TestSwitchRepoClosesEditorPane(t *testing.T) {
 	}
 }
 
-// 「编辑器」视图下工具栏该给出保存/还原。
-func TestEditorToolbarActions(t *testing.T) {
+// 「编辑器」视图的顶栏不再摆保存/还原：保存只剩 ⌘S，未保存的缓冲区跟着
+// tab 走（关 tab 时才问要不要丢）。
+func TestEditorViewToolbarHasNoSaveOrRevert(t *testing.T) {
 	a := richApp(t)
 	a.setViewMode(viewModeEditor)
 	settle(t, a)
 
 	tt := ui.NewTester(a.view, 1280, 860)
 	tt.Frame()
-	for _, want := range []string{"保存", "还原"} {
-		if !tt.HasText(want) {
-			t.Errorf("工具栏缺 %q，实际文本：%q", want, tt.Texts())
+	for _, unwanted := range []string{"保存", "还原"} {
+		if tt.HasText(unwanted) {
+			t.Errorf("编辑器顶栏不该再有 %q，实际文本：%q", unwanted, tt.Texts())
 		}
 	}
 }

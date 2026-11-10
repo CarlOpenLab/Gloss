@@ -1447,6 +1447,37 @@ func TestTerminalDividerDragAndDoubleClick(t *testing.T) {
 	}
 }
 
+// 新建会话的 + 紧跟在最后一枚芯片右边：芯片少的时候，剩余空白归右侧的
+// 清屏/重启使用，不该把 + 推到带子中间。
+func TestTerminalNewTabButtonHugsLastChip(t *testing.T) {
+	stubTerminal(t)
+	a := newApp()
+	a.openInNewTab("/tmp/proj1")
+	tab := a.currentTab()
+	a.setViewMode(viewModeTerm)
+	tt := ui.NewTester(a.view, 1000, 700)
+	still(tt)
+	tt.Frame()
+
+	a.newTerminalSession(tab)
+	a.newTerminalSession(tab)
+	a.newTerminalSession(tab)
+	tt.Frame()
+
+	last, okLast := tt.Find("终端 3")
+	plus, okPlus := tt.Find("新建终端标签页")
+	if !okLast || !okPlus {
+		t.Fatalf("找不到最后一枚芯片或 +：%q", tt.Texts())
+	}
+	if gap := plus.X - (last.X + last.W); gap > 30 {
+		t.Errorf("+ 该紧跟最后一枚芯片，实际隔了 %.0f", gap)
+	}
+	clear, okClear := tt.Find("清屏")
+	if !okClear || clear.X <= plus.X {
+		t.Errorf("清屏该仍在 + 右边：+ x=%.0f 清屏 x=%.0f", plus.X, clear.X)
+	}
+}
+
 // 清屏 / 重启从顶部工具栏搬到了会话芯片带的最右端：它们作用于当前会话，
 // 就该和会话芯片待在一起；没有会话时不占位置。
 func TestTerminalActionsLiveInSessionTabBar(t *testing.T) {

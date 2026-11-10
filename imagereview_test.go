@@ -178,8 +178,7 @@ func TestReviewKeepsBinaryFileMessage(t *testing.T) {
 	}
 }
 
-// 编辑器视图：左边选到图片时右边摆画面，不建文本缓冲区（保存/还原因此
-// 一直是灰的，见 editorToolbar 的 ready）。
+// 编辑器视图：左边选到图片时右边摆画面，不建文本缓冲区。
 func TestEditorPanePreviewsImage(t *testing.T) {
 	a := testApp(t)
 	writeImage(t, a.repoPath, "assets/logo.png", 40, 20)
@@ -212,8 +211,10 @@ func TestEditorPanePreviewsImage(t *testing.T) {
 	if !strings.Contains(text, "assets/logo.png") {
 		t.Errorf("编辑器栏头该写清文件：%q", text)
 	}
-	if !strings.Contains(text, T("图片", "Image")) {
-		t.Errorf("图片该挂一个「图片」标记，和可编辑的文本区分开：%q", text)
+	// tab 栏不再摆「图片」chip；认得出这是图片靠画面自己的元信息
+	// （格式 · 尺寸 · 体积），它和编辑器正文不会混在一起。
+	if !strings.Contains(text, "PNG · 40 × 20") {
+		t.Errorf("图片预览该报出格式与尺寸：%q", text)
 	}
 }
 

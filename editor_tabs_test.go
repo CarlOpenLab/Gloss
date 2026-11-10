@@ -56,6 +56,38 @@ func TestEditorTabsOpenActivateAndDedupe(t *testing.T) {
 	}
 }
 
+// 未保存的文件在文件名前面亮一颗蓝点；tab 栏右侧不再摆「未暂存」状态 chip
+// —— 文件要不要保存，tab 自己说。
+func TestEditorTabUnsavedDotIsBlueAndPrecedesName(t *testing.T) {
+	a := richApp(t)
+	a.split = true // 固定文件栏宽度，编辑器栏的起点才是可预期的
+	a.setViewMode(viewModeEditor)
+	settle(t, a)
+	tab := openEditorFile(t, a, "README.md")
+	tab.buffer.Set("改了没存\n")
+
+	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+	tt.Frame()
+
+	if tt.HasText("未暂存") {
+		t.Errorf("tab 栏不该再摆「未暂存」chip：%q", tt.Texts())
+	}
+	dot, ok := tt.Find("未保存的改动")
+	if !ok {
+		t.Fatalf("未保存的 tab 该有圆点：%q", tt.Texts())
+	}
+	// 1280 宽、split 档：编辑器栏从窗口左侧约 497 起，tab 内边距 6 —— 圆点
+	// 在文件名前面时落在 515 左右；留在文件名后面（旧位置）就到 585 以外。
+	if dot.X >= 545 {
+		t.Errorf("未保存圆点该在文件名前面，实际 x=%.0f", dot.X)
+	}
+	px := tt.Image().RGBAAt(int(dot.X+dot.W/2), int(dot.Y+dot.H/2))
+	if px.B <= px.R || px.B <= px.G {
+		t.Errorf("未保存圆点该是蓝色，采样到 rgb(%d,%d,%d)", px.R, px.G, px.B)
+	}
+}
+
 // 关闭有未保存改动的 tab 要先问；取消留着，确认后消失并标 dead。
 func TestEditorTabDirtyDotAndCloseConfirm(t *testing.T) {
 	a := richApp(t)

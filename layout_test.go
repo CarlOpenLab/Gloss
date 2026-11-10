@@ -618,6 +618,47 @@ func TestFileCountReportedOnce(t *testing.T) {
 	}
 }
 
+// 顶栏按语义归组：刷新和远程（抓取 / 拉取 / 推送）是一组，紧跟在四格视图
+// 切换右边；统一 / 左右对照另起一组，在远程组右边。右侧不再摆这些按钮。
+func TestToolbarGroupsRepositoryActionsLeftOfSplitToggle(t *testing.T) {
+	a := richApp(t)
+	a.remotes = []string{"origin"}
+	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+	tt.Frame()
+
+	refresh, okRefresh := tt.Find("刷新")
+	fetch, okFetch := tt.Find("抓取")
+	pull, okPull := tt.Find("拉取")
+	push, okPush := tt.Find("推送")
+	split, okSplit := tt.Find("Split")
+	if !okRefresh || !okFetch || !okPull || !okPush || !okSplit {
+		t.Fatalf("顶栏缺按钮：刷新=%v 抓取=%v 拉取=%v 推送=%v Split=%v（%q）",
+			okRefresh, okFetch, okPull, okPush, okSplit, tt.Texts())
+	}
+	order := []struct {
+		name string
+		x    float32
+	}{
+		{"刷新", refresh.X},
+		{"抓取", fetch.X},
+		{"拉取", pull.X},
+		{"推送", push.X},
+		{"左右对照", split.X},
+	}
+	for i := 1; i < len(order); i++ {
+		if order[i].x <= order[i-1].x {
+			t.Errorf("%s 该在 %s 右边：%s x=%.0f，%s x=%.0f",
+				order[i].name, order[i-1].name,
+				order[i-1].name, order[i-1].x, order[i].name, order[i].x)
+		}
+	}
+	// 整组都在左半边：旧布局里刷新与远程组贴着窗口右沿。
+	if split.X > 760 {
+		t.Errorf("刷新/远程/对照三组该收到左侧，左右对照 x=%.0f", split.X)
+	}
+}
+
 // 刷新过程中工具栏按钮零偏移：无论是在 ready 还是 loading 态，
 // 刷新和设置按钮的 X 坐标严格一致，不产生任何横向抖动。
 func TestRefreshLoadingLayoutDoesNotShift(t *testing.T) {
