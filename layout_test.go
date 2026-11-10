@@ -619,7 +619,7 @@ func TestFileCountReportedOnce(t *testing.T) {
 }
 
 // 刷新过程中工具栏按钮零偏移：无论是在 ready 还是 loading 态，
-// 刷新、设置、打开仓库按钮的 X 坐标严格一致，不产生任何横向抖动。
+// 刷新和设置按钮的 X 坐标严格一致，不产生任何横向抖动。
 func TestRefreshLoadingLayoutDoesNotShift(t *testing.T) {
 	a := richApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
@@ -627,9 +627,8 @@ func TestRefreshLoadingLayoutDoesNotShift(t *testing.T) {
 
 	refreshReady, ok1 := tt.Find("刷新")
 	settingsReady, ok2 := tt.Find("模型设置…")
-	openReady, ok3 := tt.Find("打开仓库…")
-	if !ok1 || !ok2 || !ok3 {
-		t.Fatalf("找不到工具栏按钮: %v %v %v", ok1, ok2, ok3)
+	if !ok1 || !ok2 {
+		t.Fatalf("找不到工具栏按钮: %v %v", ok1, ok2)
 	}
 
 	// 切换到刷新中状态
@@ -638,16 +637,12 @@ func TestRefreshLoadingLayoutDoesNotShift(t *testing.T) {
 
 	refreshLoading, _ := tt.Find("刷新")
 	settingsLoading, _ := tt.Find("模型设置…")
-	openLoading, _ := tt.Find("打开仓库…")
 
 	if refreshLoading.X != refreshReady.X {
 		t.Errorf("刷新按钮 X 坐标偏移：ready=%.1f, loading=%.1f", refreshReady.X, refreshLoading.X)
 	}
 	if settingsLoading.X != settingsReady.X {
 		t.Errorf("设置按钮 X 坐标偏移：ready=%.1f, loading=%.1f", settingsReady.X, settingsLoading.X)
-	}
-	if openLoading.X != openReady.X {
-		t.Errorf("打开仓库按钮 X 坐标偏移：ready=%.1f, loading=%.1f", openReady.X, openLoading.X)
 	}
 }
 
@@ -944,5 +939,51 @@ func TestWorkspaceNavLivesInToolbar(t *testing.T) {
 			t.Errorf("四格没排在一行：「%s」y=%.0f，「%s」y=%.0f",
 				order[i-1], rects[i-1].Y, order[i], rects[i].Y)
 		}
+	}
+}
+
+// 顶栏删掉了分支 chip 和「打开仓库…」：现在「main」只在侧栏分支树里出现
+// 一次，打开仓库的入口只有侧栏项目标题的 +、菜单和命令面板。
+func TestToolbarNoLongerShowsBranchChipOrOpenRepo(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+	tt.Frame()
+	tt.Frame()
+
+	if _, ok := tt.Find("打开仓库…"); ok {
+		t.Errorf("工具栏不该再有「打开仓库…」按钮：%q", tt.Texts())
+	}
+	if n := countText(tt.Texts(), "main"); n != 1 {
+		t.Errorf("「main」该只在侧栏出现一次，实际 %d 次：%q", n, tt.Texts())
+	}
+}
+
+// 分支 chip 删掉之后，分离 HEAD / 变基中的警示不能跟着消失 —— 它现在是一枚
+// 不可点击的小标签，而且终端视图里也要在（终端视图没有 pending 状态条）。
+func TestToolbarKeepsAbnormalStateWarning(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+
+	a.detached = true
+	a.branch = "abc1234"
+	tt.Frame()
+	if !tt.HasText("分离 HEAD：abc1234") {
+		t.Errorf("普通视图该显示分离 HEAD 警示：%q", tt.Texts())
+	}
+
+	a.setViewMode(viewModeTerm)
+	tt.Frame()
+	if !tt.HasText("分离 HEAD：abc1234") {
+		t.Errorf("终端视图也该显示分离 HEAD 警示：%q", tt.Texts())
+	}
+
+	a.detached = false
+	a.branch = "main"
+	a.pending = gitrepo.Pending{Kind: gitrepo.PendingRebase, Branch: "main"}
+	tt.Frame()
+	if !tt.HasText("变基中") {
+		t.Errorf("变基中该有警示标签：%q", tt.Texts())
 	}
 }

@@ -124,6 +124,11 @@ func (a *app) refRow(c *ui.Context, pal palette, r filetree.Row) {
 			// 用 Ink 而不是 laneColor(0)：主干现在是钢青蓝，跟下去就和本地
 			// 分支芯片那颗 accentBlue 点同色，两种引用分不开（见 badgeDot）。
 			specChip(c, pal, "HEAD", pal.ink, rowChipH, rowChipText)
+		} else if ref.Worktree != "" {
+			// 被另一个工作区检出：git 不肯再切过去，也不肯删。名字后面标出
+			// 来，右键菜单给出「打开 / 移除」那条路。
+			specChip(c, pal, "WT", pal.inkSubtle, rowChipH, rowChipText).
+				Tooltip(T("已在 Worktree 检出：", "Checked out in worktree: ") + ref.Worktree)
 		}
 		// 有上游的分支把「和远程差几个提交」摆在名字后面。
 		//

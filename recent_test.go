@@ -41,7 +41,9 @@ func TestRecentReposPersistenceAndPalette(t *testing.T) {
 	}
 }
 
-func TestHeaderRepoMenuAndBranchQuickMenu(t *testing.T) {
+// 收起侧栏后，仓库下拉回到主卡工具栏；分支不再有顶栏徽章 —— 它的入口
+// 只在侧栏的分支树里。
+func TestHeaderRepoMenuWithoutBranchChip(t *testing.T) {
 	a := richApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
 	// 收起侧栏后的落位要等 260ms 的宽度动画走完才量得准；无头渲染每帧
@@ -58,44 +60,30 @@ func TestHeaderRepoMenuAndBranchQuickMenu(t *testing.T) {
 		t.Fatal("菜单中应该包含「最近打开的项目」")
 	}
 
-	// 收起侧栏后，项目下拉和分支徽章应回到主卡工具栏的同一行。现在没有
-	// 单独的顶部项目标签带，项目名也不再跨行压在工具栏上方。
 	a.sidebarOn = false
 	tt.Frame()
 	tt.Frame()
 
-	tab, okTab := tt.Find(a.repoName)
-	if !okTab {
+	if _, ok := tt.Find(a.repoName); !ok {
 		t.Fatalf("工具栏上找不到项目名 %q", a.repoName)
 	}
-	chip, okChip := tt.Find(a.branch)
-	if !okChip {
-		t.Fatalf("界面上找不到当前分支名 %q", a.branch)
-	}
-	if abs(float64(tab.Y+tab.H/2-chip.Y-chip.H/2)) > 4 {
-		t.Errorf("项目下拉与分支徽章应同在工具栏一行：项目中心 y=%.1f，分支中心 y=%.1f",
-			tab.Y+tab.H/2, chip.Y+chip.H/2)
-	}
-	if tab.X >= chip.X {
-		t.Errorf("项目下拉应该在分支徽章左边：项目 x=%.1f，分支 x=%.1f", tab.X, chip.X)
+	if _, ok := tt.Find(a.branch); ok {
+		t.Errorf("侧栏收起后顶栏也不该再有分支徽章 %q", a.branch)
 	}
 }
 
 // toolbarRepoPoint 给出工具栏上那枚仓库名按钮的点击位置。
-//
-// 侧栏收起时项目下拉和分支徽章都在工具栏同一行。从分支徽章往左让开按钮
-// 自身的一小段宽度，落到的就是仓库按钮。
-func toolbarRepoPoint(tt *ui.Tester, branch string) (x, y float32, ok bool) {
-	chip, found := tt.Find(branch)
+func toolbarRepoPoint(tt *ui.Tester, repo string) (x, y float32, ok bool) {
+	btn, found := tt.Find(repo)
 	if !found {
 		return 0, 0, false
 	}
-	return chip.X - 20, chip.Y + chip.H/2, true
+	return btn.X + btn.W/2, btn.Y + btn.H/2, true
 }
 
 func TestHeaderRepoDropdownPopover(t *testing.T) {
 	a := richApp(t)
-	// 仓库下拉按钮在工具栏上：侧栏收起时工具栏摆着「仓库名 + 分支」那块。
+	// 仓库下拉按钮在工具栏上：侧栏收起时工具栏摆着仓库名。
 	a.sidebarOn = false
 	tt := ui.NewTester(a.view, 1280, 860)
 	tt.Frame()
@@ -107,10 +95,9 @@ func TestHeaderRepoDropdownPopover(t *testing.T) {
 		t.Fatal("初始状态 repoDropdownOpen 应该为 false")
 	}
 
-	// 仓库按钮就在同排分支徽章的左边（见 toolbarRepoPoint）。
-	repoX, repoY, ok := toolbarRepoPoint(tt, a.branch)
+	repoX, repoY, ok := toolbarRepoPoint(tt, a.repoName)
 	if !ok {
-		t.Fatalf("工具栏上找不到分支徽章 %q：%q", a.branch, tt.Texts())
+		t.Fatalf("工具栏上找不到仓库名 %q：%q", a.repoName, tt.Texts())
 	}
 	tt.ClickAt(repoX, repoY)
 	tt.Frame()

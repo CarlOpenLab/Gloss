@@ -46,6 +46,16 @@ type Ref struct {
 	// 分支和标签的提交信息在提交列表里看。
 	Subject string
 	When    time.Time
+
+	// Worktree 是这条本地分支被哪个工作区检出（主工作区也算），没检出为空。
+	//
+	// WorktreeMain 说那个工作区是不是主工作区 —— 主工作区就是用户当前打开
+	// 的这个目录，不值得在分支行上标「WT」；WorktreePrunable 说那个目录已经
+	// 不在了：git 在 prune 之前仍拒绝检出/新建同名 worktree，界面得给一条
+	// 「清理失效记录」的出路。
+	Worktree         string
+	WorktreeMain     bool
+	WorktreePrunable bool
 }
 
 // Label 是侧栏每行显示的文字：远程分支去掉 remote 前缀，分组那一层已经在
@@ -79,6 +89,27 @@ func (r *Repo) Refs(ctx context.Context) ([]Ref, error) {
 	// 一条储藏读不出来不该让整棵树变成「读不到分支」。
 	if stashes, err := run(ctx, r.Root, "stash", "list", "--format=%gd%x00%H%x00%s"); err == nil {
 		refs = append(refs, parseStashes(string(stashes))...)
+	}
+
+	// 注解 worktree 占用（多起一次进程，和 Refs 同样频率）。读失败只当
+	// 没有占用：WT 标记和菜单是附加信息，不该让整份分支列表读不出来。
+	if wts, err := r.Worktrees(ctx); err == nil {
+		byBranch := make(map[string]WorktreeEntry, len(wts))
+		for _, w := range wts {
+			if w.Branch != "" {
+				byBranch[w.Branch] = w
+			}
+		}
+		for i := range refs {
+			if refs[i].Kind != RefLocal {
+				continue
+			}
+			if w, ok := byBranch[refs[i].Name]; ok {
+				refs[i].Worktree = w.Path
+				refs[i].WorktreeMain = w.Main
+				refs[i].WorktreePrunable = w.Prunable
+			}
+		}
 	}
 	return refs, nil
 }

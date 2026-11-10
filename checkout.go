@@ -42,6 +42,11 @@ func (a *app) planCheckout(ref gitrepo.Ref) (checkoutPlan, bool) {
 		if ref.Head {
 			return checkoutPlan{noop: true, note: "已经在这条分支上了"}, true
 		}
+		// 被别的 worktree 检出着：git 会拒绝，而且用户真正想做的多半是
+		// 「去那个工作区里操作」，不是在这里再切一次。
+		if ref.Worktree != "" {
+			return checkoutPlan{noop: true, note: "已在 worktree " + ref.Worktree + " 检出"}, true
+		}
 		return checkoutPlan{
 			kind: gitrepo.RefLocal, name: ref.Name,
 			menu:  "检出 " + ref.Name,
@@ -54,6 +59,9 @@ func (a *app) planCheckout(ref gitrepo.Ref) (checkoutPlan, bool) {
 		if existing, ok := a.refByFull["refs/heads/"+local]; ok {
 			if existing.Head {
 				return checkoutPlan{noop: true, note: "已经在 " + local + " 上了"}, true
+			}
+			if existing.Worktree != "" {
+				return checkoutPlan{noop: true, note: "已在 worktree " + existing.Worktree + " 检出"}, true
 			}
 			return checkoutPlan{
 				kind: gitrepo.RefLocal, name: existing.Name,
@@ -200,11 +208,15 @@ func (a *app) refMenu(m *ui.Menu, ref gitrepo.Ref) {
 func (a *app) localBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
 	busy := a.op != gitrepo.OpNone
 	isHead := ref.Head || ref.Name == a.branch
+	// 被别的 worktree 检出着：检出和删除 git 都会拒绝，菜单上也不该摆成
+	// 能点的样子（删除项同理，见下面）。
+	occupied := ref.Worktree != "" && !isHead
 	held := busy || isHead || a.pending.Active()
 
-	if m.Item("检出 " + ref.Name).Disabled(busy || isHead).Chosen() {
+	if m.Item("检出 " + ref.Name).Disabled(busy || isHead || occupied).Chosen() {
 		a.checkoutRef(ref)
 	}
+	a.worktreeMenuItems(m, ref)
 	m.Separator()
 	if !isHead && a.branch != "" {
 		if m.Item("与当前分支 (" + a.branch + ") 对比代码差异").Disabled(busy).Chosen() {
@@ -225,7 +237,7 @@ func (a *app) localBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
 	if m.Item("重命名 " + ref.Name + "…").Disabled(busy).Chosen() {
 		a.openRenameBranchDialog(ref.Name)
 	}
-	if m.Item(T("删除分支 "+ref.Name+"…", "Delete Branch "+ref.Name+"…")).Disabled(busy || isHead).Chosen() {
+	if m.Item(T("删除分支 "+ref.Name+"…", "Delete Branch "+ref.Name+"…")).Disabled(busy || isHead || occupied).Chosen() {
 		a.promptDeleteBranch(ref.Name)
 	}
 	// 本地分支也顺手能删掉它在远程那份：删的仍然是**远程分支**，与上一条删
@@ -244,6 +256,37 @@ func (a *app) localBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
 	m.Separator()
 	if m.Item(T("复制分支名", "Copy Branch Name")).Disabled(busy).Chosen() {
 		a.copyText = ref.Name
+	}
+}
+
+// worktreeMenuItems 在本地分支菜单的「检出」之后插入 worktree 相关动作。
+//
+// 三种处境各给各的出路：分支被正常 worktree 占着 → 打开或移除那个工作区；
+// 记录失效（目录没了）→ 只给清理；分支空闲 → 检出到一个新工作区。
+func (a *app) worktreeMenuItems(m *ui.Menu, ref gitrepo.Ref) {
+	busy := a.op != gitrepo.OpNone
+	occupied := ref.Worktree != "" && !ref.Head
+	switch {
+	case occupied && ref.WorktreePrunable:
+		if m.Item(T("清理失效 Worktree 记录", "Prune Stale Worktree Record")).Disabled(busy).Chosen() {
+			a.pruneWorktrees()
+		}
+	case occupied:
+		if m.Item(T("打开所在 Worktree", "Open Worktree")).Disabled(busy).Chosen() {
+			// 推迟一帧再换项目：菜单还开着的时候重铺标签页，会把这一帧
+			// 已经挂好的控件和新的活动项目对到一起去（见 recent 项目行同款
+			// 的 dispatch）。
+			a.dispatch(func() { a.openInNewTab(ref.Worktree) })
+		}
+		if !ref.WorktreeMain {
+			if m.Item(T("移除 Worktree…", "Remove Worktree…")).Disabled(busy).Chosen() {
+				a.promptRemoveWorktree(ref.Worktree, false)
+			}
+		}
+	case !ref.Head && a.repoReady():
+		if m.Item(T("在新 Worktree 中检出…", "Check Out in New Worktree…")).Disabled(busy).Chosen() {
+			a.openNewWorktreeDialog(ref.Name)
+		}
 	}
 }
 

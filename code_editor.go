@@ -137,30 +137,42 @@ func (a *app) codeEditorTheme(c *ui.Context, pal palette) *editor.Theme {
 	return th
 }
 
-// closeEmbeddedEditors 收掉内置编辑器（整文件代码对话框 / 编辑器视图 /
-// 改动区的 DiffView）。
+// closeTransientEditors 收掉绑定当前操作的一次性编辑器（整文件代码对话框 /
+// 改动区的 DiffView / 冲突草稿）。
 //
-// 换仓库时必须调：它们的缓冲区属于上一个仓库，而「保存」写的是 a.repoPath
-// 底下的相对路径 —— 留着它，下一次保存就会把 A 仓的内容写进 B 仓。
-func (a *app) closeEmbeddedEditors() {
+// 切换项目时要调，因为它们绑定的是刚刚离开的那个仓库；但编辑器视图的文件
+// tab 不在这里收 —— 那一列是按项目保留的，由项目的快照接着。
+func (a *app) closeTransientEditors() {
 	a.codeEdit = codeEditorState{}
-	a.editorPane = editorPaneState{}
 	a.review = reviewState{}
 	// 草稿里的缓冲区属于上一个仓库，而「保存」写的是 a.repoPath 底下的
 	// 相对路径 —— 留着它，下一次保存就会把 A 仓的内容写进 B 仓。
 	a.reviewDrafts = nil
 }
 
+// closeRepoEditors 收掉所有属于旧仓库的编辑状态：一次性编辑器 + 当前项目的
+// 文件 tab + 当前 repoTab 快照里的那列 tab。
+//
+// 只清 a.editorPane 不够：快照里还躺着旧仓库的文件，切走再切回来会把它们
+// 当成新仓库的 tab 恢复出来。
+func (a *app) closeRepoEditors() {
+	a.closeTransientEditors()
+	a.discardEditorTabs(&a.editorPane)
+	if tab := a.currentTab(); tab != nil {
+		a.discardEditorTabs(&tab.editorPane)
+	}
+}
+
 // unsavedEdits 报告眼前这些编辑器缓冲区里有没有没保存的改动。
 //
 // 三个缓冲区各管一处：改动区的 DiffView（review）、「编辑代码」对话框
-// （codeEdit）、编辑器视图（editorPane）。改过的才叫没保存 —— 只是打开看过
-// 的缓冲区 Modified() 是 false，不会平白多问一句。
+// （codeEdit）、编辑器视图的全部文件 tab（editorPane）。改过的才叫没保存 ——
+// 只是打开看过的缓冲区 Modified() 是 false，不会平白多问一句。
 func (a *app) unsavedEdits() bool {
 	if a.codeEdit.on && a.codeEdit.buffer != nil && a.codeEdit.buffer.Modified() {
 		return true
 	}
-	if a.editorPane.buffer != nil && a.editorPane.buffer.Modified() {
+	if editorTabsDirty(&a.editorPane) {
 		return true
 	}
 	return a.review.editable && a.review.new != nil && a.review.new.Modified()
@@ -168,10 +180,8 @@ func (a *app) unsavedEdits() bool {
 
 // tabHasUnsavedEdits 看第 idx 页有没有没保存的编辑改动。
 //
-// 活动页的活状态在 app 上（切走时才由 saveActiveTab 存进 tab.review），别的
-// 页只有 tab.review 那份快照 —— 所以活动页问 app，非活动页问快照。codeEdit
-// 和 editorPane 不进快照（切页时就被 closeEmbeddedEditors 收掉了），非活动
-// 页不存在这两样。
+// 活动页的活状态在 app 上，别的页看 tab 快照。编辑器视图的文件 tab 现在也
+// 进快照，所以两边都要扫全部 tab，不能只看激活的那一个。
 func (a *app) tabHasUnsavedEdits(idx int) bool {
 	if idx < 0 || idx >= len(a.tabs) {
 		return false
@@ -179,8 +189,11 @@ func (a *app) tabHasUnsavedEdits(idx int) bool {
 	if idx == a.activeTab {
 		return a.unsavedEdits()
 	}
-	r := a.tabs[idx].review
-	return r.editable && r.new != nil && r.new.Modified()
+	tab := a.tabs[idx]
+	if tab.review.editable && tab.review.new != nil && tab.review.new.Modified() {
+		return true
+	}
+	return editorTabsDirty(&tab.editorPane)
 }
 
 // codeEditorDialog 画整文件编辑器。和冲突编辑器同一副骨架（标题条 / 正文 /

@@ -23,7 +23,7 @@ func selectEditorFile(t *testing.T, a *app, path string) {
 	for i := range *list {
 		if pathOf((*list)[i]) == path {
 			*sel = i
-			a.syncEditorPane()
+			a.openEditorSelection()
 			return
 		}
 	}
@@ -37,9 +37,13 @@ func TestEditorViewLoadsSelectedFile(t *testing.T) {
 	a.setViewMode(viewModeEditor)
 	settle(t, a)
 
-	s := a.editorPane
-	if s.code == nil || s.buffer == nil {
-		t.Fatalf("编辑器没读到文件：%q", s.err)
+	s := a.activeEditorTab()
+	if s == nil || s.code == nil || s.buffer == nil {
+		var errText string
+		if s != nil {
+			errText = s.err
+		}
+		t.Fatalf("编辑器没读到文件：%q", errText)
 	}
 	if got := s.buffer.String(); !strings.Contains(got, "line 3: CHANGED AGAIN") {
 		t.Errorf("读到的不是工作区那一份：%q", got)
@@ -58,10 +62,10 @@ func TestEditorViewFollowsFileSelection(t *testing.T) {
 	selectEditorFile(t, a, "README.md")
 	settle(t, a)
 
-	if a.editorPane.path != "README.md" {
-		t.Fatalf("编辑器该跟到 README.md，实际 %q", a.editorPane.path)
+	if got := a.activeEditorTab(); got == nil || got.path != "README.md" {
+		t.Fatalf("编辑器该跟到 README.md，实际 %+v", got)
 	}
-	if got := a.editorPane.buffer.String(); !strings.Contains(got, "新的一行") {
+	if got := a.activeEditorTab().buffer.String(); !strings.Contains(got, "新的一行") {
 		t.Errorf("README 内容不对：%q", got)
 	}
 }
@@ -73,11 +77,16 @@ func TestEditorViewSaveWritesWorktreeOnly(t *testing.T) {
 	selectEditorFile(t, a, "README.md")
 	a.setViewMode(viewModeEditor)
 	settle(t, a)
-	if a.editorPane.code == nil {
-		t.Fatalf("编辑器没打开：%q", a.editorPane.err)
+	s := a.activeEditorTab()
+	if s == nil || s.code == nil {
+		var errText string
+		if s != nil {
+			errText = s.err
+		}
+		t.Fatalf("编辑器没打开：%q", errText)
 	}
 
-	a.editorPane.buffer.Set("编辑器视图改的\n")
+	s.buffer.Set("编辑器视图改的\n")
 	a.saveEditorPane()
 	settle(t, a)
 
@@ -87,10 +96,10 @@ func TestEditorViewSaveWritesWorktreeOnly(t *testing.T) {
 	if got := indexContents(t, a.repoPath, "README.md"); strings.Contains(got, "编辑器视图改的") {
 		t.Errorf("保存不该动 index，实际 %q", got)
 	}
-	if a.editorPane.code == nil {
+	if a.activeEditorTab() != s || s.code == nil {
 		t.Error("编辑器视图保存后该继续留着")
 	}
-	if a.editorPane.buffer.Modified() {
+	if s.buffer.Modified() {
 		t.Error("存完不该再显示未保存圆点")
 	}
 	if got := listedFile(t, a, "README.md").Section; got != gitrepo.SectionUnstaged {
@@ -105,18 +114,19 @@ func TestEditorViewRevertReloadsFromDisk(t *testing.T) {
 	a.setViewMode(viewModeEditor)
 	settle(t, a)
 
-	a.editorPane.buffer.Set("乱改的一行\n")
-	if !a.editorPane.buffer.Modified() {
+	s := a.activeEditorTab()
+	s.buffer.Set("乱改的一行\n")
+	if !s.buffer.Modified() {
 		t.Fatal("改了缓冲区该显示未保存")
 	}
 
-	a.revertEditorPane()
+	a.revertEditorTab(s)
 	settle(t, a)
 
-	if got := a.editorPane.buffer.String(); strings.Contains(got, "乱改的一行") {
+	if got := s.buffer.String(); strings.Contains(got, "乱改的一行") {
 		t.Errorf("还原后还有未保存内容：%q", got)
 	}
-	if a.editorPane.buffer.Modified() {
+	if s.buffer.Modified() {
 		t.Error("还原后不该还是未保存状态")
 	}
 }
@@ -127,15 +137,19 @@ func TestSwitchRepoClosesEditorPane(t *testing.T) {
 	a := richApp(t)
 	a.setViewMode(viewModeEditor)
 	settle(t, a)
-	if a.editorPane.code == nil {
-		t.Fatalf("前置条件：编辑器该已打开，实际 %q", a.editorPane.err)
+	s := a.activeEditorTab()
+	if s == nil || s.code == nil {
+		t.Fatal("前置条件：编辑器该已打开")
 	}
 
 	a.openRepo(newRepoDir(t))
 	settle(t, a)
 
-	if a.editorPane.code != nil || a.editorPane.buffer != nil {
-		t.Error("换仓库后编辑器缓冲区该清空")
+	if len(a.editorPane.tabs) != 0 {
+		t.Error("换仓库后文件 tab 该清空")
+	}
+	if !s.dead {
+		t.Error("换仓库后旧 tab 该标 dead，迟到的读盘结果才不会写回来")
 	}
 }
 
@@ -162,7 +176,11 @@ func TestEditorViewRendersFileListAndHeader(t *testing.T) {
 
 	tt := ui.NewTester(a.view, 1280, 860)
 	tt.Frame()
-	for _, want := range []string{"README.md", a.editorPane.path} {
+	active := a.activeEditorTab()
+	if active == nil {
+		t.Fatal("编辑器视图该自动打开一个文件")
+	}
+	for _, want := range []string{"README.md", active.path} {
 		if !tt.HasText(want) {
 			t.Errorf("界面上找不到 %q，实际文本：%q", want, tt.Texts())
 		}

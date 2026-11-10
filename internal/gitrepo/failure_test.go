@@ -197,6 +197,7 @@ func TestOpTitles(t *testing.T) {
 		{OpForcePush, "强制推送没成功"},
 		{OpAm, "应用补丁没成功"},
 		{OpDiscard, "丢弃改动没成功"},
+		{OpWorktree, "Worktree 操作没成功"},
 	}
 	for _, c := range cases {
 		if got := opTitle(c.op); got != c.want {

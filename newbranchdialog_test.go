@@ -203,3 +203,26 @@ func TestAIBranchKeepsEditMadeWhileWaiting(t *testing.T) {
 		t.Fatalf("等结果时改的名字被 AI 结果覆盖了：name = %q", a.newBranch.name)
 	}
 }
+
+// 侧栏「分支」标题右边的 + 直接打开新建分支对话框，不再先弹一次菜单。
+func TestSidebarBranchHeaderHasNewBranchButton(t *testing.T) {
+	a := branchApp(t)
+	tt := ui.NewTester(a.view, 1280, 900)
+	settle(t, a)
+	tt.Frame()
+
+	if _, ok := tt.Find("新建分支…"); !ok {
+		t.Fatalf("侧栏分支标题旁该有「新建分支…」按钮：%q", tt.Texts())
+	}
+	if err := tt.Click("新建分支…"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+
+	if !a.newBranch.on {
+		t.Fatal("点 + 该直接打开新建分支对话框")
+	}
+	if !tt.HasText("新建分支") {
+		t.Errorf("对话框标题该出现：%q", tt.Texts())
+	}
+}

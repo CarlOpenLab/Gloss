@@ -283,7 +283,6 @@ var opaqueSurfaceOwners = map[string]string{
 
 	// 混在卡片文件里的浮层与画布
 	"app.go:repoDropdownPanel":        "仓库下拉浮层",
-	"app.go:branchDropdownPanel":      "分支下拉浮层",
 	"code_editor.go:codeEditorTheme":  "代码画布共用的配色：编辑器视图 / Diff 预览 / 编辑弹窗三处的底色都从这里出，增删淡染从背景色现算，必须不透明",
 	"compare.go:compareDialog":        "对比分支弹窗（对比栏 compareBar 在卡片上，不在此列）",
 	"prdialog.go:prDialogBody":        "PR 列表弹窗（PR 检视栏 prReviewBar 在卡片上，不在此列）",

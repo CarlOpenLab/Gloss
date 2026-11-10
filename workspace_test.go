@@ -256,18 +256,19 @@ func TestEditorViewOpensUnchangedFile(t *testing.T) {
 	selectEditorFile(t, a, "internal/clean/untouched.go")
 	settle(t, a)
 
-	if a.editorPane.path != "internal/clean/untouched.go" {
-		t.Fatalf("编辑器打开的是 %q", a.editorPane.path)
+	active := a.activeEditorTab()
+	if active == nil || active.path != "internal/clean/untouched.go" {
+		t.Fatalf("编辑器打开的不是 untouched.go：%+v", active)
 	}
-	if a.editorPane.buffer == nil {
-		t.Fatalf("编辑器没读到文件：%q", a.editorPane.err)
+	if active.buffer == nil {
+		t.Fatalf("编辑器没读到文件：%q", active.err)
 	}
-	if got := a.editorPane.buffer.String(); !strings.Contains(got, "没动过") {
+	if got := active.buffer.String(); !strings.Contains(got, "没动过") {
 		t.Fatalf("编辑器里的内容不对：%q", got)
 	}
 	// 没改动 ⇒ 行号边上不该冒改动标记：基线要么没有，要么与正文一模一样。
-	if base := a.editorPane.code.DiffBase; base != nil {
-		if base.String() != a.editorPane.buffer.String() {
+	if base := active.code.DiffBase; base != nil {
+		if base.String() != active.buffer.String() {
 			t.Fatalf("没改过的文件不该带改动标记：基线与正文对不上")
 		}
 	}

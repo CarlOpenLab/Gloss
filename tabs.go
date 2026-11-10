@@ -95,6 +95,9 @@ type repoTab struct {
 	// review 是改动区那一栏的状态（review.go）。它进快照：切回一个标签页
 	// 时看的还是那一个文件，滚动位置、展开过的未改动区间都在原来的地方。
 	review reviewState
+	// editorPane 是「编辑器」视图的文件 tab 列。它按项目保留：切视图、
+	// 切项目再回来，tab 和未保存的缓冲区都还在；关闭项目时才清空。
+	editorPane editorPaneState
 
 	tree             []*filetree.Node
 	filesList        ui.ListState
@@ -140,6 +143,12 @@ type repoTab struct {
 	refsFilter string
 	refSel     string
 	refsClosed map[string]bool
+	// refsDirty 表示这份引用快照可能过期了：同一仓库的 worktree 新建/移除/
+	// prune 之后，所有同仓库的项目都会被打上这个标记，切回来时先重读一次。
+	refsDirty bool
+	// refsSeq 是这一页最近一次引用读取的序号。引用结果是异步回来的，切走
+	// 之后再落地时靠它认出「这是不是这一页要的那一轮」（见 loadRefs）。
+	refsSeq int
 
 	commitMsg string
 	draftFor  string
@@ -229,6 +238,7 @@ func (a *app) saveActiveTab() {
 
 	tab.commitMsg = a.commitMsg
 	tab.draftFor = a.draftFor
+	tab.editorPane = a.editorPane
 }
 
 // restoreActiveTab 将当前激活标签页的快照恢复到主应用的仓库及视图字段中。
@@ -236,8 +246,9 @@ func (a *app) restoreActiveTab() {
 	if a.activeTab < 0 || a.activeTab >= len(a.tabs) {
 		return
 	}
-	a.closeEmbeddedEditors()
+	a.closeTransientEditors()
 	tab := a.tabs[a.activeTab]
+	a.editorPane = tab.editorPane
 	a.repoPath = tab.path
 	a.repoName = tab.name
 	a.branch = tab.branch
@@ -307,9 +318,6 @@ func (a *app) restoreActiveTab() {
 
 	a.commitMsg = tab.commitMsg
 	a.draftFor = tab.draftFor
-
-	// 从别的标签页切回来时，编辑器要重新读一份（closeEmbeddedEditors 刚清过）。
-	a.syncEditorPane()
 }
 
 // switchTab 切换到指定下标的标签页。
@@ -327,6 +335,12 @@ func (a *app) switchTab(idx int) {
 	if tab != nil {
 		if tab.state == loadIdle && tab.path != "" {
 			a.openRepo(tab.path)
+		}
+		// 同一仓库的 worktree 动过之后，这一页的侧栏快照可能已经过期：
+		// 切回来先重读一次，WT 标记和「打开 / 移除」菜单才是当下的真相。
+		if tab.refsDirty {
+			tab.refsDirty = false
+			a.loadRefs()
 		}
 		// 终端不在这里起：起 shell 要一份当前配色，而配色只有视图那层有。
 		// 进了终端视图，shell 也只因「新建终端」而起（见 terminalArea）。
@@ -469,12 +483,14 @@ func (a *app) closeTab(idx int) {
 			onYes: func() {
 				// 用户选了丢：把这一页的缓冲区清掉再关，否则 closeTab 又会
 				// 走到这条确认上，问第二次。活动页的活状态在 app 上，非活动页
-				// 只有 tab.review 那份快照（codeEdit / editorPane 不进快照，
-				// 切页时就被收掉了，非活动页没有这两样）——各清各的，关别的
-				// 页不能顺手动活动页的活缓冲区。
+				// 看 tab 快照；文件 tab 现在两边都可能有，各清各的，关别的页
+				// 不能顺手动活动页的活缓冲区。
 				if idx == a.activeTab {
-					a.closeEmbeddedEditors()
+					a.closeTransientEditors()
+					a.discardEditorTabs(&a.editorPane)
+					a.discardEditorTabs(&a.tabs[idx].editorPane)
 				} else {
+					a.discardEditorTabs(&a.tabs[idx].editorPane)
 					a.tabs[idx].review = reviewState{}
 				}
 				a.closeTab(idx)
@@ -500,6 +516,11 @@ func (a *app) closeTab(idx int) {
 		}
 		if wasActive {
 			a.restoreActiveTab()
+			// 落在没加载过的项目上时要像 switchTab 一样把它打开：否则界面
+			// 停在空状态，保存按钮亮着而 startOp 直接拒绝（写不出去也不报错）。
+			if t := a.currentTab(); t != nil && t.state == loadIdle && t.path != "" {
+				a.openRepo(t.path)
+			}
 		}
 	}
 	// 关掉/切换后活动仓库换了，自动刷新跟着换盯的对象。
@@ -522,7 +543,7 @@ func (a *app) clearRepoState() {
 	a.cancelAICommit()
 	a.cancelAIBranch()
 	a.cancelAIReview()
-	a.closeEmbeddedEditors()
+	a.closeRepoEditors()
 
 	a.activeTab = 0
 	a.repoPath = ""
@@ -625,6 +646,16 @@ func (a *app) closeActive() {
 			return
 		}
 	}
+	// 编辑器视图里眼前那一页是一个文件 tab：先关它，关光了才轮到项目。
+	// 和终端视图认会话是同一个分层。
+	if a.viewMode == viewModeEditor && len(a.editorPane.tabs) > 0 {
+		idx := a.editorPane.active
+		if idx < 0 || idx >= len(a.editorPane.tabs) {
+			idx = len(a.editorPane.tabs) - 1
+		}
+		a.closeEditorTab(idx)
+		return
+	}
 	a.closeTab(a.activeTab)
 }
 
@@ -669,6 +700,8 @@ func (a *app) setViewMode(mode int) {
 		// 切回终端视图时把焦点交还给当前格；否则键盘还停在上一个视图
 		// 的控件上，终端看着是活的却打不进字。
 		a.focusActiveTerminal()
+		// 芯片带记得上一次的滚动位置；换回来时把当前会话滚进视野。
+		a.termReveal = true
 	}
 	if mode == viewModeEditor {
 		// 进编辑器视图时先把左边选中的那个文件读进来；之后换文件由
@@ -680,7 +713,7 @@ func (a *app) setViewMode(mode int) {
 		if a.wsSel < 0 && a.fileSel >= 0 && a.fileSel < len(a.files) {
 			a.selectWorkspaceKey(pathOf(a.files[a.fileSel]))
 		}
-		a.syncEditorPane()
+		a.ensureEditorTabOnEnter()
 	}
 }
 
@@ -899,6 +932,7 @@ func (a *app) newTerminalSession(tab *repoTab) {
 	s.focusPending = true
 	tab.terms = append(tab.terms, s)
 	tab.termActive = len(tab.terms) - 1
+	a.termReveal = true
 }
 
 // activeTermChip 返回当前项目页和当前终端芯片。没有项目、没有芯片时芯片
@@ -1554,17 +1588,6 @@ func (a *app) terminalTabBar(c *ui.Context, pal palette, tab *repoTab) {
 		// 只画下沿那一条：Border(0, …) 是零宽，画不出线，得用 BorderWidth
 		// （连框架自己注释里推荐的都是这一种）。
 		BorderWidth(0, 0, 1, 0).BorderColor(pal.hairline)
-	bar.Draw(func(p *ui.Painter, r ui.Rect) {
-		if slotW <= 0 {
-			return
-		}
-		p.Fill(ui.Rect{
-			X: r.X + chipBarPad + slotX,
-			Y: r.Y + (termBarHeight-chipHeight)/2,
-			W: slotW,
-			H: chipHeight,
-		}, pal.chip, radiusSM)
-	})
 	bar.Children(func() {
 		// 拖动期间画的是预览顺序：被拖的芯片已经挪到它将要落下的位置，
 		// tab.terms 一根手指都不动，松手才提交。
@@ -1592,31 +1615,56 @@ func (a *app) terminalTabBar(c *ui.Context, pal palette, tab *repoTab) {
 		// 前移一格 —— 剩下那几枚芯片这一帧就画成别人了。拖动同理。
 		var closeSession *termSession
 		var dragging, dropped bool
-		for i, s := range terms {
-			closeClicked, rowDragging, rowDropped := a.renderTerminalChip(c, pal, tab, i, s, xs[i], s == dragTerm, known)
-			if closeClicked {
-				closeSession = s
-			}
-			if rowDragging {
-				dragging = true
-				d := a.chipDrag
-				if d == nil || d.tab != tab || d.term != s {
-					// 刚起拖：从列表里的原位开始预览，第一帧不动任何芯片。
-					if from := termIndex(tab, s); from >= 0 {
-						d = &chipDragState{tab: tab, term: s, from: from, at: from}
-						a.chipDrag = d
+		var activeChip ui.Element
+		var activeChipOK bool
+		// 芯片本身横向滚动（会话一多就超出栏宽），+ 和清屏/重启留在滚动区
+		// 外面 —— 它们是固定入口，不能被芯片挤到窗口外去。
+		ui.ScrollHorizontal(c).Grow(1).MinWidth(0).Height(chipHeight).
+			TrackScroll(&a.termChipScroll).Gap(chipBarGap).
+			Draw(func(p *ui.Painter, r ui.Rect) {
+				if slotW <= 0 {
+					return
+				}
+				p.Fill(ui.Rect{
+					X: r.X + slotX - a.termChipScroll.X,
+					Y: r.Y,
+					W: slotW,
+					H: chipHeight,
+				}, pal.chip, radiusSM)
+			}).Children(func() {
+			for i, s := range terms {
+				chip, closeClicked, rowDragging, rowDropped := a.renderTerminalChip(c, pal, tab, i, s, xs[i], s == dragTerm, known)
+				if s != nil && tab.termActive >= 0 && tab.termActive < len(tab.terms) && tab.terms[tab.termActive] == s {
+					activeChip, activeChipOK = chip, true
+				}
+				if closeClicked {
+					closeSession = s
+				}
+				if rowDragging {
+					dragging = true
+					d := a.chipDrag
+					if d == nil || d.tab != tab || d.term != s {
+						// 刚起拖：从列表里的原位开始预览，第一帧不动任何芯片。
+						if from := termIndex(tab, s); from >= 0 {
+							d = &chipDragState{tab: tab, term: s, from: from, at: from}
+							a.chipDrag = d
+						}
+					}
+					if d != nil {
+						d.active = true
 					}
 				}
-				if d != nil {
-					d.active = true
+				if rowDropped {
+					dropped = true
+				}
+				if s == dragTerm {
+					slotX, slotW = xs[i], widths[i]
 				}
 			}
-			if rowDropped {
-				dropped = true
-			}
-			if s == dragTerm {
-				slotX, slotW = xs[i], widths[i]
-			}
+		})
+		if activeChipOK && a.termReveal {
+			activeChip.ScrollIntoView()
+			a.termReveal = false
 		}
 		if closeSession != nil {
 			if idx := termIndex(tab, closeSession); idx >= 0 {
@@ -1624,10 +1672,11 @@ func (a *app) terminalTabBar(c *ui.Context, pal palette, tab *repoTab) {
 			}
 		} else if d := a.chipDrag; d != nil && d.tab == tab {
 			// 落点按这一帧的预览和指针算；宽度还没量到（标签页刚打开的第一
-			// 帧）就先不动，否则会把芯片甩到末尾。
+			// 帧）就先不动，否则会把芯片甩到末尾。指针在滚动区里，加回滚动量
+			// 换成内容坐标。
 			if known && (dragging || dropped) {
 				px, _, _ := bar.PointerPosition()
-				d.at = chipDropIndex(px, terms, xs, widths, d.term)
+				d.at = chipDropIndex(px+a.termChipScroll.X, terms, xs, widths, d.term)
 			}
 			if dropped {
 				from, to := d.from, d.at
@@ -1648,6 +1697,17 @@ func (a *app) terminalTabBar(c *ui.Context, pal palette, tab *repoTab) {
 			false, false, drawPlusIcon) {
 			a.newTerminalSession(tab)
 		}
+		// 清屏 / 重启只作用于当前会话，所以跟着会话芯片带待在右端，而不是
+		// 顶部工具栏。没有会话时干脆不画：点不动的按钮只是占地方。
+		if a.activeSession() != nil {
+			ui.Spacer(c)
+			if toolIconButton(c, pal, T("清屏", "Clear"), T("清空终端屏幕", "Clear Terminal Screen"), false, false, drawTrashIcon) {
+				a.clearCurrentTerminal()
+			}
+			if toolIconButton(c, pal, T("重启", "Restart"), T("重启终端 Shell 进程", "Restart Terminal Shell Process"), false, false, drawZapIcon) {
+				a.restartCurrentTerminal()
+			}
+		}
 	})
 }
 
@@ -1661,7 +1721,7 @@ func (a *app) terminalTabBar(c *ui.Context, pal palette, tab *repoTab) {
 // 激活态只换颜色（底 rowSelected、边 hairlineStrong、字 ink），几何一律不动：
 // 边框两态都是 1px，内边距、字号、字重也都一样。切一次会话整条芯片带跟着
 // 重排的话，第二下就点不准了。
-func (a *app) renderTerminalChip(c *ui.Context, pal palette, tab *repoTab, idx int, s *termSession, x float32, dragged, known bool) (closeClicked, dragging, dropped bool) {
+func (a *app) renderTerminalChip(c *ui.Context, pal palette, tab *repoTab, idx int, s *termSession, x float32, dragged, known bool) (chip ui.Element, closeClicked, dragging, dropped bool) {
 	title := ""
 	if s != nil && s.active != nil && s.active.pane != nil && s.active.pane.term != nil {
 		title = strings.TrimSpace(s.active.pane.term.Title())
@@ -1689,7 +1749,7 @@ func (a *app) renderTerminalChip(c *ui.Context, pal palette, tab *repoTab, idx i
 	if s != nil {
 		key.ord = s.ord
 	}
-	chip := ui.ButtonBase(c.Key(key)).Height(chipHeight).Shrink(0).Radius(radiusSM).
+	chip = ui.ButtonBase(c.Key(key)).Height(chipHeight).Shrink(0).Radius(radiusSM).
 		Padding(0, 6).Gap(5).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).Label(title).Tooltip(tip)
 	bg, fg, bd := ui.Transparent, pal.inkSubtle, pal.hairline
@@ -1769,7 +1829,7 @@ func (a *app) renderTerminalChip(c *ui.Context, pal palette, tab *repoTab, idx i
 	if known {
 		a.placeChip(chip, s, x, !dragged && a.chipDrag != nil)
 	}
-	return closeClicked, dragging, dropped
+	return chip, closeClicked, dragging, dropped
 }
 
 // terminalArea 呈现内置终端的主区全屏视图：顶上一条会话芯片，下面是当前会话。

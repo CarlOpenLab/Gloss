@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
@@ -10,16 +11,15 @@ import (
 	"github.com/CarlOpenLab/Gloss/internal/gitrepo"
 )
 
-// editorPaneState 是「编辑器」视图里那个整文件编辑器的状态。
+// editorTabState 是「编辑器」视图里的一个文件 tab。
 //
-// 它和 codeEdit（文件右键「编辑代码」弹的对话框）是两份独立状态。那边是一次性
-// 的：打开一个文件、改完保存、关掉。这边跟着左侧文件栏的选中共进退 —— 换文件就
-// 换缓冲区，切仓库整份丢掉，只要还停在编辑器视图就一直活着。分成两份是因为收尾
-// 动作不同（对话框存完就关，这里存完要继续留着改），混在一个 state 里迟早有一边
-// 做错。
-type editorPaneState struct {
+// 一个 tab 一条完整的编辑器状态：缓冲区、git 基线、语言、待兑现的搜索命中
+// 都在它自己身上。切 tab 只换 active，不动这些；异步读盘写回的是 tab 对象
+// 本身（seq + dead 认领），所以切走项目再回来不会永远转圈。
+type editorTabState struct {
+	path    string
+	section gitrepo.Section // 打开时的段落，用于「已暂存/未暂存」chip 的兜底
 	loading bool
-	path    string // 已加载（或正在加载）的文件路径
 	err     string
 	buffer  *editor.Buffer
 	base    *editor.Buffer
@@ -32,6 +32,154 @@ type editorPaneState struct {
 	// 用）：缓冲还在读盘时先记下点中的那条命中，dispatch 就位后选中它 ——
 	// Line 为 0 表示没有待兑现的。
 	pendingHit wsSearchHit
+	// seq 给每次读盘编号；dead 标记这个 tab 已经被关掉/所属项目被清空。
+	// 迟到的回调两者对不上就什么都不碰。
+	seq  int
+	dead bool
+}
+
+// editorPaneState 是「编辑器」视图的一列文件 tab 加当前激活下标。
+//
+// active 为 -1 表示没有打开的文件。它和 codeEdit（文件右键「编辑代码」弹的
+// 对话框）是两份独立状态：那边是一次性的，这边跟着项目走。
+type editorPaneState struct {
+	tabs   []*editorTabState
+	active int
+}
+
+// activeEditorTab 返回当前激活的 tab，没有就 nil。
+func (a *app) activeEditorTab() *editorTabState {
+	s := a.editorPane
+	if s.active < 0 || s.active >= len(s.tabs) {
+		return nil
+	}
+	return s.tabs[s.active]
+}
+
+// editorTabIndex 按路径找已打开的 tab，没有返回 -1。
+func (a *app) editorTabIndex(path string) int {
+	for i, t := range a.editorPane.tabs {
+		if t.path == path {
+			return i
+		}
+	}
+	return -1
+}
+
+// editorTabIndexPtr 按对象找 tab 现在的下标（确认框关 tab 时用：确认期间
+// 列表可能已经变过，不能拿旧下标去删）。
+func (a *app) editorTabIndexPtr(target *editorTabState) int {
+	for i, t := range a.editorPane.tabs {
+		if t == target {
+			return i
+		}
+	}
+	return -1
+}
+
+// openEditorTab 打开或激活一个文件。已在某个 tab 里打开的直接切过去，不
+// 重复读盘；新打开追加到末尾并激活。
+func (a *app) openEditorTab(f gitrepo.File) {
+	if a.viewMode != viewModeEditor {
+		return
+	}
+	path := pathOf(f)
+	if i := a.editorTabIndex(path); i >= 0 {
+		a.activateEditorTab(i)
+		return
+	}
+	t := &editorTabState{path: path, section: f.Section, loading: true}
+	a.editorPane.tabs = append(a.editorPane.tabs, t)
+	a.activateEditorTab(len(a.editorPane.tabs) - 1)
+	a.loadEditorTab(t, f)
+}
+
+// activateEditorTab 切到第 i 个 tab。路径能在左栏找到时同步选中，避免
+// 「tab 是 A、左栏高亮 B」。
+func (a *app) activateEditorTab(i int) {
+	if i < 0 || i >= len(a.editorPane.tabs) {
+		return
+	}
+	a.editorPane.active = i
+	a.editorReveal = true
+	if a.viewMode != viewModeEditor {
+		return
+	}
+	path := a.editorPane.tabs[i].path
+	for j := range a.wsFiles {
+		if pathOf(a.wsFiles[j]) == path {
+			a.selectWorkspaceKey(path)
+			break
+		}
+	}
+}
+
+// closeEditorTab 关闭第 i 个 tab；有未保存改动时先问一句。
+func (a *app) closeEditorTab(i int) {
+	if i < 0 || i >= len(a.editorPane.tabs) {
+		return
+	}
+	target := a.editorPane.tabs[i]
+	if target.buffer != nil && target.buffer.Modified() {
+		a.askConfirm(confirmState{
+			title: T("关闭这个文件标签页？", "Close this file tab?"),
+			body: T("这个文件有还没保存的改动，关掉就丢了。先保存（⌘S），或者点「取消」。",
+				"This file has unsaved changes; closing it discards them. Save (⌘S) first, or cancel."),
+			yes: T("仍然关闭", "Close anyway"),
+			onYes: func() {
+				if idx := a.editorTabIndexPtr(target); idx >= 0 {
+					a.closeEditorTabNow(idx)
+				}
+			},
+		})
+		return
+	}
+	a.closeEditorTabNow(i)
+}
+
+// closeEditorTabNow 立刻关掉第 i 个 tab。关闭激活 tab 后激活右邻（没有则
+// 左邻）；全部关掉后回到空状态。
+func (a *app) closeEditorTabNow(i int) {
+	if i < 0 || i >= len(a.editorPane.tabs) {
+		return
+	}
+	t := a.editorPane.tabs[i]
+	t.dead = true
+	t.seq++ // 迟到的读盘结果对不上号
+
+	a.editorPane.tabs = append(a.editorPane.tabs[:i], a.editorPane.tabs[i+1:]...)
+	switch {
+	case len(a.editorPane.tabs) == 0:
+		a.editorPane.active = -1
+	case i < a.editorPane.active:
+		a.editorPane.active--
+	case i == a.editorPane.active:
+		if i >= len(a.editorPane.tabs) {
+			a.editorPane.active = len(a.editorPane.tabs) - 1
+		}
+	}
+	a.editorReveal = true
+}
+
+// discardEditorTabs 把一个项目里的所有 tab 标死并清空。换仓库、关项目时用：
+// 缓冲区属于旧仓库，留着下一次保存就会写进新仓库。
+func (a *app) discardEditorTabs(s *editorPaneState) {
+	for _, t := range s.tabs {
+		t.dead = true
+		t.seq++
+	}
+	s.tabs = nil
+	s.active = -1
+}
+
+// editorTabsDirty 报告这一列 tab 里有没有未保存的改动。
+func editorTabsDirty(s *editorPaneState) bool {
+	for _, t := range s.tabs {
+		if t.buffer != nil && t.buffer.Modified() {
+			return true
+		}
+	}
+	return false
 }
 
 // editorTarget 取编辑器该显示哪个文件：左栏当前选中的那个，没选就退到第一个。
@@ -59,34 +207,53 @@ func (a *app) editorTarget() *gitrepo.File {
 	return &list[i]
 }
 
-// syncEditorPane 让编辑器对齐到左栏当前选中的文件。
+// syncEditorPane 是「进入编辑器视图时该显示什么」：一个 tab 都没有才把左栏
+// 当前选中的文件打开；已经有 tab 就保持原样。
 //
-// 只在「编辑器」视图下动作 —— 别的视图里没必要读盘。切文件、切视图、仓库重读
-// 之后都调它一次；目标路径没变就直接返回，所以重复调用是安全的。
+// 仓库刷新（applyModel）不调它 —— 刷新是更新文件列表，不是换一个文件来看。
+// 方向键导航也不调它：移动选中和打开文件是两件事，一路按 ↓ 不该长出一串
+// tab；要打开请点一下或者从搜索里跳。
 func (a *app) syncEditorPane() {
-	if a.viewMode != viewModeEditor || a.editorPane.loading {
+	if a.viewMode != viewModeEditor {
 		return
 	}
-	f := a.editorTarget()
-	if f == nil {
-		a.editorPane = editorPaneState{}
+	if len(a.editorPane.tabs) > 0 {
 		return
 	}
-	if a.editorPane.path == pathOf(*f) && a.editorPane.code != nil {
-		return
+	if f := a.editorTarget(); f != nil {
+		a.openEditorTab(*f)
 	}
-	a.loadEditorPane(*f)
 }
 
-// loadEditorPane 读工作区里那一份进来，并配上和「编辑代码」同一套的 git 基线
-// （基线决定行号槽的增删标记，也决定「相对哪一版」）。
-func (a *app) loadEditorPane(f gitrepo.File) {
-	path, section := pathOf(f), f.Section
+// ensureEditorTabOnEnter 在第一次进入编辑器视图时打开左栏选中的文件。
+func (a *app) ensureEditorTabOnEnter() {
+	a.syncEditorPane()
+}
+
+// openEditorSelection 是「用户点了左栏某个文件」：打开或激活它。已有 tab
+// 时也照常动作 —— 点击本来就是明确的打开意图。
+func (a *app) openEditorSelection() {
+	if a.viewMode != viewModeEditor {
+		return
+	}
+	if f := a.editorTarget(); f != nil {
+		a.openEditorTab(*f)
+	}
+}
+
+// loadEditorTab 读工作区里那一份进来，并配上和「编辑代码」同一套的 git 基线
+// （基线决定行号槽的增删标记，也决定「相对哪一版」）。结果写回 t 本身，
+// 不要求 t 还在当前项目的列表里。
+func (a *app) loadEditorTab(t *editorTabState, f gitrepo.File) {
+	t.seq++
+	seq := t.seq
+	t.dead = false
+	t.section = f.Section
+	t.loading = true
+	t.err = ""
+	path := t.path
 	root := a.repoPath
 	image := isImagePreview(f)
-	a.editorPane.loading = true
-	a.editorPane.path = path
-	a.editorPane.err = ""
 	a.run(func() {
 		ctx := context.Background()
 		repo, err := gitrepo.Open(ctx, root)
@@ -104,31 +271,30 @@ func (a *app) loadEditorPane(f gitrepo.File) {
 			err = fmt.Errorf("%s 看起来不是文本文件", path)
 		}
 		if err == nil && !image {
-			base = codeEditorBaseline(ctx, repo, path, section)
+			base = codeEditorBaseline(ctx, repo, path, t.section)
 		}
 		a.dispatch(func() {
-			if a.editorPane.path != path {
-				return // 读盘期间又切走了，这份结果作废
+			if t.seq != seq || t.dead {
+				return // 读盘期间被关掉或被新的一次读盘顶掉了
 			}
-			s := &a.editorPane
-			s.loading = false
+			t.loading = false
 			if err != nil {
-				s.err = err.Error()
-				s.code, s.buffer, s.base, s.img = nil, nil, nil, nil
-				s.pendingHit = wsSearchHit{} // 没有缓冲可兑现，别让请求残留到下一个文件头上
+				t.err = err.Error()
+				t.code, t.buffer, t.base, t.img = nil, nil, nil, nil
+				t.pendingHit = wsSearchHit{} // 没有缓冲可兑现，别让请求残留到下一个文件头上
 				return
 			}
 			if image {
 				if side.err != "" {
-					s.err = side.err
-					s.code, s.buffer, s.base, s.img = nil, nil, nil, nil
-					s.pendingHit = wsSearchHit{}
+					t.err = side.err
+					t.code, t.buffer, t.base, t.img = nil, nil, nil, nil
+					t.pendingHit = wsSearchHit{}
 					return
 				}
-				s.img, s.imgMeta = side.bitmap, side.meta
-				s.code, s.buffer, s.base = nil, nil, nil
-				s.err = ""
-				s.pendingHit = wsSearchHit{}
+				t.img, t.imgMeta = side.bitmap, side.meta
+				t.code, t.buffer, t.base = nil, nil, nil
+				t.err = ""
+				t.pendingHit = wsSearchHit{}
 				return
 			}
 			lang := editor.LanguageFor(path)
@@ -139,33 +305,34 @@ func (a *app) loadEditorPane(f gitrepo.File) {
 				b := editor.NewBuffer(string(base))
 				b.SetLanguage(lang)
 				st.DiffBase = b
-				s.base = b
+				t.base = b
 			}
 			st.Bindings = []editor.Binding{
 				{Mods: ui.Cmd, Key: ui.KeyS, Command: editor.NoCommand},
 			}
-			s.buffer = buf
-			s.code = st
-			s.img, s.imgMeta = nil, ""
-			s.err = ""
-			if s.pendingHit.Line > 0 {
-				revealWsHit(st, s.pendingHit)
-				s.pendingHit = wsSearchHit{}
+			t.buffer = buf
+			t.code = st
+			t.img, t.imgMeta = nil, ""
+			t.err = ""
+			if t.pendingHit.Line > 0 {
+				revealWsHit(st, t.pendingHit)
+				t.pendingHit = wsSearchHit{}
 			}
 		})
 	})
 }
 
-// saveEditorPane 把缓冲区写回工作区：只写盘、不动 index，和「编辑代码」一致
-// （暂不暂存由用户在文件栏里自己决定）。
+// saveEditorPane 把当前激活 tab 的缓冲区写回工作区：只写盘、不动 index，
+// 和「编辑代码」一致（暂不暂存由用户在文件栏里自己决定）。
 func (a *app) saveEditorPane() {
-	s := &a.editorPane
-	if s.buffer == nil || s.err != "" {
+	t := a.activeEditorTab()
+	if t == nil || t.buffer == nil || t.err != "" {
 		return
 	}
-	path := s.path
-	text := s.buffer.String()
-	buf := s.buffer
+	path := t.path
+	text := t.buffer.String()
+	buf := t.buffer
+	dir := a.repoPath
 	a.startOp(gitrepo.OpWrite, Tf("正在保存 %s", "Saving %s", path),
 		func(_ context.Context, repo *gitrepo.Repo) (string, error) {
 			if err := repo.WriteContents(path, []byte(text)); err != nil {
@@ -173,24 +340,37 @@ func (a *app) saveEditorPane() {
 			}
 			return Tf("已保存 %s", "Saved %s", path), nil
 		}, func(ok bool) {
-			if ok && a.editorPane.buffer == buf {
+			if ok {
 				buf.MarkSaved()
 			}
-			a.reloadAfterOp()
+			if a.repoPath == dir {
+				a.reloadAfterOp()
+				return
+			}
+			// 保存期间切到了别的项目：别刷新眼前这个，把发起保存的那个项目
+			// 置回 loadIdle，下次切回去时整体重读。
+			for _, tab := range a.tabs {
+				if sameRepo(tab.path, dir) {
+					tab.state = loadIdle
+				}
+			}
 		})
 }
 
-// revertEditorPane 丢掉未保存的改动，重新读一份。
+// revertEditorTab 丢掉一个 tab 的未保存改动，重新读一份。
 //
-// 走 loadEditorPane 而不是在内存里回滚缓冲区：磁盘上的内容可能已经被外部（别的
+// 走 loadEditorTab 而不是在内存里回滚缓冲区：磁盘上的内容可能已经被外部（别的
 // 编辑器、git 命令）改过，重读顺带把「行号槽标记」也重新对齐。
-func (a *app) revertEditorPane() {
-	f := a.editorTarget()
-	if f == nil {
+func (a *app) revertEditorTab(t *editorTabState) {
+	if t == nil || t.dead {
 		return
 	}
-	a.editorPane.path = "" // 让 loadEditorPane 认得这是重新读
-	a.loadEditorPane(*f)
+	f := wsFileByPath(a.wsAll, t.path)
+	if f == nil {
+		f = &gitrepo.File{Section: t.section}
+		f.NewPath = t.path
+	}
+	a.loadEditorTab(t, *f)
 }
 
 // editorArea 是「编辑器」视图下的整块主区：左边仍是那栏文件列表，右边换成一个
@@ -222,13 +402,32 @@ func (a *app) editorArea(c *ui.Context, pal palette) {
 	})
 }
 
-// editorPaneView 画右边那一栏：栏头（路径 + 已暂存/未暂存 + 已改圆点）加编辑器。
+// editorPaneWidthEstimate 是编辑器栏这一帧大概有多宽：窗口减去侧栏、
+// 文件栏、卡片两侧留白和那条 1px 分隔线。tab 栏靠它决定右侧的完整路径 /
+// 状态 chip 还摆不摆得下（见 editorTabBar）。
+func (a *app) editorPaneWidthEstimate(c *ui.Context) float32 {
+	winW, _ := c.Size()
+	if winW <= 0 {
+		return 1000 // 首帧/无头还不知道窗口多大：按宽屏处理
+	}
+	return winW - a.sidebarVisualWidth(c) - 2*shellCardGap - a.filePaneWidth(c) - paneSplitterW
+}
+
+// editorPaneView 画右边那一栏：文件 tab 栏加当前 tab 的编辑器。
 func (a *app) editorPaneView(c *ui.Context, pal palette) {
-	s := &a.editorPane
+	t := c.Theme()
+	a.editorTabBar(c, pal)
 
-	a.editorPaneHeader(c, pal)
-
+	s := a.activeEditorTab()
 	switch {
+	case s == nil:
+		ui.Box(c).Grow(1).FillWidth().Children(func() {
+			ui.Column(c).Fill().Center().Gap(8).Padding(24).Children(func() {
+				ui.Text(c, T("从左侧选择一个文件开始编辑", "Select a file on the left to start editing")).
+					FontSize(textBodySM).TextColor(t.TextMuted)
+			})
+		})
+		return
 	case s.loading || (s.code == nil && s.img == nil && s.err == ""):
 		ui.Box(c).Grow(1).FillWidth().Children(func() {
 			ui.Column(c).Fill().Center().Gap(8).Children(func() {
@@ -257,44 +456,127 @@ func (a *app) editorPaneView(c *ui.Context, pal palette) {
 	editor.View(c, s.code).Fill().AutoFocus()
 }
 
-// editorPaneHeader 是编辑器上方那条细栏：左边路径，右边「已暂存/未暂存」和
-// 未保存圆点。
-func (a *app) editorPaneHeader(c *ui.Context, pal palette) {
-	s := &a.editorPane
-	t := c.Theme()
-	dirty := s.buffer != nil && s.buffer.Modified()
-
+// editorTabBar 是编辑器上方那条文件 tab 栏。
+//
+// 左边是横向滚动的 tab：文件名只写 basename，完整相对路径在 tooltip 里；
+// 右边再报一次当前文件的相对路径和「已暂存/未暂存/图片」，这样两个同名文件
+// 分别在不同目录时也能一眼认出当前是哪一个。
+func (a *app) editorTabBar(c *ui.Context, pal palette) {
 	ui.Row(c).Shrink(0).FillWidth().Height(34).Padding(0, 12).Gap(8).
 		AlignItems(ui.Center).
 		BorderWidth(0, 0, 1, 0).BorderColor(pal.hairline).Children(func() {
-		label := s.path
-		if label == "" {
-			label = T("未选择文件", "No file selected")
+		if len(a.editorPane.tabs) == 0 {
+			ui.Text(c, T("未选择文件", "No file selected")).Font("monospace").
+				FontSize(textBodySM).SingleLine().TextColor(pal.inkMuted)
+			ui.Spacer(c)
+			return
 		}
-		ui.Text(c, label).Font("monospace").FontSize(textBodySM).
-			SingleLine().TextColor(pal.ink)
-		ui.Spacer(c)
-		if f := a.editorTarget(); f != nil && (s.code != nil || s.img != nil) {
-			if s.img != nil {
-				specChip(c, pal, T("图片", "Image"), ui.Transparent, 20, textCaption)
-			} else if f.Section == gitrepo.SectionStaged {
-				specChip(c, pal, T("已暂存", "Staged"), ui.Transparent, 20, textCaption)
-			} else {
-				specChip(c, pal, T("未暂存", "Unstaged"), ui.Transparent, 20, textCaption)
+
+		var activeEl ui.Element
+		var activeOK bool
+		closeAt := -1
+		ui.ScrollHorizontal(c).Grow(1).MinWidth(0).Height(28).Gap(2).Children(func() {
+			for i, tab := range a.editorPane.tabs {
+				el, closeClicked := a.editorTabChip(c, pal, i, tab)
+				if i == a.editorPane.active {
+					activeEl, activeOK = el, true
+				}
+				if closeClicked {
+					closeAt = i
+				}
 			}
+		})
+		if closeAt >= 0 {
+			a.closeEditorTab(closeAt)
 		}
-		if dirty {
-			ui.Box(c).Size(6, 6).Shrink(0).Radius(radiusPill).Background(t.Warning)
+		if activeOK && a.editorReveal {
+			activeEl.ScrollIntoView()
+			a.editorReveal = false
+		}
+
+		s := a.activeEditorTab()
+		if s == nil {
+			return
+		}
+		// 编辑器栏本身不够宽时先保文件 tab：右侧的完整路径和状态 chip 只
+		// 是补充信息，tab 才是切文件唯一的入口。窗口 1280 时它们照常显示；
+		// 窄到放不下时让位，否则滚动区会被挤成零宽，连关闭 × 都点不到。
+		if a.editorPaneWidthEstimate(c) < 600 {
+			return
+		}
+		ui.Text(c, s.path).Font("monospace").FontSize(11).SingleLine().
+			MaxWidth(260).TextColor(pal.inkSubtle)
+		switch {
+		case s.img != nil:
+			specChip(c, pal, T("图片", "Image"), ui.Transparent, 20, textCaption)
+		case s.code != nil && s.section == gitrepo.SectionStaged:
+			specChip(c, pal, T("已暂存", "Staged"), ui.Transparent, 20, textCaption)
+		case s.code != nil:
+			specChip(c, pal, T("未暂存", "Unstaged"), ui.Transparent, 20, textCaption)
 		}
 	})
 }
 
+// editorTabChip 画一枚文件 tab，返回元素和这一帧它的关闭 × 有没有被点中。
+// 关闭动作由调用方在这一圈 tab 都画完之后再做（与终端芯片同一理由：画到
+// 一半从切片里删一个，后面的 tab 会整体前移一格）。
+func (a *app) editorTabChip(c *ui.Context, pal palette, idx int, tab *editorTabState) (ui.Element, bool) {
+	t := c.Theme()
+	active := idx == a.editorPane.active
+	name := filepath.Base(tab.path)
+
+	chip := ui.ButtonBase(c).Height(28).Shrink(0).MinWidth(110).MaxWidth(220).
+		Radius(radiusSM).Padding(0, 6).Gap(5).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer).Label(name).Tooltip(tab.path)
+
+	bg, fg, bd := ui.Transparent, pal.inkMuted, ui.Transparent
+	switch {
+	case active:
+		bg, fg, bd = pal.rowSelected, pal.ink, pal.hairlineStrong
+	case chip.Hovered():
+		bg = pal.rowHover
+	}
+	chip.Background(bg).Border(1, bd)
+	fadeColors(chip)
+
+	var closeClicked bool
+	chip.Children(func() {
+		ui.Text(c, name).FontSize(textCaption).SingleLine().
+			Grow(1).MinWidth(0).TextColor(fg)
+		if tab.buffer != nil && tab.buffer.Modified() {
+			// 未保存圆点和改动栏那一颗同一档；带 Label 让读屏和测试都
+			// 知道它是什么。
+			ui.Box(c).Size(6, 6).Shrink(0).Radius(radiusPill).
+				Background(t.Warning).Label(T("未保存的改动", "Unsaved changes"))
+		}
+		closeBtn := ui.ButtonBase(c).Size(16, 16).Shrink(0).Radius(radiusXS).
+			Cursor(ui.CursorPointer).
+			Label(Tf("关闭文件标签页 %s", "Close File Tab %s", name))
+		if closeBtn.Hovered() {
+			closeBtn.Background(pal.rowSelected)
+		}
+		fadeColors(closeBtn)
+		closeBtn.Children(func() {
+			ui.Row(c).AlignItems(ui.Center).Justify(ui.Center).Fill().Children(func() {
+				drawIcon(c, iconX, 10, pal.inkSubtle)
+			})
+		})
+		if closeBtn.Clicked() {
+			closeClicked = true
+		}
+	})
+	if chip.Clicked() && !closeClicked {
+		a.activateEditorTab(idx)
+	}
+	return chip, closeClicked
+}
+
 // editorToolbar 是「编辑器」视图下工具栏右侧的两个动作。
 func (a *app) editorToolbar(c *ui.Context, pal palette) {
-	s := &a.editorPane
-	busy := a.op != gitrepo.OpNone || s.loading
-	dirty := s.buffer != nil && s.buffer.Modified()
-	ready := s.code != nil && s.err == ""
+	s := a.activeEditorTab()
+	busy := a.op != gitrepo.OpNone || (s != nil && s.loading)
+	dirty := s != nil && s.buffer != nil && s.buffer.Modified()
+	ready := s != nil && s.code != nil && s.err == ""
 
 	save := primaryAction(c, pal, T("保存", "Save"),
 		T("写回工作区，不自动暂存", "Write to the working tree, without staging"),
@@ -306,6 +588,6 @@ func (a *app) editorToolbar(c *ui.Context, pal palette) {
 		T("丢弃未保存的改动，重新读盘", "Discard unsaved changes and reload from disk"),
 		!ready || !dirty || busy)
 	if revert.Clicked() {
-		a.revertEditorPane()
+		a.revertEditorTab(s)
 	}
 }

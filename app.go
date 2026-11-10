@@ -361,8 +361,7 @@ type app struct {
 	modelSearch    string
 
 	// —— 顶部弹窗（HeroUI 下拉）——
-	repoDropdownOpen   bool
-	branchDropdownOpen bool
+	repoDropdownOpen bool
 	// newTabMenuOpen 是顶栏 [+] 那个「新建项目」下拉：列已经打开过的项目，
 	// 末位才是「打开本地文件夹…」。以前 [+] 会直接弹系统文件夹选择器，
 	// 想回到刚关掉的项目得重走一遍路径。参照 Zed 的做法改成先给一份历史。
@@ -398,16 +397,22 @@ type app struct {
 	// reset / newBranch / rename 是表单对话框，和 tag 一个形状：状态挂在 app 上。
 	reset     resetState
 	newBranch branchState
+	// worktree 是「在新 Worktree 中检出」对话框的状态（worktreedialog.go）。
+	worktree worktreeState
 	// aiBranchSeq 给每次 AI 起名请求编号：取消、重发之后，旧请求的响应
 	// 可能才姗姗来迟，不能让它去动新请求的状态。
 	aiBranchSeq int
 	rename      renameState
 	stashDlg    stashState
 	// codeEdit 是「编辑代码」那个一次性对话框的编辑器状态；editorPane 是
-	// 「编辑器」视图里那个常驻整文件编辑器（editor_pane.go）。两者都不进
-	// 标签页快照，换仓库时一起收掉。
+	// 「编辑器」视图里那列常驻文件 tab（editor_pane.go）。editorPane 跟着
+	// 项目走（进 repoTab 快照），codeEdit 不跟。
 	codeEdit   codeEditorState
 	editorPane editorPaneState
+	// editorReveal 是新开了/激活了一个 tab 之后欠 tab 栏的一次横向滚动：
+	// 下一帧把激活的那一枚滚进视野，然后清掉（不能每帧都滚，否则用户
+	// 手动翻 tab 会被拽回去）。
+	editorReveal bool
 	// compare 是分支代码差异对比的状态（Fork 风格，见 compare.go）。
 	compare    compareState
 	compareSeq int
@@ -469,6 +474,10 @@ type app struct {
 	chipX      map[*termSession]float32
 	chipSettle map[*termSession]int
 	chipWidth  map[*termSession]float32
+	// termChipScroll 是会话芯片带的横向滚动量：会话一多，芯片带自己滚，
+	// 清屏 / 重启固定留在右端。termReveal 是一次性的「把当前芯片滚进视野」。
+	termChipScroll ui.ScrollState
+	termReveal     bool
 }
 
 func newApp() *app {
@@ -965,6 +974,7 @@ func (a *app) view(c *ui.Context) {
 	a.tagDialog(c, pal)
 	a.resetDialog(c, pal)
 	a.newBranchDialog(c, pal)
+	a.worktreeDialog(c, pal)
 	a.renameBranchDialog(c, pal)
 	a.confirmDialog(c, pal)
 	a.stashDialog(c, pal)
@@ -1112,6 +1122,10 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 
 		toolbarDivider(c, pal)
 
+		// 分离 HEAD / 变基中的警示在所有视图里都要看得见（终端视图没有
+		// pending 状态条）。分支本身不再占一条 chip —— 它属于侧栏。
+		a.abnormalStateChip(c, t, pal)
+
 		if a.viewMode == viewModeTerm {
 			if a.repoPath != "" {
 				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
@@ -1120,24 +1134,13 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 				})
 			}
 			ui.Spacer(c)
-			if toolIconButton(c, pal, T("清屏", "Clear"), T("清空终端屏幕", "Clear Terminal Screen"), false, false, drawTrashIcon) {
-				a.clearCurrentTerminal()
-			}
-			if toolIconButton(c, pal, T("重启", "Restart"), T("重启终端 Shell 进程", "Restart Terminal Shell Process"), false, false, drawZapIcon) {
-				a.restartCurrentTerminal()
-			}
-			if toolIconButton(c, pal, T("打开仓库…", "Open…"), Tf("打开本地 Git 仓库 %s", "Open Local Git Repository %s", K("⌘O")), false, false, drawFolderIcon) {
-				a.chooseFolder()
-			}
 			return
 		}
 
-		// 侧栏未开启时在工具栏左侧展示仓库名下拉与分支；侧栏开启时这一行留给分支芯片
-		// —— 那时仓库名在窗口顶栏的项目标签页上，工具栏不必再说一遍。
+		// 侧栏未开启时在工具栏左侧展示仓库名下拉；侧栏开启时这一行留给
+		// 视图导航与操作状态。
 		if a.sidebarShown < 0.5 {
-			a.repoHeader(c, t, pal)
-		} else if a.branch != "" {
-			a.branchChip(c, t, pal)
+			a.repoHeader(c, pal)
 		}
 
 		// 耗时写操作（抓取/拉取/推送/变基/合并/检出等）在标题和 Spacer 之间展示，
@@ -1184,7 +1187,7 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 
 		toolbarDivider(c, pal)
 
-		// 刷新、设置、打开仓库（纯图标按钮，对齐 Fork 与 macOS 原生设计规范）
+		// 刷新（纯图标按钮，对齐 Fork 与 macOS 原生设计规范）
 		refreshing := a.state == loadLoading
 		refreshTip := Tf("刷新仓库状态 %s", "Refresh Repository %s", K("⌘R"))
 		if refreshing {
@@ -1192,9 +1195,6 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 		}
 		if toolIconButton(c, pal, T("刷新", "Refresh"), refreshTip, noRepo, refreshing, drawRefreshIcon) {
 			a.reload()
-		}
-		if toolIconButton(c, pal, T("打开仓库…", "Open…"), Tf("打开本地 Git 仓库 %s", "Open Local Git Repository %s", K("⌘O")), false, false, drawFolderIcon) {
-			a.chooseFolder()
 		}
 		// 设置固定在项目侧栏底部；这条工具栏只服务当前视图。
 	}).Height(a.toolbarHeight(c)).Shrink(0).
@@ -1208,13 +1208,13 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 }
 
 // repoHeader 是工具栏左侧的仓库选择器：仓库名（带下拉箭头，点击展开最近
-// 项目）与当前分支徽章。
+// 项目）。分支不在这里 —— 它属于侧栏的分支树。
 //
 // 名字下面原先还压着一行精简路径。那行正好贴在项目标签正下方 —— 标签刚
 // 报过项目名，下一行又是一条路径，同一个项目在顶栏这一带要自我介绍两遍。
 // 路径本身没被藏起来：项目标签的悬停提示给完整路径，最近项目下拉里每条
 // 都带着。
-func (a *app) repoHeader(c *ui.Context, t *ui.Theme, pal palette) {
+func (a *app) repoHeader(c *ui.Context, pal palette) {
 	tw := a.titleWidth(c)
 	name := a.repoName
 	if name == "" {
@@ -1236,7 +1236,6 @@ func (a *app) repoHeader(c *ui.Context, t *ui.Theme, pal palette) {
 			})
 		})
 		if repoBtn.Clicked() {
-			a.branchDropdownOpen = false
 			a.newTabMenuOpen = false
 			a.repoDropdownOpen = !a.repoDropdownOpen
 		}
@@ -1245,8 +1244,6 @@ func (a *app) repoHeader(c *ui.Context, t *ui.Theme, pal palette) {
 				a.repoDropdownPanel(c, panel, pal)
 			})
 		}
-
-		a.branchChip(c, t, pal)
 	})
 }
 
@@ -1391,151 +1388,36 @@ func (a *app) repoDropdownPanel(c *ui.Context, panel ui.Element, pal palette) {
 	}
 }
 
-// branchChip 是工具栏上那枚「现在在哪条分支上」的小牌子。
-// 采用 Lucide 矢量分支图标与微交互设计，点击可弹出本地分支快捷切换列表。
+// abnormalStateChip 是分离 HEAD / 变基中时停在工具栏上的警示标签。
 //
-// 样子照 §4.2 来：chip 底 + 1px hairline + Ink Muted 文字，悬停升一档、边升到
-// hairline-strong。底色用半透明的 `pal.chip` 而不是 Surface 1：它长在亚克力
-// 卡片上，实心底会变成一枚白 / 黑的实心药丸，和旁边同一块卡片的按钮对不上。
-// 原来的版本更早还给底和边都染了色（`pal.ref` 配 alpha），看着像一枚「提示
-// 标签」而不是工具栏上的一个控件。
-//
-// 变基中 / 分离 HEAD 这两种异常**只把文字和图标染成 Warning**，底色和边框
-// 照旧中性 —— 规范在这一条上写得很直白：异常状态仅用微弱的警示色文字点缀。
-// 整块涂成琥珀会压过旁边真正的按钮，而这不是按钮。
-func (a *app) branchChip(c *ui.Context, t *ui.Theme, pal palette) {
-	if a.branch == "" {
-		return
-	}
-	name := a.branch
-	accent := pal.inkMuted
-	tip := Tf("当前分支 %s（点击切换分支）", "Current branch %s (click to switch)", a.branch)
+// 它接的是旧分支 chip 的班：分支本身移回侧栏了，但这两个状态是「现在做任何
+// 事都可能出事」的安全提示，不能跟着一起消失。标签不可点击 —— 操作入口在
+// 状态条和侧栏里，这里只负责让人看见。所有视图都画（终端视图没有 pending
+// 状态条）。
+func (a *app) abnormalStateChip(c *ui.Context, t *ui.Theme, pal palette) {
+	name, tip := "", ""
 	switch {
 	case a.pending.Kind == gitrepo.PendingRebase:
-		name = a.rebaseLabel()
-		accent = t.Warning
-		tip = T("变基操作进行中。可在状态栏选择「继续」、「跳过」或「中止」。", "Rebase in progress. Use Continue, Skip, or Abort in the status bar.")
+		name = T("变基中", "Rebasing")
+		tip = T("变基操作进行中。可在状态栏选择「继续」、「跳过」或「中止」。",
+			"Rebase in progress. Use Continue, Skip, or Abort in the status bar.")
 	case a.detached:
 		name = T("分离 HEAD：", "Detached HEAD: ") + a.branch
-		accent = t.Warning
-		tip = T("HEAD 处于游离状态（分离 HEAD）。如需保留后续提交，请先创建新分支。", "HEAD is detached from any branch. Create a new branch if you wish to retain subsequent commits.")
+		tip = T("HEAD 处于游离状态（分离 HEAD）。如需保留后续提交，请先创建新分支。",
+			"HEAD is detached from any branch. Create a new branch if you wish to retain subsequent commits.")
 	}
-
-	chip := ui.ButtonBase(c).Height(28).Shrink(0).Radius(radiusSM).Padding(0, 9).
-		Cursor(ui.CursorPointer).Tooltip(tip).Label(name)
-
-	bg, border := pal.chip, pal.hairline
-	if chip.Hovered() || a.branchDropdownOpen {
-		// 悬停用两个**不透明**的色值，不再对已经半透明的色再乘一次 alpha ——
-		// 老的写法 `bg.Alpha(0.22)` 是相乘语义，作用在 0.12 的底色上只剩 0.026，
-		// 鼠标指上去底色几乎消失。rowSelected 是现成的一档，压在 chip 上
-		// 正好重一层。
-		bg, border = pal.rowSelected, pal.hairlineStrong
-	}
-	chip.Background(bg).Border(1, border)
-	fadeColors(chip)
-	chip.Children(func() {
-		ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
-			drawIcon(c, iconGitBranch, 12, accent)
-			ui.Text(c, name).FontSize(textButton).FontWeight(weightMedium).
-				SingleLine().MaxWidth(220).TextColor(accent)
-			drawIcon(c, iconChevronDown, 10, accent)
-		})
-	})
-	if chip.Clicked() {
-		a.repoDropdownOpen = false
-		a.newTabMenuOpen = false
-		a.branchDropdownOpen = !a.branchDropdownOpen
-	}
-	if a.branchDropdownOpen {
-		ui.PopoverBase(c, chip, &a.branchDropdownOpen, func(panel ui.Element) {
-			a.branchDropdownPanel(c, panel, pal)
-		})
-	}
-}
-
-// branchDropdownPanel 呈现本地分支快速切换卡片。
-func (a *app) branchDropdownPanel(c *ui.Context, panel ui.Element, pal palette) {
-	popoverSurface(panel, pal).Radius(radiusLG).
-		Margin(4, 0, 0, 0).Padding(6).MinWidth(220).MaxWidth(340).Gap(2)
-
-	local, _, _, _ := splitRefs(a.refs)
-
-	ui.Row(c).Padding(6, 8, 4, 8).Gap(6).AlignItems(ui.Center).Children(func() {
-		drawIcon(c, iconGitBranch, 12, pal.inkSubtle)
-		ui.Text(c, T("切换本地分支", "Switch Local Branch")).FontSize(textCaption).
-			FontWeight(weightSemibold).TextColor(pal.inkSubtle)
-	})
-
-	if len(local) == 0 {
-		ui.Box(c).Padding(8, 10).Children(func() {
-			ui.Text(c, T("没有其他本地分支", "No other local branches")).
-				FontSize(textBodySM).TextColor(pal.inkSubtle)
-		})
+	if name == "" {
 		return
 	}
 
-	busy := a.op != gitrepo.OpNone
-	ui.Scroll(c).MaxHeight(320).FillWidth().Children(func() {
-		for _, b := range local {
-			bName := b.Name
-			isCurrent := (bName == a.branch)
-			bRef := b
-
-			btn := ui.ButtonBase(c).Height(30).Radius(radiusSM).Padding(0, 8).Gap(7).
-				AlignItems(ui.Center).Cursor(ui.CursorPointer).Disabled(busy)
-
-			bg := ui.Transparent
-			if isCurrent {
-				bg = pal.selection
-			} else if btn.Hovered() {
-				bg = pal.surface2
-			}
-			btn.Background(bg)
-			fadeColors(btn)
-
-			btn.Children(func() {
-				fg := pal.inkSubtle
-				nameCol := pal.ink
-				if isCurrent {
-					fg = pal.inkMuted
-				}
-				drawIcon(c, iconGitBranch, 12, fg)
-				bText := ui.Text(c, bName).FontSize(12).SingleLine().MaxWidth(220).TextColor(nameCol)
-				if isCurrent {
-					bText.FontWeight(weightMedium)
-				}
-				ui.Spacer(c)
-				if isCurrent {
-					specChip(c, pal, T("当前", "Current"), pal.laneColor(0), rowChipH, rowChipText)
-				}
-			})
-			if btn.Clicked() {
-				a.branchDropdownOpen = false
-				if !isCurrent && !busy {
-					a.checkoutRef(bRef)
-				}
-			}
-		}
+	ui.Box(c).Height(28).Shrink(0).Radius(radiusSM).Padding(0, 9).
+		Background(pal.chip).Border(1, pal.hairline).Tooltip(tip).Children(func() {
+		ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
+			drawIcon(c, iconGitBranch, 12, t.Warning)
+			ui.Text(c, name).FontSize(textButton).FontWeight(weightMedium).
+				SingleLine().MaxWidth(220).TextColor(t.Warning)
+		})
 	})
-
-	// 分隔线与新建分支操作
-	ui.Box(c).Height(1).FillWidth().Margin(4, 2).Background(pal.hairline)
-	newBranchBtn := ui.ButtonBase(c).Height(28).Radius(radiusSM).Padding(0, 8).Gap(7).
-		AlignItems(ui.Center).Cursor(ui.CursorPointer).Disabled(busy)
-	if newBranchBtn.Hovered() {
-		newBranchBtn.Background(pal.surface2)
-	}
-	fadeColors(newBranchBtn)
-	newBranchBtn.Children(func() {
-		drawIcon(c, iconGitBranch, 12, pal.inkMuted)
-		ui.Text(c, T("新建分支…", "New Branch…")).FontSize(textButton).
-			FontWeight(weightMedium).TextColor(pal.ink)
-	})
-	if newBranchBtn.Clicked() {
-		a.branchDropdownOpen = false
-		a.openNewBranchDialog(a.branch, Tf("从当前分支 %s 创建", "Create from branch %s", a.branch))
-	}
 }
 
 // recentReposMenu 弹出最近打开的项目菜单。
@@ -1728,9 +1610,10 @@ func (a *app) openRepo(path string) {
 	//（reload 也走这里，path 没变）时留着 —— 用户点过的分支不该被一次
 	// 刷新弹掉。
 	if !sameRepo(path, a.repoPath) {
-		a.closeEmbeddedEditors()
+		a.closeRepoEditors()
 		a.cancelAICommit()
 		a.cancelAIBranch()
+		a.worktree = worktreeState{}
 		a.exitPRReview()
 		// 老仓库的提交草稿先落盘（draftFor 还是老仓库的根）。
 		a.saveCommitDraft()
@@ -1984,7 +1867,6 @@ func (a *app) applyModel(m *gitrepo.Model) {
 	// 再刷一次。裸 ⌘R、写操作后的重读也都走这里，baseline 跟着归位。
 	a.setAutoWatch(m.Repo.Root)
 	a.setWorktree(m)
-	a.syncEditorPane()
 }
 
 // workBranch 是「改动」列表该认的分支名。
@@ -2048,6 +1930,14 @@ func (a *app) loadRefs() {
 	a.refsSeq++
 	seq := a.refsSeq
 	dir := a.repoPath
+	// 记下「这一页最近一次引用读取是第几轮」：结果迟到时它可能已经切到别
+	// 的项目上去了，得靠这个序号认出该写回哪一份快照（见下面的 dispatch）。
+	for _, tab := range a.tabs {
+		if sameRepo(tab.path, dir) {
+			tab.refsSeq = seq
+			break
+		}
+	}
 	a.run(func() {
 		repo, err := gitrepo.Open(context.Background(), dir)
 		var refs []gitrepo.Ref
@@ -2057,6 +1947,23 @@ func (a *app) loadRefs() {
 			ahead, behind, _ = repo.UpstreamCounts(context.Background())
 		}
 		a.dispatch(func() {
+			// 结果属于发起时那个仓库。已经切走了：只写回它的项目快照，
+			// 眼前这个项目的侧栏一点都不碰 —— 否则迟到的结果会把新项目的
+			// 分支树换成上一个仓库的。
+			if !sameRepo(a.repoPath, dir) {
+				for _, tab := range a.tabs {
+					if !sameRepo(tab.path, dir) || tab.refsSeq != seq {
+						continue
+					}
+					if err != nil {
+						tab.refsState = loadFailed
+						tab.refErr = err.Error()
+						return
+					}
+					applyRefsToTab(tab, refs, ahead, behind)
+				}
+				return
+			}
 			if a.refsSeq != seq {
 				return
 			}
@@ -2069,6 +1976,60 @@ func (a *app) loadRefs() {
 			a.behind = behind
 			a.setRefs(refs)
 			a.refsState = loadReady
+			if tab := a.currentTab(); tab != nil {
+				tab.refsDirty = false
+			}
+		})
+	})
+}
+
+// applyRefsToTab 把一轮引用结果写进某个非活动项目的快照。索引和树一起
+// 重建 —— 切回来时 restoreActiveTab 直接把这几项搬上来，不会再算一遍。
+func applyRefsToTab(tab *repoTab, refs []gitrepo.Ref, ahead, behind int) {
+	tab.ahead = ahead
+	tab.behind = behind
+	tab.refs = refs
+	tab.refByFull = make(map[string]*gitrepo.Ref, len(refs))
+	for i := range refs {
+		tab.refByFull[refs[i].Full] = &refs[i]
+	}
+	tab.refsFilter = tab.refFilter
+	tab.refTree = buildRefTree(refs, tab.refFilter)
+	tab.refsState = loadReady
+	tab.refErr = ""
+	tab.refsDirty = false
+}
+
+// markRefsDirtyForRepo 把同一仓库的所有项目标成「引用快照过期」。
+//
+// 同一仓库 = 主工作区 + 它的各个 linked worktree。用 Worktrees 列一遍、按
+// 路径认，比逐个比较 git common dir 省掉一层路径归一化；它要起 git，所以
+// 放后台。worktree 新建/移除/prune 之后调用，切回那些项目时侧栏会重读。
+func (a *app) markRefsDirtyForRepo(root string) {
+	if root == "" {
+		return
+	}
+	a.run(func() {
+		ctx := context.Background()
+		repo, err := gitrepo.Open(ctx, root)
+		if err != nil {
+			return
+		}
+		paths := []string{repo.Root}
+		if wts, err := repo.Worktrees(ctx); err == nil {
+			for _, w := range wts {
+				paths = append(paths, w.Path)
+			}
+		}
+		a.dispatch(func() {
+			for _, tab := range a.tabs {
+				for _, p := range paths {
+					if sameRepo(tab.path, p) {
+						tab.refsDirty = true
+						break
+					}
+				}
+			}
 		})
 	})
 }

@@ -437,7 +437,7 @@ func (a *app) emptyTreeMsg() string {
 
 // treeRow 画改动栏（左侧文件列表）里的一行。见 treeRowIn。
 func (a *app) treeRow(c *ui.Context, pal palette, r filetree.Row) {
-	a.treeRowIn(c, pal, r, rowSpec{list: a.files, sel: &a.fileSel, onClick: a.syncEditorPane, tree: treeChanges})
+	a.treeRowIn(c, pal, r, rowSpec{list: a.files, sel: &a.fileSel, onClick: a.openEditorSelection, tree: treeChanges})
 }
 
 // rowSpec 是 treeRowIn 的入参：列表、选中下标、点击回调，加上「折叠状态
@@ -843,6 +843,5 @@ func (a *app) navFile(dir int) {
 		return
 	}
 	a.fileSel = idx
-	a.syncEditorPane()
 	a.filesList.ScrollIntoView(next)
 }

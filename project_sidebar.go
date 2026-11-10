@@ -184,6 +184,19 @@ func (a *app) projectSidebar(c *ui.Context, pal palette) {
 
 		ui.Row(c).Height(28).Shrink(0).FillWidth().Padding(0, 10).Gap(6).AlignItems(ui.Center).Children(func() {
 			shellSectionLabel(c, pal, T("分支", "BRANCHES"))
+			if a.repoReady() {
+				plus := ui.ButtonBase(c).Size(22, 22).Radius(radiusXS).Center().
+					Cursor(ui.CursorPointer).Label(T("新建分支…", "New Branch…")).
+					Tooltip(Tf("新建分支… %s", "New Branch… %s", K("⌘⇧N")))
+				if plus.Hovered() {
+					plus.Background(pal.rowHover)
+				}
+				fadeColors(plus)
+				plus.Children(func() { drawIcon(c, iconGitBranchPlus, 14, pal.textMuted) })
+				if plus.Clicked() {
+					a.newBranchAtHead()
+				}
+			}
 			ui.Spacer(c)
 		})
 
@@ -298,7 +311,6 @@ func (a *app) projectGroups(c *ui.Context, pal palette, h float32) {
 			plus.Children(func() { drawIcon(c, iconPlus, 14, pal.textMuted) })
 			if plus.Clicked() {
 				a.repoDropdownOpen = false
-				a.branchDropdownOpen = false
 				a.newTabMenuOpen = !a.newTabMenuOpen
 			}
 			if a.newTabMenuOpen {

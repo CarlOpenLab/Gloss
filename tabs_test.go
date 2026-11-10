@@ -1446,3 +1446,42 @@ func TestTerminalDividerDragAndDoubleClick(t *testing.T) {
 		t.Fatalf("双击分隔线该均分，实际 %v", s.root.ratio)
 	}
 }
+
+// 清屏 / 重启从顶部工具栏搬到了会话芯片带的最右端：它们作用于当前会话，
+// 就该和会话芯片待在一起；没有会话时不占位置。
+func TestTerminalActionsLiveInSessionTabBar(t *testing.T) {
+	stubTerminal(t)
+	a := newApp()
+	a.openInNewTab("/tmp/proj1")
+	tab := a.currentTab()
+	tt := ui.NewTester(a.view, 1000, 700)
+	a.setViewMode(viewModeTerm)
+	tt.Frame()
+
+	a.newTerminalSession(tab)
+	tt.Frame()
+
+	clear, okClear := tt.Find("清屏")
+	restart, okRestart := tt.Find("重启")
+	plus, okPlus := tt.Find("新建终端标签页")
+	if !okClear || !okRestart || !okPlus {
+		t.Fatalf("会话芯片带上该有清屏/重启/新建：%q", tt.Texts())
+	}
+	if abs(float64(clear.Y-plus.Y)) > 4 || abs(float64(restart.Y-plus.Y)) > 4 {
+		t.Errorf("清屏/重启该和会话芯片同处一条带子：清屏 y=%.0f 重启 y=%.0f + y=%.0f",
+			clear.Y, restart.Y, plus.Y)
+	}
+	if clear.X <= plus.X || restart.X <= clear.X {
+		t.Errorf("清屏/重启该在 + 右边、清屏在重启左边：+ x=%.0f 清屏 x=%.0f 重启 x=%.0f",
+			plus.X, clear.X, restart.X)
+	}
+
+	a.closeAllTerminals()
+	tt.Frame()
+	if _, ok := tt.Find("清屏"); ok {
+		t.Errorf("没有会话时不该还摆着清屏：%q", tt.Texts())
+	}
+	if _, ok := tt.Find("重启"); ok {
+		t.Errorf("没有会话时不该还摆着重启：%q", tt.Texts())
+	}
+}

@@ -14,7 +14,19 @@ type Failure struct {
 	Title  string
 	Hint   string
 	Detail string
+	Code   FailureCode
 }
+
+// FailureCode 是给界面用的机器可读分类（零值 = 没分类）。
+//
+// Title / Hint 是给人看的，代码路径不该靠比对中文决定下一步 ——
+// 「移除 worktree 失败后要不要弹强制确认」就靠 Code 判断。
+type FailureCode uint8
+
+const (
+	FailureCodeNone FailureCode = iota
+	FailureCodeWorktreeDirty
+)
 
 // Empty 表示这不是一次失败。
 func (f Failure) Empty() bool { return f.Title == "" }
@@ -47,6 +59,7 @@ const (
 	OpDiscard
 	OpWrite     // 内置编辑器把文件写回工作区（不经过 git）
 	OpGitConfig // 设置里的「Git 配置」页把改动写回配置文件
+	OpWorktree  // 新建 / 移除 / 清理 worktree
 )
 
 // Describe 把 git 的错误整理成人话。
@@ -88,6 +101,14 @@ func Describe(op Op, err error) Failure {
 			Title:  "这条分支上有还没合并的提交",
 			Hint:   "删掉它，上面那些提交就再没有分支认领了。确认不要了就强制删除；拿不准就先把它合并进来。",
 			Detail: err.Error(),
+		}
+	}
+	if errors.Is(err, ErrWorktreeDirty) {
+		return Failure{
+			Title:  "这个 worktree 里还有没提交的改动",
+			Hint:   "先提交或清理，再移除；确认不要了可以强制移除（会丢弃它们）。",
+			Detail: gitDetail(err.Error()),
+			Code:   FailureCodeWorktreeDirty,
 		}
 	}
 
@@ -258,6 +279,12 @@ func Describe(op Op, err error) Failure {
 	case strings.Contains(low, "index.lock"):
 		f.Title = "另一个 git 进程正占着仓库"
 		f.Hint = "等它跑完再试。别手动删 .git/index.lock —— 真有残留时 git 自己会处理。"
+	case strings.Contains(low, "is already used by worktree at"),
+		strings.Contains(low, "is already checked out at"):
+		// 分支被别的 worktree 占着：git 拒绝检出、新建同名 worktree、删除。
+		// 出路在分支行的右键菜单里（切过去 / 移除那个 worktree）。
+		f.Title = "这条分支已经在别的工作区检出"
+		f.Hint = "去那个 worktree 里操作，或者先在分支右键菜单里移除它。"
 	case op == OpDiscard && strings.Contains(low, "pathspec"):
 		// 丢弃撞上 pathspec，几乎只有一个来路：文件在点下去和 git 跑起来之间
 		// 变成 git 不认识的了（刚被暂存又撤了、或者被别处删掉）。git 的原话
@@ -416,6 +443,8 @@ func opTitle(op Op) string {
 		return "保存文件没成功"
 	case OpGitConfig:
 		return "写 Git 配置没成功"
+	case OpWorktree:
+		return "Worktree 操作没成功"
 	}
 	return "这个操作没成功"
 }

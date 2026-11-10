@@ -190,9 +190,13 @@ func TestEditorPanePreviewsImage(t *testing.T) {
 	selectEditorFile(t, a, "assets/logo.png")
 	settle(t, a)
 
-	s := a.editorPane
-	if s.img == nil {
-		t.Fatalf("编辑器视图该把图片解出来，实际 err=%q", s.err)
+	s := a.activeEditorTab()
+	if s == nil || s.img == nil {
+		var errText string
+		if s != nil {
+			errText = s.err
+		}
+		t.Fatalf("编辑器视图该把图片解出来，实际 err=%q", errText)
 	}
 	if s.code != nil || s.buffer != nil {
 		t.Errorf("图片不该建文本缓冲区（code=%v buffer=%v）", s.code != nil, s.buffer != nil)

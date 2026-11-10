@@ -209,8 +209,8 @@ func TestPendingBarRebaseAndChip(t *testing.T) {
 	if a.pending.Kind != gitrepo.PendingRebase {
 		t.Fatalf("pending = %+v，want 变基", a.pending)
 	}
-	if !tt.HasText("正在变基 topic → main（第 1/1 步）") {
-		t.Errorf("芯片该说清变基到哪了：%q", tt.Texts())
+	if !tt.HasText("变基中") {
+		t.Errorf("工具栏该显示变基中的警示标签：%q", tt.Texts())
 	}
 	if !tt.HasText("变基停在冲突上") {
 		t.Errorf("状态条该说清停在哪一步：%q", tt.Texts())

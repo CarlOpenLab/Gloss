@@ -48,7 +48,7 @@ func TestPaletteFiltersCommands(t *testing.T) {
 			t.Errorf("筛选后的命令没画出来：%q", tt.Texts())
 		}
 	}
-	// 工具栏上也有个「打开仓库…」按钮，拿只有命令栏里才有的那条来验
+	// 「查看改动」只在命令栏里出现，工具栏上没有同名按钮，拿来验不匹配项
 	if tt.HasText("查看改动") {
 		t.Errorf("不匹配的命令不该还留着：%q", tt.Texts())
 	}

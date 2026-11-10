@@ -391,21 +391,21 @@ func (a *app) openWsSearchHit(h wsSearchHit) {
 	if a.selectedWorkspaceKey() != h.Path && wsFileByPath(a.wsAll, h.Path) != nil {
 		a.wsPinPath = h.Path
 	}
-	if a.editorPane.loading && a.editorPane.path != h.Path {
-		// 上一份文件还在读盘：不等它了，直接改读命中的这份 —— 旧的那份
-		// dispatch 会因路径对不上自己作废。
-		if f := a.editorTarget(); f != nil && pathOf(*f) == h.Path {
-			a.loadEditorPane(*f)
-		}
-	} else {
-		a.syncEditorPane()
+	if f := wsFileByPath(a.wsAll, h.Path); f != nil {
+		a.openEditorTab(*f)
+	} else if f := a.editorTarget(); f != nil {
+		a.openEditorTab(*f)
 	}
-	if a.editorPane.path == h.Path && a.editorPane.code != nil {
-		revealWsHit(a.editorPane.code, h)
-		a.editorPane.pendingHit = wsSearchHit{}
+	t := a.activeEditorTab()
+	if t == nil {
 		return
 	}
-	a.editorPane.pendingHit = h
+	if t.path == h.Path && t.code != nil {
+		revealWsHit(t.code, h)
+		t.pendingHit = wsSearchHit{}
+		return
+	}
+	t.pendingHit = h
 }
 
 // revealWsHit 在编辑器里兑现一条搜索命中：选中匹配的那段文字 —— 选中底色就

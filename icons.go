@@ -61,6 +61,9 @@ var (
 	// 分支（git-branch）
 	iconGitBranch = lucide(`<line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>`)
 
+	// 新建分支（git-branch-plus）
+	iconGitBranchPlus = lucide(`<path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/><path d="M15 6h6"/><path d="M18 3v6"/>`)
+
 	// 交换分支（arrow-left-right）
 	iconSwap = lucide(`<path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/>`)
 

@@ -17,8 +17,8 @@ import (
 // 列表占满主区全宽、diff 压到下面 —— 这是 Fork 的样子。之前列表挤在主区左
 // 半边时只有 420px，拓扑图被压在最左边一条 78px 的窄栏里，铺不开。
 
-// logBatchSize 一次读多少个提交。默认首批读 500 个，向下滚动或键盘导航到底部时自动增量加载。
-const logBatchSize = 500
+// logBatchSize 一次读多少个提交。首批读 100 个，向下滚动或键盘导航到底部时自动增量加载。
+const logBatchSize = 100
 
 // defaultCommitH 是提交列表那一栏的高度，占主区高度的四成半。
 //

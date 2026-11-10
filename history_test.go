@@ -904,9 +904,9 @@ func TestLoadMoreCommitsWhileFiltering(t *testing.T) {
 	runGit(t, dir, "config", "user.email", "test@example.com")
 	runGit(t, dir, "config", "commit.gpgsign", "false")
 
-	// 505 个提交：首批 500，还剩 5 个在下一页
+	// 105 个提交：首批 100，还剩 5 个在下一页
 	var fi strings.Builder
-	for i := 1; i <= 505; i++ {
+	for i := 1; i <= 105; i++ {
 		fmt.Fprintf(&fi, "commit refs/heads/main\ncommitter Test <test@example.com> %d +0000\ndata %d\ncommit %d\nM 644 inline file.txt\ndata 5\nhello\n\n", 1700000000+i, len(fmt.Sprintf("commit %d", i)), i)
 	}
 	cmd := exec.Command("git", "fast-import")
@@ -921,8 +921,8 @@ func TestLoadMoreCommitsWhileFiltering(t *testing.T) {
 	a.setTab(1)
 	settle(t, a)
 
-	if len(a.allCommits) != 500 || !a.histHasMore {
-		t.Fatalf("首批该读到 500 个且还有更多：all=%d hasMore=%v", len(a.allCommits), a.histHasMore)
+	if len(a.allCommits) != 100 || !a.histHasMore {
+		t.Fatalf("首批该读到 100 个且还有更多：all=%d hasMore=%v", len(a.allCommits), a.histHasMore)
 	}
 
 	// 只留一个提交在屏幕上
@@ -936,8 +936,8 @@ func TestLoadMoreCommitsWhileFiltering(t *testing.T) {
 	a.loadMoreCommits()
 	settle(t, a)
 
-	if len(a.allCommits) != 505 {
-		t.Errorf("加载更多之后该有 505 个未筛提交，实际 %d", len(a.allCommits))
+	if len(a.allCommits) != 105 {
+		t.Errorf("加载更多之后该有 105 个未筛提交，实际 %d", len(a.allCommits))
 	}
 	// 读回来的提交一条都不该重复：按筛过的条数算 offset 就会把整批读第二遍
 	seen := map[string]bool{}
@@ -1284,7 +1284,7 @@ func TestStashSurvivesTabSwitch(t *testing.T) {
 	}
 }
 
-// 验证提交列表突破 200 条限制，首屏读取 500 条且支持增量加载更多历史提交。
+// 验证提交列表首批读取 100 条且支持增量加载更多历史提交。
 func TestHistoryLoadMoreCommits(t *testing.T) {
 	dir := t.TempDir()
 	runGit(t, dir, "init", "-b", "main")
@@ -1292,9 +1292,9 @@ func TestHistoryLoadMoreCommits(t *testing.T) {
 	runGit(t, dir, "config", "user.email", "test@example.com")
 	runGit(t, dir, "config", "commit.gpgsign", "false")
 
-	// 通过 fast-import 极速生成 550 个提交（耗时 < 0.1s）
+	// 通过 fast-import 极速生成 150 个提交（耗时 < 0.1s）
 	var fi strings.Builder
-	for i := 1; i <= 550; i++ {
+	for i := 1; i <= 150; i++ {
 		fmt.Fprintf(&fi, "commit refs/heads/main\ncommitter Test <test@example.com> %d +0000\ndata %d\ncommit %d\nM 644 inline file.txt\ndata 5\nhello\n\n", 1700000000+i, len(fmt.Sprintf("commit %d", i)), i)
 	}
 	cmd := exec.Command("git", "fast-import")
@@ -1312,15 +1312,15 @@ func TestHistoryLoadMoreCommits(t *testing.T) {
 	tt := ui.NewTester(a.view, 1280, 860)
 	tt.Frame()
 
-	// 首批读取 500 个提交（突破原本 200 个的限制）
-	if len(a.commits) != 500 {
-		t.Fatalf("首批应读取 500 个提交，实际为 %d", len(a.commits))
+	// 首批读取 100 个提交
+	if len(a.commits) != 100 {
+		t.Fatalf("首批应读取 100 个提交，实际为 %d", len(a.commits))
 	}
 	if !a.histHasMore {
 		t.Fatal("应该还有未加载的提交 (histHasMore 应为 true)")
 	}
-	if !tt.HasText("已加载 500 个提交…") {
-		t.Errorf("应该显示已加载 500 个提交提示，实际文本: %q", tt.Texts())
+	if !tt.HasText("已加载 100 个提交…") {
+		t.Errorf("应该显示已加载 100 个提交提示，实际文本: %q", tt.Texts())
 	}
 
 	// 触发加载更多
@@ -1328,14 +1328,14 @@ func TestHistoryLoadMoreCommits(t *testing.T) {
 	settle(t, a)
 	tt.Frame()
 
-	// 全部 550 个提交加载完毕
-	if len(a.commits) != 550 {
-		t.Fatalf("加载更多后应为 550 个提交，实际为 %d", len(a.commits))
+	// 全部 150 个提交加载完毕
+	if len(a.commits) != 150 {
+		t.Fatalf("加载更多后应为 150 个提交，实际为 %d", len(a.commits))
 	}
 	if a.histHasMore {
 		t.Fatal("全部加载完毕后 histHasMore 应为 false")
 	}
-	if !tt.HasText("550 个提交") {
-		t.Errorf("应该显示 550 个提交提示，实际文本: %q", tt.Texts())
+	if !tt.HasText("150 个提交") {
+		t.Errorf("应该显示 150 个提交提示，实际文本: %q", tt.Texts())
 	}
 }
