@@ -57,6 +57,12 @@ type palette struct {
 	control      ui.Color
 	controlHover ui.Color
 	// kbd 是快捷键提示的底色（§2.1）。
+	//
+	// 键帽是**凹**进去的，所以洗色一律往远离文字的方向推：深色压暗、浅色提亮。
+	// 原来跟着洗色阶梯的默认方向走（深色提亮 6% 白、浅色压暗 4% 黑），那是
+	// 「抬起来的一层」的方向，用在一片凹下去的片上正好反了 —— 底子被推向
+	// 文字，快捷键那段字反而更难认（kbd_hint_test.go 量过：深色 1.72:1、
+	// 浅色 2.08:1，而按钮自己的标签是 6.31 / 4.58）。
 	kbd ui.Color
 
 	ink         ui.Color // 高亮标题、正文基准（§2.3）
@@ -539,7 +545,7 @@ func paletteFor(t *ui.Theme, ls laneSet) palette {
 			rowDivider:       ui.RGBA(255, 255, 255, 0.07),
 			control:          ui.Hex("#404047"),
 			controlHover:     ui.Hex("#4a4a52"),
-			kbd:              ui.RGBA(255, 255, 255, 0.06),
+			kbd:              ui.RGBA(0, 0, 0, 0.12),
 			// 灰阶（§2.3）
 			ink:         ui.Hex("#ececf0"),
 			inkMuted:    ui.Hex("#a9a9b4"),
@@ -601,7 +607,7 @@ func paletteFor(t *ui.Theme, ls laneSet) palette {
 		rowDivider:       ui.RGBA(0, 0, 0, 0.07),
 		control:          ui.Hex("#ffffff"),
 		controlHover:     ui.Hex("#f7f7f9"),
-		kbd:              ui.RGBA(0, 0, 0, 0.04),
+		kbd:              ui.RGBA(255, 255, 255, 0.55),
 		ink:              ui.Hex("#1d1d1f"),
 		inkMuted:         ui.Hex("#6e6e78"),
 		inkSubtle:        ui.Hex("#8d8d97"),

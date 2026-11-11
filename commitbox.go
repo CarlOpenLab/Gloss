@@ -547,9 +547,15 @@ func (a *app) aiCommitButton(c *ui.Context, t *ui.Theme, pal palette) {
 			sparkleIcon(c, 11, fg)
 			ui.Text(c, T("AI 生成", "AI Commit")).FontSize(uiFontSize(textButton)).
 				FontWeight(weightMedium).TextColor(fg)
+			// 快捷键提示：11px 的全界面最小字号，坐在一片凹下去的 kbd 洗色上。
+			// 原来用 inkTertiary —— DESIGN.md §2.3 确实把「快捷键提示文本」派给了
+			// 最暗的那一档墨，但那一档是给「禁用态」和「占位符」留的：一段
+			// 用户还没记住的快捷键，读不清就等于没写。换成 inkMuted，和旁边
+			// 「AI 生成」四个字站在同一档上。kbd_hint_test.go 量的是画出来的
+			// 像素，换 token 骗不过去。
 			ui.Box(c).Radius(radiusXS).Padding(1, 4).Background(pal.kbd).
 				Children(func() {
-					ui.Text(c, K("⌘I")).FontSize(uiFontSize(textCaption)).TextColor(pal.inkTertiary)
+					ui.Text(c, K("⌘I")).FontSize(uiFontSize(textCaption)).TextColor(pal.inkMuted)
 				})
 		}
 	})

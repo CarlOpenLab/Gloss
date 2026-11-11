@@ -14,8 +14,9 @@ config.json
 state.json
 cache.json
 
-# 本地开发用的二进制
+# 本地开发用的二进制（.exe 是 Windows 上 mygo 打出来的，无后缀的是 macOS 上直接 go build 的）
 /gloss_dev.exe*
+/gloss_dev
 
 # Ryugi 的本地工作状态（artboard / document 缓存与 id，跟着本机走）
 .ryugi/
