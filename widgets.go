@@ -75,7 +75,7 @@ func specChip(c *ui.Context, pal palette, label string, dot ui.Color, height, fo
 // 摆在一起就是另一套排版了。降到 600 之后字号虽涨了一档，在深色底上反而
 // 更稳 —— 这一档是给「一屏只有一句话」的场景用的，不是给列表行用的。
 func headline(c *ui.Context, pal palette, msg string) {
-	ui.Text(c, msg).FontSize(textDisplay).FontWeight(weightSemibold).TextColor(pal.ink)
+	ui.Text(c, msg).FontSize(uiFontSize(textDisplay)).FontWeight(weightSemibold).TextColor(pal.ink)
 }
 
 // emptyNote 是列表、侧栏空着时的一行浅色提示。msg 为空就什么都不画 ——
@@ -85,7 +85,7 @@ func emptyNote(c *ui.Context, t *ui.Theme, msg string) {
 		return
 	}
 	ui.Box(c).Grow(1).Padding(16).Children(func() {
-		ui.Text(c, msg).FontSize(textBodySM).TextColor(t.TextMuted)
+		ui.Text(c, msg).FontSize(uiFontSize(textBodySM)).TextColor(t.TextMuted)
 	})
 }
 
@@ -255,7 +255,7 @@ func toolbarSegmentedText(c *ui.Context, pal palette, selected *int, off bool, l
 			s.Background(bg)
 			fadeColors(s)
 			s.Children(func() {
-				ui.Text(c, label).FontSize(textBodySM).FontWeight(weightMedium).
+				ui.Text(c, label).FontSize(uiFontSize(textBodySM)).FontWeight(weightMedium).
 					TextColor(fg).SingleLine()
 			})
 		}
@@ -369,7 +369,7 @@ func toolButton(c *ui.Context, pal palette, label, tip string, off, loading bool
 			ui.Box(c).Size(toolIconSize, toolIconSize).Shrink(0).
 				Draw(func(p *ui.Painter, r ui.Rect) { icon(p, r, fg) })
 		}
-		ui.Text(c, label).FontSize(textButton).FontWeight(weightMedium).
+		ui.Text(c, label).FontSize(uiFontSize(textButton)).FontWeight(weightMedium).
 			SingleLine().TextColor(fg)
 	})
 	return btn.Clicked() && !loading
@@ -551,7 +551,7 @@ func primaryAction(c *ui.Context, pal palette, label, tip string, disabled bool)
 	fadeColors(btn)
 
 	btn.Children(func() {
-		ui.Text(c, label).FontSize(textButton).FontWeight(weightMedium).TextColor(fg)
+		ui.Text(c, label).FontSize(uiFontSize(textButton)).FontWeight(weightMedium).TextColor(fg)
 	})
 	return btn
 }
@@ -581,7 +581,7 @@ func secondaryAction(c *ui.Context, pal palette, label, tip string, disabled boo
 	fadeColors(btn)
 
 	btn.Children(func() {
-		ui.Text(c, label).FontSize(textButton).FontWeight(weightMedium).TextColor(fg)
+		ui.Text(c, label).FontSize(uiFontSize(textButton)).FontWeight(weightMedium).TextColor(fg)
 	})
 	return btn
 }

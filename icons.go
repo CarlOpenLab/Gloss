@@ -7,6 +7,20 @@ func lucide(shapes string) *ui.SVG {
 	return ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` + shapes + `</svg>`))
 }
 
+// sparkleStroke 是 iconSparkle 自己的笔画宽。
+//
+// 图标是从 24×24 的 viewBox 缩到实际尺寸的，笔画跟着一起缩：Lucide 默认的 2
+// 画到 11px 的按钮里只剩 0.92 个像素宽，笔画被抗锯齿摊成半透明的一层灰。
+// 3.2 缩下来是 1.47px，笔画才落得实。只给火花自己加，不动 lucide() ——
+// 其余图标都画在 12px 以上，stroke=2 落到 1px 以上是够的，一起改会让整层
+// 工具栏的图标全部变粗。
+const sparkleStroke = "3.2"
+
+// lucideStroke 和 lucide() 一样，但笔画宽由调用方给。
+func lucideStroke(shapes, strokeWidth string) *ui.SVG {
+	return ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="` + strokeWidth + `" stroke-linecap="round" stroke-linejoin="round">` + shapes + `</svg>`))
+}
+
 var (
 	// 刷新（rotate-cw）
 	iconRefresh = lucide(`<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>`)
@@ -36,7 +50,13 @@ var (
 	iconSearch = lucide(`<circle cx="11" cy="11" r="8"/><path d="m21 21-4.34-4.34"/>`)
 
 	// 单颗火花（sparkle，用于 AI 按钮）
-	iconSparkle = lucide(`<path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/>`)
+	//
+	// 笔画比 lucide() 默认的 2 重（sparkleStroke）：这颗要画到 11px 的按钮里，
+	// 24×24 的 viewBox 缩下来 stroke 只剩 2×11/24 ≈ 0.92 个像素 —— 不到一个
+	// 设备像素，四只角被抗锯齿摊成一层灰，用户读到的是「看不清」。加重到 3.2
+	// 之后是 1.47px，笔画才真的落成一个像素。别顺手改成 fill：那会变成一团
+	// 实心块，比虚更糟（icon_legibility_test.go 两头都盯着）。
+	iconSparkle = lucideStroke(`<path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/>`, sparkleStroke)
 
 	// 星群（sparkles，用于 AI 结果标题与入口）
 	iconSparkles = lucide(`<path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/>`)

@@ -169,7 +169,7 @@ func (a *app) reviewImageBody(c *ui.Context, pal palette, f *gitrepo.File) {
 		if !showOld && !showNew {
 			ui.Column(c).Grow(1).Fill().Center().Padding(24).Children(func() {
 				ui.Text(c, T("这个版本里没有可以预览的图片", "There's no image to preview in this version")).
-					FontSize(textBodySM).TextColor(pal.inkMuted)
+					FontSize(uiFontSize(textBodySM)).TextColor(pal.inkMuted)
 			})
 		}
 	})
@@ -185,11 +185,11 @@ func imagePanel(c *ui.Context, pal palette, label string, side imageSide) {
 				if label != "" {
 					// 单行：栏窄的时候让它自己截断，别折成两行把 30px 的
 					// 标题条撑破（截图里那半个「改」字就是这么来的）。
-					ui.Text(c, label).FontSize(textCaption).FontWeight(weightSemibold).
+					ui.Text(c, label).FontSize(uiFontSize(textCaption)).FontWeight(weightSemibold).
 						SingleLine().Shrink(0).TextColor(pal.inkMuted)
 				}
 				if side.meta != "" {
-					ui.Text(c, side.meta).FontSize(textCaption).TextColor(pal.inkSubtle).
+					ui.Text(c, side.meta).FontSize(uiFontSize(textCaption)).TextColor(pal.inkSubtle).
 						SingleLine().Shrink(2)
 				}
 				ui.Spacer(c)
@@ -202,7 +202,7 @@ func imagePanel(c *ui.Context, pal palette, label string, side imageSide) {
 					if text == "" {
 						text = T("这一侧没有图片", "There's no image on this side")
 					}
-					ui.Text(c, text).FontSize(textBodySM).TextColor(pal.inkMuted).
+					ui.Text(c, text).FontSize(uiFontSize(textBodySM)).TextColor(pal.inkMuted).
 						TextAlign(ui.Center)
 				})
 				return

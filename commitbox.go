@@ -241,7 +241,7 @@ func stageFileButton(c *ui.Context, pal palette, s stageState, lock bool) ui.Ele
 			ui.Box(c).Size(12, 12).Shrink(0).Radius(radiusXS).
 				Border(1, border)
 		}
-		ui.Text(c, text).FontSize(11).SingleLine().TextColor(fg)
+		ui.Text(c, text).FontSize(uiFontSize(textCaption)).SingleLine().TextColor(fg)
 	})
 	return btn
 }
@@ -541,15 +541,15 @@ func (a *app) aiCommitButton(c *ui.Context, t *ui.Theme, pal palette) {
 	btn.Children(func() {
 		if a.aiCommitLoading {
 			ui.Spinner(c).Size(11, 11)
-			ui.Text(c, T("生成中…", "Generating…")).FontSize(textButton).
+			ui.Text(c, T("生成中…", "Generating…")).FontSize(uiFontSize(textButton)).
 				FontWeight(weightMedium).TextColor(fg)
 		} else {
 			sparkleIcon(c, 11, fg)
-			ui.Text(c, T("AI 生成", "AI Commit")).FontSize(textButton).
+			ui.Text(c, T("AI 生成", "AI Commit")).FontSize(uiFontSize(textButton)).
 				FontWeight(weightMedium).TextColor(fg)
 			ui.Box(c).Radius(radiusXS).Padding(1, 4).Background(pal.kbd).
 				Children(func() {
-					ui.Text(c, K("⌘I")).FontSize(textCaption).TextColor(pal.inkTertiary)
+					ui.Text(c, K("⌘I")).FontSize(uiFontSize(textCaption)).TextColor(pal.inkTertiary)
 				})
 		}
 	})
@@ -593,7 +593,7 @@ func (a *app) commitLangButton(c *ui.Context, t *ui.Theme, pal palette) {
 	btn.Background(bg).Border(1, border)
 	fadeColors(btn)
 	btn.Children(func() {
-		ui.Text(c, label).FontSize(textCaption).FontWeight(weightMedium).TextColor(fg)
+		ui.Text(c, label).FontSize(uiFontSize(textCaption)).FontWeight(weightMedium).TextColor(fg)
 	})
 
 	if btn.Clicked() {
@@ -635,11 +635,11 @@ func (a *app) riskScanButton(c *ui.Context, t *ui.Theme, pal palette) {
 	btn.Children(func() {
 		if a.riskScan.loading {
 			ui.Spinner(c).Size(11, 11)
-			ui.Text(c, T("预检中…", "Auditing…")).FontSize(textButton).
+			ui.Text(c, T("预检中…", "Auditing…")).FontSize(uiFontSize(textButton)).
 				FontWeight(weightMedium).TextColor(fg)
 		} else {
 			shieldIcon(c, 11, fg)
-			ui.Text(c, T("变更预检", "Audit Changes")).FontSize(textButton).
+			ui.Text(c, T("变更预检", "Audit Changes")).FontSize(uiFontSize(textButton)).
 				FontWeight(weightMedium).TextColor(fg)
 		}
 	})
@@ -807,10 +807,10 @@ func (a *app) commitButton(c *ui.Context, t *ui.Theme, pal palette) {
 
 	btn.Children(func() {
 		drawIcon(c, iconGitCommit, 12, fg)
-		ui.Text(c, label).FontSize(textButton).FontWeight(weightMedium).TextColor(fg)
+		ui.Text(c, label).FontSize(uiFontSize(textButton)).FontWeight(weightMedium).TextColor(fg)
 		if can {
 			ui.Box(c).Radius(radiusXS).Padding(1, 4).Background(t.AccentText.Alpha(0.2)).Children(func() {
-				ui.Text(c, K("⌘⏎")).FontSize(textCaption).TextColor(fg)
+				ui.Text(c, K("⌘⏎")).FontSize(uiFontSize(textCaption)).TextColor(fg)
 			})
 		}
 	})
@@ -825,19 +825,19 @@ func (a *app) commitStatus(c *ui.Context, t *ui.Theme, pal palette) {
 	ui.Row(c).Shrink(0).Gap(8).AlignItems(ui.Center).Children(func() {
 		if a.op == gitrepo.OpCommit || a.op == gitrepo.OpAmend {
 			ui.Spinner(c).Size(12, 12)
-			ui.Text(c, a.opName).FontSize(textButton).TextColor(t.TextMuted)
+			ui.Text(c, a.opName).FontSize(uiFontSize(textButton)).TextColor(t.TextMuted)
 			return
 		}
 		if a.aiCommitLoading {
 			ui.Spinner(c).Size(12, 12)
 			ui.Text(c, T("正在通过 AI 生成提交信息…", "Generating commit message with AI…")).
-				FontSize(textButton).TextColor(t.Accent)
+				FontSize(uiFontSize(textButton)).TextColor(t.Accent)
 			return
 		}
 		if a.riskScan.loading {
 			ui.Spinner(c).Size(12, 12)
 			ui.Text(c, T("正在进行代码安全审计…", "Auditing changes for security risks…")).
-				FontSize(textButton).TextColor(t.Accent)
+				FontSize(uiFontSize(textButton)).TextColor(t.Accent)
 			return
 		}
 
@@ -846,7 +846,7 @@ func (a *app) commitStatus(c *ui.Context, t *ui.Theme, pal palette) {
 		case a.amend:
 			if n == 0 {
 				ui.Text(c, T("未暂存新改动，仅修改上次提交的信息。", "No staged changes, amending message only.")).
-					FontSize(textCaption).TextColor(pal.inkSubtle)
+					FontSize(uiFontSize(textCaption)).TextColor(pal.inkSubtle)
 			} else {
 				specChip(c, pal, Tf("已暂存 %d 个文件，将合并入最近提交", "%d files staged, will merge into last commit", n),
 					t.Warning, statusChipH, statusChipText)
@@ -856,7 +856,7 @@ func (a *app) commitStatus(c *ui.Context, t *ui.Theme, pal palette) {
 				ui.Box(c).Size(chipDot, chipDot).Shrink(0).Radius(chipDot / 2).
 					Background(pal.inkTertiary)
 				ui.Text(c, T("还没有暂存的文件", "No staged changes — select files above to commit")).
-					FontSize(textCaption).TextColor(pal.inkSubtle)
+					FontSize(uiFontSize(textCaption)).TextColor(pal.inkSubtle)
 				if m > 0 && a.op == gitrepo.OpNone {
 					if quickStageAllChip(c, pal) {
 						a.stageAll()
@@ -875,7 +875,7 @@ func (a *app) commitStatus(c *ui.Context, t *ui.Theme, pal palette) {
 					}
 				}
 				if m > 0 {
-					ui.Textf(c, T("(%d 个未暂存)", "(%d unstaged)"), m).FontSize(textCaption).
+					ui.Textf(c, T("(%d 个未暂存)", "(%d unstaged)"), m).FontSize(uiFontSize(textCaption)).
 						Font("monospace").FontFeatures("tnum").TextColor(pal.inkSubtle)
 					if a.op == gitrepo.OpNone {
 						if quickStageRemainingChip(c, pal) {
@@ -956,7 +956,7 @@ func quickStageAllChip(c *ui.Context, pal palette) bool {
 	fadeColors(btn)
 
 	btn.Children(func() {
-		ui.Text(c, T("+ 全部暂存", "+ Stage All")).FontSize(textCaption).
+		ui.Text(c, T("+ 全部暂存", "+ Stage All")).FontSize(uiFontSize(textCaption)).
 			FontWeight(weightMedium).TextColor(fg)
 	})
 	return btn.Clicked()
@@ -976,7 +976,7 @@ func quickUnstageAllChip(c *ui.Context, pal palette) bool {
 	fadeColors(btn)
 
 	btn.Children(func() {
-		ui.Text(c, T("全部取消", "Unstage All")).FontSize(textCaption).
+		ui.Text(c, T("全部取消", "Unstage All")).FontSize(uiFontSize(textCaption)).
 			FontWeight(weightMedium).TextColor(fg)
 	})
 	return btn.Clicked()
@@ -996,7 +996,7 @@ func quickStageRemainingChip(c *ui.Context, pal palette) bool {
 	fadeColors(btn)
 
 	btn.Children(func() {
-		ui.Text(c, T("+ 暂存剩余", "+ Stage Remaining")).FontSize(textCaption).
+		ui.Text(c, T("+ 暂存剩余", "+ Stage Remaining")).FontSize(uiFontSize(textCaption)).
 			FontWeight(weightMedium).TextColor(fg)
 	})
 	return btn.Clicked()

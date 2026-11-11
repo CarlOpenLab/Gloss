@@ -47,9 +47,9 @@ func (a *app) pendingBar(c *ui.Context, pal palette) {
 		Children(func() {
 			warnIcon(c, 14, t.Warning)
 			ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
-				ui.Text(c, title).FontSize(textBodySM).FontWeight(weightSemibold).
+				ui.Text(c, title).FontSize(uiFontSize(textBodySM)).FontWeight(weightSemibold).
 					TextColor(pal.ink)
-				ui.Text(c, hint).FontSize(textCaption).TextColor(pal.inkMuted)
+				ui.Text(c, hint).FontSize(uiFontSize(textCaption)).TextColor(pal.inkMuted)
 			})
 			a.pendingButtons(c, pal, conflicts, busy)
 		})

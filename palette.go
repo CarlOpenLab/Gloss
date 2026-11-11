@@ -303,7 +303,7 @@ func (a *app) paletteDialog(c *ui.Context, pal palette) {
 				ui.Column(c).Padding(palettePad).Gap(paletteGap).Children(func() {
 					if len(cmds) == 0 {
 						ui.Text(c, T("没有匹配的命令", "No matching commands")).
-							FontSize(textBodySM).TextColor(pal.inkSubtle).Padding(8)
+							FontSize(uiFontSize(textBodySM)).TextColor(pal.inkSubtle).Padding(8)
 						return
 					}
 					for i := range cmds {
@@ -346,12 +346,12 @@ func (a *app) paletteRow(c *ui.Context, t *ui.Theme, pal palette, i int, cmds []
 	fadeColors(row)
 	var clicked bool
 	row.Children(func() {
-		txt := ui.Text(c, cmd.label).FontSize(12.5).Grow(1).SingleLine().TextColor(text)
+		txt := ui.Text(c, cmd.label).FontSize(uiFontSize(textButton)).Grow(1).SingleLine().TextColor(text)
 		if sel {
 			txt.FontWeight(weightMedium)
 		}
 		if cmd.hint != "" {
-			ui.Text(c, cmd.hint).FontSize(textCaption).SingleLine().
+			ui.Text(c, cmd.hint).FontSize(uiFontSize(textCaption)).SingleLine().
 				TextColor(pal.inkSubtle)
 		}
 	})

@@ -171,7 +171,7 @@ func (a *app) workspaceFilePane(c *ui.Context, pal palette, t *ui.Theme) {
 				if a.state == loadReady || a.state == loadFailed {
 					label = Tf("%d 个文件", "%d files", len(a.wsFiles))
 				}
-				ui.Text(c, label).FontSize(textCaption).TextColor(pal.inkSubtle)
+				ui.Text(c, label).FontSize(uiFontSize(textCaption)).TextColor(pal.inkSubtle)
 			}
 		})
 		if a.wsTab == wsTabSearch {
@@ -295,12 +295,12 @@ func (a *app) workspaceFooter(c *ui.Context, pal palette) {
 		Background(pal.chip).
 		BorderWidth(1, 0, 0, 0).BorderColor(pal.hairline).Children(func() {
 		if n == 0 {
-			ui.Text(c, T("工作区无改动", "Working tree clean")).FontSize(textCaption).
+			ui.Text(c, T("工作区无改动", "Working tree clean")).FontSize(uiFontSize(textCaption)).
 				TextColor(pal.inkSubtle)
 			return
 		}
-		ui.Text(c, T("已改动", "Changed")).FontSize(textCaption).TextColor(pal.inkSubtle)
-		ui.Textf(c, T("%d 个文件", "%d files"), n).FontSize(11).
+		ui.Text(c, T("已改动", "Changed")).FontSize(uiFontSize(textCaption)).TextColor(pal.inkSubtle)
+		ui.Textf(c, T("%d 个文件", "%d files"), n).FontSize(uiFontSize(textCaption)).
 			FontFeatures("tnum").TextColor(pal.inkMuted)
 	})
 }

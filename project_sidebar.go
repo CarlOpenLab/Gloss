@@ -332,7 +332,7 @@ func (a *app) projectGroups(c *ui.Context, pal palette, h float32) {
 			if a.repoPath == "" {
 				ui.Box(c).Padding(6, 8).Children(func() {
 					ui.Text(c, T("还没有打开项目", "No projects opened yet")).
-						FontSize(textBodySM).TextColor(pal.inkSubtle)
+						FontSize(uiFontSize(textBodySM)).TextColor(pal.inkSubtle)
 				})
 				return
 			}
@@ -462,7 +462,7 @@ func (a *app) projectGroup(c *ui.Context, pal palette, idx int, tab *repoTab, ac
 		if active {
 			fg = pal.ink
 		}
-		ui.Text(c, name).FontSize(12.5).FontWeight(weightSemibold).
+		ui.Text(c, name).FontSize(uiFontSize(textButton)).FontWeight(weightSemibold).
 			TextColor(fg).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).
 			Tooltip(tab.path)
 

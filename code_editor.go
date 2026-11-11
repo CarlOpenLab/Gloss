@@ -235,13 +235,13 @@ func (a *app) codeEditorBody(c *ui.Context, pal palette) {
 		ui.Row(c).Height(48).Shrink(0).Padding(0, 14).Gap(8).AlignItems(ui.Center).
 			BorderWidth(0, 0, 1, 0).BorderColor(pal.hairline).Children(func() {
 			ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
-				ui.Text(c, title).FontSize(textHeadline).FontWeight(weightSemibold).
+				ui.Text(c, title).FontSize(uiFontSize(textHeadline)).FontWeight(weightSemibold).
 					TextColor(pal.ink)
-				ui.Text(c, s.path).Font("monospace").FontSize(textCaption).
+				ui.Text(c, s.path).Font("monospace").FontSize(uiFontSize(textCaption)).
 					SingleLine().TextColor(pal.inkMuted)
 			})
 			if s.buffer != nil && s.buffer.Modified() {
-				ui.Text(c, "已修改").FontSize(textCaption).TextColor(t.Warning)
+				ui.Text(c, "已修改").FontSize(uiFontSize(textCaption)).TextColor(t.Warning)
 			}
 			// Cmd+S 只有落在对话框自己身上才有效：handleKeys 在 view 一开头
 			// 跑，而那时 c 还在对话框外面，全局快捷键在有弹窗时一律让位。
@@ -263,7 +263,7 @@ func (a *app) codeEditorBody(c *ui.Context, pal palette) {
 		if s.err != "" || (s.code == nil && s.img == nil) {
 			ui.Column(c).Grow(1).Center().Gap(10).Padding(24).Children(func() {
 				headline(c, pal, "无法打开内置编辑器")
-				ui.Text(c, s.err).Font("monospace").FontSize(textBodySM).
+				ui.Text(c, s.err).Font("monospace").FontSize(uiFontSize(textBodySM)).
 					TextColor(t.TextMuted)
 				if secondaryAction(c, pal, "关闭", "", false).Clicked() {
 					a.closeCodeEditor()
@@ -279,7 +279,7 @@ func (a *app) codeEditorBody(c *ui.Context, pal palette) {
 			ui.Row(c).Height(48).Shrink(0).Padding(0, 12).Gap(8).AlignItems(ui.Center).
 				BorderWidth(1, 0, 0, 0).BorderColor(pal.hairline).Children(func() {
 				ui.Text(c, "图片不能在这里编辑；右键「在编辑器打开」可用系统看图应用查看原图").
-					FontSize(textCaption).TextColor(pal.inkMuted).Grow(1).MinWidth(0)
+					FontSize(uiFontSize(textCaption)).TextColor(pal.inkMuted).Grow(1).MinWidth(0)
 				if secondaryAction(c, pal, "关闭", "", false).Clicked() {
 					a.closeCodeEditor()
 				}
@@ -299,7 +299,7 @@ func (a *app) codeEditorBody(c *ui.Context, pal palette) {
 			if s.base != nil {
 				hint += "；行号槽的标记是相对暂存区/HEAD 的改动"
 			}
-			ui.Text(c, hint).FontSize(textCaption).TextColor(pal.inkMuted).
+			ui.Text(c, hint).FontSize(uiFontSize(textCaption)).TextColor(pal.inkMuted).
 				Grow(1).MinWidth(0)
 			busy := a.op != gitrepo.OpNone
 			if secondaryAction(c, pal, "取消", "放弃本次编辑", busy).Clicked() {

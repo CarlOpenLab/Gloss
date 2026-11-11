@@ -108,29 +108,29 @@ func (a *app) fileHistBody(c *ui.Context, pal palette) {
 	fh := &a.fileHist
 
 	ui.Column(c).Width(560).Gap(10).Children(func() {
-		ui.Text(c, T("文件历史", "File History")).FontSize(textHeadline).FontWeight(weightSemibold)
+		ui.Text(c, T("文件历史", "File History")).FontSize(uiFontSize(textHeadline)).FontWeight(weightSemibold)
 		// 路径写在脸上：同一棵树里几个文件名字可能只差一个目录，而弹窗
 		// 打开之后用户未必还记得自己右键的是哪一个。
-		ui.Text(c, fh.path).Font("monospace").FontSize(11).SingleLine().TextColor(t.TextMuted)
+		ui.Text(c, fh.path).Font("monospace").FontSize(uiFontSize(textCaption)).SingleLine().TextColor(t.TextMuted)
 
 		ui.Column(c).Height(360).Radius(radiusMD).Background(pal.surface2).
 			Border(1, pal.hairline).Children(func() {
 			switch {
 			case fh.state == loadLoading:
 				ui.Box(c).Fill().AlignItems(ui.Center).Justify(ui.Center).Children(func() {
-					ui.Text(c, T("正在读取文件历史…", "Loading file history…")).FontSize(12).TextColor(t.TextMuted)
+					ui.Text(c, T("正在读取文件历史…", "Loading file history…")).FontSize(uiFontSize(textBodySM)).TextColor(t.TextMuted)
 				})
 			case fh.state == loadFailed:
 				ui.Box(c).Fill().AlignItems(ui.Center).Justify(ui.Center).Padding(16).Children(func() {
 					ui.Text(c, T("读不出这个文件的历史", "Could not read this file's history")).
-						FontSize(12).TextColor(t.TextMuted)
+						FontSize(uiFontSize(textBodySM)).TextColor(t.TextMuted)
 				})
 			case len(fh.commits) == 0:
 				ui.Box(c).Fill().AlignItems(ui.Center).Justify(ui.Center).Padding(16).Children(func() {
 					// 空 = 这个文件还没有任何一次提交碰过它（新加的文件就是
 					// 这样）。说清楚是「还没有」，不是「读失败了」。
 					ui.Text(c, T("Git 里还没有这个文件的历史", "No history for this file yet")).
-						FontSize(12).TextColor(t.TextMuted)
+						FontSize(uiFontSize(textBodySM)).TextColor(t.TextMuted)
 				})
 			default:
 				fh.scroll.Key = func(i int) any {
@@ -172,12 +172,12 @@ func (a *app) fileHistRow(c *ui.Context, pal palette, i int) {
 	}
 	fadeColors(row)
 	row.Children(func() {
-		ui.Text(c, cm.Short).Font("monospace").FontSize(10).
+		ui.Text(c, cm.Short).Font("monospace").FontSize(uiFontSize(rowChipText)).
 			Width(commitHashW).Shrink(0).TextColor(t.TextMuted)
-		ui.Text(c, cm.Subject).FontSize(12).SingleLine().Grow(1).MinWidth(0)
-		ui.Text(c, cm.Author).FontSize(11).SingleLine().
+		ui.Text(c, cm.Subject).FontSize(uiFontSize(textBodySM)).SingleLine().Grow(1).MinWidth(0)
+		ui.Text(c, cm.Author).FontSize(uiFontSize(textCaption)).SingleLine().
 			Width(commitAuthorW).Shrink(0).TextColor(t.TextMuted)
-		ui.Text(c, shortWhen(cm.When, time.Now())).FontSize(11).
+		ui.Text(c, shortWhen(cm.When, time.Now())).FontSize(uiFontSize(textCaption)).
 			Width(commitWhenW).Shrink(0).TextAlign(ui.End).TextColor(t.TextMuted)
 	})
 	if row.Clicked() {

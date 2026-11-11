@@ -12,6 +12,8 @@ import (
 //
 // 规则（见 specModalSticky）：表单类粘住，确认框 / 纯查看的（文件历史、风险
 // 预检）照旧点背景即关。 Esc 是显式关闭，每条用例末尾都验一遍还在关。
+//
+// 设置不在这张表里：它是自己的窗口（issue #7 问题四），见下面那条。
 func TestFormDialogsSurviveBackdropClick(t *testing.T) {
 	cases := []struct {
 		name string
@@ -23,7 +25,6 @@ func TestFormDialogsSurviveBackdropClick(t *testing.T) {
 		{"储藏", func(a *app) { a.openStashDialog() }, func(a *app) bool { return a.stashDlg.on }},
 		{"重命名分支", func(a *app) { a.openRenameBranchDialog("main") }, func(a *app) bool { return a.rename.on }},
 		{"对比分支", func(a *app) { a.openCompareDialog("") }, func(a *app) bool { return a.compare.dialog }},
-		{"模型设置", func(a *app) { a.openSettings() }, func(a *app) bool { return a.settingsOn }},
 	}
 
 	for _, c := range cases {
@@ -55,6 +56,28 @@ func TestFormDialogsSurviveBackdropClick(t *testing.T) {
 				t.Errorf("Esc 该关掉%s对话框", c.name)
 			}
 		})
+	}
+}
+
+// 设置窗口自己那一条：它现在是独立的窗口（issue #7 问题四），没有压暗的
+// 背景可点，Esc 也不再是框架的 backdrop 白送的 —— 得它自己接。
+func TestSettingsWindowSurvivesBackdropClick(t *testing.T) {
+	a := richApp(t)
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+	settle(t, a)
+	tt.Frame()
+
+	st := settingsTester(t, a, settingsWindowW, settingsWindowH)
+	if !a.settingsOn {
+		t.Fatal("设置窗口没打开")
+	}
+
+	// 窗口是系统拖动的，不存在「点背景关掉」这回事；Esc 照旧关。
+	st.Key(0, ui.KeyEscape)
+	st.Frame()
+	if a.settingsOn {
+		t.Error("Esc 该关掉设置窗口")
 	}
 }
 

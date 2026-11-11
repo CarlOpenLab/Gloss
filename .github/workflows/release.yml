@@ -119,6 +119,11 @@ jobs:
       # Windows 用户需要一条免安装的路，这份 zip 就是 —— 解压直接双击
       # Gloss.exe，不写注册表、不加开始菜单。
       #
+      # 只收 exe 和它运行时要用的原生库，不 zip 整个 build/windows-amd64：
+      # 那个目录里还躺着安装包、更新用的 tar.gz / 增量 / 清单和已经
+      # go:embed 进二进制的 PNG，都不归便携包管（理由见 portable-zip.sh 顶上）。
+      # v0.3.32 那一版把整个目录打进去了，30MB 里 21MB 没人用。
+      #
       # 只加 zip、不动 gloss-<版本>-windows-amd64.tar.gz：客户端更新只按
       # update-windows-amd64.json 里的 URL 下载（还带 ed25519 签名校验），
       # 不会去 release 资产里按名字找包，多一个 zip 影响不到自动更新。
@@ -129,7 +134,7 @@ jobs:
         run: |
           version="$(jq -r .version mygo.json)"
           zip="$RUNNER_TEMP/gloss-${version}-windows-amd64-portable.zip"
-          (cd build/windows-amd64 && zip -qr "$zip" .)
+          sh scripts/portable-zip.sh "build/windows-amd64" "$zip"
           gh release upload "$GITHUB_REF_NAME" "$zip" \
             --repo "$GITHUB_REPOSITORY" --clobber
           echo "::notice::便携包已上传：$(basename "$zip")（Defender 误报时的免安装绕过路径）"

@@ -16,3 +16,9 @@ cache.json
 
 # 本地开发用的二进制
 /gloss_dev.exe*
+
+# Ryugi 的本地工作状态（artboard / document 缓存与 id，跟着本机走）
+.ryugi/
+
+# 第三方架构分析笔记，不是这个仓库的文档
+/docs/memoh-agent-infra.md

@@ -15,10 +15,15 @@ import (
 
 // codeSizeMin/Max/Step 是 ⌘+/⌘− 的范围。小于 9 看不清，大于 22 一行放不下
 // 几个字。
+//
+// Step 是 0.5 而不是 1：默认字号 defSize 是 12.5，步进 1 的话整数字号一个都
+// 落不上 —— 按一次 + 是 13.5，按一次 − 又回 12.5，用户想要的 13.0 永远在两步
+// 之间（issue #7 问的就是这个）。半个像素的步长肉眼分不出，却刚好把 12.5 和
+// 13.0 之间的缝补上。
 const (
 	codeSizeMin  = 9
 	codeSizeMax  = 22
-	codeSizeStep = 1
+	codeSizeStep = 0.5
 )
 
 func (a *app) handleKeys(c *ui.Context) {
@@ -303,6 +308,29 @@ func (a *app) codeSizeValue() float32 {
 		return defSize
 	}
 	return a.codeSize
+}
+
+// setUIFontSize 调整界面字号档位。传 0 表示回到默认档。
+//
+// 和代码字号分开：代码字号只动 diff / 编辑器 / 终端那几个等宽视图，界面字号
+// 动的是整套界面（按钮、侧栏、对话框、设置页自己）。Windows 上用户把系统文本
+// 放大到 125% 而 Gloss 一个像素不动，缺的就是这一格（issue #7 问题二）。
+func (a *app) setUIFontSize(size float32) {
+	if size <= 0 {
+		a.uiFontSize = 0
+		setUIFontSizeStep(uiFontSizeDefault)
+	} else {
+		a.uiFontSize = setUIFontSizeStep(size)
+	}
+	a.saveViewSettings()
+}
+
+// uiFontSizeValue 是当前生效的界面字号档位，0 归一成默认档。
+func (a *app) uiFontSizeValue() float32 {
+	if a.uiFontSize <= 0 {
+		return uiFontSizeDefault
+	}
+	return a.uiFontSize
 }
 
 // jumpHunk 跳到下一个/上一个改动块，走到头绕到另一端。

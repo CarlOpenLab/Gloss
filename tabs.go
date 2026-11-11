@@ -1435,14 +1435,14 @@ func (a *app) newProjectMenuPanel(c *ui.Context, panel ui.Element, pal palette) 
 	// 标题
 	ui.Row(c).Padding(6, 8, 4, 8).Gap(6).AlignItems(ui.Center).Children(func() {
 		drawIcon(c, iconClock, 12, pal.inkSubtle)
-		ui.Text(c, T("最近打开的项目", "Recent Projects")).FontSize(textCaption).
+		ui.Text(c, T("最近打开的项目", "Recent Projects")).FontSize(uiFontSize(textCaption)).
 			FontWeight(weightSemibold).TextColor(pal.inkSubtle)
 	})
 
 	if len(recent) == 0 {
 		ui.Box(c).Padding(4, 8, 8, 8).Children(func() {
 			ui.Text(c, T("还没有打开过项目", "No projects opened yet")).
-				FontSize(textBodySM).TextColor(pal.inkSubtle)
+				FontSize(uiFontSize(textBodySM)).TextColor(pal.inkSubtle)
 		})
 	} else {
 		_, winH := c.Size()
@@ -1476,7 +1476,7 @@ func (a *app) newProjectMenuPanel(c *ui.Context, panel ui.Element, pal palette) 
 		ui.Row(c).AlignItems(ui.Center).Gap(8).FillWidth().Children(func() {
 			drawIcon(c, iconFolderPlus, 13, pal.inkMuted)
 			ui.Text(c, T("打开本地文件夹…", "Open Local Folder…")).
-				FontSize(textButton).TextColor(pal.ink).Grow(1).SingleLine()
+				FontSize(uiFontSize(textButton)).TextColor(pal.ink).Grow(1).SingleLine()
 			specChip(c, pal, K("⌘O"), ui.Transparent, rowChipH, rowChipText)
 		})
 	})
@@ -1510,12 +1510,12 @@ func (a *app) newProjectRecentRow(c *ui.Context, path string, pal palette) {
 	row.Children(func() {
 		ui.Row(c).AlignItems(ui.Center).Gap(8).FillWidth().Children(func() {
 			drawIcon(c, iconFolder, 13, pal.inkMuted)
-			ui.Text(c, base).FontSize(textBodySM).TextColor(pal.ink).
+			ui.Text(c, base).FontSize(uiFontSize(textBodySM)).TextColor(pal.ink).
 				Grow(1).SingleLine()
 			if opened {
 				specChip(c, pal, T("已打开", "Open"), ui.Transparent, rowChipH, rowChipText)
 			} else {
-				ui.Text(c, filepath.Dir(path)).FontSize(textCaption).
+				ui.Text(c, filepath.Dir(path)).FontSize(uiFontSize(textCaption)).
 					TextColor(pal.inkSubtle).MaxWidth(150).SingleLine()
 			}
 
@@ -1793,7 +1793,7 @@ func (a *app) renderTerminalChip(c *ui.Context, pal palette, tab *repoTab, idx i
 	// （理由见 terminalTabBar）。
 	chip.Children(func() {
 		drawIcon(c, iconTerminal, 11, fg)
-		ui.Text(c, title).FontSize(textCaption).SingleLine().MaxWidth(140).TextColor(fg)
+		ui.Text(c, title).FontSize(uiFontSize(textCaption)).SingleLine().MaxWidth(140).TextColor(fg)
 
 		// 关闭 ×。一直挂在芯片上、不跟着悬停出现：一颗只在悬停时才长出来的
 		// ×，会让芯片宽度在指针扫过时变来变去，下一枚芯片跟着挪 —— 那正是
@@ -1921,7 +1921,7 @@ func (a *app) terminalPane(c *ui.Context, pal palette, tab *repoTab, s *termSess
 		box.AlignItems(ui.Center).Justify(ui.Center).Children(func() {
 			ui.Column(c).Gap(12).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, T("终端启动失败", "Failed to start terminal")).FontWeight(weightSemibold).TextColor(pal.ink)
-				ui.Text(c, p.err).FontSize(textCaption).TextColor(pal.inkSubtle)
+				ui.Text(c, p.err).FontSize(uiFontSize(textCaption)).TextColor(pal.inkSubtle)
 				if secondaryAction(c, pal, T("重试", "Retry"), "", false).Clicked() {
 					p.err = ""
 					p.started = false
@@ -2026,7 +2026,7 @@ func (a *app) terminalEmptyState(c *ui.Context, pal palette, tab *repoTab) {
 				a.newTerminalSession(tab)
 			}
 			// 空页上顺便把快捷键说一遍：下次就不用找按钮。
-			ui.Text(c, Tf("快捷键 %s", "Press %s to open", K("⌘⇧T"))).FontSize(textCaption).TextColor(t.TextMuted)
+			ui.Text(c, Tf("快捷键 %s", "Press %s to open", K("⌘⇧T"))).FontSize(uiFontSize(textCaption)).TextColor(t.TextMuted)
 		})
 	})
 }

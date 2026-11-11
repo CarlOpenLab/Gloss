@@ -68,6 +68,31 @@ func TestJumpHunkEmpty(t *testing.T) {
 	}
 }
 
+// 整数 px 号也能停：默认 12.5、步进 1 的话，13.0 永远落不上 —— 一次 +
+// 就到 13.5，一次 − 又回 12.5，用户想要的那个数在两步之间。
+//
+// issue #7 的原文就是这一句「为啥不能设置 13.0，只能是 0.5 啊」。
+func TestCodeSizeCanLandOnWholePixels(t *testing.T) {
+	a := richApp(t)
+
+	// 从默认值一路按上去，该在某个字号上正好等于 13。
+	size := a.codeSizeValue()
+	for i := 0; i < 8; i++ {
+		if size == 13 {
+			break
+		}
+		size += codeSizeStep
+	}
+	if size != 13 {
+		t.Fatalf("从默认 %v 起按 %v 步进，走不到 13.0（停在 %v）", defSize, codeSizeStep, size)
+	}
+	// 真落上去：setCodeSize 夹在上下限之间，不该把它改成别的数。
+	a.setCodeSize(13)
+	if got := a.codeSizeValue(); got != 13 {
+		t.Errorf("设置 13.0 之后 = %v, want 13", got)
+	}
+}
+
 // 字号：⌘+/⌘−/⌘0，并且夹在上下限内。
 func TestCodeSizeShortcuts(t *testing.T) {
 	a := richApp(t)
@@ -253,11 +278,15 @@ func TestSettingsShortcut(t *testing.T) {
 	a := richApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
 	tt.Frame()
+	installSettingsWindowStub(t)
 
 	tt.Key(ui.Cmd, ui.KeyComma)
 	tt.Frame()
 	if !a.settingsOn {
 		t.Fatal("⌘, 该打开模型设置")
+	}
+	if a.settingsView == nil {
+		t.Fatal("⌘, 开的设置没有交出视图 —— 系统那边只会是一个空窗口")
 	}
 	if got := a.codeSizeValue(); got != defSize {
 		t.Errorf("⌘, 之后字号 = %v, want 不动（%v）", got, defSize)
@@ -268,15 +297,16 @@ func TestSettingsShortcut(t *testing.T) {
 func TestShortcutsWithoutRepo(t *testing.T) {
 	a := newApp()
 	tt := ui.NewTester(a.view, 1280, 860)
+	installSettingsWindowStub(t)
 
-	// ⌘, 不依赖仓库，单独先试 —— 它开出来的对话框是模态的，会把后面
+	// ⌘, 不依赖仓库，单独先试 —— 它开出来的窗口是模态的，会把后面
 	// 这一串键全挡在外面，所以先问完再收起来。
 	tt.Key(ui.Cmd, ui.KeyComma)
 	tt.Frame()
 	if !a.settingsOn {
 		t.Fatal("没有仓库时 ⌘, 也该打开模型设置")
 	}
-	a.settingsOn = false
+	a.closeSettings()
 	tt.Frame()
 
 	for _, c := range []struct {

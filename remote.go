@@ -255,7 +255,7 @@ func iconToolButton(c *ui.Context, pal palette, label, tip string, off bool, ico
 					if badge > 99 {
 						countStr = "99+"
 					}
-					ui.Text(c, countStr).FontSize(textCaption).FontWeight(weightMedium).
+					ui.Text(c, countStr).FontSize(uiFontSize(textCaption)).FontWeight(weightMedium).
 						FontFeatures("tnum").TextColor(fg)
 				})
 			} else {

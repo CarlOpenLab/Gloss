@@ -43,12 +43,12 @@ func (a *app) stashDialogBody(c *ui.Context, pal palette) {
 	s := &a.stashDlg
 
 	ui.Column(c).Width(460).Gap(12).Children(func() {
-		ui.Text(c, "储藏工作区改动").FontSize(textHeadline).FontWeight(weightSemibold)
+		ui.Text(c, "储藏工作区改动").FontSize(uiFontSize(textHeadline)).FontWeight(weightSemibold)
 		ui.Text(c, "将手头未提交的修改存入储藏栈，工作区与暂存区恢复干净。").
-			FontSize(11).SingleLine().TextColor(t.TextMuted)
+			FontSize(uiFontSize(textCaption)).SingleLine().TextColor(t.TextMuted)
 
 		ui.Column(c).Gap(3).Children(func() {
-			ui.Text(c, "说明（可选）").FontSize(11).TextColor(t.TextMuted)
+			ui.Text(c, "说明（可选）").FontSize(uiFontSize(textCaption)).TextColor(t.TextMuted)
 			in := ui.TextInput(c, &s.message).Placeholder("例如：重构前的临时改动").Label("储藏说明")
 			if s.focusMessage {
 				in.Focus()
@@ -61,7 +61,7 @@ func (a *app) stashDialogBody(c *ui.Context, pal palette) {
 
 		ui.Checkbox(c, &s.includeUntracked, "包含未跟踪的新建文件（-u）").Label("包含未跟踪文件")
 		ui.Text(c, "勾上会把尚未 git add 的新建文件一并收进储藏；不勾则只储藏已跟踪文件的修改。").
-			FontSize(11).TextColor(t.TextMuted)
+			FontSize(uiFontSize(textCaption)).TextColor(t.TextMuted)
 
 		failureBox(c, pal, t, s.err)
 

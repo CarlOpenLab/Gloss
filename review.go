@@ -556,7 +556,7 @@ func (a *app) reviewPane(c *ui.Context, pal palette) {
 		ui.Box(c).Grow(1).FillWidth().Children(func() {
 			ui.Column(c).Fill().Center().Gap(8).Children(func() {
 				ui.Spinner(c).Size(18, 18)
-				ui.Text(c, T("正在读取这个文件…", "Loading file…")).FontSize(textBodySM).
+				ui.Text(c, T("正在读取这个文件…", "Loading file…")).FontSize(uiFontSize(textBodySM)).
 					TextColor(pal.inkMuted)
 			})
 		})
@@ -565,7 +565,7 @@ func (a *app) reviewPane(c *ui.Context, pal palette) {
 		ui.Box(c).Grow(1).FillWidth().Children(func() {
 			ui.Column(c).Fill().Center().Gap(10).Padding(24).Children(func() {
 				headline(c, pal, T("这个文件画不出 diff", "This file's diff can't be shown"))
-				ui.Text(c, s.err).Font("monospace").FontSize(textCaption).
+				ui.Text(c, s.err).Font("monospace").FontSize(uiFontSize(textCaption)).
 					SingleLine().TextColor(pal.inkMuted)
 			})
 		})
@@ -623,7 +623,7 @@ func (a *app) reviewHeader(c *ui.Context, pal palette) {
 		AlignItems(ui.Center).Background(pal.chip).
 		BorderWidth(0, 0, 1, 0).BorderColor(pal.hairline).Children(func() {
 		if f == nil {
-			ui.Text(c, T("未选择文件", "No file selected")).FontSize(textBodySM).
+			ui.Text(c, T("未选择文件", "No file selected")).FontSize(uiFontSize(textBodySM)).
 				TextColor(pal.inkMuted)
 			return
 		}
@@ -631,7 +631,7 @@ func (a *app) reviewHeader(c *ui.Context, pal palette) {
 			specChip(c, pal, string(f.Status.Letter()), statusColor(f.Status, pal), 20, textCaption)
 		}
 		path := displayPath(*f)
-		ui.Text(c, path).Font("monospace").FontSize(textBodySM).Shrink(2).
+		ui.Text(c, path).Font("monospace").FontSize(uiFontSize(textBodySM)).Shrink(2).
 			SingleLine().TextColor(pal.ink)
 		if s.image {
 			specChip(c, pal, T("图片", "Image"), ui.Transparent, 20, textCaption)
@@ -641,11 +641,11 @@ func (a *app) reviewHeader(c *ui.Context, pal palette) {
 		if s.diff != nil && !s.patchOnly {
 			added, deleted := s.diff.Stats()
 			if added > 0 {
-				ui.Textf(c, "+%d", added).Font("monospace").FontSize(textCaption).Bold().
+				ui.Textf(c, "+%d", added).Font("monospace").FontSize(uiFontSize(textCaption)).Bold().
 					FontFeatures("tnum").TextColor(pal.addBar)
 			}
 			if deleted > 0 {
-				ui.Textf(c, "−%d", deleted).Font("monospace").FontSize(textCaption).Bold().
+				ui.Textf(c, "−%d", deleted).Font("monospace").FontSize(uiFontSize(textCaption)).Bold().
 					FontFeatures("tnum").TextColor(pal.delBar)
 			}
 		}
@@ -653,7 +653,7 @@ func (a *app) reviewHeader(c *ui.Context, pal palette) {
 			// 底栏的「保存到工作区」撤掉之后，保存这件事只剩 ⌘S；改过的
 			// 时候把键位就写在提示里，不用再翻菜单。
 			ui.Text(c, T("已编辑 · ⌘S 保存", "Edited · ⌘S to save")).
-				FontSize(textCaption).TextColor(t.Warning)
+				FontSize(uiFontSize(textCaption)).TextColor(t.Warning)
 		}
 
 		// 整文件暂存：只有工作区那一段（历史、储藏、对比、PR 检视都不能
@@ -685,7 +685,7 @@ func (a *app) reviewConflictBar(c *ui.Context, pal palette, f gitrepo.File) {
 	ui.Column(c).Shrink(0).FillWidth().Padding(8, 12).Gap(6).
 		Background(pal.chip).
 		BorderWidth(0, 0, 1, 0).BorderColor(pal.hairline).Children(func() {
-		ui.Text(c, act.note).FontSize(textCaption).TextColor(t.TextMuted)
+		ui.Text(c, act.note).FontSize(uiFontSize(textCaption)).TextColor(t.TextMuted)
 		ui.Row(c).Wrap().Gap(6).AlignItems(ui.Center).Children(func() {
 			if secondaryAction(c, pal, act.ours, act.oursTip, busy).Shrink(0).Clicked() {
 				a.resolveFile(f, gitrepo.SideOurs, act.ours)
@@ -702,7 +702,7 @@ func (a *app) reviewConflictBar(c *ui.Context, pal palette, f gitrepo.File) {
 			// 图片没有「左侧基线」可选：两边摆的就是两份文件本身，
 			// 逐块挑边那套不适用，整份落盘走上面两颗按钮。
 			if !a.review.image {
-				ui.Text(c, T("左侧基线", "Compare with")).FontSize(textCaption).
+				ui.Text(c, T("左侧基线", "Compare with")).FontSize(uiFontSize(textCaption)).
 					TextColor(pal.inkSubtle)
 				a.reviewBaselineButton(c, pal, T("当前分支", "Current"), baselineOurs)
 				a.reviewBaselineButton(c, pal, T("对方", "Theirs"), baselineTheirs)
@@ -735,7 +735,7 @@ func (a *app) reviewBaselineButton(c *ui.Context, pal palette, label string, b c
 	} else {
 		btn.Background(ui.Transparent).Border(1, pal.hairline)
 	}
-	btn.Children(func() { ui.Text(c, label).FontSize(textCaption).TextColor(pal.inkMuted) })
+	btn.Children(func() { ui.Text(c, label).FontSize(uiFontSize(textCaption)).TextColor(pal.inkMuted) })
 	if btn.Clicked() && !sel {
 		a.setReviewBaseline(b)
 	}
@@ -812,7 +812,7 @@ func (a *app) reviewRegionActions(c *ui.Context, pal palette, an editor.DiffAnno
 	oursLabel, theirsLabel := conflictRegionHint(r)
 
 	ui.Row(c).FillWidth().Padding(0, 2).Gap(6).AlignItems(ui.Center).Children(func() {
-		ui.Textf(c, T("第 %d 处", "Block %d"), i+1).FontSize(textCaption).TextColor(pal.inkSubtle)
+		ui.Textf(c, T("第 %d 处", "Block %d"), i+1).FontSize(uiFontSize(textCaption)).TextColor(pal.inkSubtle)
 		if smallConflictAction(c, pal, Tf("留下 %s", "Keep %s", oursLabel), oursLabel).Clicked() {
 			a.applyRegionChoice(i, conflictTakeOurs)
 		}
@@ -837,7 +837,7 @@ func smallConflictAction(c *ui.Context, pal palette, label, tip string) ui.Eleme
 	if btn.Hovered() {
 		btn.Background(pal.rowSelected).Border(1, pal.hairlineStrong)
 	}
-	btn.Children(func() { ui.Text(c, label).FontSize(textCaption).TextColor(pal.inkMuted) })
+	btn.Children(func() { ui.Text(c, label).FontSize(uiFontSize(textCaption)).TextColor(pal.inkMuted) })
 	return btn
 }
 

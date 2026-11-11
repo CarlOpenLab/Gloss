@@ -233,7 +233,7 @@ const mdDotH = 16
 // 像一串挂着的小石子。和箭头、叉号一样，这种几何形状自己画才控得住。
 func (a *app) mdMarker(c *ui.Context, st mdStyle, marker string) {
 	if marker != "•" {
-		ui.Text(c, marker).FontSize(13).Width(mdMarkerW).
+		ui.Text(c, marker).FontSize(uiFontSize(textBody)).Width(mdMarkerW).
 			TextAlign(ui.End).TextColor(st.bullet)
 		return
 	}
@@ -270,14 +270,14 @@ func (a *app) mdBlock(c *ui.Context, st mdStyle, b mdBlock, gap float32) {
 		ui.Box(c).Margin(gap, 0, 0, 0).Padding(7, 9).Radius(radiusSM).
 			Background(st.codeBg).Children(func() {
 			ui.RichText(c, ui.Span{Text: b.code, Font: st.mono, Color: st.code}).
-				FontSize(12)
+				FontSize(uiFontSize(textBodySM))
 		})
 
 	case mdBullet:
 		// 符号和正文分两栏：折行自然落在正文那一栏里（悬挂缩进）
 		ui.Row(c).Margin(gap, 0, 0, 0).AlignItems(ui.Start).Gap(6).Children(func() {
 			a.mdMarker(c, st, b.marker)
-			ui.RichText(c, b.spans...).Grow(1).MinWidth(0).FontSize(13)
+			ui.RichText(c, b.spans...).Grow(1).MinWidth(0).FontSize(uiFontSize(textBody))
 		})
 
 	case mdQuote:
@@ -288,12 +288,12 @@ func (a *app) mdBlock(c *ui.Context, st mdStyle, b mdBlock, gap float32) {
 			// 角 token，所以写出来而不是套一个 token。
 			ui.Box(c).Width(2).Shrink(0).Radius(1).AlignSelf(ui.Stretch).
 				Background(st.bullet.Alpha(0.4))
-			ui.RichText(c, b.spans...).Grow(1).MinWidth(0).FontSize(13)
+			ui.RichText(c, b.spans...).Grow(1).MinWidth(0).FontSize(uiFontSize(textBody))
 		})
 
 	default:
 		// 段落和标题：spans 里已经带了粗体和颜色
-		ui.RichText(c, b.spans...).Margin(gap, 0, 0, 0).FontSize(13)
+		ui.RichText(c, b.spans...).Margin(gap, 0, 0, 0).FontSize(uiFontSize(textBody))
 	}
 }
 

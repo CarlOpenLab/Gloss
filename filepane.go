@@ -291,7 +291,7 @@ func (a *app) fileListPane(c *ui.Context, pal palette, t *ui.Theme) {
 			if a.hasDiff() || a.state == loadReady {
 				n = Tf("%d 个文件", "%d files", len(a.files))
 			}
-			ui.Text(c, n).FontSize(11).Font("monospace").FontFeatures("tnum").
+			ui.Text(c, n).FontSize(uiFontSize(textCaption)).Font("monospace").FontFeatures("tnum").
 				SingleLine().TextColor(t.TextMuted)
 		})
 		ui.Box(c).Key("file-filter-wrap").Shrink(0).Padding(0, 12, 8, 12).Children(func() {
@@ -482,7 +482,7 @@ func (a *app) treeRowIn(c *ui.Context, pal palette, r filetree.Row, o rowSpec) {
 			}
 		}
 		row, arrow := treeRow(c, t, pal, treeRowOpts{Depth: r.Depth, HasKids: true, Open: open}, func() {
-			ui.Text(c, n.Label).FontSize(12).SingleLine().Grow(1).MinWidth(0).
+			ui.Text(c, n.Label).FontSize(uiFontSize(textBodySM)).SingleLine().Grow(1).MinWidth(0).
 				TextColor(labelColor)
 		})
 		// 右键菜单挂在整行上（含缩进那块）：一个文件夹底下的改动一起
@@ -497,7 +497,7 @@ func (a *app) treeRowIn(c *ui.Context, pal palette, r filetree.Row, o rowSpec) {
 
 	if n.FileIdx < 0 || n.FileIdx >= len(o.list) {
 		treeRow(c, t, pal, treeRowOpts{Depth: r.Depth}, func() {
-			ui.Text(c, n.Label).FontSize(12).SingleLine()
+			ui.Text(c, n.Label).FontSize(uiFontSize(textBodySM)).SingleLine()
 		})
 		return
 	}
@@ -534,7 +534,7 @@ func (a *app) treeRowIn(c *ui.Context, pal palette, r filetree.Row, o rowSpec) {
 		case a.isViewed(f):
 			nameColor = t.TextMuted
 		}
-		ui.Text(c, n.Label).FontSize(12).SingleLine().Grow(1).MinWidth(0).TextColor(nameColor)
+		ui.Text(c, n.Label).FontSize(uiFontSize(textBodySM)).SingleLine().Grow(1).MinWidth(0).TextColor(nameColor)
 
 		// 增删行数和状态字母只画在改动栏（见 rowSpec.plain）。
 		//
@@ -542,15 +542,15 @@ func (a *app) treeRowIn(c *ui.Context, pal palette, r filetree.Row, o rowSpec) {
 		// 一列扫下来不会参差不齐。
 		if !o.plain {
 			if f.AddCount > 0 {
-				ui.Textf(c, "+%d", f.AddCount).FontSize(10).Bold().
+				ui.Textf(c, "+%d", f.AddCount).FontSize(uiFontSize(rowChipText)).Bold().
 					Font("monospace").FontFeatures("tnum").TextColor(pal.addBar)
 			}
 			if f.DelCount > 0 {
-				ui.Textf(c, "−%d", f.DelCount).FontSize(10).Bold().
+				ui.Textf(c, "−%d", f.DelCount).FontSize(uiFontSize(rowChipText)).Bold().
 					Font("monospace").FontFeatures("tnum").TextColor(pal.delBar)
 			}
 
-			ui.Text(c, string(f.Status.Letter())).FontSize(10).Bold().
+			ui.Text(c, string(f.Status.Letter())).FontSize(uiFontSize(rowChipText)).Bold().
 				Width(12).TextAlign(ui.Center).
 				TextColor(statusColor(f.Status, pal)).
 				Tooltip(f.Status.Label())
@@ -691,16 +691,16 @@ func (a *app) filePaneFooter(c *ui.Context, pal palette, t *ui.Theme) {
 	ui.Row(c).Shrink(0).Padding(7, 12).Gap(6).AlignItems(ui.Center).
 		Background(pal.chip).
 		BorderWidth(1, 0, 0, 0).BorderColor(pal.hairline).Children(func() {
-		ui.Text(c, T("总计", "Total")).FontSize(textCaption).TextColor(pal.inkSubtle)
-		ui.Textf(c, "+%d", a.totalAdd()).FontSize(11).Bold().
+		ui.Text(c, T("总计", "Total")).FontSize(uiFontSize(textCaption)).TextColor(pal.inkSubtle)
+		ui.Textf(c, "+%d", a.totalAdd()).FontSize(uiFontSize(textCaption)).Bold().
 			Font("monospace").FontFeatures("tnum").TextColor(pal.addBar)
-		ui.Textf(c, "−%d", a.totalDel()).FontSize(11).Bold().
+		ui.Textf(c, "−%d", a.totalDel()).FontSize(uiFontSize(textCaption)).Bold().
 			Font("monospace").FontFeatures("tnum").TextColor(pal.delBar)
 		// 冲突数摆在总计旁边：它是「这份改动现在能不能提交」的答案 ——
 		// 不解决完，提交上去的会是带着 <<<<<<< 的文件。
 		if n := a.conflictCount(); n > 0 {
 			warnIcon(c, 11, t.Warning)
-			ui.Textf(c, T("%d 个冲突待解决", "%d conflicts to resolve"), n).FontSize(11).
+			ui.Textf(c, T("%d 个冲突待解决", "%d conflicts to resolve"), n).FontSize(uiFontSize(textCaption)).
 				FontFeatures("tnum").TextColor(t.Warning)
 		}
 		ui.Spacer(c)
@@ -708,7 +708,7 @@ func (a *app) filePaneFooter(c *ui.Context, pal palette, t *ui.Theme) {
 			ui.Box(c).Size(checkSize, checkSize).Shrink(0).
 				Draw(func(p *ui.Painter, r ui.Rect) { drawCheckMark(p, r, pal.viewed) })
 			ui.Textf(c, "%d/%d", n, len(a.files)).
-				FontSize(11).TextColor(pal.viewed)
+				FontSize(uiFontSize(textCaption)).TextColor(pal.viewed)
 		}
 	})
 }
@@ -753,7 +753,7 @@ func (a *app) detailEmpty(c *ui.Context, t *ui.Theme, pal palette) {
 			a.chooseFolder()
 		}
 		// 第一眼的地方，顺手把菜单里的那个键说一遍：下次就不用找按钮了。
-		ui.Text(c, Tf("快捷键 %s", "Press %s to open", K("⌘O"))).FontSize(textCaption).TextColor(t.TextMuted)
+		ui.Text(c, Tf("快捷键 %s", "Press %s to open", K("⌘O"))).FontSize(uiFontSize(textCaption)).TextColor(t.TextMuted)
 	case a.state == loadLoading && !a.repoReady():
 		ui.Spinner(c)
 		ui.Text(c, T("正在读取仓库…", "Loading repository…")).TextColor(t.TextMuted)
@@ -765,7 +765,7 @@ func (a *app) detailEmpty(c *ui.Context, t *ui.Theme, pal palette) {
 		}
 	case a.state == loadFailed:
 		headline(c, pal, T("无法打开仓库", "Unable to Open Repository"))
-		ui.Text(c, a.errMsg).Font("monospace").FontSize(textBodySM).TextColor(t.TextMuted)
+		ui.Text(c, a.errMsg).Font("monospace").FontSize(uiFontSize(textBodySM)).TextColor(t.TextMuted)
 		if secondaryAction(c, pal, T("重试", "Retry"), "", false).Clicked() {
 			a.reload()
 		}

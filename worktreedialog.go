@@ -93,12 +93,12 @@ func (a *app) worktreeBody(c *ui.Context, pal palette) {
 
 	ui.Column(c).Width(480).Gap(12).Children(func() {
 		ui.Text(c, T("在新 Worktree 中检出", "Check Out in New Worktree")).
-			FontSize(textHeadline).FontWeight(weightSemibold)
+			FontSize(uiFontSize(textHeadline)).FontWeight(weightSemibold)
 		ui.Textf(c, T("分支 %s 将在一个独立工作目录里检出", "Branch %s will be checked out in a separate working directory"), ws.branch).
-			FontSize(11).SingleLine().TextColor(t.TextMuted)
+			FontSize(uiFontSize(textCaption)).SingleLine().TextColor(t.TextMuted)
 
 		ui.Column(c).Gap(3).Children(func() {
-			ui.Text(c, T("路径", "Path")).FontSize(11).TextColor(t.TextMuted)
+			ui.Text(c, T("路径", "Path")).FontSize(uiFontSize(textCaption)).TextColor(t.TextMuted)
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				in := ui.TextInput(c, &ws.path).Placeholder(T("工作目录路径", "Working directory path")).
 					Label(T("Worktree 路径", "Worktree Path"))
@@ -116,10 +116,10 @@ func (a *app) worktreeBody(c *ui.Context, pal palette) {
 		})
 
 		ui.Text(c, T("创建后会作为新项目打开。", "It opens as a new project after creation.")).
-			FontSize(11).TextColor(t.TextMuted)
+			FontSize(uiFontSize(textCaption)).TextColor(t.TextMuted)
 
 		if msg := a.worktreeBlocker(); msg != "" {
-			ui.Text(c, msg).FontSize(11).TextColor(t.TextMuted)
+			ui.Text(c, msg).FontSize(uiFontSize(textCaption)).TextColor(t.TextMuted)
 		}
 		failureBox(c, pal, t, ws.err)
 

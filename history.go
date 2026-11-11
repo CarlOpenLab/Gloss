@@ -459,12 +459,12 @@ func (a *app) commitListPane(c *ui.Context, pal palette) {
 					n = Tf("%d 个提交", "%d commits", len(a.commits))
 				}
 			}
-			ui.Text(c, n).FontSize(11).Font("monospace").FontFeatures("tnum").
+			ui.Text(c, n).FontSize(uiFontSize(textCaption)).Font("monospace").FontFeatures("tnum").
 				TextColor(t.TextMuted)
 			if name := a.histName(); name != "" {
 				// 点了分支（或「所有分支」）之后得有个说法，不然用户不知道
 				// 自己在看哪条历史
-				ui.Text(c, name).FontSize(11).Bold().SingleLine().
+				ui.Text(c, name).FontSize(uiFontSize(textCaption)).Bold().SingleLine().
 					TextColor(pal.ref)
 			}
 			ui.Spacer(c)
@@ -472,9 +472,9 @@ func (a *app) commitListPane(c *ui.Context, pal palette) {
 				// 增删各上一支色（addBar / delBar），和文件树行尾、栏脚
 				// 「总计」同一个口径：一处用中性 ref 色，同样两个数字在
 				// 屏幕三处三个脸色，读的人得分别记。
-				ui.Textf(c, "+%d", a.totalAdd()).FontSize(11).Bold().
+				ui.Textf(c, "+%d", a.totalAdd()).FontSize(uiFontSize(textCaption)).Bold().
 					Font("monospace").FontFeatures("tnum").TextColor(pal.addBar)
-				ui.Textf(c, "−%d", a.totalDel()).FontSize(11).Bold().
+				ui.Textf(c, "−%d", a.totalDel()).FontSize(uiFontSize(textCaption)).Bold().
 					Font("monospace").FontFeatures("tnum").TextColor(pal.delBar)
 			}
 		})
@@ -569,12 +569,12 @@ func (a *app) loadMoreRow(c *ui.Context, t *ui.Theme, pal palette) {
 	row.Children(func() {
 		if a.histLoadingMore {
 			ui.Text(c, T("正在加载更早的提交…", "Loading earlier commits…")).
-				FontSize(11).TextColor(t.TextMuted)
+				FontSize(uiFontSize(textCaption)).TextColor(t.TextMuted)
 		} else {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 				drawIcon(c, iconChevronDown, 12, pal.inkSubtle)
 				ui.Text(c, Tf("加载更早的提交 (已显示 %d 个)", "Load earlier commits (%d shown)", len(a.commits))).
-					FontSize(11).TextColor(pal.inkSubtle)
+					FontSize(uiFontSize(textCaption)).TextColor(pal.inkSubtle)
 			})
 		}
 	})
@@ -610,11 +610,11 @@ func (a *app) commitHeaderRow(c *ui.Context, t *ui.Theme, pal palette) {
 	ui.Row(c).Height(24).Shrink(0).AlignItems(ui.Center).Children(func() {
 		ui.Box(c).Width(graphWidth(a.maxLanes)).Shrink(0)
 		ui.Row(c).Grow(1).MinWidth(0).Padding(0, 8).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, T("描述", "Description")).FontSize(11).Grow(1).MinWidth(0).TextColor(t.TextMuted)
-			ui.Text(c, T("作者", "Author")).FontSize(11).Width(commitAuthorW).Shrink(0).TextColor(t.TextMuted)
-			ui.Text(c, T("时间", "Date")).FontSize(11).Width(commitWhenW).Shrink(0).
+			ui.Text(c, T("描述", "Description")).FontSize(uiFontSize(textCaption)).Grow(1).MinWidth(0).TextColor(t.TextMuted)
+			ui.Text(c, T("作者", "Author")).FontSize(uiFontSize(textCaption)).Width(commitAuthorW).Shrink(0).TextColor(t.TextMuted)
+			ui.Text(c, T("时间", "Date")).FontSize(uiFontSize(textCaption)).Width(commitWhenW).Shrink(0).
 				TextAlign(ui.End).TextColor(t.TextMuted)
-			ui.Text(c, T("哈希", "Commit")).FontSize(11).Width(commitHashW).Shrink(0).TextColor(t.TextMuted)
+			ui.Text(c, T("哈希", "Commit")).FontSize(uiFontSize(textCaption)).Width(commitHashW).Shrink(0).TextColor(t.TextMuted)
 		})
 	})
 }
@@ -654,7 +654,7 @@ func (a *app) commitRow(c *ui.Context, pal palette, i int) {
 			// 主题和徽章挤在同一行：主题可以压到很小（MinWidth(0) 是关键，
 			// 中文主题没有空格可断，不给它就会被自己撑住、把徽章挤出去），
 			// 徽章不压，宁可截主题也不能让「这是哪条分支」看不全。
-			ui.Text(c, cm.Subject).FontSize(12).SingleLine().Shrink(1).MinWidth(0)
+			ui.Text(c, cm.Subject).FontSize(uiFontSize(textBodySM)).SingleLine().Shrink(1).MinWidth(0)
 			badges := parseRefBadges(cm.Refs, a.remotes)
 			visible := badges
 			overflow := 0
@@ -683,7 +683,7 @@ func (a *app) commitRow(c *ui.Context, pal palette, i int) {
 				}
 			}
 			if overflow > 0 {
-				ui.Text(c, fmt.Sprintf("+%d", overflow)).FontSize(rowChipText).
+				ui.Text(c, fmt.Sprintf("+%d", overflow)).FontSize(uiFontSize(rowChipText)).
 					FontWeight(weightMedium).SingleLine().Shrink(0).
 					Padding(1, 5).Radius(radiusXS).
 					TextColor(pal.inkSubtle).Background(pal.chip).
@@ -691,11 +691,11 @@ func (a *app) commitRow(c *ui.Context, pal palette, i int) {
 			}
 			ui.Spacer(c)
 
-			ui.Text(c, cm.Author).FontSize(11).SingleLine().
+			ui.Text(c, cm.Author).FontSize(uiFontSize(textCaption)).SingleLine().
 				Width(commitAuthorW).Shrink(0).TextColor(t.TextMuted)
-			ui.Text(c, shortWhen(cm.When, time.Now())).FontSize(11).
+			ui.Text(c, shortWhen(cm.When, time.Now())).FontSize(uiFontSize(textCaption)).
 				Width(commitWhenW).Shrink(0).TextAlign(ui.End).TextColor(t.TextMuted)
-			ui.Text(c, cm.Short).Font("monospace").FontSize(10).
+			ui.Text(c, cm.Short).Font("monospace").FontSize(uiFontSize(rowChipText)).
 				Width(commitHashW).Shrink(0).TextColor(t.TextMuted)
 		})
 	})

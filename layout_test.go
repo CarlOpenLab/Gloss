@@ -306,6 +306,7 @@ func TestUtilityClusterFollowsSidebar(t *testing.T) {
 	}
 
 	// 收起态两颗都点得开，开关点得回来。
+	installSettingsWindowStub(t)
 	if err := tt.Click(T("模型设置…", "Model Settings…")); err != nil {
 		t.Fatal(err)
 	}
@@ -313,7 +314,8 @@ func TestUtilityClusterFollowsSidebar(t *testing.T) {
 	if !a.settingsOn {
 		t.Error("收起态点设置该打开设置窗口")
 	}
-	tt.Key(0, ui.KeyEscape)
+	// 设置在它自己的窗口里，Esc 也归那个窗口收（见 settings.go 的 settingsDialog）
+	a.closeSettings()
 	tt.Frame()
 	if err := tt.Click(T("命令面板", "Command Palette")); err != nil {
 		t.Fatal(err)
@@ -922,11 +924,15 @@ func TestCompareBarKeepsExitWhenNarrow(t *testing.T) {
 	}
 }
 
-// 设置面板在最小窗口下要收进屏幕：固定 960×680 会让底部的保存 / 取消
-// 四边出屏、点不到。
+// 设置面板在主窗口收到最小时也要收进屏幕。
+//
+// 以前这里盯的是主窗口：面板 bounds 是拿主窗口尺寸算的，主窗口一窄，底部
+// 的保存 / 取消就被推出可视区、点不到。现在设置是它自己的窗口（issue #7
+// 问题四），尺寸固定、不随主窗口变，所以这一条反过来盯**主窗口** ——
+// 它收到最小的时候，设置窗口照旧是 940×680，保存 / 取消在它自己那一屏里
+// 四边都出不去。
 func TestSettingsFitsWhenNarrow(t *testing.T) {
 	a := richApp(t)
-	a.openSettings()
 
 	tt := ui.NewTester(a.view, 720, 620)
 	still(tt)
@@ -934,11 +940,14 @@ func TestSettingsFitsWhenNarrow(t *testing.T) {
 	tt.SetTitleBar(realTitleBar)
 	tt.Frame()
 
-	save, ok := tt.Find("保存")
+	st := settingsTester(t, a, settingsWindowW, settingsWindowH)
+	const w, h = settingsWindowW, settingsWindowH
+
+	save, ok := st.Find("保存")
 	if !ok {
-		t.Fatalf("设置面板里找不到保存按钮：%q", tt.Texts())
+		t.Fatalf("设置面板里找不到保存按钮：%q", st.Texts())
 	}
-	if save.X+save.W > 720+1 || save.Y+save.H > 620+1 {
+	if save.X+save.W > float32(w)+1 || save.Y+save.H > float32(h)+1 {
 		t.Errorf("保存按钮出屏：x=%.0f..%.0f y=%.0f..%.0f",
 			save.X, save.X+save.W, save.Y, save.Y+save.H)
 	}

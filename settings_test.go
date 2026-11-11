@@ -28,28 +28,43 @@ func TestSettingsModalInteractions(t *testing.T) {
 	tt := ui.NewTester(a.view, 1280, 860)
 	still(tt)
 	tt.Frame()
+	installSettingsWindowStub(t)
+
+	// open 从主窗口点开设置，拿回设置视图的 Tester。
+	//
+	// 面板搬去自己的窗口了（issue #7 问题四）：主窗口这边一个字都不该有，
+	// 面板里的点击全落在设置视图上。每开一次就是一棵新树，所以 open 每次都
+	// 建一个新的 Tester —— 用上一次的那个会去驱动一棵已经拆掉的树。
+	open := func() *ui.Tester {
+		t.Helper()
+		if err := tt.Click("模型设置…"); err != nil {
+			t.Fatalf("点模型设置: %v", err)
+		}
+		tt.Frame()
+		if !a.settingsOn {
+			t.Fatal("模型设置未打开")
+		}
+		if tt.HasText("设置存储于本地配置文件，所有请求由本机直连服务端") {
+			t.Error("主窗口里还有设置面板的底栏 —— 它该在自己的窗口里")
+		}
+		return settingsViewTester(t, a)
+	}
 
 	// 1. 打开模型设置
-	if err := tt.Click("模型设置…"); err != nil {
-		t.Fatalf("点模型设置: %v", err)
-	}
-	tt.Frame()
-	if !a.settingsOn {
-		t.Fatal("模型设置未打开")
-	}
-	if !tt.HasText("模型设置") {
-		t.Fatal("未渲染出模型设置标题")
+	st := open()
+	if !st.HasText("搜索供应商") {
+		t.Fatalf("设置窗口里没有模型设置页：%q", st.Texts())
 	}
 
 	// 2. 从「添加供应商」菜单里加 DeepSeek
-	if err := tt.Click("添加供应商"); err != nil {
+	if err := st.Click("添加供应商"); err != nil {
 		t.Fatalf("点添加供应商: %v", err)
 	}
-	tt.Frame()
-	if err := tt.ChooseMenuItem("DeepSeek"); err != nil {
+	st.Frame()
+	if err := st.ChooseMenuItem("DeepSeek"); err != nil {
 		t.Fatalf("菜单里选 DeepSeek: %v", err)
 	}
-	tt.Frame()
+	st.Frame()
 
 	if len(a.editCfg.Providers) != 2 {
 		t.Fatalf("供应商数量应为 2，实际为 %d", len(a.editCfg.Providers))
@@ -71,7 +86,7 @@ func TestSettingsModalInteractions(t *testing.T) {
 	if a.editCfg.Active != 1 {
 		t.Fatalf("开关点上后 DeepSeek 应为当前生效，当前 active=%d", a.editCfg.Active)
 	}
-	if err := tt.Click("保存"); err != nil {
+	if err := st.Click("保存"); err != nil {
 		t.Fatalf("点保存: %v", err)
 	}
 	tt.Frame()
@@ -86,13 +101,10 @@ func TestSettingsModalInteractions(t *testing.T) {
 	}
 
 	// 4. 再次打开设置，测试切换与删除
-	if err := tt.Click("模型设置…"); err != nil {
-		t.Fatalf("再次点模型设置: %v", err)
-	}
-	tt.Frame()
+	st = open()
 
 	// 点击左侧 Anthropic 切换选中
-	if err := tt.Click("Anthropic"); err != nil {
+	if err := st.Click("Anthropic"); err != nil {
 		t.Fatalf("点 Anthropic 列表项: %v", err)
 	}
 	tt.Frame()
@@ -103,8 +115,12 @@ func TestSettingsModalInteractions(t *testing.T) {
 		t.Errorf("点击列表项只应选中编辑、不应切换生效，当前 active=%d", a.editCfg.Active)
 	}
 
-	// 点击删除按钮删除一项
-	if err := tt.Click("删除"); err != nil {
+	// 点击删除按钮删除一项。
+	//
+	// 按钮的 label 是「删除供应商」、上面写的字是「删除」—— 但 940 宽的设置
+	// 窗口里这一页走 stacked 那一支，渲染出来的是图标钮，只有 label 没有字。
+	// 所以这里点 label：两种排版下都点得到。
+	if err := st.Click("删除供应商"); err != nil {
 		t.Fatalf("点删除按钮: %v", err)
 	}
 	tt.Frame()
@@ -113,7 +129,7 @@ func TestSettingsModalInteractions(t *testing.T) {
 	}
 
 	// 取消关闭
-	if err := tt.Click("取消"); err != nil {
+	if err := st.Click("取消"); err != nil {
 		t.Fatalf("点取消: %v", err)
 	}
 	tt.Frame()
@@ -122,10 +138,7 @@ func TestSettingsModalInteractions(t *testing.T) {
 	}
 
 	// 5. 测试 API Key 隐私明密文切换与 Magpie 接入
-	if err := tt.Click("模型设置…"); err != nil {
-		t.Fatalf("第三次点模型设置: %v", err)
-	}
-	tt.Frame()
+	st = open()
 
 	// 初始状态下密钥应默认隐藏
 	if a.showAPIKey {
@@ -133,7 +146,7 @@ func TestSettingsModalInteractions(t *testing.T) {
 	}
 
 	// 点击眼睛切换明文
-	if err := tt.Click("切换密钥显示"); err != nil {
+	if err := st.Click("切换密钥显示"); err != nil {
 		t.Fatalf("点切换密钥显示: %v", err)
 	}
 	tt.Frame()
@@ -148,11 +161,11 @@ func TestSettingsModalInteractions(t *testing.T) {
 
 	// 从底部「添加供应商」菜单里把 Magpie 加进来（预设不再摆在左栏里：
 	// 点一下就跳到已添加那段上面去，看着像「点一下排序自己变了」）
-	if err := tt.Click("添加供应商"); err != nil {
+	if err := st.Click("添加供应商"); err != nil {
 		t.Fatalf("点添加供应商: %v", err)
 	}
 	tt.Frame()
-	if err := tt.ChooseMenuItem("Magpie"); err != nil {
+	if err := st.ChooseMenuItem("Magpie"); err != nil {
 		t.Fatalf("菜单里选 Magpie: %v", err)
 	}
 	tt.Frame()
@@ -177,7 +190,7 @@ func TestSettingsModalInteractions(t *testing.T) {
 	}
 
 	// 点击芯片切换模型（带 provider 命名空间）
-	if err := tt.Click("codex-2/gpt-6-sol"); err != nil {
+	if err := st.Click("codex-2/gpt-6-sol"); err != nil {
 		t.Fatalf("点击选择 codex-2/gpt-6-sol 芯片: %v", err)
 	}
 	tt.Frame()
@@ -186,7 +199,7 @@ func TestSettingsModalInteractions(t *testing.T) {
 	}
 
 	// 取消关闭
-	if err := tt.Click("取消"); err != nil {
+	if err := st.Click("取消"); err != nil {
 		t.Fatalf("点取消: %v", err)
 	}
 	tt.Frame()
@@ -209,12 +222,14 @@ func TestPresetDeduplication(t *testing.T) {
 	tt := ui.NewTester(a.view, 1280, 860)
 	still(tt)
 	tt.Frame()
+	installSettingsWindowStub(t)
 
 	// 打开模型设置
 	if err := tt.Click("模型设置…"); err != nil {
 		t.Fatalf("点模型设置: %v", err)
 	}
 	tt.Frame()
+	st := settingsViewTester(t, a)
 
 	// 初始有 1 个 (Anthropic)
 	if len(a.editCfg.Providers) != 1 {
@@ -224,24 +239,24 @@ func TestPresetDeduplication(t *testing.T) {
 	// 打开「添加供应商」菜单：已经在列表里的 Anthropic 灰着，选不动
 	openAdd := func() {
 		t.Helper()
-		if err := tt.Click("添加供应商"); err != nil {
+		if err := st.Click("添加供应商"); err != nil {
 			t.Fatalf("点添加供应商: %v", err)
 		}
-		tt.Frame()
+		st.Frame()
 	}
 	openAdd()
-	if err := tt.ChooseMenuItem("Anthropic"); err == nil {
+	if err := st.ChooseMenuItem("Anthropic"); err == nil {
 		t.Error("已添加的 Anthropic 在菜单里应该是灰的")
 	}
-	tt.CloseMenu()
-	tt.Frame()
+	st.CloseMenu()
+	st.Frame()
 	if len(a.editCfg.Providers) != 1 {
 		t.Fatalf("再点一次 Anthropic 不该增加供应商，数量应为 1，实际为 %d", len(a.editCfg.Providers))
 	}
 
 	// 从菜单里添加 DeepSeek
 	openAdd()
-	if err := tt.ChooseMenuItem("DeepSeek"); err != nil {
+	if err := st.ChooseMenuItem("DeepSeek"); err != nil {
 		t.Fatalf("菜单里选 DeepSeek: %v", err)
 	}
 	tt.Frame()
@@ -254,11 +269,11 @@ func TestPresetDeduplication(t *testing.T) {
 
 	// 再加一次：菜单里它已经灰了，进不来
 	openAdd()
-	if err := tt.ChooseMenuItem("DeepSeek"); err == nil {
+	if err := st.ChooseMenuItem("DeepSeek"); err == nil {
 		t.Error("已添加的 DeepSeek 在菜单里应该是灰的")
 	}
-	tt.CloseMenu()
-	tt.Frame()
+	st.CloseMenu()
+	st.Frame()
 	if len(a.editCfg.Providers) != 2 {
 		t.Fatalf("重复添加 DeepSeek 不应增加供应商，数量应仍为 2，实际为 %d", len(a.editCfg.Providers))
 	}
@@ -266,19 +281,19 @@ func TestPresetDeduplication(t *testing.T) {
 	// 左栏只画已经加进来的：没加的预设连行都没有（以前它们接在下面，
 	// 点一下会跳进上面那段，看着像排序自己变了）
 	for _, name := range []string{"Ollama（本地）", "OpenRouter", "智谱 GLM"} {
-		if tt.HasText(name) {
+		if st.HasText(name) {
 			t.Errorf("未添加的预设 %q 不该出现在左栏里", name)
 		}
 	}
 	for _, name := range []string{"Anthropic", "DeepSeek"} {
-		if !tt.HasText(name) {
+		if !st.HasText(name) {
 			t.Errorf("已添加的 %q 应该还在左栏里", name)
 		}
 	}
 
 	// 取消关闭
-	_ = tt.Click("取消")
-	tt.Frame()
+	_ = st.Click("取消")
+	st.Frame()
 }
 
 // TestProviderDragReorder 拖行首的手柄能把供应商换位置，选中与生效跟着走。
@@ -295,37 +310,31 @@ func TestProviderDragReorder(t *testing.T) {
 	})
 	a.attachStore(s)
 
-	tt := ui.NewTester(a.view, 1280, 860)
-	still(tt)
-	tt.Frame()
-	if err := tt.Click("模型设置…"); err != nil {
-		t.Fatalf("点模型设置: %v", err)
-	}
-	tt.Frame()
+	st := settingsTester(t, a, settingsWindowW, settingsWindowH)
 
 	// Find 拿到的是整行（行按钮先登记 Label，名字文本在它里面）：
 	// 行首 8px 内边距 + 11px 手柄，中心大约在行内 13px 处
-	ra, _ := tt.Find("AAA")
-	rb, _ := tt.Find("BBB")
+	ra, _ := st.Find("AAA")
+	rb, _ := st.Find("BBB")
 	if ra.H == 0 || rb.Y <= ra.Y {
 		t.Fatalf("三行没摆出来: AAA=%+v BBB=%+v", ra, rb)
 	}
 	gripX := rb.X + 13
-	tt.Move(gripX, rb.Y+rb.H/2)
-	tt.Frame()
-	if c := tt.Cursor(); c != ui.CursorGrab {
+	st.Move(gripX, rb.Y+rb.H/2)
+	st.Frame()
+	if c := st.Cursor(); c != ui.CursorGrab {
 		t.Errorf("悬停在拖动手柄上光标应该是 CursorGrab，实际是 %v", c)
 	}
 
 	// 把 BBB 拖到 AAA 的上半条 = 插到 AAA 前面
-	tt.Press(gripX, rb.Y+rb.H/2)
-	tt.Move(gripX, rb.Y+rb.H/2-10)
-	tt.Frame()
-	tt.Move(gripX, ra.Y+4)
-	tt.Frame()
-	tt.Release(gripX, ra.Y+4)
-	tt.Frame()
-	tt.Frame()
+	st.Press(gripX, rb.Y+rb.H/2)
+	st.Move(gripX, rb.Y+rb.H/2-10)
+	st.Frame()
+	st.Move(gripX, ra.Y+4)
+	st.Frame()
+	st.Release(gripX, ra.Y+4)
+	st.Frame()
+	st.Frame()
 
 	if got := providerNames(a.editCfg.Providers); got != "BBB, AAA, CCC" {
 		t.Fatalf("拖过之后顺序应为 BBB, AAA, CCC，实际为 %s", got)
@@ -339,16 +348,16 @@ func TestProviderDragReorder(t *testing.T) {
 	}
 
 	// 再把它拖回末尾：落在最后一行（CCC）的下半条
-	rb, _ = tt.Find("BBB")
-	rc, _ := tt.Find("CCC")
-	tt.Press(rb.X+13, rb.Y+rb.H/2)
-	tt.Move(rb.X+13, rb.Y+rb.H/2+10)
-	tt.Frame()
-	tt.Move(rb.X+13, rc.Y+rc.H-4)
-	tt.Frame()
-	tt.Release(rb.X+13, rc.Y+rc.H-4)
-	tt.Frame()
-	tt.Frame()
+	rb, _ = st.Find("BBB")
+	rc, _ := st.Find("CCC")
+	st.Press(rb.X+13, rb.Y+rb.H/2)
+	st.Move(rb.X+13, rb.Y+rb.H/2+10)
+	st.Frame()
+	st.Move(rb.X+13, rc.Y+rc.H-4)
+	st.Frame()
+	st.Release(rb.X+13, rc.Y+rc.H-4)
+	st.Frame()
+	st.Frame()
 
 	if got := providerNames(a.editCfg.Providers); got != "AAA, CCC, BBB" {
 		t.Fatalf("拖到末尾后顺序应为 AAA, CCC, BBB，实际为 %s", got)
@@ -358,17 +367,17 @@ func TestProviderDragReorder(t *testing.T) {
 	}
 
 	// 点行里的名字仍然是选中，不会因为多了个手柄就点不动
-	if err := tt.Click("AAA"); err != nil {
+	if err := st.Click("AAA"); err != nil {
 		t.Fatalf("点行名字: %v", err)
 	}
-	tt.Frame()
+	st.Frame()
 	if a.editIdx != 0 {
 		t.Errorf("点名字应该选中那一行，editIdx=%d", a.editIdx)
 	}
 	// 点手柄也一样选中（手柄只吃不拖的那一下）
-	ra, _ = tt.Find("AAA")
-	tt.ClickAt(ra.X+13, ra.Y+ra.H/2)
-	tt.Frame()
+	ra, _ = st.Find("AAA")
+	st.ClickAt(ra.X+13, ra.Y+ra.H/2)
+	st.Frame()
 	if a.editIdx != 0 {
 		t.Errorf("点手柄也应该选中那一行，editIdx=%d", a.editIdx)
 	}
@@ -391,6 +400,7 @@ func TestThemeAndLocaleSettings(t *testing.T) {
 	tt := ui.NewTester(a.view, 1280, 860)
 	still(tt)
 	tt.Frame()
+	installSettingsWindowStub(t)
 
 	// 1. 测试外观切换逻辑
 	a.setThemeMode("light")
@@ -442,111 +452,112 @@ func TestThemeAndLocaleSettings(t *testing.T) {
 		t.Fatalf("点模型设置: %v", err)
 	}
 	tt.Frame()
+	st := settingsViewTester(t, a)
 
 	if !a.settingsOn {
 		t.Fatal("设置窗口应处于打开状态")
 	}
 
 	// 切换到「通用偏好」选项卡
-	if err := tt.Click("通用偏好"); err != nil {
+	if err := st.Click("通用偏好"); err != nil {
 		t.Fatalf("点击「通用偏好」选项卡: %v", err)
 	}
-	tt.Frame()
+	st.Frame()
 
 	if a.settingsTab != 1 {
 		t.Errorf("settingsTab 应为 1（通用偏好），实际为 %d", a.settingsTab)
 	}
 
 	// 验证选项卡内卡片渲染
-	if !tt.HasText("外观主题") || !tt.HasText("界面语言") {
+	if !st.HasText("外观主题") || !st.HasText("界面语言") {
 		t.Error("通用偏好页面应包含外观主题与界面语言分区")
 	}
 
 	// 点击浅色模式卡片
-	if err := tt.Click("浅色模式"); err != nil {
+	if err := st.Click("浅色模式"); err != nil {
 		t.Fatalf("点击「浅色模式」卡片: %v", err)
 	}
-	tt.Frame()
+	st.Frame()
 	if a.themeMode != "light" {
 		t.Errorf("点击浅色卡片后 themeMode 应为 light，实际为 %s", a.themeMode)
 	}
 
 	// 点击深色模式卡片
-	if err := tt.Click("深色模式"); err != nil {
+	if err := st.Click("深色模式"); err != nil {
 		t.Fatalf("点击「深色模式」卡片: %v", err)
 	}
-	tt.Frame()
+	st.Frame()
 	if a.themeMode != "dark" {
 		t.Errorf("点击深色卡片后 themeMode 应为 dark，实际为 %s", a.themeMode)
 	}
 
 	// 亚克力背景：两条设置都在外观主题分组里，模糊档位点了就落进配置。
-	if !tt.HasText("背景透明度") || !tt.HasText("亚克力模糊") {
+	if !st.HasText("背景透明度") || !st.HasText("亚克力模糊") {
 		t.Error("外观主题分组应包含「背景透明度」与「亚克力模糊」")
 	}
-	if err := tt.Click("强力"); err != nil {
+	if err := st.Click("强力"); err != nil {
 		t.Fatalf("点击「强力」模糊档位: %v", err)
 	}
-	tt.Frame()
+	st.Frame()
 	if a.backgroundBlur() != blurDeep {
 		t.Errorf("点击「强力」后背景模糊应为 %q，实际为 %q", blurDeep, a.backgroundBlur())
 	}
 
 	// 点击 English 卡片
-	if err := tt.Click("English"); err != nil {
+	if err := st.Click("English"); err != nil {
 		t.Fatalf("点击「English」卡片: %v", err)
 	}
-	tt.Frame()
+	st.Frame()
 	if !IsEnglish() {
 		t.Error("点击 English 卡片后语言应切换为英文")
 	}
 
 	// 切换回简体中文
-	if err := tt.Click("简体中文"); err != nil {
+	if err := st.Click("简体中文"); err != nil {
 		t.Fatalf("点击「简体中文」卡片: %v", err)
 	}
-	tt.Frame()
+	st.Frame()
 	if IsEnglish() {
 		t.Error("点击简体中文卡片后语言应切换为中文")
 	}
 
 	// 4. 测试应用图标切换（这一分区只在 macOS 上摆，见 settings.go）
 	if runtime.GOOS == "darwin" {
-		if !tt.HasText("应用图标") {
+		if !st.HasText("应用图标") {
 			t.Error("通用偏好页面应包含「应用图标」分区")
 		}
-		if err := tt.Click("纯白极简"); err != nil {
+		if err := st.Click("纯白极简"); err != nil {
 			t.Fatalf("点击「纯白极简」图标卡片: %v", err)
 		}
-		tt.Frame()
+		st.Frame()
 		if a.appIcon != "white" {
 			t.Errorf("点击纯白卡片后 appIcon 应为 white，实际为 %s", a.appIcon)
 		}
 
-		if err := tt.Click("纯黑极简"); err != nil {
+		if err := st.Click("纯黑极简"); err != nil {
 			t.Fatalf("点击「纯黑极简」图标卡片: %v", err)
 		}
-		tt.Frame()
+		st.Frame()
 		if a.appIcon != "black" {
 			t.Errorf("点击纯黑卡片后 appIcon 应为 black，实际为 %s", a.appIcon)
 		}
 	}
 
 	// 5. 测试切换至「关于 Gloss」选项卡
-	if err := tt.Click("关于 Gloss"); err != nil {
+	if err := st.Click("关于 Gloss"); err != nil {
 		t.Fatalf("点击「关于 Gloss」侧边栏条目: %v", err)
 	}
-	tt.Frame()
+	st.Frame()
 	if a.settingsTab != settingsTabAbout {
 		t.Errorf("settingsTab 应为 settingsTabAbout (%d)，实际为 %d", settingsTabAbout, a.settingsTab)
 	}
-	if !tt.HasText(appVersionLabel()) {
+	if !st.HasText(appVersionLabel()) {
 		t.Errorf("关于面板应渲染版本号 %s", appVersionLabel())
 	}
 
 	// 取消关闭
-	_ = tt.Click("取消")
-	tt.Frame()
+	_ = st.Click("取消")
+	st.Frame()
 	if a.settingsOn {
 		t.Fatal("取消后对话框应该关闭")
 	}
@@ -627,27 +638,31 @@ func TestToggleEditActive(t *testing.T) {
 func TestSettingsDialogSavesProviders(t *testing.T) {
 	a := richApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
+	still(tt)
+	tt.Frame()
+	installSettingsWindowStub(t)
 
 	if err := tt.Click("模型设置…"); err != nil {
 		t.Fatalf("点模型设置：%v", err)
 	}
 	tt.Frame()
+	st := settingsViewTester(t, a)
 	if !a.settingsOn {
 		t.Fatal("设置对话框没打开")
 	}
-	if !tt.HasText("模型设置") {
-		t.Errorf("对话框内容没画出来：%q", tt.Texts())
+	if !st.HasText("模型设置") {
+		t.Errorf("对话框内容没画出来：%q", st.Texts())
 	}
 
 	// 加一个 DeepSeek，改掉 API key，保存
-	if err := tt.Click("添加供应商"); err != nil {
+	if err := st.Click("添加供应商"); err != nil {
 		t.Fatalf("点添加供应商：%v", err)
 	}
-	tt.Frame()
-	if err := tt.ChooseMenuItem("DeepSeek"); err != nil {
+	st.Frame()
+	if err := st.ChooseMenuItem("DeepSeek"); err != nil {
 		t.Fatalf("菜单里选 DeepSeek：%v", err)
 	}
-	tt.Frame()
+	st.Frame()
 	// 加预设只选中编辑，不悄悄切成当前生效 —— 启用是详情页那个开关的事
 	if got := a.editCfg.Providers[a.editIdx].BaseURL; got != "https://api.deepseek.com" {
 		t.Errorf("预设没填进 Base URL：%+v", a.editCfg.Providers[a.editIdx])
@@ -657,10 +672,10 @@ func TestSettingsDialogSavesProviders(t *testing.T) {
 	}
 	a.editCfg.Providers[a.editIdx].APIKey = "sk-test"
 	a.toggleEditActive() // 详情页头部那个开关绑定的就是这个行为
-	if err := tt.Click("保存"); err != nil {
+	if err := st.Click("保存"); err != nil {
 		t.Fatalf("点保存：%v", err)
 	}
-	tt.Frame()
+	st.Frame()
 
 	if a.settingsOn {
 		t.Error("保存之后对话框应该关掉")
@@ -706,33 +721,36 @@ func TestUpdatesSettingsPane(t *testing.T) {
 	a.attachStore(s)
 	tt := ui.NewTester(a.view, 1280, 860)
 	still(tt)
+	tt.Frame()
+	installSettingsWindowStub(t)
 
 	if err := tt.Click("模型设置…"); err != nil {
 		t.Fatalf("打开设置面板失败: %v", err)
 	}
 	tt.Frame()
-	if err := tt.Click(T("更新", "Updates")); err != nil {
+	st := settingsViewTester(t, a)
+	if err := st.Click(T("更新", "Updates")); err != nil {
 		t.Fatalf("点击「更新」分栏失败: %v", err)
 	}
-	tt.Frame()
+	st.Frame()
 
 	if a.settingsTab != settingsTabUpdates {
 		t.Fatalf("设置页签应切到更新页，实际 %d", a.settingsTab)
 	}
-	if !tt.HasText(appVersionLabel()) {
+	if !st.HasText(appVersionLabel()) {
 		t.Errorf("更新页应显示当前版本 %s", appVersionLabel())
 	}
-	if !tt.HasText(lastCheckLabel(checkedAt)) {
+	if !st.HasText(lastCheckLabel(checkedAt)) {
 		t.Errorf("更新页应显示上次检查时间 %s", lastCheckLabel(checkedAt))
 	}
-	if !tt.HasText("自动检查更新") || !tt.HasText("自动下载更新") {
+	if !st.HasText("自动检查更新") || !st.HasText("自动下载更新") {
 		t.Error("更新页应显示两个自动更新开关")
 	}
 
-	if err := tt.Click("检查更新…"); err != nil {
+	if err := st.Click("检查更新…"); err != nil {
 		t.Fatalf("点击「检查更新…」失败: %v", err)
 	}
-	tt.Frame()
+	st.Frame()
 	if checkCalls != 1 {
 		t.Errorf("点击「检查更新…」应触发一次检查，实际 %d 次", checkCalls)
 	}
@@ -755,8 +773,8 @@ func TestUpdatesSettingsPane(t *testing.T) {
 
 	// 未启用更新的构建：只说明不可用，不给开关。
 	prefs = updatePrefs{}
-	tt.Frame()
-	if !tt.HasText("当前构建未启用自动更新（开发构建，或由包管理器安装）。") {
+	st.Frame()
+	if !st.HasText("当前构建未启用自动更新（开发构建，或由包管理器安装）。") {
 		t.Error("未启用更新的构建应显示说明")
 	}
 }
@@ -791,25 +809,22 @@ func TestAutoFetchSettingPersists(t *testing.T) {
 		t.Error("轮询那边的开关该跟着是 0")
 	}
 
-	const winH float32 = 900
-	tt := ui.NewTester(a.view, 1280, int(winH))
-	still(tt)
-	tt.Frame()
-	a.openSettings()
+	const winH float32 = settingsWindowH
+	st := settingsTester(t, a, settingsWindowW, settingsWindowH)
 	a.settingsTab = settingsTabGeneral
-	tt.Frame()
+	st.Frame()
 
-	if !tt.HasText(T("远程同步", "Remote Sync")) {
-		t.Fatalf("通用偏好里没有远程同步分区：%q", tt.Texts())
+	if !st.HasText(T("远程同步", "Remote Sync")) {
+		t.Fatalf("通用偏好里没有远程同步分区：%q", st.Texts())
 	}
 	// 那一分区在页面底下，先滚到能看见
-	scrollTo(t, tt, T("后台自动抓取", "Fetch in the Background"), winH)
+	scrollTo(t, st, T("后台自动抓取", "Fetch in the Background"), winH)
 	// 开关有它自己的名字（行左边那行字是纯文本，点了不 toggle）
-	if err := tt.Click(T("后台自动抓取开关", "Fetch in the Background switch")); err != nil {
+	if err := st.Click(T("后台自动抓取开关", "Fetch in the Background switch")); err != nil {
 		t.Fatalf("点「后台自动抓取」开关: %v", err)
 	}
 	settle(t, a)
-	tt.Frame()
+	st.Frame()
 
 	if !a.autoFetch {
 		t.Error("点过之后 autoFetch 该是 true")
@@ -823,11 +838,11 @@ func TestAutoFetchSettingPersists(t *testing.T) {
 	}
 
 	// 关回去
-	if err := tt.Click(T("后台自动抓取开关", "Fetch in the Background switch")); err != nil {
+	if err := st.Click(T("后台自动抓取开关", "Fetch in the Background switch")); err != nil {
 		t.Fatalf("再点一次「后台自动抓取」开关: %v", err)
 	}
 	settle(t, a)
-	tt.Frame()
+	st.Frame()
 	if a.autoFetch || a.autoFetchOn.Load() != 0 {
 		t.Errorf("再点一次该关回去：autoFetch=%v on=%d", a.autoFetch, a.autoFetchOn.Load())
 	}

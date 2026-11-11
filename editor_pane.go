@@ -408,7 +408,7 @@ func (a *app) editorPaneView(c *ui.Context, pal palette) {
 		ui.Box(c).Grow(1).FillWidth().Children(func() {
 			ui.Column(c).Fill().Center().Gap(8).Padding(24).Children(func() {
 				ui.Text(c, T("从左侧选择一个文件开始编辑", "Select a file on the left to start editing")).
-					FontSize(textBodySM).TextColor(t.TextMuted)
+					FontSize(uiFontSize(textBodySM)).TextColor(t.TextMuted)
 			})
 		})
 		return
@@ -416,7 +416,7 @@ func (a *app) editorPaneView(c *ui.Context, pal palette) {
 		ui.Box(c).Grow(1).FillWidth().Children(func() {
 			ui.Column(c).Fill().Center().Gap(8).Children(func() {
 				ui.Spinner(c).Size(18, 18)
-				ui.Text(c, T("正在读取文件…", "Loading file…")).FontSize(textBodySM).TextColor(pal.inkMuted)
+				ui.Text(c, T("正在读取文件…", "Loading file…")).FontSize(uiFontSize(textBodySM)).TextColor(pal.inkMuted)
 			})
 		})
 		return
@@ -424,7 +424,7 @@ func (a *app) editorPaneView(c *ui.Context, pal palette) {
 		ui.Box(c).Grow(1).FillWidth().Children(func() {
 			ui.Column(c).Fill().Center().Gap(10).Padding(24).Children(func() {
 				headline(c, pal, T("打不开这个文件", "Unable to Open File"))
-				ui.Text(c, s.err).Font("monospace").FontSize(textCaption).
+				ui.Text(c, s.err).Font("monospace").FontSize(uiFontSize(textCaption)).
 					SingleLine().TextColor(pal.inkMuted)
 			})
 		})
@@ -452,7 +452,7 @@ func (a *app) editorTabBar(c *ui.Context, pal palette) {
 		BorderWidth(0, 0, 1, 0).BorderColor(pal.hairline).Children(func() {
 		if len(a.editorPane.tabs) == 0 {
 			ui.Text(c, T("未选择文件", "No file selected")).Font("monospace").
-				FontSize(textBodySM).SingleLine().TextColor(pal.inkMuted)
+				FontSize(uiFontSize(textBodySM)).SingleLine().TextColor(pal.inkMuted)
 			ui.Spacer(c)
 			return
 		}
@@ -489,7 +489,7 @@ func (a *app) editorTabBar(c *ui.Context, pal palette) {
 		if a.editorPaneWidthEstimate(c) < 600 {
 			return
 		}
-		ui.Text(c, s.path).Font("monospace").FontSize(11).SingleLine().
+		ui.Text(c, s.path).Font("monospace").FontSize(uiFontSize(textCaption)).SingleLine().
 			MaxWidth(260).TextColor(pal.inkSubtle)
 	})
 }
@@ -525,7 +525,7 @@ func (a *app) editorTabChip(c *ui.Context, pal palette, idx int, tab *editorTabS
 			ui.Box(c).Size(6, 6).Shrink(0).Radius(radiusPill).
 				Background(t.Accent).Label(T("未保存的改动", "Unsaved changes"))
 		}
-		ui.Text(c, name).FontSize(textCaption).SingleLine().
+		ui.Text(c, name).FontSize(uiFontSize(textCaption)).SingleLine().
 			Grow(1).MinWidth(0).TextColor(fg)
 		closeBtn := ui.ButtonBase(c).Size(16, 16).Shrink(0).Radius(radiusXS).
 			Cursor(ui.CursorPointer).

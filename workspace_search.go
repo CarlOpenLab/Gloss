@@ -495,7 +495,7 @@ func (a *app) workspaceSearchView(c *ui.Context, pal palette, t *ui.Theme) {
 		ui.Box(c).Grow(1).FillWidth().Children(func() {
 			ui.Column(c).Fill().Center().Gap(8).Children(func() {
 				ui.Spinner(c).Size(16, 16)
-				ui.Text(c, T("正在搜索…", "Searching…")).FontSize(textCaption).TextColor(pal.inkSubtle)
+				ui.Text(c, T("正在搜索…", "Searching…")).FontSize(uiFontSize(textCaption)).TextColor(pal.inkSubtle)
 			})
 		})
 		return
@@ -510,13 +510,13 @@ func (a *app) workspaceSearchView(c *ui.Context, pal palette, t *ui.Theme) {
 
 	ui.Row(c).Shrink(0).Padding(2, 12, 6, 12).Gap(6).AlignItems(ui.Center).Children(func() {
 		ui.Textf(c, T("在 %d 个文件里命中 %d 处", "%d hits in %d files"), len(s.results), s.fileCount).
-			FontSize(textCaption).TextColor(pal.inkSubtle)
+			FontSize(uiFontSize(textCaption)).TextColor(pal.inkSubtle)
 		if len(wsGlobPatterns(s.include)) > 0 || len(wsGlobPatterns(s.exclude)) > 0 {
-			ui.Text(c, T("· 路径过滤生效中", "· path filters active")).FontSize(textCaption).
+			ui.Text(c, T("· 路径过滤生效中", "· path filters active")).FontSize(uiFontSize(textCaption)).
 				TextColor(pal.inkTertiary)
 		}
 		if s.truncated {
-			ui.Text(c, T("结果已截断", "Results truncated")).FontSize(textCaption).
+			ui.Text(c, T("结果已截断", "Results truncated")).FontSize(uiFontSize(textCaption)).
 				TextColor(pal.inkTertiary)
 		}
 	})
@@ -541,9 +541,9 @@ func (a *app) wsSearchHeadRow(c *ui.Context, pal palette, r wsSearchRow) {
 		row.Background(pal.rowHover)
 	}
 	row.Children(func() {
-		ui.Text(c, r.path).Font("monospace").FontSize(textCaption).Grow(1).
+		ui.Text(c, r.path).Font("monospace").FontSize(uiFontSize(textCaption)).Grow(1).
 			MinWidth(0).SingleLine().TextColor(pal.ink)
-		ui.Textf(c, "%d", r.count).Shrink(0).FontSize(textCaption).
+		ui.Textf(c, "%d", r.count).Shrink(0).FontSize(uiFontSize(textCaption)).
 			FontFeatures("tnum").TextColor(pal.inkSubtle)
 	})
 	if row.Clicked() {
@@ -560,13 +560,13 @@ func (a *app) wsSearchHitRow(c *ui.Context, pal palette, h wsSearchHit) {
 	}
 	row.Children(func() {
 		ui.Textf(c, "%d", h.Line).Width(28).Shrink(0).TextAlign(ui.End).
-			FontSize(11).FontFeatures("tnum").TextColor(pal.inkTertiary)
+			FontSize(uiFontSize(textCaption)).FontFeatures("tnum").TextColor(pal.inkTertiary)
 		// 片段可能比栏宽长：Clip 掉，三段文本在窗口里从左往右排。
 		ui.Box(c).Grow(1).MinWidth(0).Clip().Children(func() {
 			ui.Row(c).Gap(0).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, h.Text[:h.Off]).SingleLine().FontSize(11).TextColor(pal.inkMuted)
-				ui.Text(c, h.Text[h.Off:h.Off+h.Len]).SingleLine().FontSize(11).TextColor(pal.accent)
-				ui.Text(c, h.Text[h.Off+h.Len:]).SingleLine().FontSize(11).TextColor(pal.inkMuted)
+				ui.Text(c, h.Text[:h.Off]).SingleLine().FontSize(uiFontSize(textCaption)).TextColor(pal.inkMuted)
+				ui.Text(c, h.Text[h.Off:h.Off+h.Len]).SingleLine().FontSize(uiFontSize(textCaption)).TextColor(pal.accent)
+				ui.Text(c, h.Text[h.Off+h.Len:]).SingleLine().FontSize(uiFontSize(textCaption)).TextColor(pal.inkMuted)
 			})
 		})
 	})
@@ -586,7 +586,7 @@ func (a *app) wsSearchPathPanel(c *ui.Context, pal palette) {
 			T("不搜这些：node_modules, dist, *.lock", "Not these: node_modules, dist, *.lock"))
 		if sug := wsSearchSuggestions(a.wsAll); len(sug) > 0 {
 			ui.Row(c).Shrink(0).FillWidth().Gap(4).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, T("试试：", "Try:")).FontSize(textCaption).TextColor(pal.inkTertiary).Shrink(0)
+				ui.Text(c, T("试试：", "Try:")).FontSize(uiFontSize(textCaption)).TextColor(pal.inkTertiary).Shrink(0)
 				for _, sg := range sug {
 					sg := sg
 					chip := ui.ButtonBase(c).Shrink(0).Height(18).Padding(0, 8).Radius(radiusPill).
@@ -596,7 +596,7 @@ func (a *app) wsSearchPathPanel(c *ui.Context, pal palette) {
 					}
 					fadeColors(chip)
 					chip.Children(func() {
-						ui.Text(c, sg).Font("monospace").FontSize(10).TextColor(pal.inkMuted)
+						ui.Text(c, sg).Font("monospace").FontSize(uiFontSize(rowChipText)).TextColor(pal.inkMuted)
 					})
 					if chip.Clicked() {
 						a.wsSearchInclude = wsAppendPattern(a.wsSearchInclude, sg)

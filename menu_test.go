@@ -214,24 +214,35 @@ func TestMenuCommands(t *testing.T) {
 		t.Error("点「显示侧栏」应该把侧栏收起来")
 	}
 
-	// 对话框开着的时候让位：视图那条路在模态下会被框架挡掉，菜单这条路
-	// 框架挡不着，得自己让。两边不然就不一个脾气了。
+	// 设置不再是主窗口里的一块模态浮层，而是它自己的窗口（issue #7 问题四）：
+	// 主窗口整个露在外面，快捷键照旧归它。这正是用户要的 —— 「修改字号的
+	// 时候已经生效了，但是被遮挡」，改完想看看效果，得先把设置关掉。
 	//
-	// 模态是在对话框被提交的那一帧才立起来的，所以先画一帧再说 ——
-	// 也正是用户真正看到的顺序（对话框先出现在屏幕上，然后才按键）。
+	// 而菜单那条路仍然让位：它在系统层收键，framework 挡不到，得自己判
+	// （menuDo 的 modalOn）。两边的分工照旧，只是快捷键这一边不再被挡。
+	installSettingsWindowStub(t)
 	a.settingsOn = true
+	tt.Frame()
+	a.setSection(sectionHistory)
 	tt.Frame()
 	before := a.tab
 	tt.Key(ui.Cmd, ui.Key1)
 	tt.Frame()
-	if a.tab != before {
-		t.Fatalf("设置面板开着时快捷键不该切 tab（前提就错了）")
+	if a.tab == before {
+		t.Fatalf("设置窗口开着时主窗口该还活着：⌘1 要能切回改动（tab = %d）", a.tab)
 	}
+	if a.tab != sectionChanges {
+		t.Errorf("⌘1 该切到改动，tab = %d, want %d", a.tab, sectionChanges)
+	}
+	// 菜单这一边相反：点「查看改动」什么都不该发生，tab 停在 ⌘1 刚给的
+	// 那个位置上。菜单在系统层收键，框架的模态挡不到它，所以让位是 menuDo
+	// 自己判的（modalOn）—— 少了那一判，用户在设置窗口里点一下菜单，
+	// 背后的 tab 就换了。
 	clickMenuItem(t, m, "查看改动")
 	settle(t, a)
 	tt.Frame()
-	if a.tab != before {
-		t.Errorf("设置面板开着时菜单也不该在背后切 tab：tab = %d, want %d", a.tab, before)
+	if a.tab != sectionChanges {
+		t.Errorf("设置窗口开着时菜单不该在背后切 tab：tab = %d, want %d", a.tab, sectionChanges)
 	}
 }
 

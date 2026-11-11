@@ -140,11 +140,12 @@ type app struct {
 	listID string
 
 	// —— 视图 ——
-	tabs      []*repoTab // 打开的多项目标签页
-	activeTab int        // 当前激活的标签页下标
-	viewMode  int        // 0 = Git GUI 面板, 1 = 内置终端
-	split     bool       // true = split（左右对照），false = unified
-	codeSize  float32    // 代码字号；0 表示用默认值
+	tabs       []*repoTab // 打开的多项目标签页
+	activeTab  int        // 当前激活的标签页下标
+	viewMode   int        // 0 = Git GUI 面板, 1 = 内置终端
+	split      bool       // true = split（左右对照），false = unified
+	codeSize   float32    // 代码字号；0 表示用默认值
+	uiFontSize float32    // 界面字号档位；0 表示用默认档
 	// termThemePushed / termThemeDark 记着上一次推给终端的明暗。终端的配色
 	// 是启动时给的一份快照，换主题它不会自己跟上 —— 比一眼，变了才推
 	// （见 syncTerminalThemes）。第一个字段是「推过没有」：默认（浅色）
@@ -321,9 +322,12 @@ type app struct {
 	// settingsOn 是「模型设置」对话框是否打开；editCfg 是编辑中的副本，
 	// 点确定之前不动真配置。
 	settingsOn bool
-	// settingsDrag 是设置窗口被拖到的位置（相对窗口中心）。它是一块浮在
-	// 页面上的窗口，不是盖住页面的幕布：可以挪开看底下的终端。
-	settingsDrag  ui.Point
+	// settingsWin 是设置那个窗口，nil 表示没开（无头测试、或者系统拒绝
+	// 开窗）。设置现在是自己的窗口（issue #7 问题四），主窗口那边不再画它。
+	settingsWin settingsWindow
+	// settingsView 是设置窗口的视图函数，建窗时交出去的那一份。留着它，
+	// 测试才能驱动设置那一棵树（Tester 一次驱动一个 view 函数）。
+	settingsView  func(*ui.Context)
 	settingsTab   settingsTab
 	editCfg       store.Config
 	editIdx       int
@@ -546,6 +550,10 @@ func (a *app) attachStore(s *store.Store) {
 	a.store = s
 	cfg := s.Config()
 	a.codeSize = cfg.CodeSize
+	// 界面字号档位：读回来就拨上去，这样第一帧就是用户要的大小 —— 等用户在
+	// 设置里手动调一次才生效的话，启动那一瞬间还是会看到偏小的字。
+	a.uiFontSize = cfg.UIFontSize
+	setUIFontSizeStep(a.uiFontSizeValue())
 	a.split = !cfg.Unified
 	a.sidebarOn = !cfg.SidebarOff
 	a.sidebarWidthVal = cfg.SidebarWidth
@@ -632,6 +640,7 @@ func (a *app) saveViewSettings() {
 	cfg.Unified = !a.split
 	cfg.SidebarOff = !a.sidebarOn
 	cfg.CodeSize = a.codeSize
+	cfg.UIFontSize = a.uiFontSize
 	if a.sidebarWidthVal > 0 {
 		cfg.SidebarWidth = a.sidebarWidthVal
 	}
@@ -970,7 +979,6 @@ func (a *app) view(c *ui.Context) {
 		}
 	})
 	a.paletteDialog(c, pal)
-	a.settingsDialog(c, pal)
 	a.tagDialog(c, pal)
 	a.resetDialog(c, pal)
 	a.newBranchDialog(c, pal)
@@ -1132,7 +1140,7 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 			if a.repoPath != "" {
 				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 					drawIcon(c, iconTerminal, 12, pal.inkSubtle)
-					ui.Text(c, a.repoPath).FontSize(textCaption).TextColor(pal.inkMuted).SingleLine()
+					ui.Text(c, a.repoPath).FontSize(uiFontSize(textCaption)).TextColor(pal.inkMuted).SingleLine()
 				})
 			}
 			ui.Spacer(c)
@@ -1188,7 +1196,7 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 				Children(func() {
 					ui.Row(c).Gap(6).AlignItems(ui.Center).Shrink(0).Children(func() {
 						ui.Spinner(c).Size(12, 12)
-						ui.Text(c, a.opName).FontSize(textCaption).
+						ui.Text(c, a.opName).FontSize(uiFontSize(textCaption)).
 							TextColor(pal.inkMuted).SingleLine()
 					})
 				})
@@ -1230,7 +1238,7 @@ func (a *app) repoHeader(c *ui.Context, pal palette) {
 		fadeColors(repoBtn)
 		repoBtn.Children(func() {
 			ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, name).FontWeight(weightSemibold).FontSize(textBody).SingleLine().MaxWidth(180)
+				ui.Text(c, name).FontWeight(weightSemibold).FontSize(uiFontSize(textBody)).SingleLine().MaxWidth(180)
 				drawIcon(c, iconChevronDown, 10, pal.inkSubtle)
 			})
 		})
@@ -1267,14 +1275,14 @@ func (a *app) repoDropdownPanel(c *ui.Context, panel ui.Element, pal palette) {
 	// 标题区域
 	ui.Row(c).Padding(6, 8, 4, 8).Gap(6).AlignItems(ui.Center).Children(func() {
 		drawIcon(c, iconClock, 12, pal.inkSubtle)
-		ui.Text(c, T("最近打开的项目", "Recent Repositories")).FontSize(textCaption).
+		ui.Text(c, T("最近打开的项目", "Recent Repositories")).FontSize(uiFontSize(textCaption)).
 			FontWeight(weightSemibold).TextColor(pal.inkSubtle)
 	})
 
 	if !hasRecent {
 		ui.Box(c).Padding(8, 10).Children(func() {
 			ui.Text(c, T("暂无最近打开的项目", "No recent repositories")).
-				FontSize(textBodySM).TextColor(pal.inkSubtle)
+				FontSize(uiFontSize(textBodySM)).TextColor(pal.inkSubtle)
 		})
 	} else {
 		ui.Scroll(c).MaxHeight(320).FillWidth().Children(func() {
@@ -1312,11 +1320,11 @@ func (a *app) repoDropdownPanel(c *ui.Context, panel ui.Element, pal palette) {
 					drawIcon(c, iconFolder, 14, iconCol)
 
 					ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
-						tElem := ui.Text(c, base).FontSize(12.5).SingleLine().TextColor(pal.ink)
+						tElem := ui.Text(c, base).FontSize(uiFontSize(textButton)).SingleLine().TextColor(pal.ink)
 						if isCurrent {
 							tElem.FontWeight(weightMedium)
 						}
-						ui.Text(c, pathCopy).FontSize(textCaption).SingleLine().
+						ui.Text(c, pathCopy).FontSize(uiFontSize(textCaption)).SingleLine().
 							TextColor(pal.inkSubtle)
 					})
 
@@ -1354,11 +1362,11 @@ func (a *app) repoDropdownPanel(c *ui.Context, panel ui.Element, pal palette) {
 	openBtn.Children(func() {
 		drawIcon(c, iconFolderPlus, 13, pal.inkMuted)
 		ui.Text(c, T("打开其他本地仓库…", "Open Other Local Repository…")).
-			FontSize(textButton).TextColor(pal.ink)
+			FontSize(uiFontSize(textButton)).TextColor(pal.ink)
 		ui.Spacer(c)
 		ui.Box(c).Radius(radiusXS).Padding(1, 5).Background(pal.surface1).
 			Border(1, pal.hairlineStrong).Children(func() {
-			ui.Text(c, K("⌘O")).FontSize(textCaption).Font("monospace").TextColor(pal.inkSubtle)
+			ui.Text(c, K("⌘O")).FontSize(uiFontSize(textCaption)).Font("monospace").TextColor(pal.inkSubtle)
 		})
 	})
 	if openBtn.Clicked() {
@@ -1377,7 +1385,7 @@ func (a *app) repoDropdownPanel(c *ui.Context, panel ui.Element, pal palette) {
 		clearBtn.Children(func() {
 			drawIcon(c, iconTrash, 11, pal.inkSubtle)
 			ui.Text(c, T("清除最近打开记录", "Clear Recent Repositories")).
-				FontSize(textCaption).TextColor(pal.inkSubtle)
+				FontSize(uiFontSize(textCaption)).TextColor(pal.inkSubtle)
 		})
 		if clearBtn.Clicked() {
 			a.repoDropdownOpen = false
@@ -1413,7 +1421,7 @@ func (a *app) abnormalStateChip(c *ui.Context, t *ui.Theme, pal palette) {
 		Background(pal.chip).Border(1, pal.hairline).Tooltip(tip).Children(func() {
 		ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
 			drawIcon(c, iconGitBranch, 12, t.Warning)
-			ui.Text(c, name).FontSize(textButton).FontWeight(weightMedium).
+			ui.Text(c, name).FontSize(uiFontSize(textButton)).FontWeight(weightMedium).
 				SingleLine().MaxWidth(220).TextColor(t.Warning)
 		})
 	})

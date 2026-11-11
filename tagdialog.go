@@ -74,16 +74,16 @@ func (a *app) tagBody(c *ui.Context, pal palette) {
 	tg := &a.tag
 
 	ui.Column(c).Width(460).Gap(12).Children(func() {
-		ui.Text(c, "新建标签").FontSize(textHeadline).FontWeight(weightSemibold)
+		ui.Text(c, "新建标签").FontSize(uiFontSize(textHeadline)).FontWeight(weightSemibold)
 		// 打在哪儿必须写在脸上：右键是从某一行发起的，但用户的视线可能已经
 		// 跟着菜单走了，回来时得能确认自己点的是哪个提交。
-		ui.Text(c, "打在 "+tg.revLabel).FontSize(11).SingleLine().TextColor(t.TextMuted)
+		ui.Text(c, "打在 "+tg.revLabel).FontSize(uiFontSize(textCaption)).SingleLine().TextColor(t.TextMuted)
 
 		ui.Column(c).Gap(3).Children(func() {
 			// 小标题写「名称」、输入框的无障碍名字写「标签名称」：两个词不一样
 			// 是故意的 —— 屏幕上这个框就在「新建标签」底下，多两个字是废话；
 			// 而读屏和测试找的是控件自己，那个名字要能离开上下文站着。
-			ui.Text(c, "名称").FontSize(11).TextColor(t.TextMuted)
+			ui.Text(c, "名称").FontSize(uiFontSize(textCaption)).TextColor(t.TextMuted)
 			in := ui.TextInput(c, &tg.name).Placeholder("v1.0.0").Label("标签名称")
 			// 焦点只送一次：每帧都送的话，用户永远跳不到说明框去。
 			if tg.focusName {
@@ -99,7 +99,7 @@ func (a *app) tagBody(c *ui.Context, pal palette) {
 
 		ui.Checkbox(c, &tg.annotated, "附注标签").Label("附注标签")
 		ui.Text(c, "带说明、作者和日期；不勾就是轻量标签，只是一个名字。").
-			FontSize(11).TextColor(t.TextMuted)
+			FontSize(uiFontSize(textCaption)).TextColor(t.TextMuted)
 
 		if tg.annotated {
 			// 不加一行「标签说明」的小标题：placeholder 就是那句话，和提交框
@@ -111,7 +111,7 @@ func (a *app) tagBody(c *ui.Context, pal palette) {
 		}
 
 		if msg := tagBlocker(tg); msg != "" {
-			ui.Text(c, msg).FontSize(11).TextColor(t.TextMuted)
+			ui.Text(c, msg).FontSize(uiFontSize(textCaption)).TextColor(t.TextMuted)
 		}
 		failureBox(c, pal, t, tg.err)
 

@@ -118,7 +118,7 @@ func (a *app) riskScanBody(c *ui.Context, pal palette) {
 		// 顶部标题栏
 		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
 			shieldIcon(c, 16, pal.inkMuted)
-			ui.Text(c, "代码变更安全与风险预检").FontSize(textHeadline).
+			ui.Text(c, "代码变更安全与风险预检").FontSize(uiFontSize(textHeadline)).
 				FontWeight(weightSemibold).TextColor(pal.ink)
 			ui.Spacer(c)
 			if closeButton(c, pal) {
@@ -132,9 +132,9 @@ func (a *app) riskScanBody(c *ui.Context, pal palette) {
 			ui.Column(c).Padding(36, 0).Gap(12).AlignItems(ui.Center).Children(func() {
 				ui.Spinner(c)
 				ui.Text(c, "正在全面预检暂存区代码中的潜在漏洞与凭证泄露…").
-					FontSize(textBody).FontWeight(weightMedium).TextColor(pal.ink)
+					FontSize(uiFontSize(textBody)).FontWeight(weightMedium).TextColor(pal.ink)
 				ui.Text(c, "分析凭证泄露、代码注入、并发异常及破坏性变更").
-					FontSize(textCaption).TextColor(pal.inkSubtle)
+					FontSize(uiFontSize(textCaption)).TextColor(pal.inkSubtle)
 				ui.Row(c).Padding(8, 0).Children(func() {
 					if secondaryAction(c, pal, "取消预检", "", false).Clicked() {
 						a.closeRiskScan()
@@ -151,10 +151,10 @@ func (a *app) riskScanBody(c *ui.Context, pal palette) {
 				Background(t.Danger.Alpha(0.10)).Border(1, t.Danger.Alpha(0.35)).Gap(8).Children(func() {
 				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 					warnIcon(c, 14, t.Danger)
-					ui.Text(c, "预检扫描失败").FontSize(textBody).
+					ui.Text(c, "预检扫描失败").FontSize(uiFontSize(textBody)).
 						FontWeight(weightSemibold).TextColor(t.Danger)
 				})
-				ui.Text(c, rs.err).FontSize(textBodySM).TextColor(pal.inkMuted)
+				ui.Text(c, rs.err).FontSize(uiFontSize(textBodySM)).TextColor(pal.inkMuted)
 			})
 
 			ui.Row(c).Justify(ui.End).Gap(8).Children(func() {
@@ -190,11 +190,11 @@ func (a *app) riskScanBody(c *ui.Context, pal palette) {
 			ui.Row(c).Shrink(0).Gap(6).AlignItems(ui.Center).Children(func() {
 				ui.Box(c).Size(chipDot, chipDot).Shrink(0).Radius(chipDot / 2).
 					Background(badgeDot)
-				ui.Text(c, badgeIcon+" "+badgeText).FontSize(textBody).
+				ui.Text(c, badgeIcon+" "+badgeText).FontSize(uiFontSize(textBody)).
 					FontWeight(weightSemibold).TextColor(pal.ink)
 			})
-			ui.Text(c, "·").FontSize(textBodySM).TextColor(pal.inkTertiary)
-			ui.Text(c, rs.report.Summary).FontSize(textBodySM).TextColor(pal.inkMuted).Grow(1)
+			ui.Text(c, "·").FontSize(uiFontSize(textBodySM)).TextColor(pal.inkTertiary)
+			ui.Text(c, rs.report.Summary).FontSize(uiFontSize(textBodySM)).TextColor(pal.inkMuted).Grow(1)
 		})
 
 		// 发现项列表 (Findings List)
@@ -203,7 +203,7 @@ func (a *app) riskScanBody(c *ui.Context, pal palette) {
 				Background(pal.surface2).Border(1, pal.hairline).Children(func() {
 				ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
 					ui.Text(c, "✅ 暂存区代码未检出已知安全漏洞、凭证机密或危险并发缺陷。").
-						FontSize(textBodySM).TextColor(pal.inkMuted)
+						FontSize(uiFontSize(textBodySM)).TextColor(pal.inkMuted)
 				})
 			})
 		} else {
@@ -220,7 +220,7 @@ func (a *app) riskScanBody(c *ui.Context, pal palette) {
 		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
 			if len(rs.report.Findings) > 0 {
 				ui.Textf(c, "共发现 %d 处风险项", len(rs.report.Findings)).
-					FontSize(textCaption).TextColor(pal.inkSubtle)
+					FontSize(uiFontSize(textCaption)).TextColor(pal.inkSubtle)
 			}
 			ui.Spacer(c)
 			if secondaryAction(c, pal, "关闭", "", false).Clicked() {
@@ -256,22 +256,22 @@ func riskFindingCard(c *ui.Context, pal palette, f explain.RiskFinding) {
 		// 行 1: 严重度芯片 + 标题 + 文件路径与行号
 		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
 			specChip(c, pal, string(f.Severity), dot, rowChipH, rowChipText)
-			ui.Text(c, f.Title).FontSize(textBodySM).FontWeight(weightSemibold).
+			ui.Text(c, f.Title).FontSize(uiFontSize(textBodySM)).FontWeight(weightSemibold).
 				TextColor(pal.ink).Grow(1)
 			if f.FilePath != "" {
 				loc := f.FilePath
 				if f.Line > 0 {
 					loc = fmt.Sprintf("%s:%d", f.FilePath, f.Line)
 				}
-				ui.Text(c, loc).Font("monospace").FontSize(textCaption).TextColor(pal.inkSubtle)
+				ui.Text(c, loc).Font("monospace").FontSize(uiFontSize(textCaption)).TextColor(pal.inkSubtle)
 			}
 		})
 
 		// 行 2: 风险描述
 		if f.Description != "" {
 			ui.Row(c).Gap(6).AlignItems(ui.Start).Children(func() {
-				ui.Text(c, "风险描述:").FontSize(textCaption).TextColor(pal.inkSubtle).Shrink(0)
-				ui.Text(c, f.Description).FontSize(textCaption).TextColor(pal.inkMuted).Grow(1)
+				ui.Text(c, "风险描述:").FontSize(uiFontSize(textCaption)).TextColor(pal.inkSubtle).Shrink(0)
+				ui.Text(c, f.Description).FontSize(uiFontSize(textCaption)).TextColor(pal.inkMuted).Grow(1)
 			})
 		}
 
@@ -279,8 +279,8 @@ func riskFindingCard(c *ui.Context, pal palette, f explain.RiskFinding) {
 		// 而它指的正是上面那颗圆点，一眼能对上是哪一条。
 		if f.Suggestion != "" {
 			ui.Row(c).Gap(6).AlignItems(ui.Start).Children(func() {
-				ui.Text(c, "建议修复:").FontSize(textCaption).TextColor(dot).Shrink(0)
-				ui.Text(c, f.Suggestion).FontSize(textCaption).TextColor(pal.inkMuted).Grow(1)
+				ui.Text(c, "建议修复:").FontSize(uiFontSize(textCaption)).TextColor(dot).Shrink(0)
+				ui.Text(c, f.Suggestion).FontSize(uiFontSize(textCaption)).TextColor(pal.inkMuted).Grow(1)
 			})
 		}
 	})

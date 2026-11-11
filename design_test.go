@@ -72,6 +72,40 @@ func TestNoDerivedRadii(t *testing.T) {
 	}
 }
 
+// TestNoRawFontSizeLiterals 断言界面字号不再出现规范之外的裸数字。
+//
+// 规范给的是六档（§typography：display 20 / headline 16 / body 13 / body-sm 12 /
+// button 12.5 / caption 11），而代码里一度散着 9、10、10.5、12、12.5、13、13.5、
+// 14、15、18 十个值 —— 其中 54 个 11、17 个 12、13 个 13、6 个 12.5 写的正是
+// 六档里的数，只是没用 token 名。
+//
+// 守它不是为了整齐：**界面字号要能整体缩放**（设置里的「界面字号」，Win11 上
+// 正文偏小的那件事）。缩放只能在一个地方乘 —— 字号是散落的字面量的话，乘了
+// token 的那 216 处会变大，剩下这 100 来处不动，界面就一半大一半小，比不缩放
+// 更难读。所以字面量必须先收成 token，才好谈缩放。
+//
+// 例外的都写在 fontLiteralExceptions 里，键是「文件名:字面量」。
+var fontLiteralExceptions = map[string]string{
+	// 芯片徽章的字号（§4 那一档，widgets.go 的 rowChipText），由调用方作为
+	// 实参传进来 —— 参数名就是 token，值仍是一处定义。
+	"widgets.go:fontSize": "芯片字号由调用方给，见 specChip 的 rowChipText",
+}
+
+// TestNoRawFontSizeLiterals 断言 FontSize 的实参是 token 或变量，不是裸数字。
+func TestNoRawFontSizeLiterals(t *testing.T) {
+	for _, path := range designGuardFiles(t) {
+		for _, lit := range designCallArgs(t, path, "FontSize") {
+			key := filepath.Base(path) + ":" + lit
+			if _, ok := fontLiteralExceptions[key]; ok {
+				continue
+			}
+			t.Errorf("%s: FontSize(%s) 是裸字号 —— 用 design.go 的 textDisplay/Headline/Body/"+
+				"BodySM/Button/Caption；确实属于别的档位就在 fontLiteralExceptions 里写明理由",
+				path, lit)
+		}
+	}
+}
+
 // TestIntegerBorderWidths 断言描边宽度都是整数。
 //
 // 规范里只有 1px 发丝线和 2px 焦点环两种描边；1.2 与 1.5 这种值在半像素对齐的

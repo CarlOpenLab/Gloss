@@ -53,4 +53,68 @@ const (
 	// defSize 是代码的默认字号（diff 与编辑器共用）。⌘+ / ⌘− 在这基础上加减，
 	// 用户没调过时就是它。
 	defSize = 12.5
+
+	// —— 界面字号（上面那六档 + rowChipText 的整体缩放）——
+	//
+	// 系统那条 TextScale 路走不通：框架只把它乘到主题自己的 t.FontSize 上
+	// （ui/theme.go 的 follow），而 Gloss 界面上三百多处文字写的是上面的
+	// token，谁都不看 t.FontSize。用户在 Windows 设置里把文本放大到 125%，
+	// Gloss 一个像素都不动 —— 所以界面字号是 Gloss 自己的一个设置，跟着
+	// 用户走，而不是跟着系统走（issue #7 问题二）。
+	//
+	// 存的是**档位**而不是倍数：倍数是个浮点，写进 JSON 之后用户手改一位就
+	// 落不到档上，设置页显示的那一格也会对不上。档位是整数，拨过去就停在那。
+	uiFontSizeMin     float32 = 0 // 默认（规范定值）
+	uiFontSizeDefault float32 = 1 // 小一档
+	uiFontSizeMax     float32 = 2 // 大一档
+	uiFontSizeGear    float32 = 0.5
 )
+
+// uiFontGear 是当前生效的界面字号档位，包级 —— 界面上的字号每帧现算，而算它的
+// 地方一大半是没有 *app 的自由函数（settingsButton、riskFindingCard、headline
+// 这些，共 46 处），所以档位和 SetLocale/CurrentLocale 一样是包级状态。
+var uiFontGear = uiFontSizeDefault
+
+// uiFontSize 把一档字号基准按当前档位缩放。
+//
+// 缩放**只在这里乘一次**，而且每次都从入参那个基准现算：基准是 design.go 的
+// 常量（不会自己变大），结果也不写回去，所以同一个基准取多少次都是同一个数。
+// 反过来说，如果某个调用点把 uiFontSize 的结果存进跨帧复用的对象、下一帧又
+// 拿它当基准，字号就会一帧涨一截 —— TestUIFontScaleIsNotCompounded 守这一条。
+func uiFontSize(base float32) float32 {
+	return base * uiFontScaleFactor()
+}
+
+// uiFontScaleFactor 是当前档位对应的缩放倍数。
+func uiFontScaleFactor() float32 {
+	return 1 + (uiFontGear-uiFontSizeDefault)*uiFontSizeGear
+}
+
+// setUIFontSizeStep 设置界面字号档位，超出范围的收敛到范围内。
+//
+// 档位会从配置文件里读回来（用户手改过、旧版本写过别的数），一个 99 落进来，
+// 下一帧字号就是 50 倍 —— 界面直接涨出窗口。返回收敛后的档位，调用方不必
+// 再读一遍才知道实际落在哪一格。
+func setUIFontSizeStep(step float32) float32 {
+	uiFontGear = clamp(step, uiFontSizeMin, uiFontSizeMax)
+	return uiFontGear
+}
+
+// currentUIFontSizeStep 读当前档位（设置页与菜单显示用）。
+func currentUIFontSizeStep() float32 { return uiFontGear }
+
+// uiFontGearLabel 是设置页那一格里显示的文字。
+//
+// 显示「小 / 默认 / 大」而不是「0.5× / 1.0× / 1.5×」：用户调的是界面大小，
+// 倍数对他没有意义，而每一档具体是多少像素又随基准不同而不同（正文 13、
+// 芯片 10）。档位名是唯一一个三档都说得通的标签。
+func uiFontGearLabel(step float32) string {
+	switch step {
+	case uiFontSizeMin:
+		return T("默认", "Default")
+	case uiFontSizeMax:
+		return T("大", "Large")
+	default:
+		return T("小", "Small")
+	}
+}

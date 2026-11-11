@@ -84,7 +84,7 @@ func (a *app) refRow(c *ui.Context, pal palette, r filetree.Row) {
 		// 「现在看的是全部」。
 		if n.Key == refAll {
 			row, _ := treeRow(c, t, pal, treeRowOpts{Depth: r.Depth, Selected: a.histAll}, func() {
-				ui.Text(c, n.Label).FontSize(12).SingleLine().
+				ui.Text(c, n.Label).FontSize(uiFontSize(textBodySM)).SingleLine().
 					Grow(1).MinWidth(0).TextColor(pal.inkMuted)
 			})
 			if row.Clicked() {
@@ -92,7 +92,7 @@ func (a *app) refRow(c *ui.Context, pal palette, r filetree.Row) {
 			}
 			return
 		}
-		ui.Text(c, n.Label).FontSize(12).SingleLine()
+		ui.Text(c, n.Label).FontSize(uiFontSize(textBodySM)).SingleLine()
 		return
 	}
 
@@ -107,16 +107,16 @@ func (a *app) refRow(c *ui.Context, pal palette, r filetree.Row) {
 		if ref.Kind == gitrepo.RefStash {
 			// 储藏的名字（stash@{0}）人人都一样，认出它是哪一条全靠信息；
 			// 两个都画，名字压暗当索引，信息才是给人读的。
-			ui.Text(c, ref.Name).FontSize(11).Font("monospace").Shrink(0).
+			ui.Text(c, ref.Name).FontSize(uiFontSize(textCaption)).Font("monospace").Shrink(0).
 				TextColor(t.TextMuted)
-			ui.Text(c, ref.Subject).FontSize(12).SingleLine().
+			ui.Text(c, ref.Subject).FontSize(uiFontSize(textBodySM)).SingleLine().
 				Grow(1).MinWidth(0).TextColor(t.Text)
 			return
 		}
 
 		// 常规分支名用 Ink Muted，只有当前检出的那条提到 Ink（§2.3）：
 		// 一列分支读的是「有哪几条」，「我在哪条」才需要更亮的那一档。
-		txt := ui.Text(c, n.Label).FontSize(12).SingleLine().
+		txt := ui.Text(c, n.Label).FontSize(uiFontSize(textBodySM)).SingleLine().
 			Grow(1).MinWidth(0).TextColor(pal.inkMuted)
 		if ref.Head {
 			txt.FontWeight(weightSemibold).TextColor(pal.ink)
@@ -142,7 +142,7 @@ func (a *app) refRow(c *ui.Context, pal palette, r filetree.Row) {
 			if ref.UpstreamGone {
 				trackColor = pal.danger
 			}
-			ui.Text(c, track).FontSize(10).Font("monospace").FontFeatures("tnum").
+			ui.Text(c, track).FontSize(uiFontSize(rowChipText)).Font("monospace").FontFeatures("tnum").
 				Shrink(0).TextColor(trackColor)
 		}
 	})
@@ -191,7 +191,7 @@ func (a *app) refGroupRow(c *ui.Context, t *ui.Theme, pal palette, r filetree.Ro
 
 	// 分组行不参与选中：它不是一个可以「去看历史」的东西
 	row, arrow := treeRow(c, t, pal, treeRowOpts{Depth: r.Depth, HasKids: true, Open: open}, func() {
-		ui.Text(c, r.Node.Label).FontSize(textCaption).FontWeight(weightSemibold).
+		ui.Text(c, r.Node.Label).FontSize(uiFontSize(textCaption)).FontWeight(weightSemibold).
 			SingleLine().TextColor(pal.inkSubtle)
 	})
 

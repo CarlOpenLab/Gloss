@@ -132,12 +132,22 @@ func TestGraphNodeKnockout(t *testing.T) {
 // scrollTo 把通用偏好里的一项滚进视野，再交给调用方去点。
 //
 // 两件事一起判：一是这一项真的被排版了（被裁掉时 Find 会给出 W/H 都是 0 的
-// 位置，照着它点等于点空），二是它落在面板内容区里（面板最高 680，
-// settingsDialog 里那个 clamp；底下的「取消 / 保存」占了最后几十像素）。
-// 只判一条都会踩空：前者点到 (0,0)，后者点到模态遮罩上，把对话框点关。
+// 位置，照着它点等于点空），二是它落在设置窗口的内容区里（顶栏和底下的
+// 「取消 / 保存」各占了几十像素）。只判一条都会踩空：前者点到 (0,0)，
+// 后者点到底栏上，把面板关掉。
+//
+// 上下界从设置窗口自己的版式算，不写死：卡片四周留 settingsCardGap，顶栏
+// settingsBarH、底栏 settingsFooterH（settings_ui.go）。以前那对
+// 150 / winH-180 是面板还坐在主窗口里时拍的脑袋，搬到自己的窗口之后窗口
+// 只有 680 高 —— 上界 150 放掉了上面 100 像素，下界 500 又比真正的
+// 620 少了一截，「远程同步」那一组偏偏停在 519，于是永远滚不进那条带子。
+//
+// winH 是**设置窗口**的高度（settings_window.go 的 settingsWindowH）：设置
+// 现在是它自己的窗口，滚动也发生在那个窗口里。
 func scrollTo(t *testing.T, tt *ui.Tester, label string, winH float32) {
 	t.Helper()
-	top, bottom := float32(150), winH-180
+	top := float32(settingsBarH + settingsCardGap)
+	bottom := winH - float32(settingsFooterH+settingsCardGap)
 	for i := 0; i < 60; i++ {
 		box, ok := tt.Find(label)
 		if ok && box.W > 0 && box.H > 0 && box.Y >= top && box.Y+box.H <= bottom {
@@ -147,7 +157,7 @@ func scrollTo(t *testing.T, tt *ui.Tester, label string, winH float32) {
 		if ok && box.Y < top {
 			dy = -120
 		}
-		tt.Scroll(640, winH/2, 0, dy)
+		tt.Scroll(470, winH/2, 0, dy)
 		tt.Frame()
 	}
 	box, ok := tt.Find(label)
@@ -160,12 +170,9 @@ func TestGraphAndTerminalSettingsPersist(t *testing.T) {
 	s := store.Open(t.TempDir())
 	a.attachStore(s)
 
-	const winH float32 = 900
-	tt := ui.NewTester(a.view, 1280, 900)
-	still(tt)
-	tt.Frame()
-
-	a.openSettings()
+	// 设置是它自己的窗口（issue #7 问题四），这一页的点击全在设置视图上。
+	const winH float32 = settingsWindowH
+	tt := settingsTester(t, a, settingsWindowW, settingsWindowH)
 	a.settingsTab = settingsTabGeneral
 	tt.Frame()
 
@@ -247,15 +254,11 @@ func TestTerminalFontFamilyPicker(t *testing.T) {
 	s := store.Open(t.TempDir())
 	a.attachStore(s)
 
-	tt := ui.NewTester(a.view, 1280, 900)
-	still(tt)
-	tt.Frame()
-
-	a.openSettings()
+	tt := settingsTester(t, a, settingsWindowW, settingsWindowH)
 	a.settingsTab = settingsTabGeneral
 	tt.Frame()
 
-	scrollTo(t, tt, "终端字体族", 900)
+	scrollTo(t, tt, "终端字体族", settingsWindowH)
 	if err := tt.Click("终端字体族"); err != nil {
 		t.Fatalf("点字体族下拉：%v（%q）", err, tt.Texts())
 	}

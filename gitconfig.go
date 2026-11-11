@@ -308,12 +308,12 @@ func (a *app) gitSettingsPane(c *ui.Context, pal palette) {
 			ui.Row(c).AlignItems(ui.Center).Gap(12).Children(func() {
 				ui.Text(c, T("改的是 git 自己的配置文件，不是 Gloss 的设置。这里只管提交时署的身份（姓名与邮箱）—— 分支、远程那些在各自的面板里改。同名项按 项目级 > 全局 > 系统级 生效；保存时只写动过的那几项，配置文件里的注释和顺序都不动。",
 					"These are git's own config files, not Gloss preferences. This page covers only the identity commits are signed with (name and email) — branches and remotes live in their own panes. For duplicate keys, local beats global beats system; saving touches only what you changed, leaving comments and ordering intact.")).
-					FontSize(textBodySM).TextColor(pal.textMuted).LineHeight(1.4).Grow(1).MinWidth(0)
+					FontSize(uiFontSize(textBodySM)).TextColor(pal.textMuted).LineHeight(1.4).Grow(1).MinWidth(0)
 				a.gitConfigReloadButton(c, pal)
 			})
 
 			if a.gitCfg.loading && len(a.gitCfg.groups) == 0 {
-				ui.Text(c, T("正在读取配置…", "Reading config…")).FontSize(textBodySM).TextColor(pal.inkSubtle)
+				ui.Text(c, T("正在读取配置…", "Reading config…")).FontSize(uiFontSize(textBodySM)).TextColor(pal.inkSubtle)
 			}
 			if a.gitCfg.err != "" {
 				gitConfigErrorCard(c, pal, T("读 Git 配置没成功", "Could not read git config"), a.gitCfg.err)
@@ -358,11 +358,11 @@ func gitConfigErrorCard(c *ui.Context, pal palette, title, detail string) {
 		Background(t.Danger.Alpha(0.10)).Border(1, t.Danger.Alpha(0.35)).Children(func() {
 		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
 			warnIcon(c, 14, t.Danger)
-			ui.Text(c, title).FontSize(textBodySM).FontWeight(weightSemibold).TextColor(pal.ink)
+			ui.Text(c, title).FontSize(uiFontSize(textBodySM)).FontWeight(weightSemibold).TextColor(pal.ink)
 		})
 		if detail != "" {
 			// git 的原话：等宽、小一号 —— 它是证据不是结论。
-			ui.Text(c, detail).Font("monospace").FontSize(textCaption).TextColor(pal.inkMuted)
+			ui.Text(c, detail).Font("monospace").FontSize(uiFontSize(textCaption)).TextColor(pal.inkMuted)
 		}
 	})
 }
@@ -375,7 +375,7 @@ func (a *app) gitConfigGroupCard(c *ui.Context, pal palette, g *gitConfigGroup) 
 	ui.Column(c).Gap(8).FillWidth().Children(func() {
 		ui.Row(c).AlignItems(ui.Center).Gap(8).Padding(0, 4).Children(func() {
 			drawIcon(c, g.Icon, 14, pal.textMuted)
-			ui.Text(c, g.Title).FontSize(textBodySM).FontWeight(weightSemibold).TextColor(pal.textMuted)
+			ui.Text(c, g.Title).FontSize(uiFontSize(textBodySM)).FontWeight(weightSemibold).TextColor(pal.textMuted)
 			if g.ReadOnly {
 				specChip(c, pal, T("只读", "Read-only"), ui.Transparent, 18, textCaption)
 			}
@@ -385,7 +385,7 @@ func (a *app) gitConfigGroupCard(c *ui.Context, pal palette, g *gitConfigGroup) 
 			desc += "　" + strings.Join(g.Files, "　·　")
 		}
 		if desc != "" {
-			ui.Text(c, desc).FontSize(textBodySM).TextColor(pal.textFaint).SingleLine().
+			ui.Text(c, desc).FontSize(uiFontSize(textBodySM)).TextColor(pal.textFaint).SingleLine().
 				LineHeight(1.35)
 		}
 
@@ -442,12 +442,12 @@ func (a *app) gitIdentityScopeRow(c *ui.Context, pal palette, g *gitConfigGroup)
 		ui.Row(c).AlignItems(ui.Center).Gap(12).FillWidth().Children(func() {
 			// 名字在左、控件在右：space-between，不是把控件摆在名字后面。
 			ui.Text(c, T("身份来源", "Identity")).Grow(1).MinWidth(0).SingleLine().
-				FontSize(textBodySM).TextColor(pal.ink)
+				FontSize(uiFontSize(textBodySM)).TextColor(pal.ink)
 			seg := settingsSegmented(c, pal, &g.scopeSel,
 				T("跟随全局", "Inherit global"), T("单独设置", "Set here"))
 			seg.Label(T("身份来源", "Identity"))
 		})
-		ui.Text(c, note).FontSize(textCaption).TextColor(pal.inkSubtle)
+		ui.Text(c, note).FontSize(uiFontSize(textCaption)).TextColor(pal.inkSubtle)
 	})
 	// 分段控件往 g.scopeSel 里写选中：这一帧看到的就是用户刚点的那一下。
 	if (g.scopeSel == 0) != g.InheritGlobal {
@@ -500,7 +500,7 @@ func (a *app) gitIdentityInheritedRow(c *ui.Context, pal palette) {
 		ui.Row(c).Padding(11, 0).AlignItems(ui.Center).Gap(12).FillWidth().Children(func() {
 			gitIdentityKeyCell(c, pal, key, false, false)
 			ui.Spacer(c)
-			ui.Text(c, val).FontSize(textBodySM).TextColor(pal.inkMuted).
+			ui.Text(c, val).FontSize(uiFontSize(textBodySM)).TextColor(pal.inkMuted).
 				Shrink(1).SingleLine().Ellipsis("…").TextAlign(ui.End)
 		})
 	}
@@ -538,7 +538,7 @@ func (a *app) gitIdentityInherited(key, scope string) string {
 // gitConfigEmptyRow 是一栏里没有内容时那句说明。
 func gitConfigEmptyRow(c *ui.Context, pal palette, note string) {
 	ui.Box(c).Padding(10, 14).FillWidth().Children(func() {
-		ui.Text(c, note).FontSize(textCaption).TextColor(pal.inkSubtle)
+		ui.Text(c, note).FontSize(uiFontSize(textCaption)).TextColor(pal.inkSubtle)
 	})
 }
 
@@ -566,7 +566,7 @@ func (a *app) gitConfigEditorRow(c *ui.Context, pal palette, g *gitConfigGroup, 
 		gitIdentityKeyCell(c, pal, r.Key, r.cleared(), r.Multi)
 		if r.Deleted {
 			// 待删的行不给编辑：这一行现在唯一有意义的事是「恢复」。
-			ui.Text(c, T("保存时从这一层删掉", "Removed from this level on save")).FontSize(textCaption).
+			ui.Text(c, T("保存时从这一层删掉", "Removed from this level on save")).FontSize(uiFontSize(textCaption)).
 				TextColor(pal.inkSubtle).Grow(1)
 			if secondaryAction(c, pal, T("恢复", "Restore"), "", false).Clicked() {
 				r.Deleted = false
@@ -606,12 +606,12 @@ func gitIdentityKeyCell(c *ui.Context, pal palette, key string, dim, multi bool)
 		if dim {
 			col = pal.inkTertiary
 		}
-		ui.Text(c, gitIdentityFieldLabel(key)).FontSize(textBodySM).TextColor(col).SingleLine()
+		ui.Text(c, gitIdentityFieldLabel(key)).FontSize(uiFontSize(textBodySM)).TextColor(col).SingleLine()
 		caption := key
 		if multi {
 			caption += "　" + T("原有多条，保存后合并为一条", "Multiple entries; merged into one on save")
 		}
-		ui.Text(c, caption).FontSize(textCaption).TextColor(pal.inkSubtle).SingleLine()
+		ui.Text(c, caption).FontSize(uiFontSize(textCaption)).TextColor(pal.inkSubtle).SingleLine()
 	})
 }
 
@@ -620,7 +620,7 @@ func gitConfigReadOnlyRow(c *ui.Context, pal palette, r *gitConfigRow) {
 	ui.Row(c).Padding(11, 0).AlignItems(ui.Center).Gap(12).FillWidth().Children(func() {
 		gitIdentityKeyCell(c, pal, r.Key, false, r.Multi)
 		ui.Spacer(c)
-		ui.Text(c, r.Value).FontSize(textBodySM).TextColor(pal.inkMuted).
+		ui.Text(c, r.Value).FontSize(uiFontSize(textBodySM)).TextColor(pal.inkMuted).
 			Shrink(1).SingleLine().Ellipsis("…").TextAlign(ui.End)
 	})
 }

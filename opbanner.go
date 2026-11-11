@@ -32,14 +32,14 @@ func (a *app) opBanner(c *ui.Context, pal palette) {
 		Children(func() {
 			warnIcon(c, 14, t.Danger)
 			ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
-				ui.Text(c, f.Title).FontSize(textBodySM).FontWeight(weightSemibold).
+				ui.Text(c, f.Title).FontSize(uiFontSize(textBodySM)).FontWeight(weightSemibold).
 					TextColor(pal.ink)
 				if f.Hint != "" {
-					ui.Text(c, f.Hint).FontSize(textCaption).TextColor(pal.inkMuted)
+					ui.Text(c, f.Hint).FontSize(uiFontSize(textCaption)).TextColor(pal.inkMuted)
 				}
 				if f.Detail != "" {
 					// git 的原话：等宽、小一号、压过色。它是证据不是结论。
-					ui.Text(c, f.Detail).Font("monospace").FontSize(textCaption).
+					ui.Text(c, f.Detail).Font("monospace").FontSize(uiFontSize(textCaption)).
 						TextColor(pal.inkSubtle)
 				}
 			})
@@ -100,13 +100,13 @@ func failureBox(c *ui.Context, pal palette, t *ui.Theme, f gitrepo.Failure) {
 		Children(func() {
 			warnIcon(c, 13, t.Danger)
 			ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
-				ui.Text(c, f.Title).FontSize(textBodySM).FontWeight(weightSemibold).
+				ui.Text(c, f.Title).FontSize(uiFontSize(textBodySM)).FontWeight(weightSemibold).
 					TextColor(pal.ink)
 				if f.Hint != "" {
-					ui.Text(c, f.Hint).FontSize(textCaption).TextColor(pal.inkMuted)
+					ui.Text(c, f.Hint).FontSize(uiFontSize(textCaption)).TextColor(pal.inkMuted)
 				}
 				if f.Detail != "" {
-					ui.Text(c, f.Detail).Font("monospace").FontSize(textCaption).
+					ui.Text(c, f.Detail).Font("monospace").FontSize(uiFontSize(textCaption)).
 						TextColor(pal.inkSubtle)
 				}
 			})

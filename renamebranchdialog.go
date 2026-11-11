@@ -53,11 +53,11 @@ func (a *app) renameBranchBody(c *ui.Context, pal palette) {
 	rs := &a.rename
 
 	ui.Column(c).Width(440).Gap(12).Children(func() {
-		ui.Text(c, "重命名分支").FontSize(textHeadline).FontWeight(weightSemibold)
-		ui.Text(c, "将 "+rs.oldName+" 改名为").FontSize(11).SingleLine().TextColor(t.TextMuted)
+		ui.Text(c, "重命名分支").FontSize(uiFontSize(textHeadline)).FontWeight(weightSemibold)
+		ui.Text(c, "将 "+rs.oldName+" 改名为").FontSize(uiFontSize(textCaption)).SingleLine().TextColor(t.TextMuted)
 
 		ui.Column(c).Gap(3).Children(func() {
-			ui.Text(c, "新名称").FontSize(11).TextColor(t.TextMuted)
+			ui.Text(c, "新名称").FontSize(uiFontSize(textCaption)).TextColor(t.TextMuted)
 			in := ui.TextInput(c, &rs.newName).Placeholder(rs.oldName).Label("分支名称")
 			if rs.focusName {
 				in.Focus()
@@ -69,7 +69,7 @@ func (a *app) renameBranchBody(c *ui.Context, pal palette) {
 		})
 
 		if msg := renameBlocker(rs); msg != "" {
-			ui.Text(c, msg).FontSize(11).TextColor(t.TextMuted)
+			ui.Text(c, msg).FontSize(uiFontSize(textCaption)).TextColor(t.TextMuted)
 		}
 		failureBox(c, pal, t, rs.err)
 

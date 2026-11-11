@@ -341,6 +341,6 @@ func shellDivider(c *ui.Context, pal palette) {
 }
 
 func shellSectionLabel(c *ui.Context, pal palette, label string) {
-	ui.Text(c, label).FontSize(10.5).FontWeight(weightSemibold).
+	ui.Text(c, label).FontSize(uiFontSize(textBodySM)).FontWeight(weightSemibold).
 		TextColor(pal.textFaint).SingleLine().Padding(0, 2)
 }

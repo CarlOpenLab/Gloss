@@ -18,6 +18,11 @@ import (
 // 三层配置全指到临时文件上：这一页会**写**全局配置，不指走就是改跑测试
 // 这台机器的 ~/.gitconfig。runGit 护不住这里 —— 它只管自己起的那个进程，
 // 而写入是 Gloss 自己跑的 git。
+// gitConfigApp 建一个 app 和**设置窗口**那个 tester。
+//
+// 设置现在是它自己的窗口（issue #7 问题四），所以这一页的点击全落在设置
+// 视图上，不再是主视图。Tester 一次驱动一个 view 函数，这里用 settingsTester
+// 拿设置那一个（见 settings_window_test.go）。
 func gitConfigApp(t *testing.T) (*app, *ui.Tester, string) {
 	t.Helper()
 	globalPath := filepath.Join(t.TempDir(), "gitconfig")
@@ -25,8 +30,7 @@ func gitConfigApp(t *testing.T) (*app, *ui.Tester, string) {
 	t.Setenv("GIT_CONFIG_SYSTEM", filepath.Join(t.TempDir(), "gitconfig"))
 
 	a := richApp(t)
-	tt := ui.NewTester(a.view, 1280, 900)
-	tt.Frame()
+	tt := settingsTester(t, a, 940, 680)
 	settle(t, a)
 	return a, tt, globalPath
 }
@@ -34,7 +38,9 @@ func gitConfigApp(t *testing.T) (*app, *ui.Tester, string) {
 // openGitConfigTab 打开设置面板并切到「Git 配置」页，等那一趟读跑完。
 func openGitConfigTab(t *testing.T, a *app, tt *ui.Tester) {
 	t.Helper()
-	a.openSettings()
+	if !a.settingsOn {
+		a.openSettings()
+	}
 	tt.Frame()
 	settle(t, a)
 	tt.Frame()
@@ -100,6 +106,11 @@ func saveGitConfig(t *testing.T, a *app, tt *ui.Tester) {
 	settle(t, a)
 	tt.Frame()
 	if !a.settingsOn {
+		// 保存把窗口关了。接着往下测就得再开一次 —— 重开走 openSettings，
+		// 而设置窗口已经换过一个替身了，这里直接再拿一个 tester。
+		a.openSettings()
+		settle(t, a)
+		tt.Frame()
 		openGitConfigTab(t, a, tt)
 	}
 }

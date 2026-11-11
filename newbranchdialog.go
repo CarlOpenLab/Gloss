@@ -77,11 +77,11 @@ func (a *app) newBranchBody(c *ui.Context, pal palette) {
 	bs := &a.newBranch
 
 	ui.Column(c).Width(460).Gap(12).Children(func() {
-		ui.Text(c, "新建分支").FontSize(textHeadline).FontWeight(weightSemibold)
-		ui.Text(c, "从 "+bs.revLabel+" 起步").FontSize(11).SingleLine().TextColor(t.TextMuted)
+		ui.Text(c, "新建分支").FontSize(uiFontSize(textHeadline)).FontWeight(weightSemibold)
+		ui.Text(c, "从 "+bs.revLabel+" 起步").FontSize(uiFontSize(textCaption)).SingleLine().TextColor(t.TextMuted)
 
 		ui.Column(c).Gap(3).Children(func() {
-			ui.Text(c, "名称").FontSize(11).TextColor(t.TextMuted)
+			ui.Text(c, "名称").FontSize(uiFontSize(textCaption)).TextColor(t.TextMuted)
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				// placeholder 把两种用法都摆出来：这个框既是分支名，也是「意图」的输入位
 				// —— AI 起名会把框里写的内容当成需求描述喂给模型（见 startAIBranch）。
@@ -102,7 +102,7 @@ func (a *app) newBranchBody(c *ui.Context, pal palette) {
 			// 剩下的和打标签（tagdialog.go）一个密度。
 			if strings.TrimSpace(bs.name) == "" && !bs.aiLoading {
 				ui.Text(c, "想不出名字就写一句要做什么，点「AI 起名」让 AI 想一个。").
-					FontSize(11).TextColor(t.TextMuted)
+					FontSize(uiFontSize(textCaption)).TextColor(t.TextMuted)
 			}
 		})
 
@@ -112,7 +112,7 @@ func (a *app) newBranchBody(c *ui.Context, pal palette) {
 			Tooltip("建好就把 HEAD 挪到新分支（工作区的改动跟着过去）；不勾只建一条，停在当前分支不动")
 
 		if msg := branchBlocker(bs); msg != "" {
-			ui.Text(c, msg).FontSize(11).TextColor(t.TextMuted)
+			ui.Text(c, msg).FontSize(uiFontSize(textCaption)).TextColor(t.TextMuted)
 		}
 		failureBox(c, pal, t, bs.err)
 
@@ -166,10 +166,10 @@ func (a *app) aiBranchButton(c *ui.Context, pal palette) {
 	btn.Children(func() {
 		if bs.aiLoading {
 			ui.Spinner(c)
-			ui.Text(c, "推荐中…").FontSize(textButton).FontWeight(weightMedium).TextColor(fg)
+			ui.Text(c, "推荐中…").FontSize(uiFontSize(textButton)).FontWeight(weightMedium).TextColor(fg)
 		} else {
 			sparkleIcon(c, sparkleSize, fg)
-			ui.Text(c, "AI 起名").FontSize(textButton).
+			ui.Text(c, "AI 起名").FontSize(uiFontSize(textButton)).
 				FontWeight(weightMedium).TextColor(fg)
 		}
 	})

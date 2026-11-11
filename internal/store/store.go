@@ -28,6 +28,9 @@ type Config struct {
 	Active int `json:"active,omitempty"`
 	// CodeSize 是代码字号，0 表示用默认值。
 	CodeSize float32 `json:"codeSize,omitempty"`
+	// UIFontSize 是界面字号档位（design.go 的 uiFontSizeMin~Max），0 表示默认档。
+	// 它缩放的是整套界面的文字（按钮、侧栏、对话框），代码字号只动等宽那几处。
+	UIFontSize float32 `json:"uiFontSize,omitempty"`
 	// Split 为 true 时用左右对照视图。
 	Split bool `json:"split,omitempty"`
 	// Unified 为 true 时用单栏统一视图（默认左右对照）。

@@ -57,9 +57,9 @@ func (a *app) commitDetailPane(c *ui.Context, pal palette, cm gitrepo.Commit) {
 					Children(func() {
 						drawIcon(c, iconUser, commitAvatar/2, pal.inkSubtle)
 					})
-				ui.Text(c, cm.Author).FontSize(13).FontWeight(weightSemibold).
+				ui.Text(c, cm.Author).FontSize(uiFontSize(textBody)).FontWeight(weightSemibold).
 					SingleLine().MaxWidth(240).TextColor(pal.ink)
-				ui.Text(c, commitWhen(cm.When)).FontSize(11).
+				ui.Text(c, commitWhen(cm.When)).FontSize(uiFontSize(textCaption)).
 					SingleLine().TextColor(t.TextMuted)
 			})
 		})
@@ -70,14 +70,14 @@ func (a *app) commitDetailPane(c *ui.Context, pal palette, cm gitrepo.Commit) {
 			if cm.Email != "" {
 				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 					drawIcon(c, iconMail, 12, pal.inkSubtle)
-					ui.Text(c, cm.Email).FontSize(11).SingleLine().
+					ui.Text(c, cm.Email).FontSize(uiFontSize(textCaption)).SingleLine().
 						Grow(1).MinWidth(0).TextColor(pal.inkMuted)
 				})
 			}
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "#").FontSize(11).FontWeight(weightSemibold).
+				ui.Text(c, "#").FontSize(uiFontSize(textCaption)).FontWeight(weightSemibold).
 					TextColor(pal.inkSubtle)
-				ui.Text(c, cm.Short).Font("monospace").FontSize(11).
+				ui.Text(c, cm.Short).Font("monospace").FontSize(uiFontSize(textCaption)).
 					Grow(1).MinWidth(0).TextColor(pal.inkMuted)
 			})
 			if url, label := a.commitWebURL(cm); url != "" {
@@ -89,7 +89,7 @@ func (a *app) commitDetailPane(c *ui.Context, pal palette, cm gitrepo.Commit) {
 					Cursor(ui.CursorPointer).Role(ui.RoleLink)
 				link.Children(func() {
 					drawIcon(c, iconLink, 12, pal.inkSubtle)
-					txt := ui.Text(c, label).FontSize(11).SingleLine().
+					txt := ui.Text(c, label).FontSize(uiFontSize(textCaption)).SingleLine().
 						Grow(1).MinWidth(0).TextColor(pal.inkMuted)
 					if link.Hovered() {
 						txt.Underline()
@@ -113,9 +113,9 @@ func (a *app) commitDetailPane(c *ui.Context, pal palette, cm gitrepo.Commit) {
 		ui.Box(c).Grow(1).FillWidth().MinHeight(0).Padding(10, 12, 12, 12).Children(func() {
 			ui.Scroll(c).FillWidth().FillHeight().Children(func() {
 				ui.Column(c).FillWidth().Gap(6).Children(func() {
-					ui.Text(c, cm.Subject).FontSize(12).TextColor(pal.ink)
+					ui.Text(c, cm.Subject).FontSize(uiFontSize(textBodySM)).TextColor(pal.ink)
 					if cm.Body != "" {
-						ui.Text(c, cm.Body).FontSize(11).TextColor(t.TextMuted)
+						ui.Text(c, cm.Body).FontSize(uiFontSize(textCaption)).TextColor(t.TextMuted)
 					}
 				})
 			})

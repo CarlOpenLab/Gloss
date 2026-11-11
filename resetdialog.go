@@ -90,21 +90,21 @@ func (a *app) resetBody(c *ui.Context, pal palette) {
 	rs := &a.reset
 
 	ui.Column(c).Width(460).Gap(12).Children(func() {
-		ui.Text(c, "重置 "+rs.target+" 到 "+rs.short).FontSize(textHeadline).FontWeight(weightSemibold)
+		ui.Text(c, "重置 "+rs.target+" 到 "+rs.short).FontSize(uiFontSize(textHeadline)).FontWeight(weightSemibold)
 		ui.Text(c, "只挪这条分支的指向，提交本身不会丢 —— 弄错了随时能重置回去。").
-			FontSize(11).TextColor(t.TextMuted)
+			FontSize(uiFontSize(textCaption)).TextColor(t.TextMuted)
 
 		ui.Column(c).Gap(6).Children(func() {
 			ui.Radio(c, &rs.mode, gitrepo.ResetSoft, "软重置（--soft）")
 			ui.Radio(c, &rs.mode, gitrepo.ResetMixed, "混合重置（--mixed）")
 			ui.Radio(c, &rs.mode, gitrepo.ResetHard, "硬重置（--hard）")
 		})
-		ui.Text(c, resetExplain(rs.mode)).FontSize(11).TextColor(t.TextMuted)
+		ui.Text(c, resetExplain(rs.mode)).FontSize(uiFontSize(textCaption)).TextColor(t.TextMuted)
 
 		// 硬重置 + 工作区有东西要丢：把数字写在按钮之上。dirty 是在打开
 		// 对话框那一刻数的，够新 —— 期间仓库被动过的话，重置本身会重读。
 		if rs.mode == gitrepo.ResetHard && rs.dirty > 0 {
-			ui.Text(c, hardResetWarning(rs.dirty)).FontSize(12).TextColor(t.Danger)
+			ui.Text(c, hardResetWarning(rs.dirty)).FontSize(uiFontSize(textBodySM)).TextColor(t.Danger)
 		}
 
 		failureBox(c, pal, t, rs.err)

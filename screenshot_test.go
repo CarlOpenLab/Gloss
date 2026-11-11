@@ -52,6 +52,11 @@ func TestDumpScreenshot(t *testing.T) {
 	tt.SetTitleBar(realTitleBar)
 	tt.Frame()
 
+	// st 是设置窗口那一个 tester。设置搬去自己的窗口之后（issue #7 问题四），
+	// 设置那一组截图全从它这儿出。声明提在最前面，是因为 shotSet 是个闭包，
+	// 里面每换一页都要重新给它赋值（见下面设置那一组）。
+	var st *ui.Tester
+
 	// shot 拍之前先把这一趟异步读盘跑完、再重画一帧：改动区的两侧原文是
 	// 异步读进来的，直接拍会拍到「正在读取这个文件…」。
 	shot := func(path string) {
@@ -145,43 +150,56 @@ func TestDumpScreenshot(t *testing.T) {
 	a.exitCompare()
 	tt.SetDark(false)
 
-	// 模型设置对话框
+	// 设置窗口自己那一组。设置搬去了它自己的窗口（issue #7 问题四），
+	// 这些图得从那个窗口的视图上拍 —— 主窗口的画面上一个字都没有了。
+	//
+	// shot 是闭包，拍的是主窗口那一个 tester；所以这一组换一个自己的
+	// shotSet，驱动 a.settingsView。两边的设置页共用同一个 *app，所以在
+	// 设置视图上改的 tab 一样会反映到主窗口的状态上。
+	shotSet := func(path string) {
+		settle(t, a)
+		st.Frame()
+		writePNG(t, path, st.Image())
+	}
+
+	// 模型设置
+	installSettingsWindowStub(t)
 	a.openSettings()
 	a.editCfg.Providers[0].APIKey = "sk-ant-xxxxxxxxxxxxxxxx"
-	tt.Frame()
-	shot("/tmp/de-shot-settings.png")
-	tt.SetDark(true)
-	tt.Frame()
-	shot("/tmp/de-shot-settings-dark.png")
-	tt.SetDark(false)
+	st = newSettingsViewTester(t, a, settingsWindowW, settingsWindowH)
+	st.Frame()
+	shotSet("/tmp/de-shot-settings.png")
+	st.SetDark(true)
+	st.Frame()
+	shotSet("/tmp/de-shot-settings-dark.png")
+	st.SetDark(false)
 
 	// 展示 Magpie 本地网关接入状态
 	a.magpieOnline = true
 	a.magpieModels = []string{"opencode-go/deepseek-v4.1-flash", "opencode-go/claude-haiku-5-5", "codex-2/gpt-6-sol"}
 	a.connectMagpie()
-	tt.Frame()
-	shot("/tmp/de-shot-settings-magpie.png")
+	shotSet("/tmp/de-shot-settings-magpie.png")
 
 	// 设置其余几页：通用偏好、提示词、Git 配置、关于。
 	a.settingsTab = settingsTabGeneral
-	tt.SetDark(false)
-	tt.Frame()
-	shot("/tmp/de-shot-settings-general.png")
-	tt.SetDark(true)
-	tt.Frame()
-	shot("/tmp/de-shot-settings-general-dark.png")
-	tt.SetDark(false)
+	st.SetDark(false)
+	st.Frame()
+	shotSet("/tmp/de-shot-settings-general.png")
+	st.SetDark(true)
+	st.Frame()
+	shotSet("/tmp/de-shot-settings-general-dark.png")
+	st.SetDark(false)
 	a.settingsTab = settingsTabPrompts
-	tt.Frame()
-	shot("/tmp/de-shot-settings-prompts.png")
+	st.Frame()
+	shotSet("/tmp/de-shot-settings-prompts.png")
 	a.settingsTab = settingsTabGit
-	tt.Frame()
-	shot("/tmp/de-shot-settings-git.png")
+	st.Frame()
+	shotSet("/tmp/de-shot-settings-git.png")
 	a.settingsTab = settingsTabAbout
-	tt.Frame()
-	shot("/tmp/de-shot-settings-about.png")
+	st.Frame()
+	shotSet("/tmp/de-shot-settings-about.png")
 	a.settingsTab = settingsTabModels
-	a.settingsOn = false
+	a.closeSettings()
 
 	// 设置里的「更新」页。无头环境里 updater 插件没注册（mygo.Updater.Enabled()
 	// 为 false），所以这里伪造一份可用状态，看的是打包发行版里真正会出现的排版。
@@ -196,14 +214,15 @@ func TestDumpScreenshot(t *testing.T) {
 	}
 	a.openSettings()
 	a.settingsTab = settingsTabUpdates
-	tt.Frame()
-	shot("/tmp/de-shot-settings-updates.png")
-	tt.SetDark(true)
-	tt.Frame()
-	shot("/tmp/de-shot-settings-updates-dark.png")
-	tt.SetDark(false)
+	st = newSettingsViewTester(t, a, settingsWindowW, settingsWindowH)
+	st.Frame()
+	shotSet("/tmp/de-shot-settings-updates.png")
+	st.SetDark(true)
+	st.Frame()
+	shotSet("/tmp/de-shot-settings-updates-dark.png")
+	st.SetDark(false)
 	loadUpdatePrefs = origLoadPrefs
-	a.settingsOn = false
+	a.closeSettings()
 
 	// 已 review：第一个文件标上，文件栏里它的名字变淡、勾亮起来。
 	a.toggleViewed(a.files[0])

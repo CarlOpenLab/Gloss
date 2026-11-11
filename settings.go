@@ -214,7 +214,25 @@ func (a *app) openSettings() {
 	a.gitCfg.err = ""
 
 	a.settingsOn = true
+	a.openSettingsWindow()
 	a.probeMagpie()
+}
+
+// openSettingsWindow 把设置开成它自己的一个窗口（issue #7 问题四）。
+//
+// 设置已经开着的话什么都不做：重复开窗会在 macOS 上多出一个窗口，而用户
+// 以为自己看的是原来那个。这个函数的另一半是 closeSettings。
+func (a *app) openSettingsWindow() {
+	if a.settingsWin != nil {
+		return
+	}
+	a.settingsWin = settingsWindowNew(a, settingsWindowOptions{
+		View: a.settingsDialog,
+		// 系统那边关窗（用户点窗口的 ×，或者 ⌘W）也走 closeSettings：两条
+		// 路汇到一处，才不会一次操作关两次。
+		OnClosed: func() { a.closeSettings() },
+		Parent:   a.win,
+	})
 }
 
 // probeMagpie 异步探测本地 Magpie 网关是否在线并拉取可用模型列表。
@@ -322,45 +340,40 @@ func findExistingPreset(providers []llm.Provider, ps preset) int {
 // 左边 212px 的导航栏，右边一块与四周都留 8px 的浮起卡片（14px 圆角）。
 // 卡片自己带 44px 顶栏和 52px 底栏，中间那页滚动 —— 页与页之间只换内容，
 // 不换版式。
-// settingsMargin 是拖开的设置窗口离窗口边缘留的缝。
-const settingsMargin = float32(12)
-
-func (a *app) settingsDialog(c *ui.Context, pal palette) {
+//
+// 它是**自己那个窗口**的视图，不再画在主窗口里（issue #7 问题四）：以前
+// 面板坐在主窗口的视图上，bounds 是拿主窗口尺寸算的，于是「设置拖不出主
+// 窗口」，而改字号想看看效果就得先把设置关掉 —— 面板底下就是它唯一的
+// 可见区域。搬进自己的窗口之后，窗口由系统拖动，想放到哪放到哪；主窗口
+// 整个露出来，字号改动当场能在终端里看见。
+//
+// 尺寸也不再受主窗口约束：以前 panelW 是 clamp(winW-40, 640, 980)、panelH
+// 是 clamp(winH-40, 360, 680)，主窗口一窄面板就被压扁。现在窗口自己就是
+// 这个尺寸，窄屏上终于能舒展开。
+func (a *app) settingsDialog(c *ui.Context) {
 	if !a.settingsOn {
 		return
 	}
-	winW, winH := c.Size()
-	panelW := settingsPanelW(winW)
-	panelH := clamp(winH-40, 360, 680)
-	// 拖动量是从中心（对话框的起始位置）算起的：边界就是让它整块留在
-	// 窗口里、离四边留 settingsMargin 的那段余量。
-	bounds := ui.Rect{
-		X: settingsMargin - (winW-panelW)/2,
-		Y: settingsMargin - (winH-panelH)/2,
-		W: max(0, winW-panelW-2*settingsMargin),
-		H: max(0, winH-panelH-2*settingsMargin),
-	}
+	// 走 isDark(c) 而不是 isDarkMode()：这一帧手里有 Context，而 isDarkMode()
+	// 要过 mygo.Theme.IsDark()，那条路 post 到主线程并阻塞等着回来 —— 无头
+	// 测试里没有主循环在跑，一个 Tester 建起来就永远卡在这儿（headless.go 的
+	// settle 就是这样被挂住的）。isDarkMode() 留给建窗那一刻：那时还没有视图。
+	dark := a.isDark(c)
+	c.SetTheme(themeFor(dark, c.Preferences()))
+	pal := paletteFor(c.Theme(), a.laneSet())
 
-	open := true
-	ui.DialogBase(c, &open, func(back, panel ui.Element) {
-		// 表单对话框：点背景不关（Esc、标题栏的 × 和底栏的「取消 / 保存」
-		// 照旧）—— 供应商表单、API Key 打到一半，被页面上误触的一下丢掉太亏。
-		// 见 specModalSticky。
-		if back.Clicked() {
-			open = true
-		}
-		// 不再压暗整页：设置是浮在页面上的窗口，不是盖住页面的幕布 ——
-		// 改外观、字号、终端配色能当场在底下的终端里看到；按住它的导航栏
-		// 或卡片顶栏就能把它挪开。
-		back.Background(ui.Transparent)
-		window := panel.Width(panelW).Height(panelH).Radius(radiusXL).
-			Background(pal.sideBg).Clip()
-		floatingSurface(window, pal)
-		window.Draggable(&a.settingsDrag, ui.DraggableOptions{Bounds: &bounds, Rigid: true}).
-			Children(func() { a.settingsBody(c, pal) })
-	})
-	if !open {
-		a.settingsOn = false
+	// 窗口自己这一块就是面板：圆角、底色、卡片都在里头。
+	root := ui.Column(c).Fill().Background(pal.sideBg).Clip()
+	root.Children(func() { a.settingsBody(c, pal) })
+
+	// Esc 关窗。以前这一下是 DialogBase 的 backdrop 白送的，现在设置是独立
+	// 窗口、没有 backdrop 了，得自己接 —— 少了它，用户在设置窗口里按 Esc
+	// 什么都不会发生，而每个系统上 Esc 都是「关掉这个窗」。
+	//
+	// 放在最后一帧的末尾：输入框里的 Esc 先归它自己（比如收起下拉），
+	// 剩下的才轮到关窗。
+	if c.Shortcut(0, ui.KeyEscape) {
+		a.closeSettings()
 	}
 }
 
@@ -395,7 +408,7 @@ func settingsSidebarItem(c *ui.Context, pal palette, label string, icon *ui.SVG,
 			col = pal.accent
 		}
 		drawIcon(c, icon, 15, col)
-		ui.Text(c, label).FontSize(13.5).TextColor(pal.text).SingleLine()
+		ui.Text(c, label).FontSize(uiFontSize(textBody)).TextColor(pal.text).SingleLine()
 	})
 	if btn.Clicked() {
 		onClick()
@@ -411,7 +424,7 @@ func (a *app) settingsBody(c *ui.Context, pal palette) {
 			ui.Row(c).Height(settingsBarH).Shrink(0).FillWidth().
 				Padding(0, 8).Gap(8).AlignItems(ui.Center).Children(func() {
 				// drawIcon(c, iconSettings, 15, pal.textMuted)
-				ui.Text(c, T("设置", "Settings")).FontSize(14).
+				ui.Text(c, T("设置", "Settings")).FontSize(uiFontSize(textBody)).
 					FontWeight(weightSemibold).TextColor(pal.text)
 			})
 
@@ -427,7 +440,7 @@ func (a *app) settingsBody(c *ui.Context, pal palette) {
 			settingsSidebarItem(c, pal, T("Git 配置", "Git Config"), iconGitBranch,
 				a.settingsTab == settingsTabGit, func() { a.settingsTab = settingsTabGit })
 
-			ui.Text(c, T("系统", "System")).FontSize(textCaption).
+			ui.Text(c, T("系统", "System")).FontSize(uiFontSize(textCaption)).
 				FontWeight(weightSemibold).TextColor(pal.textFaint).
 				Padding(14, 8, 4, 8)
 
@@ -439,7 +452,7 @@ func (a *app) settingsBody(c *ui.Context, pal palette) {
 			ui.Spacer(c)
 
 			ui.Row(c).Padding(8, 8).Children(func() {
-				ui.Text(c, "Gloss "+appVersionLabel()).FontSize(textCaption).
+				ui.Text(c, "Gloss "+appVersionLabel()).FontSize(uiFontSize(textCaption)).
 					TextColor(pal.textFaint)
 			})
 		})
@@ -453,7 +466,7 @@ func (a *app) settingsBody(c *ui.Context, pal palette) {
 			card.Children(func() {
 				settingsCardHeader(c, pal, a.settingsTitle(), func() {
 					settingsIconButton(c, pal, T("关闭设置", "Close Settings"), T("关闭设置 Esc", "Close settings Esc"),
-						iconX, func() { a.settingsOn = false })
+						iconX, func() { a.closeSettings() })
 				})
 
 				ui.Box(c).Grow(1).FillWidth().MinHeight(0).Children(func() {
@@ -467,10 +480,10 @@ func (a *app) settingsBody(c *ui.Context, pal palette) {
 					drawIcon(c, iconShield, 13, pal.textFaint)
 					ui.Text(c, T("设置存储于本地配置文件，所有请求由本机直连服务端",
 						"Preferences stored locally; requests connect directly from this device")).
-						FontSize(textBodySM).TextColor(pal.textMuted).SingleLine().MinWidth(0).Shrink(1)
+						FontSize(uiFontSize(textBodySM)).TextColor(pal.textMuted).SingleLine().MinWidth(0).Shrink(1)
 					ui.Spacer(c)
 					if settingsButton(c, pal, T("取消", "Cancel"), false, false).Clicked() {
-						a.settingsOn = false
+						a.closeSettings()
 					}
 					if settingsButton(c, pal, T("保存", "Save"), true, false).Clicked() {
 						a.applySettings()
@@ -529,7 +542,7 @@ func (a *app) generalSettingsPane(c *ui.Context, pal palette) {
 			if settingsMiniButton(c, pal, decLabel, "−", false).Clicked() {
 				dec()
 			}
-			ui.Text(c, value).FontSize(12.5).FontFeatures("tnum").
+			ui.Text(c, value).FontSize(uiFontSize(textButton)).FontFeatures("tnum").
 				Width(74).TextAlign(ui.Center).TextColor(pal.textMuted).SingleLine()
 			if settingsMiniButton(c, pal, incLabel, "+", false).Clicked() {
 				inc()
@@ -577,7 +590,7 @@ func (a *app) generalSettingsPane(c *ui.Context, pal palette) {
 								a.setBackgroundOpacity(a.bgOpacity)
 							}
 							ui.Text(c, Tf("%d%%", "%d%%", int(math.Round(a.backgroundOpacity()*100)))).
-								FontSize(12.5).FontFeatures("tnum").TextColor(pal.textMuted).
+								FontSize(uiFontSize(textButton)).FontFeatures("tnum").TextColor(pal.textMuted).
 								Width(38).TextAlign(ui.End)
 						})
 
@@ -637,6 +650,29 @@ func (a *app) generalSettingsPane(c *ui.Context, pal palette) {
 							T("重置代码字号", "Reset code font"),
 							func() { a.setCodeSize(0) })
 					})
+				// 界面字号：整套界面（按钮、侧栏、对话框、这一页自己）的文字。
+				//
+				// 和上一行分开是有意的：上一行只动 diff / 编辑器 / 终端那几个
+				// 等宽视图，这一行动的是其余全部。Windows 上用户把系统文本放大
+				// 到 125% 而 Gloss 一个像素都不动，缺的就是这一格 ——
+				// 框架的 TextScale 只乘主题自己的 t.FontSize，而界面上三百多处
+				// 文字写的是 design.go 的 token（见 uiFontSize 的注释）。
+				//
+				// 档位是「默认 / 小 / 大」而不是像素值：字号档是给整套界面用的，
+				// 逐个像素给会让六档基准各自漂出规范（TestNoRawFontSizeLiterals
+				// 守字面量，uiFontSize 守缩放）。
+				settingsRow(c, pal, T("界面字体大小", "UI Font Size"),
+					T("整套界面的文字：按钮、侧栏、对话框，包括这一页。代码与终端不改，用上一行和下面的终端字号。",
+						"Text across the interface: buttons, sidebar, dialogs, and this page. Code and the terminal are set separately."),
+					func() {
+						stepper(uiFontGearLabel(a.uiFontSizeValue()),
+							T("缩小界面字号", "Smaller UI font"),
+							T("放大界面字号", "Larger UI font"),
+							func() { a.setUIFontSize(a.uiFontSizeValue() - 1) },
+							func() { a.setUIFontSize(a.uiFontSizeValue() + 1) },
+							T("重置界面字号", "Reset UI font"),
+							func() { a.setUIFontSize(0) })
+					})
 			})
 
 			// —— 拓扑图配色 ——
@@ -683,7 +719,7 @@ func (a *app) generalSettingsPane(c *ui.Context, pal palette) {
 										tip = T("主干（0 号）的颜色", "Mainline (lane 0) color")
 									}
 									ui.Column(c).Gap(2).AlignItems(ui.Center).Children(func() {
-										ui.Text(c, Tf("%d", "%d", i)).FontSize(9).
+										ui.Text(c, Tf("%d", "%d", i)).FontSize(uiFontSize(rowChipText)).
 											TextColor(pal.textFaint)
 										if ui.ColorWell(c, &col).Label(tip).Tooltip(tip).Changed() {
 											a.setLaneOverride(row.dark, i, hexOf(col))
@@ -727,7 +763,7 @@ func (a *app) generalSettingsPane(c *ui.Context, pal palette) {
 							}
 							if !a.fontScanDone {
 								ui.Text(c, T("读取字体中…", "Reading fonts…")).
-									FontSize(textCaption).TextColor(pal.textFaint)
+									FontSize(uiFontSize(textCaption)).TextColor(pal.textFaint)
 							}
 							if settingsMiniButton(c, pal, T("默认字体", "Default font"),
 								T("默认", "Default"), a.termFontFamily == "" || a.termFontFamily == termFontGenericMono).Clicked() {
@@ -790,18 +826,18 @@ func (a *app) aboutSettingsPane(c *ui.Context, pal palette) {
 				}
 				ui.Column(c).Gap(4).Children(func() {
 					ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-						ui.Text(c, "Gloss").FontSize(textDisplay).
+						ui.Text(c, "Gloss").FontSize(uiFontSize(textDisplay)).
 							FontWeight(weightSemibold).TextColor(pal.text)
 						ver := ui.Row(c).Padding(2, 8).Radius(radiusPill).
 							Background(pal.chip).AlignItems(ui.Center)
 						ver.Children(func() {
-							ui.Text(c, appVersionLabel()).FontSize(textCaption).
+							ui.Text(c, appVersionLabel()).FontSize(uiFontSize(textCaption)).
 								FontWeight(weightMedium).TextColor(pal.textMuted).
 								FontFeatures("tnum")
 						})
 					})
 					ui.Text(c, T("原生智能 Git 客户端", "Native Git GUI with AI-powered diff review")).
-						FontSize(13).TextColor(pal.textMuted)
+						FontSize(uiFontSize(textBody)).TextColor(pal.textMuted)
 				})
 			})
 
@@ -832,8 +868,8 @@ func (a *app) aboutSettingsPane(c *ui.Context, pal palette) {
 								Background(pal.control).AlignItems(ui.Center).Justify(ui.Center).
 								Children(func() { drawIcon(c, f.icon, 14, pal.textMuted) })
 							ui.Column(c).Gap(3).Grow(1).MinWidth(0).Children(func() {
-								ui.Text(c, f.title).FontSize(13.5).TextColor(pal.text)
-								ui.Text(c, f.desc).FontSize(textBodySM).TextColor(pal.textMuted).
+								ui.Text(c, f.title).FontSize(uiFontSize(textBody)).TextColor(pal.text)
+								ui.Text(c, f.desc).FontSize(uiFontSize(textBodySM)).TextColor(pal.textMuted).
 									LineHeight(1.35)
 							})
 						})
@@ -856,7 +892,7 @@ func (a *app) aboutSettingsPane(c *ui.Context, pal palette) {
 			})
 
 			ui.Text(c, "Copyright © 2026 CarlOpenLab. Released under the MIT License.").
-				FontSize(textBodySM).TextColor(pal.textFaint).Padding(0, 4)
+				FontSize(uiFontSize(textBodySM)).TextColor(pal.textFaint).Padding(0, 4)
 		})
 	})
 }
@@ -944,11 +980,11 @@ func (a *app) updatesSettingsPane(c *ui.Context, pal palette) {
 					"Update channel: official releases from github.com/CarlOpenLab/Gloss."),
 				func() {
 					settingsRow(c, pal, T("当前版本", "Current Version"), "", func() {
-						ui.Text(c, appVersionLabel()).FontSize(13).FontWeight(weightMedium).
+						ui.Text(c, appVersionLabel()).FontSize(uiFontSize(textBody)).FontWeight(weightMedium).
 							TextColor(pal.textMuted).FontFeatures("tnum")
 					})
 					settingsRow(c, pal, T("上次检查", "Last Checked"), "", func() {
-						ui.Text(c, lastCheckLabel(prefs.lastCheck)).FontSize(13).
+						ui.Text(c, lastCheckLabel(prefs.lastCheck)).FontSize(uiFontSize(textBody)).
 							TextColor(pal.textMuted).FontFeatures("tnum")
 					})
 				})
@@ -962,10 +998,10 @@ func (a *app) updatesSettingsPane(c *ui.Context, pal palette) {
 			settingsGroup(c, pal, T("自动更新", "Automatic Updates"), checksDesc, func() {
 				if !prefs.available {
 					settingsRow(c, pal, T("自动检查更新", "Check for Updates Automatically"), "", func() {
-						ui.Text(c, T("不可用", "Unavailable")).FontSize(13).TextColor(pal.textFaint)
+						ui.Text(c, T("不可用", "Unavailable")).FontSize(uiFontSize(textBody)).TextColor(pal.textFaint)
 					})
 					settingsRow(c, pal, T("自动下载更新", "Download Updates Automatically"), "", func() {
-						ui.Text(c, T("不可用", "Unavailable")).FontSize(13).TextColor(pal.textFaint)
+						ui.Text(c, T("不可用", "Unavailable")).FontSize(uiFontSize(textBody)).TextColor(pal.textFaint)
 					})
 					return
 				}
@@ -1108,7 +1144,7 @@ func settingsField(c *ui.Context, pal palette, value *string, placeholder string
 		Radius(radiusSM).Background(settingsFieldBg(pal)).
 		Border(1, settingsFieldBorder(pal)).
 		Children(func() {
-			in = ui.TextInputBase(c, value).Grow(1).MinWidth(0).FontSize(13).
+			in = ui.TextInputBase(c, value).Grow(1).MinWidth(0).FontSize(uiFontSize(textBody)).
 				Placeholder(placeholder).Label(placeholder)
 			if password {
 				in.Password()
@@ -1197,7 +1233,7 @@ func settingsSegmented(c *ui.Context, pal palette, selected *int, labels ...stri
 			}
 			fadeColors(s)
 			s.Children(func() {
-				ui.Text(c, label).FontSize(12.5).FontWeight(weightMedium).
+				ui.Text(c, label).FontSize(uiFontSize(textButton)).FontWeight(weightMedium).
 					TextColor(fg).SingleLine()
 			})
 		}
@@ -1291,7 +1327,7 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 					})
 				}
 				ui.Column(c).Gap(1).Children(func() {
-					ui.Text(c, providerLabel(*p)).FontSize(13.5).
+					ui.Text(c, providerLabel(*p)).FontSize(uiFontSize(textBody)).
 						FontWeight(weightSemibold).TextColor(pal.text).SingleLine()
 					isActive := a.editIdx == a.editCfg.Active
 					status, col := T("未生效", "Inactive"), pal.textMuted
@@ -1300,7 +1336,7 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 					}
 					ui.Row(c).AlignItems(ui.Center).Gap(5).Children(func() {
 						ui.Box(c).Size(6, 6).Radius(radiusPill).Background(col)
-						ui.Text(c, status).FontSize(textBodySM).TextColor(col)
+						ui.Text(c, status).FontSize(uiFontSize(textBodySM)).TextColor(col)
 					})
 				})
 				ui.Spacer(c)
@@ -1468,7 +1504,7 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 										for _, tag := range m.Tags {
 											ui.Box(c).Shrink(0).Padding(1, 5).Radius(radiusXS).
 												Background(pal.chip).Children(func() {
-												ui.Text(c, tag).FontSize(10).
+												ui.Text(c, tag).FontSize(uiFontSize(rowChipText)).
 													TextColor(pal.textMuted).SingleLine()
 											})
 										}
@@ -1495,14 +1531,14 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 											ui.Row(c).AlignItems(ui.Center).Gap(6).Fill().Children(func() {
 												if twoLineModels {
 													ui.Column(c).Grow(1).MinWidth(0).Gap(3).Children(func() {
-														ui.Text(c, m.ID).FontSize(textBodySM).
+														ui.Text(c, m.ID).FontSize(uiFontSize(textBodySM)).
 															TextColor(pal.text).SingleLine()
 														if len(m.Tags) > 0 {
 															ui.Row(c).Gap(4).Children(func() { tags(m) })
 														}
 													})
 												} else {
-													ui.Text(c, m.ID).FontSize(textBodySM).
+													ui.Text(c, m.ID).FontSize(uiFontSize(textBodySM)).
 														TextColor(pal.text).SingleLine().
 														Shrink(1).MinWidth(0)
 													tags(m)
@@ -1523,7 +1559,7 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 
 									ui.Row(c).Padding(6, 8).Gap(8).AlignItems(ui.Center).
 										FillWidth().Children(func() {
-										ui.Text(c, T("自定义", "Custom")).FontSize(textBodySM).
+										ui.Text(c, T("自定义", "Custom")).FontSize(uiFontSize(textBodySM)).
 											TextColor(pal.textMuted).Shrink(0)
 										settingsField(c, pal, &p.Model,
 											T("如 deepseek-chat, gpt-4o", "e.g. gpt-4o"), false).Grow(1)
@@ -1539,7 +1575,7 @@ func (a *app) modelsSettingsPane(c *ui.Context, pal palette) {
 						}
 						ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
 							ui.Box(c).Size(6, 6).Radius(radiusPill).Background(col)
-							ui.Text(c, status).FontSize(textBodySM).TextColor(col)
+							ui.Text(c, status).FontSize(uiFontSize(textBodySM)).TextColor(col)
 						})
 					}
 				})
@@ -1604,11 +1640,11 @@ func promptSection(c *ui.Context, pal palette, t *ui.Theme, title, desc string, 
 				Border(1, settingsFieldBorder(pal)).FillWidth().Clip()
 			box.Children(func() {
 				ta = ui.TextAreaBase(c, value).FillWidth().MinHeight(110).MaxHeight(170).
-					Padding(8, 10).FontSize(13).
+					Padding(8, 10).FontSize(uiFontSize(textBody)).
 					Placeholder(preset).Label(title)
 				ui.Box(c).Height(1).FillWidth().Background(pal.rowDivider)
 				ui.Row(c).Padding(4, 8).AlignItems(ui.Center).FillWidth().Children(func() {
-					ui.Text(c, Tf("%d 字符", "%d chars", len(*value))).FontSize(textCaption).
+					ui.Text(c, Tf("%d 字符", "%d chars", len(*value))).FontSize(uiFontSize(textCaption)).
 						TextColor(pal.textFaint).FontFeatures("tnum")
 					ui.Spacer(c)
 					isPreset := *value == preset || strings.TrimSpace(*value) == ""
@@ -1618,7 +1654,7 @@ func promptSection(c *ui.Context, pal palette, t *ui.Theme, title, desc string, 
 						tag = T("预设", "Default")
 						tagCol = t.Success
 					}
-					ui.Text(c, tag).FontSize(textCaption).TextColor(tagCol)
+					ui.Text(c, tag).FontSize(uiFontSize(textCaption)).TextColor(tagCol)
 				})
 			})
 			switch {
@@ -1757,7 +1793,7 @@ func (a *app) providerRow(c *ui.Context, pal palette, t *ui.Theme, i, next int) 
 			if selected {
 				txtCol = pal.text
 			}
-			ui.Text(c, label).FontSize(textBodySM).FontWeight(weightMedium).
+			ui.Text(c, label).FontSize(uiFontSize(textBodySM)).FontWeight(weightMedium).
 				TextColor(txtCol).SingleLine().Shrink(1).MinWidth(0)
 			ui.Spacer(c)
 			// 状态圆点：只有当前生效的供应商是实心绿点，其余一律
@@ -1900,7 +1936,7 @@ func (a *app) applySettings() {
 	// 写完由横幅/吐司回话（见 applyGitConfig）。
 	a.applyGitConfig()
 
-	a.settingsOn = false
+	a.closeSettings()
 }
 
 func providerLabel(p llm.Provider) string {

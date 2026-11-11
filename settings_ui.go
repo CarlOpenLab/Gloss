@@ -41,13 +41,13 @@ var settingsGroupRows int
 
 // settingsGroupTitle is a group's heading: 12px, semibold, secondary.
 func settingsGroupTitle(c *ui.Context, pal palette, title string) {
-	ui.Text(c, title).FontSize(textBodySM).FontWeight(weightSemibold).
+	ui.Text(c, title).FontSize(uiFontSize(textBodySM)).FontWeight(weightSemibold).
 		TextColor(pal.textMuted).Padding(0, 4)
 }
 
 // settingsGroupNote is the quiet line under a group.
 func settingsGroupNote(c *ui.Context, pal palette, note string) {
-	ui.Text(c, note).FontSize(textBodySM).TextColor(pal.textFaint).
+	ui.Text(c, note).FontSize(uiFontSize(textBodySM)).TextColor(pal.textFaint).
 		LineHeight(1.4).Padding(0, 4)
 }
 
@@ -77,9 +77,9 @@ func settingsRow(c *ui.Context, pal palette, label, detail string, control func(
 	ui.Row(c).Padding(settingsRowV, 0).Gap(16).AlignItems(ui.Center).FillWidth().
 		Children(func() {
 			ui.Column(c).Grow(1).MinWidth(0).Gap(3).Children(func() {
-				ui.Text(c, label).FontSize(13.5).TextColor(pal.text).SingleLine()
+				ui.Text(c, label).FontSize(uiFontSize(textBody)).TextColor(pal.text).SingleLine()
 				if detail != "" {
-					ui.Text(c, detail).FontSize(textBodySM).TextColor(pal.textMuted).
+					ui.Text(c, detail).FontSize(uiFontSize(textBodySM)).TextColor(pal.textMuted).
 						LineHeight(1.35)
 				}
 			})
@@ -89,25 +89,31 @@ func settingsRow(c *ui.Context, pal palette, label, detail string, control func(
 
 // settingsMiniButton is a compact control for steppers and secondary
 // actions inside a row: 24px high, 6px radius, a quiet control fill.
+//
+// 皮和界面上其余控件同一套：洗色底 + 1px 发丝边 + inkMuted 文字，悬停 /
+// 按下沿洗色阶梯升（widgets.go 的 secondaryAction）。这里以前走的是拟态那一套
+// —— darkSurfaceShadow(litSurfaceEdge(…))，深色下三层外投影加一道内高光，
+// 于是同一个设置页里，−/＋ 是拟态、旁边的分段控件和开关不是（issue #7 问题三
+// 问的就是这个）。层级靠明度阶梯和发丝边表达，控件不投投影（DESIGN.md §4.1）。
 func settingsMiniButton(c *ui.Context, pal palette, label, text string, disabled bool) ui.Element {
 	btn := ui.ButtonBase(c).Height(24).Shrink(0).Padding(0, 8).Radius(radiusSM).
 		Center().Label(label).Disabled(disabled).Cursor(ui.CursorPointer)
-	bg, fg := pal.control, pal.text
+	var bg, border, fg ui.Color
 	switch {
 	case disabled:
-		bg, fg = ui.Transparent, pal.textFaint
-	case btn.Hovered():
-		bg = pal.controlHover
+		bg, border, fg = ui.Transparent, pal.hairline, pal.textFaint
 	case btn.Pressed():
-		bg = pal.control.Mix(pal.text, 0.05)
+		bg, border, fg = pal.rowSelected, pal.hairlineStrong, pal.ink
+	case btn.Hovered():
+		bg, border, fg = pal.rowSelected, pal.hairlineStrong, pal.ink
+	default:
+		bg, border, fg = pal.control, pal.hairline, pal.text
 	}
 	btn.Background(btn.AnimateColor("bg", bg, ui.Animation{Duration: 90 * time.Millisecond})).
-		TextColor(fg)
-	if pal.dark && !disabled {
-		darkSurfaceShadow(litSurfaceEdge(btn, pal))
-	}
+		Border(1, border).TextColor(fg)
+	fadeColors(btn)
 	btn.Children(func() {
-		ui.Text(c, text).FontSize(textBodySM).FontWeight(weightMedium).SingleLine()
+		ui.Text(c, text).FontSize(uiFontSize(textBodySM)).FontWeight(weightMedium).SingleLine()
 	})
 	return btn
 }
@@ -119,9 +125,9 @@ func settingsFieldRow(c *ui.Context, pal palette, label, detail string, field fu
 		ui.Box(c).Height(1).Shrink(0).FillWidth().Background(pal.rowDivider)
 	}
 	ui.Column(c).Padding(settingsRowV, 0).Gap(6).FillWidth().Children(func() {
-		ui.Text(c, label).FontSize(13.5).TextColor(pal.text).SingleLine()
+		ui.Text(c, label).FontSize(uiFontSize(textBody)).TextColor(pal.text).SingleLine()
 		if detail != "" {
-			ui.Text(c, detail).FontSize(textBodySM).TextColor(pal.textMuted).LineHeight(1.35)
+			ui.Text(c, detail).FontSize(uiFontSize(textBodySM)).TextColor(pal.textMuted).LineHeight(1.35)
 		}
 		field()
 	})
@@ -134,7 +140,7 @@ func settingsCardHeader(c *ui.Context, pal palette, title string, tools func()) 
 	ui.Row(c).Height(settingsBarH).Shrink(0).FillWidth().
 		Padding(0, 12, 0, 16).Gap(10).AlignItems(ui.Center).
 		BorderWidth(0, 0, 0, 0).Children(func() {
-		ui.Text(c, title).FontSize(15).FontWeight(weightSemibold).
+		ui.Text(c, title).FontSize(uiFontSize(textHeadline)).FontWeight(weightSemibold).
 			TextColor(pal.text).SingleLine()
 		ui.Spacer(c)
 		if tools != nil {
@@ -161,45 +167,42 @@ func settingsIconButton(c *ui.Context, pal palette, label, tip string, icon *ui.
 	return false
 }
 
-// settingsButton is the settings window's button: a raised control face,
-// or the accent's for the primary action.
+// settingsButton is the settings window's button: the shared wash control
+// face, or the accent's for the primary action.
+//
+// 和 primaryAction / secondaryAction 同一套（widgets.go）：静息洗色底 + 1px 发丝
+// 边，悬停 / 按下沿洗色阶梯升。以前深色走拟态（三层外投影 + 内高光）、浅色走
+// 一层内阴影加一层外投影 —— 同一设置页里这颗是拟态、顶栏「关闭设置」不是，
+// 用户读到的是两三套互相不认识的语言（issue #7 问题三）。
+//
+// 主按钮和 primaryAction 一样靠**有没有实心底**分主次，不靠投影：实心强调色
+// 的是「就这么办」，洗色的是「再想想」。
 func settingsButton(c *ui.Context, pal palette, label string, primary, disabled bool) ui.Element {
 	btn := ui.ButtonBase(c).Height(30).Shrink(0).Padding(0, 14).Gap(8).
 		Radius(radiusMD).AlignItems(ui.Center).Center().
 		Label(label).Disabled(disabled).Cursor(ui.CursorPointer)
-	var bg, fg ui.Color
+	var bg, border, fg ui.Color
 	switch {
 	case disabled:
-		bg, fg = pal.control, pal.textFaint
+		bg, border, fg = pal.chip, pal.hairline, pal.inkTertiary
 	case primary:
-		bg, fg = pal.accent, ui.Hex("#ffffff")
+		bg, border, fg = pal.accent, pal.accent, ui.Hex("#ffffff")
 		if btn.Hovered() {
 			bg = bg.Mix(ui.Hex("#ffffff"), 0.08)
 		}
 		if btn.Pressed() {
 			bg = bg.Mix(ui.Hex("#000000"), 0.08)
 		}
+	case btn.Pressed(), btn.Hovered():
+		bg, border, fg = pal.rowSelected, pal.hairlineStrong, pal.ink
 	default:
-		bg, fg = pal.control, pal.text
-		if btn.Hovered() {
-			bg = pal.controlHover
-		}
-		if btn.Pressed() {
-			bg = pal.control.Mix(pal.text, 0.06)
-		}
+		bg, border, fg = pal.chip, pal.hairline, pal.inkMuted
 	}
 	btn.Background(btn.AnimateColor("bg", bg, ui.Animation{Duration: 90 * time.Millisecond})).
-		TextColor(fg)
-	if !primary && !disabled {
-		if pal.dark {
-			darkSurfaceShadow(litSurfaceEdge(btn, pal))
-		} else {
-			btn.InsetShadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.05)).
-				Shadow(0, 0.5, 1.5, 0, ui.RGBA(0, 0, 0, 0.13))
-		}
-	}
+		Border(1, border).TextColor(fg)
+	fadeColors(btn)
 	btn.Children(func() {
-		ui.Text(c, label).FontSize(13).FontWeight(weightMedium).SingleLine()
+		ui.Text(c, label).FontSize(uiFontSize(textBody)).FontWeight(weightMedium).SingleLine()
 	})
 	return btn
 }

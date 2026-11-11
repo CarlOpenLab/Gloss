@@ -63,9 +63,9 @@ func (a *app) confirmBody(c *ui.Context, pal palette) {
 	cf := &a.confirm
 
 	ui.Column(c).Width(420).Gap(12).Children(func() {
-		ui.Text(c, cf.title).FontSize(textHeadline).FontWeight(weightSemibold)
+		ui.Text(c, cf.title).FontSize(uiFontSize(textHeadline)).FontWeight(weightSemibold)
 		if cf.body != "" {
-			ui.Text(c, cf.body).FontSize(12).TextColor(t.TextMuted)
+			ui.Text(c, cf.body).FontSize(uiFontSize(textBodySM)).TextColor(t.TextMuted)
 		}
 
 		ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
