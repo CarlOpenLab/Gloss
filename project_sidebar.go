@@ -182,8 +182,15 @@ func (a *app) projectSidebar(c *ui.Context, pal palette) {
 			}
 		})
 
-		ui.Row(c).Height(28).Shrink(0).FillWidth().Padding(0, 10).Gap(6).AlignItems(ui.Center).Children(func() {
+		// 左右各 12px：和上面「项目」标题行同一个格子（那一行的 10px 长在
+		// 滚动容器上、2px 长在自己身上），标签与右端那颗 + 才和项目行收在
+		// 一处 —— 侧栏开关也挂在同一竖线上（见 TestUtilityCluster…）。
+		ui.Row(c).Height(28).Shrink(0).FillWidth().Padding(0, 12).Gap(6).AlignItems(ui.Center).Children(func() {
 			shellSectionLabel(c, pal, T("分支", "BRANCHES"))
+			// Spacer 在按钮前面：+ 贴在侧栏右沿，和「项目」标题那颗同一边。
+			// 挨着标题放的话，一颗孤零零的图标紧跟在字后面，既像标题的一部
+			// 分，又和上面「项目」那颗 + 端着一个在左一个在右。
+			ui.Spacer(c)
 			if a.repoReady() {
 				plus := ui.ButtonBase(c).Size(22, 22).Radius(radiusXS).Center().
 					Cursor(ui.CursorPointer).Label(T("新建分支…", "New Branch…")).
@@ -197,7 +204,6 @@ func (a *app) projectSidebar(c *ui.Context, pal palette) {
 					a.newBranchAtHead()
 				}
 			}
-			ui.Spacer(c)
 		})
 
 		if a.repoReady() {

@@ -214,6 +214,17 @@ func TestSidebarBranchHeaderHasNewBranchButton(t *testing.T) {
 	if _, ok := tt.Find("新建分支…"); !ok {
 		t.Fatalf("侧栏分支标题旁该有「新建分支…」按钮：%q", tt.Texts())
 	}
+	// + 贴在标题行右端，和「项目」行那颗收在同一处：挨着标题放既像标题
+	// 的一部分，侧栏右端也对不齐。
+	branchPlus, _ := tt.Find("新建分支…")
+	projectsPlus, ok := tt.Find(T("添加项目", "Add Project"))
+	if !ok {
+		t.Fatalf("项目行找不到 + 按钮：%q", tt.Texts())
+	}
+	if d := (branchPlus.X + branchPlus.W/2) - (projectsPlus.X + projectsPlus.W/2); d > 1 || d < -1 {
+		t.Errorf("「分支」+ 中心 x=%.1f 和「项目」+ 中心 x=%.1f 没对齐（差 %.1f）",
+			branchPlus.X+branchPlus.W/2, projectsPlus.X+projectsPlus.W/2, d)
+	}
 	if err := tt.Click("新建分支…"); err != nil {
 		t.Fatal(err)
 	}
