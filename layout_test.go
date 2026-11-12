@@ -901,10 +901,11 @@ func TestCommitBarKeepsActionsWhenNarrow(t *testing.T) {
 	}
 }
 
-// 窄窗口下分支对比栏折成两行：上一行「基准 ⇄ 对比 + 退出」，下一行模式与
-// 统计。原来是一整条不可换行的 Row，720 下「退出对比」被顶到窗口外，
-// 标题也被 Shrink(0) 的邻居挤成竖排。
-func TestCompareBarKeepsExitWhenNarrow(t *testing.T) {
+// 窄窗口下分支对比弹窗整块收进窗口：标题、基准/对比选择器、退出按钮都还在
+// 可视区内。以前它是一条钉在卡片里的对比栏（compareBar），720 宽下选择器把
+// 「退出对比」顶到窗口外；现在是走 specModalSticky 的模态，MaxWidth/MaxHeight
+// 按窗口收，这件事由它自己保证。
+func TestCompareModalFitsNarrowWindow(t *testing.T) {
 	a := richApp(t)
 	a.startCompare("main", "feature")
 	a.compare.state = loadReady
@@ -921,6 +922,13 @@ func TestCompareBarKeepsExitWhenNarrow(t *testing.T) {
 	}
 	if exit.X+exit.W > 720+1 {
 		t.Errorf("退出对比右边缘 x=%.0f 出了 720 的窗口", exit.X+exit.W)
+	}
+	if exit.Y+exit.H > 620+1 {
+		t.Errorf("退出对比下边缘 y=%.0f 出了 620 的窗口", exit.Y+exit.H)
+	}
+	// 标题也得在：模态面板被窗口尺寸夹过之后，整块该是完整的一块。
+	if !tt.HasText("分支对比") {
+		t.Errorf("窄窗口下该有「分支对比」标题：%q", tt.Texts())
 	}
 }
 

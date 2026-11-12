@@ -32,7 +32,7 @@ const commitAvatar = 34
 // 这个提交的改动，栏上写着「这个提交」就是错的。摆不摆得下（detailPaneFits）
 // 不归这里管：那是布局问题，由 detailPane 问。
 func (a *app) commitDetailVisible() bool {
-	if a.compare.on || a.prReview.on {
+	if a.prReview.on {
 		return false
 	}
 	return a.tab == 1 && a.stashRev == "" &&

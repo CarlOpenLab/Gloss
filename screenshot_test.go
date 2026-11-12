@@ -134,12 +134,42 @@ func TestDumpScreenshot(t *testing.T) {
 	tt.Frame()
 	shot("/tmp/de-shot-split.png")
 
-	// 分支对比视图（Fork 风格）：两分支比对栏、差异文件、diff
-	a.startCompare("main", "feature")
-	a.compare.state = loadReady
-	a.compare.commits = []gitrepo.Commit{
-		{Short: "a1b2c3d", Subject: "feat: add user authentication"},
-		{Short: "e4f5g6h", Subject: "fix: update router handler"},
+	// 分支对比弹窗：压在主页面上的一层，主区还是工作区改动。
+	//
+	// richApp 只有一条分支，所以这里在它自己的仓库里现开一条 feature 并提一个
+	// 提交 —— 对比比的是两个真实分支，读盘那一条路（loadCompareReview）也真
+	// 跑得到，截图里看得见 diff 而不是空状态。
+	runGit(t, a.repoPath, "checkout", "-b", "feature")
+	writeFile(t, filepath.Join(a.repoPath, "internal/server/auth.go"), `package server
+
+import "net/http"
+
+// auth 校验请求头里的 token。
+func auth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next(w, r)
+	}
+}
+`)
+	writeFile(t, filepath.Join(a.repoPath, "internal/server/handler.go"), "# diff explainer\n\n改了一行\n")
+	runGit(t, a.repoPath, "add", ".")
+	runGit(t, a.repoPath, "commit", "-m", "feat: add user authentication")
+	runGit(t, a.repoPath, "checkout", "-")
+	a.loadRefs()
+	settle(t, a)
+	tt.Frame()
+
+	a.startCompare(a.branch, "feature")
+	for i := 0; i < 40 && (a.compare.state != loadReady || a.compare.review.diff == nil); i++ {
+		settle(t, a)
+		tt.Frame()
+	}
+	if a.compare.state != loadReady {
+		t.Fatalf("对比没加载成功：state=%v err=%s", a.compare.state, a.compare.err)
 	}
 	tt.SetDark(false)
 	tt.Frame()

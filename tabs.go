@@ -106,6 +106,7 @@ type repoTab struct {
 	fileTreeFilter   string
 	filesClosed      map[string]bool
 	fileSel          int
+	filesChosen      ui.Selection[string]
 
 	// 「编辑器」视图那一栏列的是整个工作区，与上面那份改动列表并行存在。
 	wsAll        []gitrepo.File
@@ -199,6 +200,7 @@ func (a *app) saveActiveTab() {
 	tab.fileTreeFilter = a.fileTreeFilter
 	tab.filesClosed = a.filesClosed
 	tab.fileSel = a.fileSel
+	tab.filesChosen = a.filesChosen
 
 	tab.wsAll = a.wsAll
 	tab.wsFiles = a.wsFiles
@@ -279,6 +281,7 @@ func (a *app) restoreActiveTab() {
 	a.fileTreeFilter = tab.fileTreeFilter
 	a.filesClosed = tab.filesClosed
 	a.fileSel = tab.fileSel
+	a.filesChosen = tab.filesChosen
 
 	a.wsAll = tab.wsAll
 	a.wsFiles = tab.wsFiles
@@ -531,9 +534,9 @@ func (a *app) closeTab(idx int) {
 // clearRepoState 关掉最后一个项目后，把仓库相关状态清干净，让主区和侧栏
 // 真的落回「还没有打开仓库 / 项目」的空状态。
 //
-// 只清 repoPath / state 是不够的：侧栏分支读的是 refsState，对比栏看的是
-// compare.on，PR 检视看的是 prReview.on —— 这些字段留着，空状态旁边就会
-// 挂着已经关掉的仓库的分支、对比栏或 PR 检视条。
+// 只清 repoPath / state 是不够的：侧栏分支读的是 refsState，PR 检视看的是
+// prReview.on —— 这些字段留着，空状态旁边就会挂着已经关掉的仓库的分支或
+// PR 检视条。
 func (a *app) clearRepoState() {
 	// 提交框里的草稿按仓库记着，关掉之前先落盘，重新打开还能捡回来。
 	if a.store != nil {
@@ -576,6 +579,7 @@ func (a *app) clearRepoState() {
 	a.fileTreeFilter = ""
 	a.filesClosed = nil
 	a.fileSel = 0
+	a.filesChosen = ui.Selection[string]{}
 
 	a.wsAll = nil
 	a.wsFiles = nil

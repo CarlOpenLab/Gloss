@@ -27,6 +27,10 @@ import (
 // 就是一道闸。
 var radiusLiteralExceptions = map[string]string{
 	"markdown.go:1": "引用块左侧那条 2px 竖线的端头，圆角取它宽度的一半才是圆头；这是几何，不是设计 token",
+	// review.go 那四个 0 说的是「另外三个角不收圆」：DiffView 只有右下角贴在
+	// 卡片圆角上（cardClipRadius），另外三角是方的就该写 0。写 radiusXS 会把
+	// 它们也磨圆，那一圈弧在卡片中间凭空出现。所以 0 在这里是几何，不是档位。
+	"review.go:0": "DiffView 只收贴着卡片圆角的那一个角，另外三角「不收」写 0；写任何一档都会把方角也磨圆",
 }
 
 // TestNoRawRadiusLiterals 断言非测试代码里不再出现圆角数字字面量。
@@ -318,7 +322,7 @@ var opaqueSurfaceOwners = map[string]string{
 	// 混在卡片文件里的浮层与画布
 	"app.go:repoDropdownPanel":        "仓库下拉浮层",
 	"code_editor.go:codeEditorTheme":  "代码画布共用的配色：编辑器视图 / Diff 预览 / 编辑弹窗三处的底色都从这里出，增删淡染从背景色现算，必须不透明",
-	"compare.go:compareDialog":        "对比分支弹窗（对比栏 compareBar 在卡片上，不在此列）",
+	"compare.go:compareDialog":        "对比分支弹窗（选两个分支的那个）；对比本身也是弹窗 compareModal，走 specModalSticky",
 	"prdialog.go:prDialogBody":        "PR 列表弹窗（PR 检视栏 prReviewBar 在卡片上，不在此列）",
 	"prdialog.go:prReviewModalBody":   "AI Review 弹窗",
 	"markdown.go:mdStyleFor":          "Markdown 只在 AI Review 弹窗里渲染，代码块落在弹窗面板上",

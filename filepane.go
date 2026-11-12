@@ -413,12 +413,6 @@ func (a *app) emptyTreeMsg() string {
 		return T("未打开仓库", "No repository opened")
 	case a.state != loadReady && !a.repoReady():
 		return "" // 仓库在读，diff 那边有转圈了，这里先空着
-	case a.compare.on && a.compare.state == loadLoading:
-		return T("正在计算分支差异…", "Calculating branch diff…")
-	case a.compare.on && a.compare.state == loadFailed:
-		return T("无法获取分支差异", "Failed to load branch diff")
-	case a.compare.on && len(a.allFiles) == 0:
-		return T("分支间无变更", "No changes between branches")
 	case a.tab == 1 && a.hist == loadLoading && len(a.commits) == 0:
 		return T("正在读取提交记录…", "Loading commit history…")
 	case a.tab == 1 && a.hist == loadFailed && len(a.commits) == 0:
@@ -449,6 +443,9 @@ type rowSpec struct {
 	sel     *int
 	onClick func()
 	tree    treeFor
+	// mods 是这一下点击时按住的修饰键（0 = 普通点击），用来接 Cmd / Shift
+	// 多选。只在 row.Clicked() 成立时有意义，见 clickFileRow。
+	mods ui.Modifiers
 	// plain 是编辑器视图那一栏的画法：只画名字，按改动给名字上色
 	// （VSCode 那样，一眼扫出哪儿动过），**不画**增删行数和状态字母。
 	//
@@ -568,15 +565,89 @@ func (a *app) treeRowIn(c *ui.Context, pal palette, r filetree.Row, o rowSpec) {
 		return
 	}
 	if row.Clicked() {
-		*o.sel = n.FileIdx
-		// 改动区跟着选中走（它在下一帧自己发现选中的文件变了）。
-		if o.onClick != nil {
-			o.onClick()
-		}
+		o.mods = row.ClickModifiers()
+		a.clickFileRow(r, o)
+		o.mods = 0
 	}
 }
 
-// treeFor 选折叠状态记在哪一份上。两份名单的默认值正好相反。
+// clickFileRow 是文件行上那一下点击：普通点击换选中，Cmd 点击在选中集里
+// 添一个 / 减一个，Shift 点击从上一个选中的文件一路选到这儿。
+//
+// 修饰键由调用方传进来（mods），而且只在 row.Clicked() 里面取：
+// ClickModifiers 报的是这一下点击时按住的键，在分支外面读会读到上一次点击
+// 留下的值。放进 rowSpec 是为了让「编辑器那一栏」能把它关掉。
+//
+// 单选的走法和以前一模一样（换 fileSel、让改动区跟上），多选是它的延伸：
+// Cmd 点也照样选中刚点的那一个，只是不再把别的选中清掉。
+func (a *app) clickFileRow(r filetree.Row, o rowSpec) {
+	n := r.Node
+	switch {
+	case o.plain:
+		// 编辑器那一栏是「打开仓库里某个文件看一眼」，没有批量暂存 /
+		// 放弃可言，多选对它没有意义 —— 修饰键在那儿不当选择用。
+	case o.mods&ui.Cmd != 0:
+		a.toggleChosenFile(o.list[n.FileIdx])
+		*o.sel = n.FileIdx
+		a.onClickFile(o)
+		return
+	case o.mods&ui.Shift != 0:
+		a.extendChosenFiles(n.FileIdx, o)
+		return
+	}
+	// 普通点击换选中，多选作废：一次只动一个文件的时候还挂着一片选中，
+	// 下一次「对着选中集来一下」会连没点过的文件一起动。
+	a.filesChosen.Clear()
+	*o.sel = n.FileIdx
+	// 改动区跟着选中走（它在下一帧自己发现选中的文件变了）。
+	a.onClickFile(o)
+}
+
+// onClickFile 让所在那一栏把内容同步到选中的文件上。
+func (a *app) onClickFile(o rowSpec) {
+	if o.onClick != nil {
+		o.onClick()
+	}
+}
+
+// toggleChosenFile 把一个文件添进 / 移出选中集。
+func (a *app) toggleChosenFile(f gitrepo.File) {
+	k := fileKey(f)
+	if a.filesChosen.Has(k) {
+		a.filesChosen.Remove(k)
+		return
+	}
+	a.filesChosen.Add(k)
+}
+
+// extendChosenFiles 把选中集从上一个选中的文件（o.sel）一路铺到 to。
+//
+// 走的是**文件下标**这一维：树中间夹着目录行（FileIdx = -1），而 Shift 该
+// 选的是这两个文件之间的所有文件 —— 中间收起的目录里的那几个也一起选上，
+// 这正是「从这儿到那儿全要」的意思。
+func (a *app) extendChosenFiles(to int, o rowSpec) {
+	a.filesChosen.Clear()
+	if *o.sel < 0 || *o.sel >= len(o.list) {
+		// 没有起点：只选当前这一个（学不会比选错一片好）。
+		if to >= 0 && to < len(o.list) {
+			a.filesChosen.Add(fileKey(o.list[to]))
+		}
+		*o.sel = to
+		a.onClickFile(o)
+		return
+	}
+	lo, hi := *o.sel, to
+	if lo > hi {
+		lo, hi = hi, lo
+	}
+	for i := lo; i <= hi; i++ {
+		if i >= 0 && i < len(o.list) {
+			a.filesChosen.Add(fileKey(o.list[i]))
+		}
+	}
+	a.onClickFile(o)
+}
+
 type treeFor int
 
 const (
@@ -769,10 +840,6 @@ func (a *app) detailEmpty(c *ui.Context, t *ui.Theme, pal palette) {
 		if secondaryAction(c, pal, T("重试", "Retry"), "", false).Clicked() {
 			a.reload()
 		}
-	case a.compare.on:
-		headline(c, pal, T("两分支之间无代码差异", "No Code Differences"))
-		ui.Textf(c, T("分支 %s 与 %s 内容完全一致。", "Branches %s and %s are identical."), a.compare.base, a.compare.target).
-			TextColor(t.TextMuted)
 	case a.tab == 1:
 		a.historyEmpty(c, t, pal)
 	case a.fileFilter != "":

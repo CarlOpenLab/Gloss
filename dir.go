@@ -136,6 +136,83 @@ func (a *app) unstageDirFiles(files []gitrepo.File) {
 	}, func(bool) { a.reloadAfterOp() })
 }
 
+// —— 对着「选中集」的批量动作 ——
+//
+// 多选（Cmd / Shift 点文件行）选出来的那一批，和目录行右键选出来的那一批走
+// 同一条路：都是「一批路径 + 一个动作」。区别只在怎么把 gitrepo.File 收齐 ——
+// 所以下面三个函数只管收，收完交给 dirStagePaths / dirDiscardPaths 那两套。
+
+// chosenFiles 是选中集里的文件，按 a.files 的顺序给出。
+//
+// 选中集记的是 fileKey（见 filesChosen），而 key 在列表里是唯一的 —— 同一个
+// 路径不会同时在已暂存和未暂存两段里，因为 fileKey 带了段落前缀。
+func (a *app) chosenFiles() []gitrepo.File {
+	if a.filesChosen.Len() == 0 {
+		return nil
+	}
+	var out []gitrepo.File
+	for _, f := range a.files {
+		if a.filesChosen.Has(fileKey(f)) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// stageSelected 把选中的文件放进 index；没有多选时退回当前选中的那一个。
+//
+// 选中集空着不能当成「什么都没选就什么都不做」：那时用户的意图几乎总是
+// 「把我在看的这个文件收进去」，而这正是 fileSel 指着的那个。真正两处都空的
+// 时候（列表是空的、或者从没选中过）才什么都不做。
+func (a *app) stageSelected() {
+	files := a.chosenFiles()
+	if len(files) == 0 {
+		if a.fileSel < 0 || a.fileSel >= len(a.files) {
+			return
+		}
+		files = []gitrepo.File{a.files[a.fileSel]}
+	}
+	a.stageDirFiles(files)
+}
+
+// discardSelected 丢掉选中文件的未暂存改动；没有多选时退回当前那一个。
+//
+// 先问一句，和 promptDiscard / promptDiscardDir 同一道闸 —— 一次动一批文件，
+// 其中未跟踪的那些还会连文件一起从磁盘上删掉。
+func (a *app) discardSelected() {
+	files := a.chosenFiles()
+	if len(files) == 0 {
+		if a.fileSel < 0 || a.fileSel >= len(a.files) {
+			return
+		}
+		files = []gitrepo.File{a.files[a.fileSel]}
+	}
+	a.promptDiscardDir(T("选中的文件", "the selected files"), files)
+}
+
+// pruneChosenFiles 把已经不在了的文件从选中集里放掉。
+//
+// 选中跟着文件走（key 不是下标），但文件本身会消失 —— 丢掉了改动、切去了
+// 别的提交、筛过之后又清空了筛选。留着一个指向不存在文件的选中，下一次
+// 「对着选中集来一下」就会凭空虚增几个文件。
+//
+// 在每次 reload 之后调（文件列表换新的时候），而不是每帧：它要扫一遍列表，
+// 而那正是 rebuildTree 已经做过一遍的事。
+func (a *app) pruneChosenFiles() {
+	if a.filesChosen.Len() == 0 {
+		return
+	}
+	live := make(map[string]bool, len(a.files))
+	for _, f := range a.files {
+		live[fileKey(f)] = true
+	}
+	for k := range a.filesChosen.All() {
+		if !live[k] {
+			a.filesChosen.Remove(k)
+		}
+	}
+}
+
 // dirStagePaths 是批量暂存/取消暂存要交给 git 的路径。
 //
 // 重命名得新旧两个都给（见 stagePaths 的理由），所以这里不能图省事只收
@@ -241,10 +318,17 @@ func dedupPaths(paths []string) []string {
 }
 
 // revealDir 在系统文件管理器里亮出一个目录。
+//
+// 空路径是仓库根那一行（见 wrapRootDir）：它不是「没有目录」，是仓库本身，
+// 该亮的是 repoPath —— 提前返回等于菜单里那一项对根目录行永远是哑的。
 func (a *app) revealDir(path string) {
-	if a.revealPath == nil || a.repoPath == "" || path == "" {
+	if a.revealPath == nil || a.repoPath == "" {
 		return
 	}
-	reveal, full := a.revealPath, filepath.Join(a.repoPath, filepath.FromSlash(path))
+	full := a.repoPath
+	if path != "" {
+		full = filepath.Join(a.repoPath, filepath.FromSlash(path))
+	}
+	reveal := a.revealPath
 	a.run(func() { reveal(full) })
 }

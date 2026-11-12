@@ -225,6 +225,15 @@ type app struct {
 	filesClosed map[string]bool
 	// fileSel 是文件栏里选中的文件下标（不是行下标 —— 行下标一筛选就指错）。
 	fileSel int
+	// filesChosen 是文件栏里**多选**的那一批，按 fileKey 记（"u:path" 这种）。
+	//
+	// 记 key 不记下标：树一重建（筛选、折叠、刷新）行全变了，下标立刻指到
+	// 别的文件上去，而 key 跟着文件本身走 —— 筛掉的文件留在选中集里，回来
+	// 还选着，这正是「选的是文件，不是行」的意思。
+	//
+	// 单文件的动作（行上的勾选框、右键菜单）不碰它：那一套照旧对着 fileSel
+	// 下手。只有「对着选中集来一下」的那几个动作读它（见 stageSelected）。
+	filesChosen ui.Selection[string]
 
 	// —— 编辑器视图的文件栏：整个工作区，而不是只有改动 ——
 	// 编辑器要的是「仓库里有哪些代码」，所以这一栏列的是 wsAll（git ls-files
@@ -910,6 +919,7 @@ func (a *app) view(c *ui.Context) {
 	// 改动区跟着文件栏的选中 / 段落 / 仓库状态走：选中换了就换缓冲区，
 	// 指纹变了就重读两侧（这一帧先看到旧的，读盘回来自己刷新）。
 	a.syncReview()
+	a.syncCompareReview()
 
 	// The window is acrylic: the system material shows wherever the view draws
 	// no background, and the work card is the one translucent layer over it.
@@ -954,6 +964,7 @@ func (a *app) view(c *ui.Context) {
 	a.confirmDialog(c, pal)
 	a.stashDialog(c, pal)
 	a.compareDialog(c, pal)
+	a.compareModal(c, pal)
 	a.prDialog(c, pal)
 	a.prReviewModal(c, pal)
 	a.riskScanDialog(c, pal)
@@ -964,10 +975,10 @@ func (a *app) view(c *ui.Context) {
 	// 浮层）之上，不跟着侧栏、卡片或对话框一起动。
 	a.windowControls(c, pal)
 
-	// Esc 退出分支对比/PR 检视。放在最后，让对话框里正在编辑的输入框先有机会处理它。
-	if a.compare.on && !a.modalOn() && c.Shortcut(0, ui.KeyEscape) {
-		a.exitCompare()
-	}
+	// Esc 退出 PR 检视。放在最后，让对话框里正在编辑的输入框先有机会处理它。
+	//
+	// 分支对比不在这儿退：它是模态（compareModal 走 specModalSticky），Esc
+	// 由对话框自己那一层接（ui 的 coreDialogBase），在这儿再写一道就是两次。
 	if a.prReview.on && !a.modalOn() && c.Shortcut(0, ui.KeyEscape) {
 		a.exitPRReview()
 	}
@@ -1474,11 +1485,6 @@ func (a *app) mainArea(c *ui.Context, pal palette) {
 			a.editorArea(c, pal)
 			return
 		}
-		if a.compare.on {
-			a.compareBar(c, pal)
-			a.detailPane(c, pal)
-			return
-		}
 		if a.prReview.on {
 			a.prReviewBar(c, pal)
 			a.detailPane(c, pal)
@@ -1872,7 +1878,7 @@ func (a *app) workBranch() string {
 // 菜单在系统层拦键、视图在自己那一帧拦，各写各的判断迟早漏掉一处
 // （新加一个对话框，忘了改其中一个，⌘R 就会在对话框背后偷偷刷新）。
 func (a *app) modalOn() bool {
-	return a.codeEdit.on || a.palette.on || a.settingsOn || a.tag.on || a.reset.on || a.newBranch.on || a.rename.on || a.confirm.on || a.stashDlg.on || a.compare.dialog || a.prDlg.on || a.prReview.reviewModal || a.riskScan.dialog || a.fileHist.on
+	return a.codeEdit.on || a.palette.on || a.settingsOn || a.tag.on || a.reset.on || a.newBranch.on || a.rename.on || a.confirm.on || a.stashDlg.on || a.compare.dialog || a.compare.on || a.prDlg.on || a.prReview.reviewModal || a.riskScan.dialog || a.fileHist.on
 }
 
 // toggleAmend 切换修改上次提交状态。勾选时预填最近一次提交的说明。
@@ -2051,6 +2057,9 @@ func (a *app) showFiles(files []gitrepo.File, id string) {
 	a.allFiles = files
 	a.applyFilter()
 	a.pruneReviewDrafts(files)
+	// 选中集里的文件可能已经没了（丢掉改动、切去别的提交）：留着一个指向
+	// 不存在文件的选中，下一次批量动作会凭空虚增几个文件。
+	a.pruneChosenFiles()
 }
 
 // selectedFileKey 是文件栏当前选中那个文件的 key，没选中给空串。
@@ -2135,18 +2144,70 @@ func (a *app) rebuildTree() {
 	var roots []*filetree.Node
 	switch {
 	case stagedN == 0:
-		roots = filetree.BuildAt(a.files, 0, "")
+		roots = wrapRootDir(filetree.BuildAt(a.files, 0, ""), "")
 	case stagedN == len(a.files):
-		roots = filetree.BuildAt(a.files, 0, "")
+		roots = wrapRootDir(filetree.BuildAt(a.files, 0, ""), "")
 	default:
 		roots = []*filetree.Node{
 			{Key: "g:s", Label: T("已暂存", "Staged"), Path: "已暂存", Dir: true, FileIdx: -1,
-				Children: filetree.BuildAt(a.files[:stagedN], 0, "s|")},
+				Children: wrapRootDir(filetree.BuildAt(a.files[:stagedN], 0, "s|"), "s|")},
 			{Key: "g:u", Label: T("未暂存", "Unstaged"), Path: "未暂存", Dir: true, FileIdx: -1,
-				Children: filetree.BuildAt(a.files[stagedN:], stagedN, "u|")},
+				Children: wrapRootDir(filetree.BuildAt(a.files[stagedN:], stagedN, "u|"), "u|")},
 		}
 	}
 	a.tree = filetree.Filter(roots, a.fileFilter)
+}
+
+// rootDirLabel 是仓库根目录行的标题。
+//
+// 不拿仓库名当标题：那一行只收**根目录底下**的文件，不是整个仓库 —— 叫仓库名
+// 会让人以为右键它能把全仓库一起暂存。而且仓库名在工具栏上已经有了，文件栏里
+// 再来一个同名的是重复自我介绍。
+const rootDirLabel = "\uff08\u6839\u76ee\u5f55\uff09"
+
+// wrapRootDir 给顶层节点补一个仓库根目录行，根下没有文件时原样返回。
+//
+// filetree.BuildAt 只给**带斜杠的路径**建目录节点：README.md 这种根下的文件
+// 直接当顶层文件落下来，于是整棵树上一个目录行都没有。而批量操作的入口正是
+// 目录行的右键菜单（dir.go 的 dirMenu）—— 同一个改动挪到 internal/ 底下就有
+// 「全部暂存 / 全部放弃」，放在根下就一处都摸不到。
+//
+// 只收**文件**，目录节点照旧摆在顶层当兄弟行：根目录行因此不是仓库的缩影，
+// !而是「根目录底下那些文件」的把手 —— 右键它暂存的是这几个，右键
+// internal/server 暂存的是那几个，两边各批各的，互不牵连。真要把根目录行做成
+// 整棵树的根，所有文件名都白往下缩一格，而那一格不带来任何新信息。
+//
+// 摆在目录前面：根下的文件是最该一眼看见的那几个，压在整列文件夹后面等于
+// 藏起来。这也正是它放在分组行（已暂存 / 未暂存）里面的位置。
+//
+// Key 不用 "g:" 开头：dir.go 拿这个前缀认出分组行，那是两条假路径，复制路径
+// 那一组对它没有意义 —— 而根目录行是真路径，该有。"d:" 也不行：BuildAt 给
+// 内部目录的 key 就是这个前缀，撞上会串折叠状态。
+//
+// keyPrefix 是这一段建树时用的前缀（"s|" / "u|" / ""），原样带进 key 里：
+// 分组态下两段各有一个根目录行，而 key 是元素身份，两行共用一个 key 框架
+// 直接 panic。这正是 BuildAt 自己那个前缀的用处。
+func wrapRootDir(nodes []*filetree.Node, keyPrefix string) []*filetree.Node {
+	var dirs, files []*filetree.Node
+	for _, n := range nodes {
+		if n.Dir {
+			dirs = append(dirs, n)
+			continue
+		}
+		files = append(files, n)
+	}
+	if len(files) == 0 {
+		return nodes // 根下没有改动文件，不多这一行
+	}
+	root := &filetree.Node{
+		Key:      "r:" + keyPrefix,
+		Label:    T(rootDirLabel, "(root)"),
+		Path:     "",
+		Dir:      true,
+		FileIdx:  -1,
+		Children: files,
+	}
+	return append([]*filetree.Node{root}, dirs...)
 }
 
 // isViewed 判断文件是否已被标记为看过。指纹对不上就说明文件内容变了，
