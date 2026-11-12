@@ -1,6 +1,7 @@
 package main
 
 import (
+	"runtime"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -27,12 +28,6 @@ const (
 	settingsRowV     = 11
 	settingsControlH = 26
 
-	// settingsCardRadius 是设置窗口里那张卡的圆角。它不再跟着主窗口的
-	// shellCardRadius 走：这个浮窗的外框是 radiusXL(16)，按「内 = 外 − 间距」
-	// 算，内卡该是 8 —— 那张卡片会比现在方得多，是另一次版式决定。眼下先
-	// 留住 14，和主工作卡分开取值。
-	settingsCardRadius = 14
-
 	// settingsNavPad 是导航栏自己的左右留白（没有系统窗口控件时）；
 	// settingsBarLeadGap 是内容让开系统窗口控件之后与它之间再留的一道间距。
 	//
@@ -44,6 +39,26 @@ const (
 	settingsNavPad     = float32(12)
 	settingsBarLeadGap = float32(12)
 )
+
+// settingsCardRadiusFor 是设置窗口里那张卡的圆角。它和主窗口的工作卡走
+// 同一条算式（shellCardRadiusFor）：设置窗口自己也是一个窗口，卡片贴着它
+// 内缩 settingsCardGap，所以「内 = 外 − 间距、但不低于 radiusLG、也不越过
+// 外圆」对它一样成立。
+//
+// 原先这里写死 14。两个平台上都不对齐，且错得不一样：
+//
+//   - macOS 26 的窗口角是 28，主工作卡是 20；设置卡停在 14，角上那道 8px
+//     的留白带被两种曲率切开，读起来像两张不相干的卡片叠在一起。
+//   - Windows 11 的窗口角只有 8，设置卡的 14 比外圈还圆 —— 角上多出来的
+//     曲率留下一块楔形灰带，就是主工作卡 2026-10-30 实机反馈里见过的那种
+//     「内外两套弧」。
+//
+// 所以这个数不归设置窗口自己定，问 shellCardRadiusFor：跟着平台走，和主卡
+// 永远同一套弧。平台当参数传，和 settingsTitleBarOptions 一个道理 ——
+// 在 macOS 上开发的这一台，照样能验 Windows 那一半长什么样。
+func settingsCardRadiusFor(goos string) float32 {
+	return shellCardRadiusFor(goos)
+}
 
 // settingsGroupRows counts the rows of the group being built so that the
 // hairline goes between them, never at the outer edges (as macOS does).
@@ -227,3 +242,6 @@ func settingsButton(c *ui.Context, pal palette, label string, primary, disabled 
 	})
 	return btn
 }
+
+// settingsCardRadius 是本机上设置窗口那张卡的圆角（runtime.GOOS）。
+func settingsCardRadius() float32 { return settingsCardRadiusFor(runtime.GOOS) }
