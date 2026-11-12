@@ -77,7 +77,6 @@ func main() {
 		// 画在材质顶上，压住视图自绘的那三颗。建窗后立刻收掉（macOS /
 		// Linux 上是空操作）。
 		applyNativeChrome(win.NativeHandle())
-		a.syncAppIcon()
 		// 后台 goroutine 改状态必须走这里：它把闭包投到主线程执行，
 		// 并请求重绘。直接改字段不会触发重绘。
 		a.dispatch = win.Update

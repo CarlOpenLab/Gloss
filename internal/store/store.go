@@ -57,8 +57,6 @@ type Config struct {
 	BackgroundBlur string `json:"backgroundBlur,omitempty"`
 	// Locale 是界面语言设定："" 或 "zh"（简体中文）、"en"（English）。
 	Locale string `json:"locale,omitempty"`
-	// AppIcon 是应用图标风格："black"（纯黑曜石）或 "white"（纯白极简）。
-	AppIcon string `json:"appIcon,omitempty"`
 	// CommitPrompt 是自定义 Git 提交信息提示词，留空使用内置预设。
 	CommitPrompt string `json:"commitPrompt,omitempty"`
 	// BranchPrompt 是自定义 Git 分支名生成提示词，留空使用内置预设。

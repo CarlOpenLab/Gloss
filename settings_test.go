@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"image/png"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -521,28 +520,6 @@ func TestThemeAndLocaleSettings(t *testing.T) {
 		t.Error("点击简体中文卡片后语言应切换为中文")
 	}
 
-	// 4. 测试应用图标切换（这一分区只在 macOS 上摆，见 settings.go）
-	if runtime.GOOS == "darwin" {
-		if !st.HasText("应用图标") {
-			t.Error("通用偏好页面应包含「应用图标」分区")
-		}
-		if err := st.Click("纯白极简"); err != nil {
-			t.Fatalf("点击「纯白极简」图标卡片: %v", err)
-		}
-		st.Frame()
-		if a.appIcon != "white" {
-			t.Errorf("点击纯白卡片后 appIcon 应为 white，实际为 %s", a.appIcon)
-		}
-
-		if err := st.Click("纯黑极简"); err != nil {
-			t.Fatalf("点击「纯黑极简」图标卡片: %v", err)
-		}
-		st.Frame()
-		if a.appIcon != "black" {
-			t.Errorf("点击纯黑卡片后 appIcon 应为 black，实际为 %s", a.appIcon)
-		}
-	}
-
 	// 5. 测试切换至「关于 Gloss」选项卡
 	if err := st.Click("关于 Gloss"); err != nil {
 		t.Fatalf("点击「关于 Gloss」侧边栏条目: %v", err)
@@ -563,31 +540,20 @@ func TestThemeAndLocaleSettings(t *testing.T) {
 	}
 }
 
-func TestAppIconFilesAreNeutralMonochrome(t *testing.T) {
-	for name, data := range map[string][]byte{
-		"black": iconPureBlackPNG,
-		"white": iconPureWhitePNG,
-	} {
-		img, err := png.Decode(bytes.NewReader(data))
-		if err != nil {
-			t.Fatalf("decode %s: %v", name, err)
-		}
-		bounds := img.Bounds()
-		if bounds.Dx() != 1024 || bounds.Dy() != 1024 {
-			t.Errorf("%s icon size should be 1024x1024, got %dx%d", name, bounds.Dx(), bounds.Dy())
-		}
-		// 抽样验证 RGB 通道完全中性 (R == G == B)，确保绝无蓝色或杂色渐变
-		for y := bounds.Min.Y; y < bounds.Max.Y; y += 4 {
-			for x := bounds.Min.X; x < bounds.Max.X; x += 4 {
-				c := img.At(x, y)
-				r, g, b, a := c.RGBA()
-				if a > 0 {
-					if r != g || g != b {
-						t.Fatalf("%s icon has non-neutral color at (%d, %d): r=%d, g=%d, b=%d", name, x, y, r, g, b)
-					}
-				}
-			}
-		}
+// 品牌图只有一套了：图标风格的两套中性单色随新 logo 一起撤掉，设置里那行
+// 分段控件也随之删除。这里钉住剩下的事实 —— 「关于」页左上角那一枚解得出、
+// 尺寸对，而不是它解不出、那一块退化成空白色片。
+func TestTheBrandIconDecodesAtTheSizeTheBuildExpects(t *testing.T) {
+	img, err := png.Decode(bytes.NewReader(brandIconPNG))
+	if err != nil {
+		t.Fatalf("decode brand icon: %v", err)
+	}
+	bounds := img.Bounds()
+	if bounds.Dx() != 1024 || bounds.Dy() != 1024 {
+		t.Errorf("brand icon size = %dx%d, want 1024x1024", bounds.Dx(), bounds.Dy())
+	}
+	if brandBitmap() == nil {
+		t.Fatal("brandBitmap() = nil, the About pane would draw an empty box")
 	}
 }
 

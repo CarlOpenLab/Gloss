@@ -83,8 +83,6 @@ func TestPortableZipKeepsOnlyWhatRuns(t *testing.T) {
 		"icon.png",
 		"logo.png",
 		"logo-dark.png",
-		"icon-pure-black.png",
-		"icon-pure-white.png",
 		// 安装包走安装那条路，便携包是它的替代。
 		"Gloss Setup 0.3.32.exe",
 		// 自动更新的产物：客户端只认 update-windows-amd64.json 里的 URL。

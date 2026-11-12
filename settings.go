@@ -16,25 +16,18 @@ import (
 	"github.com/CarlOpenLab/Gloss/internal/llm"
 )
 
-//go:embed resources/icon-pure-black.png
-var iconPureBlackPNG []byte
+//go:embed resources/icon.png
+var brandIconPNG []byte
 
-//go:embed resources/icon-pure-white.png
-var iconPureWhitePNG []byte
+var brandIconBitmap *ui.Bitmap
 
-var (
-	iconBlackBitmap *ui.Bitmap
-	iconWhiteBitmap *ui.Bitmap
-)
-
-func getIconBitmaps() (*ui.Bitmap, *ui.Bitmap) {
-	if iconBlackBitmap == nil && len(iconPureBlackPNG) > 0 {
-		iconBlackBitmap, _ = ui.DecodeBitmap(iconPureBlackPNG)
+// brandBitmap 是「关于」页左上角那一枚品牌图。图标风格曾有两套中性单色可
+// 切，如今只有一套，这里也就只解一次、共用一份。
+func brandBitmap() *ui.Bitmap {
+	if brandIconBitmap == nil && len(brandIconPNG) > 0 {
+		brandIconBitmap, _ = ui.DecodeBitmap(brandIconPNG)
 	}
-	if iconWhiteBitmap == nil && len(iconPureWhitePNG) > 0 {
-		iconWhiteBitmap, _ = ui.DecodeBitmap(iconPureWhitePNG)
-	}
-	return iconBlackBitmap, iconWhiteBitmap
+	return brandIconBitmap
 }
 
 type settingsTab int
@@ -630,25 +623,6 @@ func (a *app) generalSettingsPane(c *ui.Context, pal palette) {
 						})
 				})
 
-			// —— 应用图标（只在 macOS 上摆） ——
-			if isMacPlatform() {
-				settingsGroup(c, pal, T("应用图标", "Application Icon"), "", func() {
-					settingsRow(c, pal, T("图标风格", "Icon Style"),
-						T("纯黑曜石或纯白瓷，两套都是中性单色。改的是 Dock 与系统「关于」里的那一枚，免重启即时生效。",
-							"Obsidian black or porcelain white, both strictly neutral. Changes the Dock and About icon; applies immediately."),
-						func() {
-							icons := []string{"black", "white"}
-							idx := 0
-							if a.appIcon == "white" {
-								idx = 1
-							}
-							seg := settingsSegmented(c, pal, &idx,
-								T("纯黑极简", "Pure Black"), T("纯白极简", "Pure White"))
-							seg.OnChange(func() { a.setAppIcon(icons[idx]) })
-						})
-				})
-			}
-
 			// —— 界面语言 ——
 			settingsGroup(c, pal, T("界面语言", "Display Language"), "", func() {
 				settingsRow(c, pal, T("语言", "Language"),
@@ -830,26 +804,16 @@ func (a *app) generalSettingsPane(c *ui.Context, pal palette) {
 
 // aboutSettingsPane 呈现关于 Gloss 的产品信息、版本与外部链接。
 func (a *app) aboutSettingsPane(c *ui.Context, pal palette) {
-	bmBlack, bmWhite := getIconBitmaps()
-	currentBm := bmBlack
-	if a.appIcon == "white" {
-		currentBm = bmWhite
-	}
-
 	ui.Scroll(c).FillWidth().FillHeight().
 		Padding(settingsPadTop, settingsPadX, settingsPadBot, settingsPadX).Children(func() {
 		ui.Column(c).Gap(22).FillWidth().MaxWidth(620).Children(func() {
 
 			// —— 品牌 ——
 			ui.Row(c).AlignItems(ui.Center).Gap(16).Padding(2, 4, 6, 4).Children(func() {
-				if currentBm != nil {
-					ui.Box(c).Size(56, 56).Radius(radiusLG).Clip().
-						Background(pal.chip).Children(func() {
-						ui.Image(c, currentBm).Size(56, 56)
-					})
-				} else {
-					ui.Box(c).Size(56, 56).Radius(radiusLG).Background(pal.chip)
-				}
+				ui.Box(c).Size(56, 56).Radius(radiusLG).Clip().
+					Background(pal.chip).Children(func() {
+					ui.Image(c, brandBitmap()).Size(56, 56)
+				})
 				ui.Column(c).Gap(4).Children(func() {
 					ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
 						ui.Text(c, "Gloss").FontSize(uiFontSize(textDisplay)).

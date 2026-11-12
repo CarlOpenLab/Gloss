@@ -337,7 +337,6 @@ type app struct {
 	magpieProbing bool
 	themeMode     string // "system", "light", "dark"
 	locale        string // "zh", "en"
-	appIcon       string // "black", "white"
 	// 亚克力磨砂背景（对齐 beacon 的 BackgroundBlur / BackgroundOpacity）：
 	// bgBlur 选系统材质档位，bgOpacity 决定工作卡和窗口底透出多少背后的内容。
 	// 0 / "" 分别表示还没设过，取默认值（见 backgroundOpacity / backgroundBlur）。
@@ -349,7 +348,6 @@ type app struct {
 	autoFetch     bool
 	editThemeMode string
 	editLocale    string
-	editAppIcon   string
 
 	// 自定义提示词配置
 	editCommitPrompt string
@@ -571,11 +569,6 @@ func (a *app) attachStore(s *store.Store) {
 		a.locale = "zh"
 	}
 	SetLocale(a.locale)
-	a.appIcon = cfg.AppIcon
-	if a.appIcon == "" {
-		a.appIcon = "black"
-	}
-	a.syncAppIcon()
 	a.viewed = s.State().Viewed
 	if a.viewed == nil {
 		a.viewed = map[string]string{}
@@ -655,7 +648,6 @@ func (a *app) saveViewSettings() {
 	cfg.BackgroundBlur = a.backgroundBlur()
 	cfg.BackgroundOpacity = a.backgroundOpacity()
 	cfg.Locale = a.locale
-	cfg.AppIcon = a.appIcon
 	cfg.GraphPreset = a.graphPreset
 	// 空覆盖写回成 nil 而不是空切片：omitempty 对空切片不生效，留一个
 	// "graphLanesDark": [] 在文件里没有意义。
@@ -676,31 +668,6 @@ func nonEmpty(s []string) []string {
 		}
 	}
 	return nil
-}
-
-// syncAppIcon 同步当前选中的图标至 macOS Dock。
-func (a *app) syncAppIcon() {
-	if a.win == nil {
-		return
-	}
-	if a.appIcon == "white" {
-		_ = mygo.App.Dock.SetIcon(iconPureWhitePNG)
-	} else {
-		_ = mygo.App.Dock.SetIcon(iconPureBlackPNG)
-	}
-}
-
-// setAppIcon 切换应用图标风格（"black" / "white"）。
-func (a *app) setAppIcon(mode string) {
-	if mode != "white" {
-		mode = "black"
-	}
-	if a.appIcon == mode {
-		return
-	}
-	a.appIcon = mode
-	a.syncAppIcon()
-	a.saveViewSettings()
 }
 
 // backgroundOpacity 是亚克力背景的不透明度：工作卡按它透出窗口材质。
