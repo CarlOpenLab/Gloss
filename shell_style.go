@@ -248,15 +248,6 @@ func raisedSurface(e ui.Element, pal palette) ui.Element {
 		Shadow(0, 1, 6, 0, pal.cardShadow2)
 }
 
-// cardClipRadius 是工作卡裁切框的圆角：裁切框在描边以内，深色档的
-// litSurfaceEdge 描了 1px，圆角跟着小 1。贴着卡片角的内容按它收圆，两条弧才重合。
-func cardClipRadius(pal palette) float32 {
-	if pal.dark {
-		return shellCardRadius() - 1
-	}
-	return shellCardRadius()
-}
-
 // selectedSurface is the restrained lift used by selected sidebar rows.
 //
 // 深色给选中行抬升（描边 + 阴影）；浅色什么都不加 —— rowSelected 的中性

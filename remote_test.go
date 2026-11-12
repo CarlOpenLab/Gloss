@@ -461,9 +461,12 @@ func TestDisabledRemoteButtonExplainsItself(t *testing.T) {
 		t.Fatalf("界面上找不到「推送」：%q", tt.Texts())
 	}
 	tt.Move(r.X+r.W/2, r.Y+r.H/2)
-	// 框架的 tooltip 要悬停满 600ms 才画（ui/widgets.go 的 Tooltip）
-	time.Sleep(700 * time.Millisecond)
-	tt.Frame()
+	// 框架的 tooltip 要悬停满 600ms 才画（ui/tooltip.go 的 tooltipDelay）。
+	//
+	// 等它靠 Advance 而不是 time.Sleep：Tester 的时钟是冻住的（v0.9.0 起
+	// rt.clock 指向 Tester.Now，只有 Advance 推得动它），睡再久钟面也不走，
+	// 悬停时长永远是 0。
+	tt.Advance(700 * time.Millisecond)
 
 	if !tt.HasText("HEAD 是分离的") {
 		t.Errorf("悬停在灰掉的推送上该说出原因：%q", tt.Texts())

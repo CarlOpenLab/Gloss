@@ -27,10 +27,6 @@ import (
 // 就是一道闸。
 var radiusLiteralExceptions = map[string]string{
 	"markdown.go:1": "引用块左侧那条 2px 竖线的端头，圆角取它宽度的一半才是圆头；这是几何，不是设计 token",
-	// review.go 那四个 0 说的是「另外三个角不收圆」：DiffView 只有右下角贴在
-	// 卡片圆角上（cardClipRadius），另外三角是方的就该写 0。写 radiusXS 会把
-	// 它们也磨圆，那一圈弧在卡片中间凭空出现。所以 0 在这里是几何，不是档位。
-	"review.go:0": "DiffView 只收贴着卡片圆角的那一个角，另外三角「不收」写 0；写任何一档都会把方角也磨圆",
 }
 
 // TestNoRawRadiusLiterals 断言非测试代码里不再出现圆角数字字面量。

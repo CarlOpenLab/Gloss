@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/plugins/terminal"
+	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
 
 	"github.com/CarlOpenLab/Gloss/internal/filetree"
@@ -1356,7 +1357,7 @@ func (a *app) startTerminal(tab *repoTab, p *termPane, dark bool, pal palette) {
 		Transparent: true,
 		OnTitle:     func(string) { redraw() },
 		OnExit:      func(int) { redraw() },
-		OnPaste: func(text string) bool {
+		OnPaste: func(d transfer.Data) bool {
 			// 剪贴板上没有文本（一张图片）时，把 Ctrl+V 补发给前台程序。
 			//
 			// Claude Code 这类 AI CLI 的「粘贴图片」是自己读系统剪贴板的，
@@ -1366,7 +1367,10 @@ func (a *app) startTerminal(tab *repoTab, p *termPane, dark bool, pal palette) {
 			// 改发 Ctrl+V。
 			//
 			// 有文本时让回去（false），插件照旧走 Bracketed Paste。
-			if text != "" {
+			//
+			// 判的是「告没告有 text/plain」，不是「读出来是不是空串」：空串
+			// 的文本也是文本，读它会把图片那一类的惰性 provider 也激活。
+			if _, ok := d.Preferred(transfer.Text); ok {
 				return false
 			}
 			if t := termPtr.Load(); t != nil {

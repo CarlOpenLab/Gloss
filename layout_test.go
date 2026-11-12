@@ -86,9 +86,12 @@ func TestProjectPathOnlyOnRowTooltip(t *testing.T) {
 	}
 
 	tt.Move(tab.X+tab.W/2, tab.Y+tab.H/2)
-	// 框架的 tooltip 要悬停满 600ms 才画（ui/widgets.go 的 Tooltip）
-	time.Sleep(700 * time.Millisecond)
-	tt.Frame()
+	// 框架的 tooltip 要悬停满 600ms 才画（ui/tooltip.go 的 tooltipDelay）。
+	//
+	// 等它靠 Advance 而不是 time.Sleep：Tester 的时钟是冻住的（v0.9.0 起
+	// rt.clock 指向 Tester.Now，只有 Advance 推得动它），睡再久钟面也不走，
+	// 悬停时长永远是 0。
+	tt.Advance(700 * time.Millisecond)
 	if !tt.HasText(a.repoPath) {
 		t.Errorf("悬停在项目标签上该给出完整路径 %q：%q", a.repoPath, tt.Texts())
 	}
@@ -456,6 +459,11 @@ func TestTreeSelectionIsPill(t *testing.T) {
 	tt.SetDark(true)
 	tt.Frame()
 	tt.Frame()
+	// 选中底带带 120ms 的颜色过渡（widgets.go 的 fadeColors），而 Tester 的
+	// 时钟是冻住的（v0.9.0 起只有 Advance 推得动它）：不推过这 120ms，量到的
+	// 是过渡进行到一半的那个色，比静息的底带暗一档，0.132 那道门槛就把它
+	// 判成「没有底色」。
+	tt.Advance(300 * time.Millisecond)
 	img := tt.Image()
 
 	// 像素是预乘的：取色前先除以 alpha 还原成直通色（底带边缘的抗锯齿

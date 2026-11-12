@@ -603,23 +603,8 @@ func (a *app) reviewPane(c *ui.Context, pal palette) {
 	}
 
 	ui.Box(c).Grow(1).MinHeight(0).FillWidth().Children(func() {
-		dv := editor.DiffView(c, s.diff).Fill()
-		// 改动区一直铺到工作卡右下角时，DiffView 自己的裁切框也收成那一角的圆。
-		//
-		// mygo v0.4.8 的 GPU 渲染只按最内层裁切框的形状裁，外层（卡片圆角）只剩
-		// 矩形 scissor：DiffView 根上那层 Clip 是方角，编辑器的深色底就从卡片
-		// 圆角外面方方正正地探出来。无头测试走 CPU 光栅、裁得对，所以测试里看
-		// 不出来。上游 v0.8.2 修了（#1418），升级之前在这里补。
-		if a.reviewAtCardBottom() {
-			dv.Radius(0, 0, cardClipRadius(pal), 0)
-		}
+		editor.DiffView(c, s.diff).Fill()
 	})
-}
-
-// reviewAtCardBottom 问改动区这一帧是不是一直铺到工作卡的下沿。改动 tab 下面
-// 压着提交栏时它离卡片角还隔着一截，那时收圆反而会在 diff 右下角抠出一个缺口。
-func (a *app) reviewAtCardBottom() bool {
-	return a.prReview.on || !a.commitBoxOn()
 }
 
 // reviewHeader 是改动区顶上那条：文件路径 + 状态 + 增删 + 整文件暂存 + 已 review。
