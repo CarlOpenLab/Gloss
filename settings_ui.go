@@ -32,6 +32,17 @@ const (
 	// 算，内卡该是 8 —— 那张卡片会比现在方得多，是另一次版式决定。眼下先
 	// 留住 14，和主工作卡分开取值。
 	settingsCardRadius = 14
+
+	// settingsNavPad 是导航栏自己的左右留白（没有系统窗口控件时）；
+	// settingsBarLeadGap 是内容让开系统窗口控件之后与它之间再留的一道间距。
+	//
+	// 设置窗口的标题栏是 TitleBarHidden（settings_window.go），系统于是把
+	// 窗口控件画在窗口的顶上：macOS 是三颗红绿灯（左上），Windows / Linux
+	// 是三颗窗口按钮（右上）。视图不按 c.TitleBar() 让位的话，它们就压在
+	// 内容上 —— 用户报的「布局乱了」正是这一件（截图里「设置」两个字横在
+	// 红灯和黄灯中间）。
+	settingsNavPad     = float32(12)
+	settingsBarLeadGap = float32(12)
 )
 
 // settingsGroupRows counts the rows of the group being built so that the
@@ -136,9 +147,19 @@ func settingsFieldRow(c *ui.Context, pal palette, label, detail string, field fu
 // settingsCardHeader is the 44px bar at the top of the floating card.
 // The title is the page's name; the right side holds the window's own
 // controls (the close button here).
+//
+// 右边按 c.TitleBar() 让位：设置窗口是 TitleBarHidden（settings_window.go），
+// Windows / Linux 于是把三颗窗口按钮画在窗口右上角，正压在这一排的关闭按钮上
+// —— 主窗口的工具栏是同一条算式（app.go 的 padRight）。macOS 的红绿灯在左上，
+// Right 是 0，这时只留卡片自己那 12。
 func settingsCardHeader(c *ui.Context, pal palette, title string, tools func()) {
+	bar := c.TitleBar()
+	padRight := settingsNavPad
+	if bar.Right > 0 {
+		padRight = bar.Right + settingsBarLeadGap
+	}
 	ui.Row(c).Height(settingsBarH).Shrink(0).FillWidth().
-		Padding(0, 12, 0, 16).Gap(10).AlignItems(ui.Center).
+		Padding(0, padRight, 0, 16).Gap(10).AlignItems(ui.Center).
 		BorderWidth(0, 0, 0, 0).Children(func() {
 		ui.Text(c, title).FontSize(uiFontSize(textHeadline)).FontWeight(weightSemibold).
 			TextColor(pal.text).SingleLine()

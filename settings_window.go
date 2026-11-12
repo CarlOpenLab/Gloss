@@ -52,7 +52,18 @@ var settingsWindowNew = func(a *app, o settingsWindowOptions) settingsWindow {
 		// 窗口可用，界面上一处都不崩。
 		return nil
 	}
-	win := mygo.NewWindow(mygo.WindowOptions{
+	win := mygo.NewWindow(settingsWindowOptionsFor(a, o))
+	win.OnClosed(o.OnClosed)
+	return win
+}
+
+// settingsWindowOptionsFor 是建设置窗口要的那一整套 WindowOptions。
+//
+// 标题栏那半套走 settingsTitleBarOptions：它和主窗口一模一样，两边都得抄
+// （见那里的说明）。底色和材质要问 *app（isDarkMode / backgroundBlur），所以
+// 这一层留着 app。
+func settingsWindowOptionsFor(a *app, o settingsWindowOptions) mygo.WindowOptions {
+	opts := mygo.WindowOptions{
 		Title:           T("设置", "Settings"),
 		Width:           settingsWindowW,
 		Height:          settingsWindowH,
@@ -64,9 +75,31 @@ var settingsWindowNew = func(a *app, o settingsWindowOptions) settingsWindow {
 		Vibrancy:        vibrancyFor(a.backgroundBlur()),
 		Parent:          o.Parent,
 		Content:         ui.View(o.View),
-	})
-	win.OnClosed(o.OnClosed)
-	return win
+	}
+	settingsTitleBarOptions(&opts, isMacPlatform())
+	return opts
+}
+
+// settingsTitleBarOptions 把标题栏那一套填进 opts：macOS 用系统的红绿灯
+// （TitleBarHiddenInset + TrafficLightPosition），Windows / Linux 用 Frameless +
+// 视图自绘的三颗。和主窗口一模一样（main.go 那一段）。
+//
+// 两边都必须照着抄，少抄一半就是用户报的那两件事：只写 TitleBarHidden 不写
+// TrafficLightPosition，macOS 就按 AppKit 的默认位置画那三颗 —— 紧贴窗口左上角，
+// 正压在「设置」两个字上（「布局乱了」）；不写 Frameless，Windows 上系统那三颗
+// 照画（internal/windows/window.go 的 newCaptionBar），而视图又在卡片顶栏画一颗
+// 自己的关闭按钮 —— 两颗挤在一处（「关闭 icon 乱了」）。
+//
+// 窗口的 chrome 归系统管，视图不该去补。平台当参数传进来，两个分支才都能测
+// —— 在 macOS 上开发的这一台，照样能验 Windows 那一半长什么样（isMacPlatform
+// 读的是本机 GOOS，测试改不了它）。
+func settingsTitleBarOptions(opts *mygo.WindowOptions, mac bool) {
+	if mac {
+		opts.TitleBarStyle = mygo.TitleBarHiddenInset
+		opts.TrafficLightPosition = &mygo.Point{X: trafficLightX, Y: trafficLightY}
+		return
+	}
+	opts.Frameless = true
 }
 
 // closeSettings 关掉设置窗口。

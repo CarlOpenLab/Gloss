@@ -416,17 +416,43 @@ func settingsSidebarItem(c *ui.Context, pal palette, label string, icon *ui.SVG,
 }
 
 // settingsBody 是设置窗口的内容：导航栏 + 浮起卡片。
+//
+// 设置窗口的标题栏是 TitleBarHidden（settings_window.go），系统窗口控件于是
+// 浮在内容顶上：macOS 是三颗红绿灯（左上），Windows / Linux 是三颗窗口按钮
+// （右上）。chrome 归系统管，视图不自己画 —— 但有两件事必须视图自己做：
+//
+//  1. 让位：按 c.TitleBar() 把内容从控件底下挪开。主窗口的工具栏和侧栏是
+//     同一套算法（app.go 的 padLeft / padRight、shell_style.go 的 titleBarLead）。
+//  2. 拖动：标题栏区是透明的，AppKit 只让那片拖动；而这一片铺满了正文，
+//     于是视图里得标出一块 DragWindow，用户才抓得动窗口（用户报的
+//     「不能拖动位置了」）。主窗口有三处（app.go 的主区、工具栏，侧栏标题行）。
 func (a *app) settingsBody(c *ui.Context, pal palette) {
+	bar := c.TitleBar()
+	// 左边：系统窗口控件占的地方加一道间距。macOS 的红绿灯约 78 宽（三颗 14px
+	// 的按钮加间距），加 settingsBarLeadGap 之后标题才不从灯底下穿过去。
+	padLeft := settingsNavPad
+	if bar.Left > 0 {
+		padLeft = bar.Left + settingsBarLeadGap
+	}
+	// 右边：Windows / Linux 的三颗窗口按钮画在窗口右上角，正压在卡片顶栏的
+	// 关闭按钮上 —— 那笔账由卡片顶栏自己算（settingsCardHeader 的 padRight）。
+	// macOS 的红绿灯在左上，Right 是 0。
+
 	ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
 		// —— 左：212px 导航栏，和窗口底同色，不画竖线 ——
 		ui.Column(c).Width(settingsNavW).Shrink(0).FillHeight().
-			Padding(0, 12, 0, 12).Gap(2).Children(func() {
-			ui.Row(c).Height(settingsBarH).Shrink(0).FillWidth().
-				Padding(0, 8).Gap(8).AlignItems(ui.Center).Children(func() {
-				// drawIcon(c, iconSettings, 15, pal.textMuted)
-				ui.Text(c, T("设置", "Settings")).FontSize(uiFontSize(textBody)).
-					FontWeight(weightSemibold).TextColor(pal.text)
-			})
+			Padding(0, settingsNavPad, 0, settingsNavPad).Gap(2).Children(func() {
+			// 顶上这一行是拖动窗口的地方（DragWindow）：标题栏藏掉了，用户抓
+			// 窗口只能抓视图里标了这一下的元素。高按系统控件占的高度走 ——
+			// 红绿灯那一排在多高，它就在多高，那一带才整片抓得动。
+			//
+			// 里头什么都不画。原先有个「设置」标题，而窗口标题已经是「设置」
+			// （settings_window.go 的 Title），系统控件也在这一行 —— 同一件事
+			// 在 40px 里自我介绍两遍，还挤掉了拖动带的面积。
+			topH := max(float32(settingsBarH), bar.Height)
+			ui.Row(c).Height(topH).Shrink(0).FillWidth().
+				Padding(0, settingsNavPad, 0, padLeft).
+				DragWindow()
 
 			ui.Box(c).Height(6).Shrink(0)
 			// 通用偏好在模型设置前头：这一页改的是界面本身（外观、语言、
