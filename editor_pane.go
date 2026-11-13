@@ -386,17 +386,6 @@ func (a *app) editorArea(c *ui.Context, pal palette) {
 	})
 }
 
-// editorPaneWidthEstimate 是编辑器栏这一帧大概有多宽：窗口减去侧栏、
-// 文件栏、卡片两侧留白和那条 1px 分隔线。tab 栏靠它决定右侧的完整路径
-// 还摆不摆得下（见 editorTabBar）。
-func (a *app) editorPaneWidthEstimate(c *ui.Context) float32 {
-	winW, _ := c.Size()
-	if winW <= 0 {
-		return 1000 // 首帧/无头还不知道窗口多大：按宽屏处理
-	}
-	return winW - a.sidebarVisualWidth(c) - 2*shellCardGap - a.filePaneWidth(c) - paneSplitterW
-}
-
 // editorPaneView 画右边那一栏：文件 tab 栏加当前 tab 的编辑器。
 func (a *app) editorPaneView(c *ui.Context, pal palette) {
 	t := c.Theme()
@@ -437,6 +426,7 @@ func (a *app) editorPaneView(c *ui.Context, pal palette) {
 	th := a.codeEditorTheme(c, pal)
 	s.code.Theme = th
 	s.code.Font = ui.Font{Family: "monospace", Size: a.codeSizeValue()}
+	s.code.SoftWrap = a.wrapCode
 	editor.View(c, s.code).Fill().AutoFocus()
 }
 
@@ -479,18 +469,16 @@ func (a *app) editorTabBar(c *ui.Context, pal palette) {
 			a.editorReveal = false
 		}
 
-		s := a.activeEditorTab()
-		if s == nil {
+		if a.activeEditorTab() == nil {
 			return
 		}
-		// 编辑器栏本身不够宽时先保文件 tab：右侧的完整路径只是补充信息，
-		// tab 才是切文件唯一的入口。窗口 1280 时它照常显示；窄到放不下时
-		// 让位，否则滚动区会被挤成零宽，连关闭 × 都点不到。
-		if a.editorPaneWidthEstimate(c) < 600 {
-			return
+		// 换行开关常驻 tab 栏右端：它管的是当前这份代码怎么排，长行
+		// 用户随时要有处切。
+		if toolIconToggle(c, pal, T("自动换行", "Soft Wrap"),
+			T("长行折到下一行显示", "Wrap long lines at the view's width"),
+			a.wrapCode, drawWrapIcon) {
+			a.setCodeWrap(!a.wrapCode)
 		}
-		ui.Text(c, s.path).Font("monospace").FontSize(uiFontSize(textCaption)).SingleLine().
-			MaxWidth(260).TextColor(pal.inkSubtle)
 	})
 }
 

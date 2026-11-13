@@ -290,6 +290,7 @@ func (a *app) codeEditorBody(c *ui.Context, pal palette) {
 		ui.Box(c).Grow(1).MinHeight(0).FillWidth().Children(func() {
 			s.code.Theme = a.codeEditorTheme(c, pal)
 			s.code.Font = ui.Font{Family: "monospace", Size: a.codeSizeValue()}
+			s.code.SoftWrap = a.wrapCode
 			editor.View(c, s.code).Fill().AutoFocus()
 		})
 
@@ -302,6 +303,12 @@ func (a *app) codeEditorBody(c *ui.Context, pal palette) {
 			ui.Text(c, hint).FontSize(uiFontSize(textCaption)).TextColor(pal.inkMuted).
 				Grow(1).MinWidth(0)
 			busy := a.op != gitrepo.OpNone
+			// 换行是看的事，和 git 操作无关，忙的时候也不关它。
+			if toolToggle(c, pal, T("自动换行", "Soft Wrap"),
+				T("长行折到下一行显示", "Wrap long lines at the view's width"),
+				a.wrapCode, drawWrapIcon) {
+				a.setCodeWrap(!a.wrapCode)
+			}
 			if secondaryAction(c, pal, "取消", "放弃本次编辑", busy).Clicked() {
 				a.closeCodeEditor()
 			}

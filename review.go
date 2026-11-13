@@ -583,6 +583,7 @@ func (a *app) reviewPane(c *ui.Context, pal palette) {
 	s.diff.Theme = th
 	s.diff.Font = ui.Font{Family: "monospace", Size: a.codeSizeValue()}
 	s.diff.TabSize = tabWidth
+	s.diff.Wrap = a.wrapDiff
 
 	if s.conflict && f != nil {
 		a.syncConflictRegions(c, pal)
@@ -652,6 +653,16 @@ func (a *app) reviewHeader(c *ui.Context, pal palette) {
 			// 时候把键位就写在提示里，不用再翻菜单。
 			ui.Text(c, T("已编辑 · ⌘S 保存", "Edited · ⌘S to save")).
 				FontSize(uiFontSize(textCaption)).TextColor(t.Warning)
+		}
+
+		// diff 的换行开关：和对比弹窗共用一份状态（diff 只按类型共享）。
+		// 图片预览没有长行可折，不摆一个点不动的开关。
+		if !s.image {
+			if toolIconToggle(c, pal, T("自动换行", "Soft Wrap"),
+				T("diff 长行折到下一行显示", "Wrap long diff lines at the view's width"),
+				a.wrapDiff, drawWrapIcon) {
+				a.setDiffWrap(!a.wrapDiff)
+			}
 		}
 
 		// 整文件暂存：只有工作区那一段（历史、储藏、对比、PR 检视都不能

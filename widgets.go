@@ -410,6 +410,63 @@ func toolIconButton(c *ui.Context, pal palette, label, tip string, off, loading 
 	return btn.Clicked() && !loading
 }
 
+// toolToggle 是工具栏上的开关键：外观和 toolButton 同一档，开启时带
+// rowSelected 洗色底与正文色图标 —— 「现在开着」得一眼看得出来，只换
+// 图标颜色的话在亚克力卡上太轻。
+func toolToggle(c *ui.Context, pal palette, label, tip string, on bool, icon func(p *ui.Painter, r ui.Rect, col ui.Color)) bool {
+	btn := ui.ButtonBase(c).Height(28).Shrink(0).Radius(radiusSM).
+		Padding(0, 9).Gap(6).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer).Label(label).Tooltip(tip)
+
+	bg := ui.Transparent
+	fg := pal.inkSubtle
+	switch {
+	case on, btn.Pressed():
+		bg, fg = pal.rowSelected, pal.ink
+	case btn.Hovered():
+		bg, fg = pal.rowHover, pal.ink
+	}
+	btn.Background(bg)
+	fadeColors(btn)
+
+	btn.Children(func() {
+		ui.Box(c).Size(toolIconSize, toolIconSize).Shrink(0).
+			Draw(func(p *ui.Painter, r ui.Rect) { icon(p, r, fg) })
+		ui.Text(c, label).FontSize(uiFontSize(textButton)).FontWeight(weightMedium).
+			SingleLine().TextColor(fg)
+	})
+	return btn.Clicked()
+}
+
+// toolIconToggle 是纯图标的开关键：28×28，给工具栏上放不下文字的位置用。
+// 和 toolToggle 一样，开启态带洗色底；无障碍名字仍由 label 给。
+func toolIconToggle(c *ui.Context, pal palette, label, tip string, on bool, icon func(p *ui.Painter, r ui.Rect, col ui.Color)) bool {
+	btn := ui.ButtonBase(c).Size(28, 28).Shrink(0).Radius(radiusSM).Center().
+		Cursor(ui.CursorPointer).Label(label).Tooltip(tip)
+
+	bg := ui.Transparent
+	fg := pal.inkSubtle
+	switch {
+	case on, btn.Pressed():
+		bg, fg = pal.rowSelected, pal.ink
+	case btn.Hovered():
+		bg, fg = pal.rowHover, pal.ink
+	}
+	btn.Background(bg)
+	fadeColors(btn)
+
+	btn.Children(func() {
+		ui.Box(c).Size(toolIconSize, toolIconSize).Shrink(0).
+			Draw(func(p *ui.Painter, r ui.Rect) { icon(p, r, fg) })
+	})
+	return btn.Clicked()
+}
+
+// drawWrapIcon 画「自动换行」（Lucide wrap-text）。
+func drawWrapIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
+	p.Icon(iconWrap, r, col)
+}
+
 // drawRefreshIcon 画「刷新」（Lucide rotate-cw）。
 func drawRefreshIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
 	p.Icon(iconRefresh, r, col)

@@ -208,10 +208,8 @@ func TestEditorPanePreviewsImage(t *testing.T) {
 	tt.Frame()
 	tt.Frame()
 	text := screenText(tt)
-	if !strings.Contains(text, "assets/logo.png") {
-		t.Errorf("编辑器栏头该写清文件：%q", text)
-	}
-	// tab 栏不再摆「图片」chip；认得出这是图片靠画面自己的元信息
+	// tab 栏不再摆完整路径，也不再摆「图片」chip；认得出这是图片靠画面
+	// 自己的元信息
 	// （格式 · 尺寸 · 体积），它和编辑器正文不会混在一起。
 	if !strings.Contains(text, "PNG · 40 × 20") {
 		t.Errorf("图片预览该报出格式与尺寸：%q", text)

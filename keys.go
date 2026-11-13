@@ -310,6 +310,27 @@ func (a *app) codeSizeValue() float32 {
 	return a.codeSize
 }
 
+// setCodeWrap 切换代码编辑器的自动换行。
+//
+// 主界面编辑器 tab 和整文件代码编辑器共用这一份状态：同一个「代码」，
+// 两处看到的长行行为应该一致。视图每帧把状态抄给编辑器，所以切换即时生效。
+func (a *app) setCodeWrap(on bool) {
+	if a.wrapCode == on {
+		return
+	}
+	a.wrapCode = on
+	a.saveViewSettings()
+}
+
+// setDiffWrap 切换 diff 视图的自动换行（改动区与对比弹窗共用）。
+func (a *app) setDiffWrap(on bool) {
+	if a.wrapDiff == on {
+		return
+	}
+	a.wrapDiff = on
+	a.saveViewSettings()
+}
+
 // setUIFontSize 调整界面字号档位。传 0 表示回到默认档。
 //
 // 和代码字号分开：代码字号只动 diff / 编辑器 / 终端那几个等宽视图，界面字号

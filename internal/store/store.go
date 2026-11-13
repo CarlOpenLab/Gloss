@@ -28,6 +28,10 @@ type Config struct {
 	Active int `json:"active,omitempty"`
 	// CodeSize 是代码字号，0 表示用默认值。
 	CodeSize float32 `json:"codeSize,omitempty"`
+	// WrapCode 是代码编辑器的自动换行（主界面编辑器 tab 与整文件编辑器共用）。
+	WrapCode bool `json:"wrapCode,omitempty"`
+	// WrapDiff 是 diff 视图的自动换行（改动区与对比弹窗共用）。
+	WrapDiff bool `json:"wrapDiff,omitempty"`
 	// UIFontSize 是界面字号档位（design.go 的 uiFontSizeMin~Max），0 表示默认档。
 	// 它缩放的是整套界面的文字（按钮、侧栏、对话框），代码字号只动等宽那几处。
 	UIFontSize float32 `json:"uiFontSize,omitempty"`

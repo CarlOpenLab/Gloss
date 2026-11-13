@@ -650,6 +650,24 @@ func (a *app) generalSettingsPane(c *ui.Context, pal palette) {
 							T("重置代码字号", "Reset code font"),
 							func() { a.setCodeSize(0) })
 					})
+				// 两处代码视图共用一个换行开关，两处 diff 视图共用另一个：
+				// 「代码」和「diff」是两类东西，排版习惯可以分开。
+				settingsRow(c, pal, T("代码自动换行", "Wrap Code"),
+					T("主界面编辑器与整文件代码编辑器共用。", "Shared by the editor pane and the full-file editor."),
+					func() {
+						on := a.wrapCode
+						if settingsSwitch(c, pal, T("代码自动换行开关", "Wrap Code switch"), &on).Clicked() {
+							a.setCodeWrap(on)
+						}
+					})
+				settingsRow(c, pal, T("Diff 自动换行", "Wrap Diff"),
+					T("改动区与对比弹窗共用。", "Shared by the changes pane and the compare dialog."),
+					func() {
+						on := a.wrapDiff
+						if settingsSwitch(c, pal, T("Diff 自动换行开关", "Wrap Diff switch"), &on).Clicked() {
+							a.setDiffWrap(on)
+						}
+					})
 				// 界面字号：整套界面（按钮、侧栏、对话框、这一页自己）的文字。
 				//
 				// 和上一行分开是有意的：上一行只动 diff / 编辑器 / 终端那几个

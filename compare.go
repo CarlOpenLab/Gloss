@@ -779,6 +779,11 @@ func (a *app) compareModalDiff(c *ui.Context, pal palette) {
 			if (mode == 1) != a.split {
 				a.setSplit(mode == 1)
 			}
+			if toolIconToggle(c, pal, T("自动换行", "Soft Wrap"),
+				T("diff 长行折到下一行显示", "Wrap long diff lines at the view's width"),
+				a.wrapDiff, drawWrapIcon) {
+				a.setDiffWrap(!a.wrapDiff)
+			}
 		}
 	})
 
@@ -788,6 +793,7 @@ func (a *app) compareModalDiff(c *ui.Context, pal palette) {
 	th := a.codeEditorTheme(c, pal)
 	s.diff.Theme = th
 	s.diff.Font = ui.Font{Family: "monospace", Size: a.codeSizeValue()}
+	s.diff.Wrap = a.wrapDiff
 	// 行高压到 1.3：mygo 的 DiffState.LineHeight 不设就默认 1.5，于是一行
 	// 代码占 1.5×12.5 ≈ 19px —— 弹窗里「上下间隔太多」说的主要是这个，代码
 	// 行之间空出来的比字本身还高。1.3 时约 16px，字贴得紧但仍然一行一行分得

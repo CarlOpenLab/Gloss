@@ -145,6 +145,8 @@ type app struct {
 	viewMode   int        // 0 = Git GUI 面板, 1 = 内置终端
 	split      bool       // true = split（左右对照），false = unified
 	codeSize   float32    // 代码字号；0 表示用默认值
+	wrapCode   bool       // 代码编辑器的自动换行（tab 与整文件编辑器共用）
+	wrapDiff   bool       // diff 视图的自动换行（改动区与对比弹窗共用）
 	uiFontSize float32    // 界面字号档位；0 表示用默认档
 	// termThemePushed / termThemeDark 记着上一次推给终端的明暗。终端的配色
 	// 是启动时给的一份快照，换主题它不会自己跟上 —— 比一眼，变了才推
@@ -557,6 +559,8 @@ func (a *app) attachStore(s *store.Store) {
 	a.store = s
 	cfg := s.Config()
 	a.codeSize = cfg.CodeSize
+	a.wrapCode = cfg.WrapCode
+	a.wrapDiff = cfg.WrapDiff
 	// 界面字号档位：读回来就拨上去，这样第一帧就是用户要的大小 —— 等用户在
 	// 设置里手动调一次才生效的话，启动那一瞬间还是会看到偏小的字。
 	a.uiFontSize = cfg.UIFontSize
@@ -642,6 +646,8 @@ func (a *app) saveViewSettings() {
 	cfg.Unified = !a.split
 	cfg.SidebarOff = !a.sidebarOn
 	cfg.CodeSize = a.codeSize
+	cfg.WrapCode = a.wrapCode
+	cfg.WrapDiff = a.wrapDiff
 	cfg.UIFontSize = a.uiFontSize
 	if a.sidebarWidthVal > 0 {
 		cfg.SidebarWidth = a.sidebarWidthVal

@@ -8,8 +8,8 @@ import (
 
 // 窄窗口下的排版回归：文件 tab 栏和终端会话栏都不能把关键控件挤成零宽。
 
-// 760 宽（应用最小 720）时编辑器栏只剩两百来像素：右侧的完整路径和状态
-// chip 该让位，把宽度留给文件 tab —— 否则第一枚 tab 的关闭 × 都是零宽。
+// 760 宽（应用最小 720）时编辑器栏只剩两百来像素：文件 tab 仍要摆得下，
+// 当前那一枚的关闭 × 不能是零宽。
 func TestEditorTabStripUsableInNarrowWindow(t *testing.T) {
 	a := richApp(t)
 	a.openInNewTab(a.repoPath)
@@ -25,7 +25,7 @@ func TestEditorTabStripUsableInNarrowWindow(t *testing.T) {
 	tt.Frame()
 
 	// 三枚 tab 在 760 宽下放不全，栏本身横向滚动；当前激活的那枚必须完整
-	// 可见、关闭 × 可点 —— 右侧的路径与状态 chip 让位正是为了这个。
+	// 可见、关闭 × 可点。
 	closeRect, ok := tt.Find("关闭文件标签页 router.go")
 	if !ok {
 		t.Fatalf("界面上找不到当前文件 tab 的关闭按钮：%q", tt.Texts())
