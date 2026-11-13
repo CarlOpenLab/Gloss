@@ -1115,19 +1115,23 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 		a.abnormalStateChip(c, t, pal)
 
 		if a.viewMode == viewModeTerm {
-			if a.repoPath != "" {
-				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-					drawIcon(c, iconTerminal, 12, pal.inkSubtle)
-					ui.Text(c, a.repoPath).FontSize(uiFontSize(textCaption)).TextColor(pal.inkMuted).SingleLine()
-				})
-			}
-			ui.Spacer(c)
-			return
+			// 终端视图原先在这儿 early return，于是刷新 / 抓取 / 拉取 / 推送
+			// 一个都没有 —— 而用户待在终端里的时候恰好是最常想「远端又更新
+			// 了，拉一下」的时候（跑完 git status 发现落后了）。现在只把仓库
+			// 级那一组放出来，视图切换和 unified/split 照旧不画：那两样管的是
+			// 改动 tab 里的东西，终端视图里没有 diff 可排，摆着是死的。
+			//
+			// 路径那一行字也不要了：标签页自己会说（见 terminalTabStrip），
+			// 工具栏上再放一个终端图标是重复 —— 四格里「终端」那一格已经亮着，
+			// 而这颗既不说明路径也不点得动，hover 才飘一行绝对路径，纯噪音。
 		}
 
 		// 仓库级动作归一组，紧跟在四格视图切换右边：刷新 + 远程（抓取 /
 		// 拉取 / 推送）。它们回答的是「仓库和远端现在怎么样」，和右边那些
 		// 「眼前这一屏怎么看」的控件不是一码事。
+		//
+		// 终端视图也走这一条（上面只少了路径那一行字）—— 这一组说的是仓库
+		// 的状态，和眼前是哪一屏没关系。
 		refreshing := a.state == loadLoading
 		refreshTip := Tf("刷新仓库状态 %s", "Refresh Repository %s", K("⌘R"))
 		if refreshing {
@@ -1140,7 +1144,9 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 			a.remoteBar(c, pal)
 		}
 
-		if a.viewMode != viewModeEditor {
+		// 终端视图没有 diff，unified/split 在那边无从排起；编辑器有自己的
+		// 分栏（见 editorPane），也不接这一对。
+		if a.viewMode != viewModeEditor && a.viewMode != viewModeTerm {
 			toolbarDivider(c, pal)
 
 			// unified / split 切换（Lucide rows-3 / columns-2 矢量图标）。
