@@ -435,7 +435,11 @@ func (a *app) compareModalBody(c *ui.Context, pal palette) {
 
 	ui.Column(c).Width(panelW).Height(panelH).Gap(0).Children(func() {
 		// —— 标题条：在比哪两条分支 + 退出 ——
-		ui.Row(c).Height(48).Shrink(0).FillWidth().Padding(0, 14).Gap(8).
+		//
+		// 44 而不是别的弹窗的 56：这条上只有一行字，下面选择器那一行紧跟着
+		// 也是 44 —— 两条等宽等高并排，中间只隔一根发丝线，比一条 48 一条
+		// 44 更像一整块。弹窗总共就那么高，省下的都要给正文（见 compareModalH）。
+		ui.Row(c).Height(44).Shrink(0).FillWidth().Padding(0, 14).Gap(8).
 			AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(pal.hairline).
 			Children(func() {
 				ui.Box(c).Size(18, 18).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
@@ -538,7 +542,10 @@ func (a *app) compareModalBody(c *ui.Context, pal palette) {
 		})
 
 		// —— 底栏 ——
-		ui.Row(c).Height(48).Shrink(0).FillWidth().Padding(0, 12).Gap(8).
+		//
+		// 也是 44：和标题条/选择器一行对齐。这一条上只有一个「退出对比」，
+		// 再高就是把空的地方算成间隔。
+		ui.Row(c).Height(44).Shrink(0).FillWidth().Padding(0, 12).Gap(8).
 			AlignItems(ui.Center).BorderWidth(1, 0, 0, 0).BorderColor(pal.hairline).
 			Children(func() {
 				ui.Text(c, "退出后回到工作区改动；比的是两个分支，不动工作区").
@@ -579,7 +586,9 @@ func (a *app) compareModalFiles(c *ui.Context, pal palette) {
 	ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
 		ui.Column(c).Width(compareFilePaneW).Shrink(0).FillHeight().
 			BorderWidth(0, 1, 0, 0).BorderColor(pal.hairline).Children(func() {
-			ui.Box(c).Shrink(0).Padding(7, 12).Children(func() {
+			// 计数那一行贴着顶：上下各 6（原来 7、且下面还拖着一截空隙），
+			// 让第一行文件紧跟着它 —— 用户是从这一行字开始往下看文件的。
+			ui.Box(c).Shrink(0).Padding(6, 12).Children(func() {
 				ui.Textf(c, "%s", Tf("%d 个文件", "%d files", len(a.compare.files))).FontSize(uiFontSize(textCaption)).
 					Font("monospace").FontFeatures("tnum").SingleLine().TextColor(t.TextMuted)
 			})
@@ -604,20 +613,43 @@ func (a *app) compareModalFiles(c *ui.Context, pal palette) {
 const compareFilePaneW = float32(240)
 
 // compareModalRow 是对比弹窗文件栏里的一行。只画名字和增删行数 —— 这里没有
-// 勾选框（弹窗里不对 index 动手，见 hunkStageable）、没有右键批量菜单
-// （那是主区的事）。
+// 勾选框（弹窗里不对 index 动手，见 hunkStageable）。
+//
+// 右键菜单照给：弹窗里确实没有批量那一套（那是主区的事），可「这条路径到底
+// 叫什么」正是对着两个分支比的时候最常要复制的东西 —— 去终端里 git show 一
+// 下、或者贴进 issue。所以这里挂的是同一份 fileMenu / dirMenu，写操作那几条
+// 它们自己会收起来（对比出来的文件是 SectionNone，见 fileMenu）。
 //
 // 目录行能收能展：弹窗的文件栏比主区窄，一个仓库比下来几十上百个文件，收
 // 不起来就只能从头滚到尾。收起状态记在 a.compare.closed 里，和主区的
 // filesClosed 一个意思、各记各的。
+//
+// 目录行走 treeRow，和主区的目录行同一个画法（filepane.go 的 treeRowIn）。
+// 早先这里自己搭了一个 Box：Box 是**竖排**容器，AlignItems(Center) 在竖排里
+// 是**横轴**居中 —— 于是「（根目录）」「src」这些字横在行中间，两头空着。
+// 看着难看之外还歪：深一层的目录缩进多 14px，居中的起始位置也跟着挪，一列
+// 目录名因此参差不齐。
 func (a *app) compareModalRow(c *ui.Context, pal palette, r filetree.Row) {
 	t := c.Theme()
 	n := r.Node
 	if n.FileIdx < 0 || n.FileIdx >= len(a.compare.files) {
-		ui.Box(c).Height(treeRowH).Shrink(0).Padding(0, 0, 0, treeIndent*float32(r.Depth)+treePadX).
-			AlignItems(ui.Center).Children(func() {
-			ui.Text(c, n.Label).FontSize(uiFontSize(textBodySM)).SingleLine().TextColor(t.TextMuted)
+		hasKids := n.Dir && len(n.Children) > 0
+		open := hasKids && !a.compare.closed[n.Key]
+		row, arrow := treeRow(c, t, pal, treeRowOpts{
+			Depth: r.Depth, HasKids: hasKids, Open: open,
+		}, func() {
+			ui.Text(c, n.Label).FontSize(uiFontSize(textBodySM)).SingleLine().
+				Grow(1).MinWidth(0).TextColor(t.TextMuted)
 		})
+		// 目录的右键菜单要一个 rowSpec，而它只读里面的 list（见 dirMenu）——
+		// 那一份给的是对比这一份文件，于是批量那几条因为凑不出改动而不出现。
+		// tree 传什么都行，这里不碰折叠状态（弹窗自己记在 a.compare.closed）。
+		row.ContextMenu(func(m *ui.Menu) {
+			a.dirMenu(m, n, rowSpec{list: a.compare.files, tree: treeChanges})
+		})
+		if arrow.Clicked() || row.Clicked() {
+			a.toggleCompareDir(n.Key)
+		}
 		return
 	}
 	f := a.compare.files[n.FileIdx]
@@ -641,6 +673,7 @@ func (a *app) compareModalRow(c *ui.Context, pal palette, r filetree.Row) {
 			Width(12).TextAlign(ui.Center).TextColor(statusColor(f.Status, pal)).
 			Tooltip(f.Status.Label())
 	})
+	row.ContextMenu(func(m *ui.Menu) { a.fileMenu(m, f) })
 	if arrow.Clicked() {
 		a.toggleCompareDir(n.Key)
 		return
@@ -727,6 +760,26 @@ func (a *app) compareModalDiff(c *ui.Context, pal palette) {
 					FontFeatures("tnum").TextColor(pal.delBar)
 			}
 		}
+
+		// 统一视图 / 两栏对照也在这儿：它管的是**右边这一块 diff** 怎么排，
+		// 和工具栏上那一对是同一个 a.split、同两个快捷键（⌘U / ⌘S），只是弹窗
+		// 盖着的时候伸手去够工具栏那条不现实。
+		//
+		// 图片文件不放：那玩意儿只有一种看法（reviewImageBody 自己画），摆了
+		// 一个点不动的开关在那儿。
+		if !s.image {
+			mode := 0
+			if a.split {
+				mode = 1
+			}
+			toolbarSegmentedIcons(c, pal, &mode, false,
+				segmentedIconItem{label: "Unified", tip: Tf("统一视图（单栏） %s", "Unified View %s", K("⌘U")), icon: iconUnified},
+				segmentedIconItem{label: "Split", tip: T("左右对照（分栏）", "Split View"), icon: iconSplit},
+			)
+			if (mode == 1) != a.split {
+				a.setSplit(mode == 1)
+			}
+		}
 	})
 
 	s.diff.Layout = a.reviewLayout()
@@ -735,6 +788,12 @@ func (a *app) compareModalDiff(c *ui.Context, pal palette) {
 	th := a.codeEditorTheme(c, pal)
 	s.diff.Theme = th
 	s.diff.Font = ui.Font{Family: "monospace", Size: a.codeSizeValue()}
+	// 行高压到 1.3：mygo 的 DiffState.LineHeight 不设就默认 1.5，于是一行
+	// 代码占 1.5×12.5 ≈ 19px —— 弹窗里「上下间隔太多」说的主要是这个，代码
+	// 行之间空出来的比字本身还高。1.3 时约 16px，字贴得紧但仍然一行一行分得
+	// 清（下降部不咬上一行）。主区不动：那边一屏能看到的行少一半也无妨，
+	// 而且用户看的是改动，不是行数。
+	s.diff.LineHeight = 1.3
 	s.diff.TabSize = tabWidth
 	s.diff.Annotations = nil
 	s.diff.RenderAnnotation = nil

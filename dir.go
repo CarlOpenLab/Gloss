@@ -87,6 +87,9 @@ func (a *app) dirMenu(m *ui.Menu, n *filetree.Node, o rowSpec) {
 	if m.Item(T("复制相对路径", "Copy Relative Path")).Chosen() {
 		a.copyText = p
 	}
+	if m.Item(T("复制目录名", "Copy Directory Name")).Chosen() {
+		a.copyText = filepath.Base(p)
+	}
 }
 
 // dirFiles 收集一个目录节点底下列出来的全部文件，含子目录里的。

@@ -32,6 +32,12 @@ const (
 	// 百分比高度会把上下 margin 顶掉，写 Margin(1) 量出来还是整整 24。
 	treeSelInset = 2 // 选中/悬停的底色块上下各往里收多少
 
+	// treeBandGap 是底色块里各子元素之间的间距（缩进盒、箭头槽、名字……），
+	// 也是名字与右边那组增删行数之间的间距。抽成常量是因为「每深一层缩进
+	// 多少」量出来是 treeIndent + treeBandGap：缩进盒自己宽 treeIndent，但它
+	// 和箭头槽之间还隔着一个 gap。测试按这个数验各层是不是落在一条竖线上。
+	treeBandGap = 6
+
 	// treeSelRadius 是选中底带的圆角。规范 §3 把「树节点选中底带」归到
 	// sm(6)：和旁边的分支芯片、分段单元是同一档，扫一列下来圆角一致。
 	treeSelRadius = radiusSM
@@ -69,7 +75,7 @@ func treeRow(c *ui.Context, t *ui.Theme, pal palette, o treeRowOpts, content fun
 	row.Children(func() {
 		band := ui.Row(c).Grow(1).Height(treeRowH-2*treeSelInset).
 			Margin(treeSelInset, treePadX).
-			Padding(0, 6).Radius(treeSelRadius).Gap(6).AlignItems(ui.Center)
+			Padding(0, treeBandGap).Radius(treeSelRadius).Gap(treeBandGap).AlignItems(ui.Center)
 		switch {
 		case o.Selected:
 			band.Background(pal.selection)

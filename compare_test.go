@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -187,5 +188,152 @@ func TestBranchCompareContextMenu(t *testing.T) {
 	want := "与当前分支 (" + a.branch + ") 对比代码差异"
 	if !menuHas(items, want) {
 		t.Fatalf("右键菜单该包含 %q，实际为 %v", want, items)
+	}
+}
+
+// 弹窗文件栏里的目录行左对齐，且各层落在相差一个缩进步长的竖线上。
+//
+// 症状是整行的字横在行中间，两头都空着一截 —— 名字那一侧空得尤其难看，目录
+// 行更歪：竖排容器里 AlignItems(Center) 居中的是横轴，而每深一层缩进多一截，
+// 居中的起始位置跟着挪，一列目录名因此参差不齐（量出来 src 落在 254、deep
+// 落在 256，本该差 20）。
+//
+// 竖线这一条比「贴左」更能说明问题 —— 单纯贴左也可能每层都贴在同一条线上
+// （缩进丢了），所以两条都量。
+func TestCompareDirRowsAreLeftAligned(t *testing.T) {
+	dir := newRepoDir(t)
+	mk := func(p, body string) { writeFile(t, filepath.Join(dir, p), body) }
+	mk("keep.txt", "a\n")
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "init")
+	runGit(t, dir, "branch", "feature")
+
+	// main 上加一层套一层的目录，feature 上加一个根下文件 —— 这样两边都有
+	// 改动，目录行才会建出来。
+	mk("src/one.txt", "one\n")
+	mk("src/deep/two.txt", "two\n")
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "main")
+	runGit(t, dir, "checkout", "feature")
+	mk("feat.txt", "y\n")
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "feat")
+	runGit(t, dir, "checkout", "main")
+
+	a := loadApp(t, dir)
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+	a.startCompare("main", "feature")
+	settle(t, a)
+	tt.Frame()
+
+	src, ok := tt.Find("src")
+	if !ok {
+		t.Fatalf("该有 src 这一行：%q", tt.Texts())
+	}
+	deep, ok := tt.Find("deep")
+	if !ok {
+		t.Fatalf("该有 deep 这一行：%q", tt.Texts())
+	}
+
+	// 栏在弹窗最左边：弹窗左边 180 + 弹窗内边距 20（见 compareModalBody）。
+	const paneLeft = float32(140)
+	if src.X > paneLeft+compareFilePaneW/2 {
+		t.Errorf("src 左边 x=%.1f 落在栏的右半边（栏 %.0f..%.0f）—— 还是居中的",
+			src.X, paneLeft, paneLeft+compareFilePaneW)
+	}
+
+	// 两层相差整整一个缩进步长 —— 步长是 缩进盒宽 + 它和箭头槽之间的那个 gap。
+	step := float32(treeIndent + treeBandGap)
+	if d := deep.X - src.X; d < step-2 || d > step+2 {
+		t.Errorf("deep 与 src 左边相差 %.1f，期望 %.1f —— 缩进丢了或者行还是居中的",
+			d, step)
+	}
+}
+
+// 弹窗文件栏的右键菜单：复制相对路径、绝对路径、文件名三项都得有。
+//
+// 对着两个分支比的时候最常要的就是「这条路径到底叫什么」—— 贴进 issue、或者
+// 去终端里 git show 一下。弹窗早先没挂菜单，一列文件右键下去什么都没有。
+func TestCompareModalCopyPaths(t *testing.T) {
+	a, dir := compareApp(t)
+	_ = dir
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+	a.startCompare("main", "feature")
+	settle(t, a)
+	tt.Frame()
+
+	cases := []struct {
+		item string
+		want string
+	}{
+		{"复制路径", filepath.Join(a.repoPath, "feature.txt")},
+		{"复制相对路径", "feature.txt"},
+		{"复制文件名", "feature.txt"},
+	}
+	for _, tc := range cases {
+		items := rightClick(t, tt, "feature.txt")
+		if !menuHas(items, tc.item) {
+			t.Fatalf("弹窗文件栏的右键菜单该有 %q，实际 %v", tc.item, items)
+		}
+		if err := tt.ChooseMenuItem(tc.item); err != nil {
+			t.Fatalf("%s: %v", tc.item, err)
+		}
+		tt.Frame()
+		tt.Frame()
+		if got := tt.Clipboard(); got != tc.want {
+			t.Errorf("%s 写进剪贴板的该是 %q，实际 %q", tc.item, tc.want, got)
+		}
+	}
+}
+
+// 弹窗目录行的右键菜单同样给复制三项，且不掺批量那一套 ——
+// 弹窗里不对 index 动手（见 hunkStageable），而 dirMenu 的批量条目是按
+// 「凑得出几个已暂存 / 未暂存」摆的，对比出来的文件是 SectionNone，一条都不该有。
+func TestCompareDirMenuCopyPaths(t *testing.T) {
+	dir := newRepoDir(t)
+	mk := func(p, body string) { writeFile(t, filepath.Join(dir, p), body) }
+	mk("keep.txt", "a\n")
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "init")
+	runGit(t, dir, "branch", "feature")
+	mk("src/one.txt", "one\n")
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "main")
+	runGit(t, dir, "checkout", "feature")
+	mk("feat.txt", "y\n")
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "feat")
+	runGit(t, dir, "checkout", "main")
+
+	a := loadApp(t, dir)
+	tt := ui.NewTester(a.view, 1280, 860)
+	tt.Frame()
+	a.startCompare("main", "feature")
+	settle(t, a)
+	tt.Frame()
+
+	items := rightClick(t, tt, "src")
+	for _, want := range []string{"复制路径", "复制相对路径", "复制目录名"} {
+		if !menuHas(items, want) {
+			t.Errorf("弹窗目录行的右键菜单该有 %q，实际 %v", want, items)
+		}
+	}
+	for _, bad := range []string{"全部暂存", "全部取消暂存", "全部放弃变更"} {
+		for _, s := range items {
+			if strings.HasPrefix(s, bad) {
+				t.Errorf("弹窗目录行的右键菜单不该有 %q（弹窗不对 index 动手），实际 %v", bad, items)
+			}
+		}
+	}
+
+	if err := tt.ChooseMenuItem("复制相对路径"); err != nil {
+		t.Fatalf("复制相对路径: %v", err)
+	}
+	tt.Frame()
+	tt.Frame()
+	if got := tt.Clipboard(); got != "src" {
+		t.Errorf("复制相对路径写进剪贴板的该是 %q，实际 %q", "src", got)
 	}
 }
