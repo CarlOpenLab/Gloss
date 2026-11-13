@@ -4,7 +4,7 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
-## [Unreleased]
+## [0.3.35] - 2026-11-13
 
 ### 变更
 - **界面框架升到 mygo 0.9.0**：升它图的是 GPU 那条裁剪 bug —— 0.4.8 的 GPU 渲染只按最内层裁切框的形状裁，外层的工作卡圆角退化成矩形 scissor，于是 diff 铺到卡片右下角时，编辑器的深色底从圆角外面方方正正探出来一截。无头测试走 CPU 光栅、每层都裁得对，所以这个 bug 测试里从来抓不到（上次是靠一张用户截图才发现的）。上游 0.8.2 修了（#1418），现在 `internal/gpu` 会把「外层圆角 + 内层方角」合成一个裁切框。跟着升的有两处要改的：Tester 的钟改成冻住的（`rt.clock` 指向 `Tester.Now`，只有 `Advance` 推得动），`time.Sleep` 等悬停提示的测试全部失效 —— 改成 `tt.Advance(700ms)`，另外选中底带带 120ms 颜色过渡，量像素前也得 `Advance` 推过它，否则读到的是过渡进行到一半的那个色；终端的 `OnPaste` 回调改收 `transfer.Data`（整个剪贴板的所有表示）而不是一个 `string`，判「有没有文本」改成问 `d.Preferred(transfer.Text)`，不去读它 —— 空串的文本也是文本，而读会把图片那一类的惰性 provider 也激活
