@@ -48,7 +48,10 @@ func (a *app) commitMenu(m *ui.Menu, cm gitrepo.Commit) {
 		a.detachAt(cm)
 	}
 	m.Separator()
-	if m.Item(T("复制哈希", "Copy Commit Hash")).Disabled(busy).Chosen() {
+	// 复制哈希不设 busy：它只是把屏幕上已经有的那串字符写进剪贴板，
+	// 和后台跑着哪个 git 命令一点关系都没有。抓取/推送正在飞的时候右键
+	// 一下想抄个 hash，为这个灰着是给用户添堵。
+	if m.Item(T("复制哈希", "Copy Commit Hash")).Chosen() {
 		// 菜单回调里拿不到 *ui.Context（WriteClipboard 是它的方法），
 		// 记一笔，下一帧开头再写进剪贴板（见 view）。
 		a.copyText = cm.Hash

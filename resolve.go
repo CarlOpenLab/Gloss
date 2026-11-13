@@ -146,7 +146,9 @@ func (a *app) conflictMenu(m *ui.Menu, f gitrepo.File) {
 		a.resolveFile(f, gitrepo.SideTheirs, act.theirs)
 	}
 	m.Separator()
-	if m.Item("在编辑器打开").Disabled(busy).Chosen() {
+	// 不设 busy：外部编辑器是另一个进程，git 后台跑着不挡它（见 fileMenu
+	// 的同一项）。
+	if m.Item("在编辑器打开").Chosen() {
 		a.openInEditor(f)
 	}
 	if m.Item("标记为已解决").Disabled(busy).Chosen() {

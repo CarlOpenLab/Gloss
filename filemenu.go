@@ -66,7 +66,10 @@ func (a *app) fileMenu(m *ui.Menu, f gitrepo.File) {
 	}
 
 	m.Separator()
-	if m.Item(T("在编辑器打开", "Open in Editor")).Disabled(busy).Chosen() {
+	// 在外部编辑器打开不设 busy：那一步是 a.openPath 起一个别的进程，git 后
+	// 台跑着什么都不挡它（git 也不锁工作区文件）。拉取正在飞的时候想看一眼
+	// 这个文件，为这个灰着没道理。
+	if m.Item(T("在编辑器打开", "Open in Editor")).Chosen() {
 		a.openInEditor(f)
 	}
 	if m.Item(T("在访达中显示", "Reveal in Finder")).Chosen() {

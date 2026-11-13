@@ -218,12 +218,15 @@ func (a *app) localBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
 	}
 	a.worktreeMenuItems(m, ref)
 	m.Separator()
+	// 对比两项都不设 busy：它们只是读两个 ref 的内容算 diff（git diff base..
+	// target），不碰 index 也不碰工作区 —— 推送正在飞的时候比一下两个分支
+	// 完全站得住。弹窗自己也是开在另一层上的（见 compareModal）。
 	if !isHead && a.branch != "" {
-		if m.Item("与当前分支 (" + a.branch + ") 对比代码差异").Disabled(busy).Chosen() {
+		if m.Item("与当前分支 (" + a.branch + ") 对比代码差异").Chosen() {
 			a.startCompare(a.branch, ref.Name)
 		}
 	}
-	if m.Item("与其他分支对比代码差异…").Disabled(busy).Chosen() {
+	if m.Item("与其他分支对比代码差异…").Chosen() {
 		a.openCompareDialog(ref.Name)
 	}
 	m.Separator()
@@ -234,7 +237,10 @@ func (a *app) localBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
 		a.promptRebase(ref.Name)
 	}
 	m.Separator()
-	if m.Item("重命名 " + ref.Name + "…").Disabled(busy).Chosen() {
+	// 重命名不设 busy：它只是弹一个对话框填新名字，git 那条命令在确认框里
+	// 才发（见 renameBranch，那儿自己有 busy 兜底）。拉取正在飞的时候先把
+	// 名字想好、对话框开着，没碍着谁。
+	if m.Item("重命名 " + ref.Name + "…").Chosen() {
 		a.openRenameBranchDialog(ref.Name)
 	}
 	if m.Item(T("删除分支 "+ref.Name+"…", "Delete Branch "+ref.Name+"…")).Disabled(busy || isHead || occupied).Chosen() {
@@ -254,7 +260,9 @@ func (a *app) localBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
 		}
 	}
 	m.Separator()
-	if m.Item(T("复制分支名", "Copy Branch Name")).Disabled(busy).Chosen() {
+	// 复制名字不设 busy：同上（commitops 的复制哈希）—— 只是把已经在那儿的
+	// 一串字符写进剪贴板。
+	if m.Item(T("复制分支名", "Copy Branch Name")).Chosen() {
 		a.copyText = ref.Name
 	}
 }
@@ -301,12 +309,13 @@ func (a *app) remoteBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
 		a.checkoutRef(ref)
 	}
 	m.Separator()
+	// 对比不设 busy（同 localBranchMenu：读两个 ref 算 diff，不碰工作区）。
 	if a.branch != "" {
-		if m.Item(T("与当前分支 ("+a.branch+") 对比代码差异", "Compare with current branch ("+a.branch+")")).Disabled(busy).Chosen() {
+		if m.Item(T("与当前分支 ("+a.branch+") 对比代码差异", "Compare with current branch ("+a.branch+")")).Chosen() {
 			a.startCompare(a.branch, ref.Name)
 		}
 	}
-	if m.Item(T("与其他分支对比代码差异…", "Compare with other branch…")).Disabled(busy).Chosen() {
+	if m.Item(T("与其他分支对比代码差异…", "Compare with other branch…")).Chosen() {
 		a.openCompareDialog(ref.Name)
 	}
 	m.Separator()
@@ -320,7 +329,9 @@ func (a *app) remoteBranchMenu(m *ui.Menu, ref gitrepo.Ref) {
 		a.promptDeleteRemoteBranch(remote, localName)
 	}
 	m.Separator()
-	if m.Item(T("复制分支名", "Copy Branch Name")).Disabled(busy).Chosen() {
+	// 复制名字不设 busy：同上（commitops 的复制哈希）—— 只是把已经在那儿的
+	// 一串字符写进剪贴板。
+	if m.Item(T("复制分支名", "Copy Branch Name")).Chosen() {
 		a.copyText = ref.Name
 	}
 }
@@ -332,12 +343,13 @@ func (a *app) tagMenu(m *ui.Menu, ref gitrepo.Ref) {
 		a.checkoutRef(ref)
 	}
 	m.Separator()
+	// 对比不设 busy（同 localBranchMenu）。
 	if a.branch != "" {
-		if m.Item(T("与当前分支 ("+a.branch+") 对比代码差异", "Compare with current branch ("+a.branch+")")).Disabled(busy).Chosen() {
+		if m.Item(T("与当前分支 ("+a.branch+") 对比代码差异", "Compare with current branch ("+a.branch+")")).Chosen() {
 			a.startCompare(a.branch, ref.Name)
 		}
 	}
-	if m.Item(T("与其他分支/标签对比代码差异…", "Compare with other branch/tag…")).Disabled(busy).Chosen() {
+	if m.Item(T("与其他分支/标签对比代码差异…", "Compare with other branch/tag…")).Chosen() {
 		a.openCompareDialog(ref.Name)
 	}
 	m.Separator()
@@ -346,7 +358,7 @@ func (a *app) tagMenu(m *ui.Menu, ref gitrepo.Ref) {
 		a.pushTag("origin", ref.Name)
 	}
 	m.Separator()
-	if m.Item(T("复制标签名", "Copy Tag Name")).Disabled(busy).Chosen() {
+	if m.Item(T("复制标签名", "Copy Tag Name")).Chosen() {
 		a.copyText = ref.Name
 	}
 }
@@ -367,7 +379,7 @@ func (a *app) stashMenu(m *ui.Menu, ref gitrepo.Ref) {
 		a.promptStashDrop(ref)
 	}
 	m.Separator()
-	if m.Item(T("复制储藏名", "Copy Stash Name")).Disabled(busy).Chosen() {
+	if m.Item(T("复制储藏名", "Copy Stash Name")).Chosen() {
 		a.copyText = ref.Name
 	}
 }
