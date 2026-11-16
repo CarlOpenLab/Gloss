@@ -1741,11 +1741,16 @@ func (a *app) toolbarOpVisible() bool {
 // startOp 是唯一的写操作入口。有写操作在飞、或者仓库没开好时直接返回 false，
 // 调用方什么都不做（界面本来就把那些控件画成灰的，这里只是最后一道兜底）。
 //
+// 「在飞」是按项目算的：操作属于发起它的标签页，切到别的项目不受影响，
+// 那边照样能写（git 的 index 锁是每个仓库一把）。结果也只写回发起的那一页；
+// 如果完成时用户已经切走，收尾回调留到切回来再跑（见 restoreActiveTab）。
+//
 // work 在后台跑，拿到的 repo 已经打开；返回一句成功提示（可以为空），出错就
 // 返回 error。done 在主线程上、a.op 已经清掉之后调用，参数是这次成没成 ——
 // 重载之类的收尾放在那里。失败会被翻成人话放进 a.opErr（顶部横幅）。
 func (a *app) startOp(kind gitrepo.Op, name string, work func(context.Context, *gitrepo.Repo) (string, error), done func(ok bool)) bool {
-	if a.op != gitrepo.OpNone || a.state != loadReady {
+	tab := a.currentTab()
+	if a.op != gitrepo.OpNone || (tab != nil && tab.op != gitrepo.OpNone) || a.state != loadReady {
 		return false
 	}
 	a.op = kind
@@ -1754,6 +1759,13 @@ func (a *app) startOp(kind gitrepo.Op, name string, work func(context.Context, *
 	a.opNote = ""
 	a.opSeq++
 	seq := a.opSeq
+	if tab != nil {
+		tab.op = kind
+		tab.opName = name
+		tab.opErr = nil
+		tab.opNote = ""
+		tab.opSeq = seq
+	}
 	dir := a.repoPath
 
 	a.run(func() {
@@ -1764,19 +1776,47 @@ func (a *app) startOp(kind gitrepo.Op, name string, work func(context.Context, *
 			note, err = work(ctx, repo)
 		}
 		a.dispatch(func() {
-			if a.opSeq != seq {
+			if tab != nil && tab.opSeq != seq {
 				return // 已经有更新的一次操作了，这次的结果丢弃
 			}
-			a.op = gitrepo.OpNone
+			if tab == nil && a.opSeq != seq {
+				return
+			}
+			var f *gitrepo.Failure
 			if err != nil {
-				f := gitrepo.Describe(kind, err)
-				a.opErr = &f
-			} else {
-				a.opNote = note
+				d := gitrepo.Describe(kind, err)
+				f = &d
 			}
+			if tab != nil {
+				tab.op = gitrepo.OpNone
+				tab.opErr = f
+				if err == nil {
+					tab.opNote = note
+				} else {
+					tab.opNote = ""
+				}
+			}
+			if tab == nil || a.currentTab() == tab {
+				a.op = gitrepo.OpNone
+				a.opErr = f
+				if err == nil {
+					a.opNote = note
+				} else {
+					a.opNote = ""
+				}
+				if done != nil {
+					done(err == nil)
+				}
+				return
+			}
+			// 操作属于另一页（用户已经切走了）：结果留在那一页，收尾也
+			// 留到切回去再跑 —— done 里读写的是发起页的提交框和视图，
+			// 在别人那一页上跑会把两边都弄错。
 			if done != nil {
-				done(err == nil)
+				tab.opDone = done
+				tab.opDoneOK = err == nil
 			}
+			tab.refsDirty = true
 		})
 	})
 	return true

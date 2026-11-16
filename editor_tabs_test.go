@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -336,8 +337,8 @@ func TestEditorLoadCompletesAfterProjectSwitch(t *testing.T) {
 	}
 }
 
-// 保存途中切项目：写盘目标在开始时就捕获，成功后只标记那份缓冲，不去
-// 刷新眼前这个项目。
+// 保存途中切项目：写盘目标在开始时就捕获，A 页的收尾（标记缓冲已保存、
+// 重读）等切回 A 页再跑，不能拿 B 页的界面和提交框去收 A 页的尾。
 func TestEditorSaveWhileSwitchingProjectsTargetsCapturedRepo(t *testing.T) {
 	a := richApp(t)
 	dirA := a.repoPath
@@ -356,14 +357,18 @@ func TestEditorSaveWhileSwitchingProjectsTargetsCapturedRepo(t *testing.T) {
 	if got := readDisk(t, dirA+"/README.md"); got != "A 项目保存的内容\n" {
 		t.Errorf("保存没落到发起时的仓库：%q", got)
 	}
-	if readme.buffer.Modified() {
-		t.Error("保存成功后该 MarkSaved 发起时的缓冲")
-	}
 	if a.repoPath != other {
 		t.Errorf("当前项目被保存流程带偏了：%q", a.repoPath)
 	}
-	if len(a.tabs) < 1 || a.tabs[0].state != loadIdle {
-		t.Error("切走的项目该置回 loadIdle，下次切回去整体重读")
+
+	// 切回 A 页：那颗迟到的收尾这时才跑，缓冲该被标记为已保存。
+	a.switchTab(0)
+	settle(t, a)
+	if readme.buffer.Modified() {
+		t.Error("切回发起保存的项目后，缓冲该被标记为已保存")
+	}
+	if a.repoPath != filepath.Clean(dirA) {
+		t.Errorf("切回后当前项目是 %q", a.repoPath)
 	}
 }
 

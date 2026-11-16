@@ -87,6 +87,21 @@ type repoTab struct {
 	errMsg     string
 	errNotRepo bool
 
+	// 写操作跟着项目走：A 页在提交（或拉取）时切到 B 页，B 页的闸门该是
+	// 开的 —— git 的 index 锁是每个仓库一把，两页各写各的互不相干。
+	// opErr / opNote 是那一页自己的结果，失败横幅和成功 Toast 也只属于
+	// 那一页；opSeq 给那一页自己的操作编号（见 startOp）。
+	op      gitrepo.Op
+	opSeq   int
+	opName  string
+	opErr   *gitrepo.Failure
+	opNote  string
+	toasted string // 这一页哪句成功提示已经播报过（见 toastNote）
+	// opDone / opDoneOK 是操作在别页完成时欠下的一次收尾：回调要读写的
+	// 是发起那一页的状态（提交框、重读），所以等切回来再跑。
+	opDone   func(bool)
+	opDoneOK bool
+
 	allFiles   []gitrepo.File
 	files      []gitrepo.File
 	workFiles  []gitrepo.File
@@ -186,6 +201,13 @@ func (a *app) saveActiveTab() {
 	tab.errMsg = a.errMsg
 	tab.errNotRepo = a.errNotRepo
 
+	tab.op = a.op
+	tab.opSeq = a.opSeq
+	tab.opName = a.opName
+	tab.opErr = a.opErr
+	tab.opNote = a.opNote
+	tab.toasted = a.toasted
+
 	tab.allFiles = a.allFiles
 	tab.files = a.files
 	tab.workFiles = a.workFiles
@@ -267,6 +289,13 @@ func (a *app) restoreActiveTab() {
 	a.errMsg = tab.errMsg
 	a.errNotRepo = tab.errNotRepo
 
+	a.op = tab.op
+	a.opSeq = tab.opSeq
+	a.opName = tab.opName
+	a.opErr = tab.opErr
+	a.opNote = tab.opNote
+	a.toasted = tab.toasted
+
 	a.allFiles = tab.allFiles
 	a.files = tab.files
 	a.workFiles = tab.workFiles
@@ -322,6 +351,15 @@ func (a *app) restoreActiveTab() {
 
 	a.commitMsg = tab.commitMsg
 	a.draftFor = tab.draftFor
+
+	// 这一页在后台完成过操作，但当时它不在眼前：收尾（重读、清提交框）
+	// 拖到现在才跑 —— 这时 a 上才是这一页的状态。
+	if done := tab.opDone; done != nil {
+		ok := tab.opDoneOK
+		tab.opDone = nil
+		tab.opDoneOK = false
+		done(ok)
+	}
 }
 
 // switchTab 切换到指定下标的标签页。
@@ -566,6 +604,12 @@ func (a *app) clearRepoState() {
 	a.errNotRepo = false
 	a.loadingPath = ""
 	a.repoSeq++ // 丢弃关闭前还在路上的读取
+	// 最后一个项目关掉了，它那一次写操作的结果和闸门也一起清掉：操作自己
+	// 还在后台跑完，但结果属于一个已经不存在的标签页，不能再挂在空状态上。
+	a.op = gitrepo.OpNone
+	a.opName = ""
+	a.opErr = nil
+	a.opNote = ""
 
 	a.allFiles = nil
 	a.files = nil
