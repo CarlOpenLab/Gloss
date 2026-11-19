@@ -523,7 +523,7 @@ func auth(next http.HandlerFunc) http.HandlerFunc {
 	ht.SetDark(false)
 	hist.confirm = confirmState{}
 
-	// 分离 HEAD：工具栏那枚分支芯片换成警示色，把话说全
+	// 分离 HEAD：工具栏不再摆游离哈希的芯片
 	det := branchApp(t)
 	runGit(t, det.repoPath, "checkout", "-q", "--detach", "HEAD")
 	det.reload()

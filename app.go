@@ -71,9 +71,9 @@ type app struct {
 	repoPath string
 	repoName string
 	branch   string
-	// detached 是 HEAD 没附在任何分支上（检出过标签或某个提交）。工具栏的
-	// 分支芯片靠它换色 —— 分离 HEAD 上提交不会丢，但没有分支接着，得让人
-	// 在提交之前就知道。
+	// detached 是 HEAD 没附在任何分支上（检出过标签或某个提交）。拉取 / 推送
+	// 没有落点、分支名读回来是短哈希，都靠它判断。分离 HEAD 上提交不会丢，
+	// 但没有分支接着，得让人在提交之前就知道。
 	detached bool
 	// remotes 是配置的远程名（`git remote`）。抓取 / 拉取 / 推送三颗按钮的
 	// 可用性看它：`git fetch --all` 在一条远程都没有时是**静默成功**的，
@@ -1397,23 +1397,18 @@ func (a *app) repoDropdownPanel(c *ui.Context, panel ui.Element, pal palette) {
 	}
 }
 
-// abnormalStateChip 是分离 HEAD / 变基中时停在工具栏上的警示标签。
+// abnormalStateChip 是变基中时停在工具栏上的警示标签。
 //
-// 它接的是旧分支 chip 的班：分支本身移回侧栏了，但这两个状态是「现在做任何
+// 它接的是旧分支 chip 的班：分支本身移回侧栏了，但变基中途是「现在做任何
 // 事都可能出事」的安全提示，不能跟着一起消失。标签不可点击 —— 操作入口在
-// 状态条和侧栏里，这里只负责让人看见。所有视图都画（终端视图没有 pending
-// 状态条）。
+// 状态条里，这里只负责让人看见。所有视图都画（终端视图没有 pending 状态条）。
+// 分离 HEAD 不再有这枚标签：工具栏顶上不需要再多一行游离哈希。
 func (a *app) abnormalStateChip(c *ui.Context, t *ui.Theme, pal palette) {
 	name, tip := "", ""
-	switch {
-	case a.pending.Kind == gitrepo.PendingRebase:
+	if a.pending.Kind == gitrepo.PendingRebase {
 		name = T("变基中", "Rebasing")
 		tip = T("变基操作进行中。可在状态栏选择「继续」、「跳过」或「中止」。",
 			"Rebase in progress. Use Continue, Skip, or Abort in the status bar.")
-	case a.detached:
-		name = T("分离 HEAD：", "Detached HEAD: ") + a.branch
-		tip = T("HEAD 处于游离状态（分离 HEAD）。如需保留后续提交，请先创建新分支。",
-			"HEAD is detached from any branch. Create a new branch if you wish to retain subsequent commits.")
 	}
 	if name == "" {
 		return

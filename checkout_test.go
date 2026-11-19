@@ -361,8 +361,10 @@ func TestCheckoutTagDetaches(t *testing.T) {
 	if !a.detached {
 		t.Error("a.detached 该是 true")
 	}
-	if !tt.HasText("分离 HEAD") {
-		t.Errorf("工具栏该把分离 HEAD 说出来：%q", tt.Texts())
+	for _, s := range tt.Texts() {
+		if strings.HasPrefix(s, "分离 HEAD：") {
+			t.Errorf("工具栏不该再摆分离 HEAD 的芯片：%q", tt.Texts())
+		}
 	}
 }
 

@@ -1025,31 +1025,23 @@ func TestToolbarNoLongerShowsBranchChipOrOpenRepo(t *testing.T) {
 	}
 }
 
-// 分支 chip 删掉之后，分离 HEAD / 变基中的警示不能跟着消失 —— 它现在是一枚
-// 不可点击的小标签，而且终端视图里也要在（终端视图没有 pending 状态条）。
+// 分支 chip 删掉之后，变基中的警示不能跟着消失 —— 它现在是一枚不可点击的
+// 小标签，而且终端视图里也要在（终端视图没有 pending 状态条）。分离 HEAD
+// 不再占一枚标签。
 func TestToolbarKeepsAbnormalStateWarning(t *testing.T) {
 	a := richApp(t)
 	tt := ui.NewTester(a.view, 1280, 860)
 	still(tt)
 
-	a.detached = true
-	a.branch = "abc1234"
+	a.pending = gitrepo.Pending{Kind: gitrepo.PendingRebase, Branch: "main"}
 	tt.Frame()
-	if !tt.HasText("分离 HEAD：abc1234") {
-		t.Errorf("普通视图该显示分离 HEAD 警示：%q", tt.Texts())
+	if !tt.HasText("变基中") {
+		t.Errorf("普通视图该有变基中警示标签：%q", tt.Texts())
 	}
 
 	a.setViewMode(viewModeTerm)
 	tt.Frame()
-	if !tt.HasText("分离 HEAD：abc1234") {
-		t.Errorf("终端视图也该显示分离 HEAD 警示：%q", tt.Texts())
-	}
-
-	a.detached = false
-	a.branch = "main"
-	a.pending = gitrepo.Pending{Kind: gitrepo.PendingRebase, Branch: "main"}
-	tt.Frame()
 	if !tt.HasText("变基中") {
-		t.Errorf("变基中该有警示标签：%q", tt.Texts())
+		t.Errorf("终端视图也该有变基中警示标签：%q", tt.Texts())
 	}
 }
