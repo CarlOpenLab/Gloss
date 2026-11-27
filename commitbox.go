@@ -544,7 +544,7 @@ func (a *app) aiCommitButton(c *ui.Context, t *ui.Theme, pal palette) {
 			ui.Text(c, T("生成中…", "Generating…")).FontSize(uiFontSize(textButton)).
 				FontWeight(weightMedium).TextColor(fg)
 		} else {
-			sparkleIcon(c, 11, fg)
+			sparkleIcon(c, sparkleSize, fg)
 			ui.Text(c, T("AI 生成", "AI Commit")).FontSize(uiFontSize(textButton)).
 				FontWeight(weightMedium).TextColor(fg)
 			// 快捷键提示：11px 的全界面最小字号，坐在一片凹下去的 kbd 洗色上。
@@ -644,7 +644,7 @@ func (a *app) riskScanButton(c *ui.Context, t *ui.Theme, pal palette) {
 			ui.Text(c, T("预检中…", "Auditing…")).FontSize(uiFontSize(textButton)).
 				FontWeight(weightMedium).TextColor(fg)
 		} else {
-			shieldIcon(c, 11, fg)
+			shieldIcon(c, 12, fg)
 			ui.Text(c, T("变更预检", "Audit Changes")).FontSize(uiFontSize(textButton)).
 				FontWeight(weightMedium).TextColor(fg)
 		}
@@ -812,7 +812,7 @@ func (a *app) commitButton(c *ui.Context, t *ui.Theme, pal palette) {
 	fadeColors(btn)
 
 	btn.Children(func() {
-		drawIcon(c, iconGitCommit, 12, fg)
+		drawIcon(c, iconGitCommit, 13, fg)
 		ui.Text(c, label).FontSize(uiFontSize(textButton)).FontWeight(weightMedium).TextColor(fg)
 		if can {
 			ui.Box(c).Radius(radiusXS).Padding(1, 4).Background(t.AccentText.Alpha(0.2)).Children(func() {
@@ -951,7 +951,7 @@ func (a *app) doCommit() {
 // 像三个不同级别的东西，其实只是同一条流水线上的三个动作。
 func quickStageAllChip(c *ui.Context, pal palette) bool {
 	btn := ui.ButtonBase(c).Shrink(0).Height(20).Radius(radiusXS).
-		Padding(0, 7).AlignItems(ui.Center).
+		Padding(0, 7).Gap(4).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).Label(T("全部暂存", "Stage All")).Tooltip(T("一键全部暂存工作区所有改动", "Stage all changes in working tree"))
 
 	fg := pal.inkMuted
@@ -962,7 +962,8 @@ func quickStageAllChip(c *ui.Context, pal palette) bool {
 	fadeColors(btn)
 
 	btn.Children(func() {
-		ui.Text(c, T("+ 全部暂存", "+ Stage All")).FontSize(uiFontSize(textCaption)).
+		drawIcon(c, iconPlus, 11, fg)
+		ui.Text(c, T("全部暂存", "Stage All")).FontSize(uiFontSize(textCaption)).
 			FontWeight(weightMedium).TextColor(fg)
 	})
 	return btn.Clicked()
@@ -991,7 +992,7 @@ func quickUnstageAllChip(c *ui.Context, pal palette) bool {
 // quickStageRemainingChip 是提交栏中的「暂存剩余」快捷微按钮。
 func quickStageRemainingChip(c *ui.Context, pal palette) bool {
 	btn := ui.ButtonBase(c).Shrink(0).Height(20).Radius(radiusXS).
-		Padding(0, 6).AlignItems(ui.Center).
+		Padding(0, 6).Gap(4).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).Label(T("暂存剩余", "Stage Remaining")).Tooltip(T("将剩余未暂存改动全部加入暂存区", "Stage remaining changes"))
 
 	fg := pal.inkMuted
@@ -1002,7 +1003,8 @@ func quickStageRemainingChip(c *ui.Context, pal palette) bool {
 	fadeColors(btn)
 
 	btn.Children(func() {
-		ui.Text(c, T("+ 暂存剩余", "+ Stage Remaining")).FontSize(uiFontSize(textCaption)).
+		drawIcon(c, iconPlus, 11, fg)
+		ui.Text(c, T("暂存剩余", "Stage Remaining")).FontSize(uiFontSize(textCaption)).
 			FontWeight(weightMedium).TextColor(fg)
 	})
 	return btn.Clicked()

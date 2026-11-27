@@ -118,9 +118,9 @@ func sparkleIcon(c *ui.Context, size float32, color ui.Color) {
 	})
 }
 
-// shieldIcon 是一个盾牌图标方盒，用来摆在安全预检按钮或对话框标题中。
+// shieldIcon 是一个盾牌勾选图标方盒，用来摆在安全预检按钮或对话框标题中。
 func shieldIcon(c *ui.Context, size float32, color ui.Color) {
-	drawIcon(c, iconShield, size, color)
+	drawIcon(c, iconShieldCheck, size, color)
 }
 
 // checkSize 是状态栏里那个小勾的边长。
@@ -515,18 +515,9 @@ func xButton(c *ui.Context, pal palette, hint string) bool {
 	btn.Background(bg)
 	fadeColors(btn)
 
-	// 叉号放在一个居中的小盒子里，而不是直接画在按钮上：按钮是
-	// Center() 的行，它的 Draw 拿到的是整块的矩形，和内容区差着几个像素，
-	// 叉号会略微偏出去。让布局系统去居中就准了。
-	// 两臂各占按钮边长的四成，四周留出来的就是点击余量。
-	arm := float32(xBtnSize * 0.4)
+	// 叉号用标准 Lucide x 矢量图标，居于按钮正中，四周留出点击余量。
 	btn.Children(func() {
-		ui.Box(c).Size(arm, arm).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
-			var path ui.Path
-			path.MoveTo(r.X, r.Y).LineTo(r.X+r.W, r.Y+r.H)
-			path.MoveTo(r.X+r.W, r.Y).LineTo(r.X, r.Y+r.H)
-			p.StrokePath(&path, 1.5, color)
-		})
+		drawIcon(c, iconX, 13, color)
 	})
 	return btn.Clicked()
 }

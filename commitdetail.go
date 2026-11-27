@@ -75,8 +75,7 @@ func (a *app) commitDetailPane(c *ui.Context, pal palette, cm gitrepo.Commit) {
 				})
 			}
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "#").FontSize(uiFontSize(textCaption)).FontWeight(weightSemibold).
-					TextColor(pal.inkSubtle)
+				drawIcon(c, iconHash, 12, pal.inkSubtle)
 				ui.Text(c, cm.Short).Font("monospace").FontSize(uiFontSize(textCaption)).
 					Grow(1).MinWidth(0).TextColor(pal.inkMuted)
 			})
@@ -88,7 +87,7 @@ func (a *app) commitDetailPane(c *ui.Context, pal palette, cm gitrepo.Commit) {
 				link := ui.Row(c).Gap(6).AlignItems(ui.Center).
 					Cursor(ui.CursorPointer).Role(ui.RoleLink)
 				link.Children(func() {
-					drawIcon(c, iconLink, 12, pal.inkSubtle)
+					drawIcon(c, iconExternalLink, 12, pal.inkSubtle)
 					txt := ui.Text(c, label).FontSize(uiFontSize(textCaption)).SingleLine().
 						Grow(1).MinWidth(0).TextColor(pal.inkMuted)
 					if link.Hovered() {

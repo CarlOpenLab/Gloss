@@ -306,7 +306,6 @@ var opaqueSurfaceOwners = map[string]string{
 	// 整个文件都画在浮层 / 弹窗 / 设置窗口里
 	"code_editor.go":     "「编辑代码」弹窗：面板 + 里面的编辑器画布",
 	"filehist.go":        "文件历史弹窗",
-	"newbranchdialog.go": "新建分支弹窗",
 	"palette.go":         "命令面板（模态）",
 	"resetdialog.go":     "重置弹窗",
 	"riskscandialog.go":  "风险预检弹窗",

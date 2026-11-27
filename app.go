@@ -1106,7 +1106,7 @@ func (a *app) toolbar(c *ui.Context, pal palette) {
 		sec := a.section()
 		toolbarSegmentedIcons(c, pal, &sec, false,
 			segmentedIconItem{label: T("改动", "Changes"), tip: Tf("工作区改动 %s", "Working tree changes %s", K("⌘1")), icon: iconFileDiff, off: noRepo},
-			segmentedIconItem{label: T("历史", "History"), tip: Tf("提交历史与拓扑图 %s", "Commit history & graph %s", K("⌘2")), icon: iconGitCommit, off: noRepo},
+			segmentedIconItem{label: T("历史", "History"), tip: Tf("提交历史与拓扑图 %s", "Commit history & graph %s", K("⌘2")), icon: iconHistory, off: noRepo},
 			segmentedIconItem{label: T("终端", "Terminal"), tip: Tf("内置终端 %s / Ctrl+~", "Built-in Terminal %s / Ctrl+~", K("⌘3")), icon: iconTerminal},
 			segmentedIconItem{label: T("编辑器", "Editor"), tip: Tf("代码编辑器 %s", "Code Editor %s", K("⌘4")), icon: iconCode},
 		)
@@ -1241,7 +1241,7 @@ func (a *app) repoHeader(c *ui.Context, pal palette) {
 		repoBtn.Children(func() {
 			ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, name).FontWeight(weightSemibold).FontSize(uiFontSize(textBody)).SingleLine().MaxWidth(180)
-				drawIcon(c, iconChevronDown, 10, pal.inkSubtle)
+				drawIcon(c, iconChevronDown, 12, pal.inkSubtle)
 			})
 		})
 		if repoBtn.Clicked() {

@@ -183,8 +183,8 @@ func TestPRReviewDiffAndRestore(t *testing.T) {
 	if !tt.HasText("PR 检视") {
 		t.Errorf("界面顶部应出现「PR 检视」条，当前文字：%q", tt.Texts())
 	}
-	if !tt.HasText("✨ 生成并发布 AI Review 评论") {
-		t.Errorf("界面应包含「✨ 生成并发布 AI Review 评论」按钮，当前文字：%q", tt.Texts())
+	if !tt.HasText("生成并发布 AI Review 评论") {
+		t.Errorf("界面应包含「生成并发布 AI Review 评论」按钮，当前文字：%q", tt.Texts())
 	}
 
 	// 退出 PR 检视

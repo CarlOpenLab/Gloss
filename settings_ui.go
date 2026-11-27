@@ -144,6 +144,29 @@ func settingsMiniButton(c *ui.Context, pal palette, label, text string, disabled
 	return btn
 }
 
+// settingsMiniIconButton is the icon variant of settingsMiniButton (for
+// steppers such as minus / plus) using crisp Lucide SVGs instead of glyphs.
+func settingsMiniIconButton(c *ui.Context, pal palette, label string, icon *ui.SVG, disabled bool) ui.Element {
+	btn := ui.ButtonBase(c).Size(24, 24).Shrink(0).Radius(radiusSM).
+		Center().Label(label).Disabled(disabled).Cursor(ui.CursorPointer)
+	var bg, border, fg ui.Color
+	switch {
+	case disabled:
+		bg, border, fg = ui.Transparent, pal.hairline, pal.textFaint
+	case btn.Pressed(), btn.Hovered():
+		bg, border, fg = pal.rowSelected, pal.hairlineStrong, pal.ink
+	default:
+		bg, border, fg = pal.control, pal.hairline, pal.text
+	}
+	btn.Background(btn.AnimateColor("bg", bg, ui.Animation{Duration: 90 * time.Millisecond})).
+		Border(1, border)
+	fadeColors(btn)
+	btn.Children(func() {
+		drawIcon(c, icon, 13, fg)
+	})
+	return btn
+}
+
 // settingsFieldRow is a group row with its label above its control, for
 // text fields that need the full width of a narrow panel.
 func settingsFieldRow(c *ui.Context, pal palette, label, detail string, field func()) {

@@ -62,28 +62,12 @@ func (a *app) toastNote(c *ui.Context) {
 	c.Toast(a.opNote)
 }
 
-// warnIcon 画一个圆圈里一个感叹号。
+// warnIcon 画一个圆圈感叹号（Lucide circle-alert）。
 //
 // 和叉号、箭头、勾一样不用字符：这类符号落到后备字体上就没有统一的形状和
 // 基线，而横幅上这颗是「出事了」的第一眼信号，不能变形。
 func warnIcon(c *ui.Context, size float32, col ui.Color) {
-	ui.Box(c).Size(size, size).Shrink(0).Margin(1, 0, 0, 0).
-		Draw(func(p *ui.Painter, r ui.Rect) {
-			cx, cy := r.X+r.W/2, r.Y+r.H/2
-			rad := min(r.W, r.H) * 0.44
-
-			var ring ui.Path
-			ring.Circle(cx, cy, rad)
-			p.StrokePath(&ring, 1.4, col)
-
-			var stem ui.Path
-			stem.MoveTo(cx, cy-rad*0.48).LineTo(cx, cy+rad*0.08)
-			p.StrokePath(&stem, 1.6, col)
-
-			var dot ui.Path
-			dot.Circle(cx, cy+rad*0.48, 0.9)
-			p.FillPath(&dot, col)
-		})
+	drawIcon(c, iconCircleAlert, size, col).Margin(1, 0, 0, 0)
 }
 
 // failureBox 是对话框里的失败说明，和顶部横幅同一套说法、同一个红色。

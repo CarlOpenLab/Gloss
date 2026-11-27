@@ -450,11 +450,11 @@ func (a *app) settingsBody(c *ui.Context, pal palette) {
 			ui.Box(c).Height(6).Shrink(0)
 			// 通用偏好在模型设置前头：这一页改的是界面本身（外观、语言、
 			// 拓扑图配色、终端字体），打开设置的人十次里有九次是来找它的。
-			settingsSidebarItem(c, pal, T("通用偏好", "Preferences"), iconPalette,
+			settingsSidebarItem(c, pal, T("通用偏好", "Preferences"), iconSliders,
 				a.settingsTab == settingsTabGeneral, func() { a.settingsTab = settingsTabGeneral })
 			settingsSidebarItem(c, pal, T("模型设置", "Model Settings"), iconSparkles,
 				a.settingsTab == settingsTabModels, func() { a.settingsTab = settingsTabModels })
-			settingsSidebarItem(c, pal, T("提示词设置", "Prompts"), iconSliders,
+			settingsSidebarItem(c, pal, T("提示词设置", "Prompts"), iconMessageSquareText,
 				a.settingsTab == settingsTabPrompts, func() { a.settingsTab = settingsTabPrompts })
 			settingsSidebarItem(c, pal, T("Git 配置", "Git Config"), iconGitBranch,
 				a.settingsTab == settingsTabGit, func() { a.settingsTab = settingsTabGit })
@@ -463,9 +463,9 @@ func (a *app) settingsBody(c *ui.Context, pal palette) {
 				FontWeight(weightSemibold).TextColor(pal.textFaint).
 				Padding(14, 8, 4, 8)
 
-			settingsSidebarItem(c, pal, T("更新", "Updates"), iconRefresh,
+			settingsSidebarItem(c, pal, T("更新", "Updates"), iconCircleArrowUp,
 				a.settingsTab == settingsTabUpdates, func() { a.settingsTab = settingsTabUpdates })
-			settingsSidebarItem(c, pal, T("关于 Gloss", "About Gloss"), iconEye,
+			settingsSidebarItem(c, pal, T("关于 Gloss", "About Gloss"), iconInfo,
 				a.settingsTab == settingsTabAbout, func() { a.settingsTab = settingsTabAbout })
 
 			ui.Spacer(c)
@@ -555,15 +555,15 @@ func (a *app) settingsPage(c *ui.Context, pal palette) {
 // 组里一行一件事，右侧放控件 —— 和 macOS 系统设置同一套语法。
 func (a *app) generalSettingsPane(c *ui.Context, pal palette) {
 
-	// 行里的小步进器：一个「−」、当前值、一个「＋」，最后的重置是可选。
+	// 行里的小步进器：一个减号图标、当前值、一个加号图标，最后的重置是可选。
 	stepper := func(value string, decLabel, incLabel string, dec, inc func(), resetLabel string, reset func()) {
 		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-			if settingsMiniButton(c, pal, decLabel, "−", false).Clicked() {
+			if settingsMiniIconButton(c, pal, decLabel, iconMinus, false).Clicked() {
 				dec()
 			}
 			ui.Text(c, value).FontSize(uiFontSize(textButton)).FontFeatures("tnum").
 				Width(74).TextAlign(ui.Center).TextColor(pal.textMuted).SingleLine()
-			if settingsMiniButton(c, pal, incLabel, "+", false).Clicked() {
+			if settingsMiniIconButton(c, pal, incLabel, iconPlus, false).Clicked() {
 				inc()
 			}
 			if resetLabel != "" {

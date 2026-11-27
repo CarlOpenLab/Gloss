@@ -164,17 +164,17 @@ func (a *app) remoteBar(c *ui.Context, pal palette) {
 // iconDraw 是画一颗图标的函数（和 toolButton 收的是同一种）。
 type iconDraw = func(p *ui.Painter, r ui.Rect, col ui.Color)
 
-// drawFetchIcon 画「抓取」（Lucide cloud-download）。
+// drawFetchIcon 画「抓取」（Lucide download）。
 func drawFetchIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
 	p.Icon(iconFetch, r, col)
 }
 
-// drawPullIcon 画「拉取」（Lucide arrow-down-to-line）。
+// drawPullIcon 画「拉取」（Lucide arrow-down）。
 func drawPullIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
 	p.Icon(iconPull, r, col)
 }
 
-// drawPushIcon 画「推送」（Lucide arrow-up-from-line）。
+// drawPushIcon 画「推送」（Lucide arrow-up）。
 func drawPushIcon(p *ui.Painter, r ui.Rect, col ui.Color) {
 	p.Icon(iconPush, r, col)
 }
@@ -246,9 +246,9 @@ func iconToolButton(c *ui.Context, pal palette, label, tip string, off bool, ico
 				// 也不会把图标推来推去。
 				ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
 					if inFlight {
-						ui.Spinner(c).Size(14, 14)
+						ui.Spinner(c).Size(toolIconSize, toolIconSize)
 					} else {
-						ui.Box(c).Size(14, 14).Shrink(0).
+						ui.Box(c).Size(toolIconSize, toolIconSize).Shrink(0).
 							Draw(func(p *ui.Painter, r ui.Rect) { icon(p, r, fg) })
 					}
 					countStr := strconv.Itoa(badge)
@@ -260,9 +260,9 @@ func iconToolButton(c *ui.Context, pal palette, label, tip string, off bool, ico
 				})
 			} else {
 				if inFlight {
-					ui.Spinner(c).Size(16, 16)
+					ui.Spinner(c).Size(toolIconSize, toolIconSize)
 				} else {
-					ui.Box(c).Size(16, 16).Shrink(0).
+					ui.Box(c).Size(toolIconSize, toolIconSize).Shrink(0).
 						Draw(func(p *ui.Painter, r ui.Rect) { icon(p, r, fg) })
 				}
 			}

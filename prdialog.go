@@ -423,8 +423,8 @@ func (a *app) prReviewBar(c *ui.Context, pal palette) {
 		}
 		fadeColors(reviewBtn)
 		reviewBtn.Children(func() {
-			sparkleIcon(c, sparkleSize, pal.inkMuted)
-			ui.Text(c, "✨ 生成并发布 AI Review 评论").FontSize(uiFontSize(textButton)).
+			sparkleIcon(c, 12, pal.inkMuted)
+			ui.Text(c, "生成并发布 AI Review 评论").FontSize(uiFontSize(textButton)).
 				FontWeight(weightMedium).TextColor(pal.ink)
 		})
 		if reviewBtn.Clicked() {
@@ -459,7 +459,8 @@ func (a *app) prReviewBar(c *ui.Context, pal palette) {
 		}
 		fadeColors(exitBtn)
 		exitBtn.Children(func() {
-			ui.Text(c, "✕  退出检视").FontSize(uiFontSize(textButton)).FontWeight(weightMedium).
+			drawIcon(c, iconX, 12, pal.inkMuted)
+			ui.Text(c, "退出检视").FontSize(uiFontSize(textButton)).FontWeight(weightMedium).
 				TextColor(pal.inkMuted)
 		})
 		if exitBtn.Clicked() {
@@ -502,7 +503,7 @@ func (a *app) prReviewModalBody(c *ui.Context, pal palette) {
 			ui.Box(c).Padding(8, 12).Radius(radiusMD).Background(pal.success.Alpha(0.1)).
 				Border(1, pal.success.Alpha(0.3)).Children(func() {
 				ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
-					ui.Text(c, "✓").FontWeight(weightSemibold).TextColor(pal.success)
+					drawIcon(c, iconCircleCheck, 14, pal.success)
 					ui.Textf(c, "已成功将 Review 评论发布至 GitHub PR #%d！", pr.Number).
 						FontSize(uiFontSize(textBodySM)).TextColor(pal.success)
 				})

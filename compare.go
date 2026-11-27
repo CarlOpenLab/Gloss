@@ -474,7 +474,7 @@ func (a *app) compareModalBody(c *ui.Context, pal palette) {
 				ui.Text(c, "基准:").FontSize(uiFontSize(textCaption)).TextColor(pal.inkSubtle)
 				ui.Text(c, a.compare.base).FontSize(uiFontSize(textButton)).SingleLine().MinWidth(0).MaxWidth(180).
 					FontWeight(weightMedium).TextColor(pal.ink)
-				ui.Text(c, "▾").FontSize(uiFontSize(textCaption)).TextColor(pal.inkSubtle)
+				drawIcon(c, iconChevronDown, 12, pal.inkSubtle)
 			})
 			baseBtn.Menu(func(m *ui.Menu) {
 				for _, b := range branches {
@@ -511,7 +511,7 @@ func (a *app) compareModalBody(c *ui.Context, pal palette) {
 				ui.Text(c, "对比:").FontSize(uiFontSize(textCaption)).TextColor(pal.inkSubtle)
 				ui.Text(c, a.compare.target).FontSize(uiFontSize(textButton)).SingleLine().MinWidth(0).MaxWidth(180).
 					FontWeight(weightMedium).TextColor(pal.ink)
-				ui.Text(c, "▾").FontSize(uiFontSize(textCaption)).TextColor(pal.inkSubtle)
+				drawIcon(c, iconChevronDown, 12, pal.inkSubtle)
 			})
 			targetBtn.Menu(func(m *ui.Menu) {
 				for _, b := range branches {
@@ -859,7 +859,7 @@ func (a *app) compareDialog(c *ui.Context, pal palette) {
 				Cursor(ui.CursorPointer)
 			baseBtn.Children(func() {
 				ui.Text(c, a.compare.pickBase).FontSize(uiFontSize(textBody)).TextColor(pal.ink)
-				ui.Text(c, "▾").FontSize(uiFontSize(textCaption)).TextColor(pal.inkSubtle)
+				drawIcon(c, iconChevronDown, 12, pal.inkSubtle)
 			})
 			baseBtn.Menu(func(m *ui.Menu) {
 				for _, b := range branches {
@@ -900,7 +900,7 @@ func (a *app) compareDialog(c *ui.Context, pal palette) {
 				Cursor(ui.CursorPointer)
 			targetBtn.Children(func() {
 				ui.Text(c, a.compare.pickTarget).FontSize(uiFontSize(textBody)).TextColor(pal.ink)
-				ui.Text(c, "▾").FontSize(uiFontSize(textCaption)).TextColor(pal.inkSubtle)
+				drawIcon(c, iconChevronDown, 12, pal.inkSubtle)
 			})
 			targetBtn.Menu(func(m *ui.Menu) {
 				for _, b := range branches {

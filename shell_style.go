@@ -193,7 +193,7 @@ func (a *app) windowButton(c *ui.Context, pal palette, key string, svg *ui.SVG,
 		col = pal.text
 	}
 	b.Children(func() {
-		drawIcon(c, svg, 16, col)
+		drawIcon(c, svg, 14, col)
 	})
 	if b.Clicked() {
 		run()
@@ -331,7 +331,7 @@ func shellIconElement(c *ui.Context, pal palette, label, tip string, icon *ui.SV
 	}
 	fadeColors(btn)
 	btn.Children(func() {
-		drawIcon(c, icon, 16, col)
+		drawIcon(c, icon, 15, col)
 	})
 	return btn
 }

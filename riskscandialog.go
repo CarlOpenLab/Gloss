@@ -170,27 +170,28 @@ func (a *app) riskScanBody(c *ui.Context, pal palette) {
 
 		// 整体安全徽标 (Security Badge)
 		//
-		// 结论用一颗语义圆点带出来，而不是把整条横幅涂成红/黄/绿：这条带子
-		// 后面还跟着一段结论摘要，底色一染，摘要那些字就得挑颜色配它 ——
-		// 而摘要本身就是普通正文。
-		badgeIcon, badgeText := rs.report.StatusBadge()
-		var badgeDot ui.Color
+		// 结论用一颗语义色 Lucide 图标带出来，不再叠一颗彩色圆点加一个 emoji
+		// （● 🔴），整条横幅保持中性灰阶。
+		_, badgeText := rs.report.StatusBadge()
+		var (
+			badgeSVG *ui.SVG
+			badgeCol ui.Color
+		)
 		switch badgeText {
 		case "安全通过":
-			badgeDot = pal.success
+			badgeSVG, badgeCol = iconShieldCheck, pal.success
 		case "需注意":
-			badgeDot = pal.warning
+			badgeSVG, badgeCol = iconTriangleAlert, pal.warning
 		default: // "高危发现"
-			badgeDot = pal.danger
+			badgeSVG, badgeCol = iconShieldAlert, pal.danger
 		}
 
 		ui.Row(c).Padding(10, 14).Radius(radiusMD).
 			Background(pal.surface2).Border(1, pal.hairline).
 			AlignItems(ui.Center).Gap(10).Children(func() {
 			ui.Row(c).Shrink(0).Gap(6).AlignItems(ui.Center).Children(func() {
-				ui.Box(c).Size(chipDot, chipDot).Shrink(0).Radius(chipDot / 2).
-					Background(badgeDot)
-				ui.Text(c, badgeIcon+" "+badgeText).FontSize(uiFontSize(textBody)).
+				drawIcon(c, badgeSVG, 15, badgeCol)
+				ui.Text(c, badgeText).FontSize(uiFontSize(textBody)).
 					FontWeight(weightSemibold).TextColor(pal.ink)
 			})
 			ui.Text(c, "·").FontSize(uiFontSize(textBodySM)).TextColor(pal.inkTertiary)
@@ -202,7 +203,8 @@ func (a *app) riskScanBody(c *ui.Context, pal palette) {
 			ui.Box(c).Padding(24, 16).Radius(radiusMD).
 				Background(pal.surface2).Border(1, pal.hairline).Children(func() {
 				ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-					ui.Text(c, "✅ 暂存区代码未检出已知安全漏洞、凭证机密或危险并发缺陷。").
+					drawIcon(c, iconCircleCheck, 15, pal.success)
+					ui.Text(c, "暂存区代码未检出已知安全漏洞、凭证机密或危险并发缺陷。").
 						FontSize(uiFontSize(textBodySM)).TextColor(pal.inkMuted)
 				})
 			})
