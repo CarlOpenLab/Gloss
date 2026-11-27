@@ -4,6 +4,17 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.3.41] - 2026-11-27
+
+### 变更
+- **全应用图标升级至 Lucide v1.82.0 并统一线宽与尺寸**：`icons.go` 统一对齐 Lucide v1.82.0 矢量路径并将全局描边由 `2` 收细至 `1.8`（保留小尺寸 `sparkle` 可读性）；工具栏四格视图切换改用 `file-diff` / `history` / `terminal` / `code-xml`，Diff 切换改用外框比例一致的 `square-menu` / `columns-2`，远程同步三件套优化为极简的 `download`（抓取）/ `arrow-down`（拉取）/ `arrow-up`（推送）并统一为 `15px`；设置侧栏改为 `sliders-horizontal` / `sparkles` / `message-square-text` / `git-branch` / `circle-arrow-up` / `info`；侧栏顶部工具键与工具栏动作键对齐至 `15px`
+- **清理残留手绘路径、Unicode 符号与 Emoji**：将错误横幅感叹号、关闭按钮叉号、分支对比下拉三角、PR 检视按钮与成功标识、风险预检状态徽标（去除重复叠画的圆点与 emoji）、提交详情哈希 `#`、提交栏 `+ 全部暂存 / + 暂存剩余` 以及设置字号步进器 `− / +` 全部统一替换为标准 Lucide 矢量图标
+- **重构「新建分支」对话框 UI**：顶栏新增 `git-branch-plus` 图标徽章、紧凑起步提交胶囊与关闭键；输入框与「AI 起名」按钮统一为 `34px` 同高洗色控件并内置前置图标与一键清空；新增 `feat/`、`fix/`、`chore/`、`refactor/` 常用前缀快选胶囊；「建好就切过去」升级为整行可点的内嵌洗色选项卡片；底栏补齐快捷键提示与发丝线分隔
+
+### 修复
+- **修复多处损坏或表意失准的图标**：修正 `git-branch-plus` 加号叠画在分支节点上的错误、补齐 `file-diff` 缺失的减号与 `trash-2` 缺失的桶身竖线、将设置页「关于 Gloss」误用的眼球图标修正为 `info`
+- **修复「新建分支」弹窗里「AI 起名」按钮在深色模式下的底色异常**：改走与其他弹窗一致的 `pal.chip` / `pal.rowSelected` 洗色阶梯，不再在深色面板上出现不透明底色跳变
+
 ## [0.3.40] - 2026-11-27
 
 ### 变更
